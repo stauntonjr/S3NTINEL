@@ -1,0 +1,64 @@
+{
+  "categorical_detector": {
+    "min_dwell_seconds": 1.5,
+    "max_dwell_seconds": 30.0,
+    "illegal_transitions": [
+      ["OFF", "STBY"]
+    ]
+  },
+  "sensors": [
+    {
+      "parameter_name": "HYD_PRESS_1",
+      "detected_type": "numeric",
+      "sampling_rate_hz": 20.0,
+      "mean": 3000.0,
+      "std": 3.0,
+      "min_value": 2880.0,
+      "max_value": 3120.0,
+      "noise_std": 3.0,
+      "drift_per_sec": 0.0,
+      "oscillation_amplitude": 8.0,
+      "oscillation_hz": 0.08,
+      "switch_interval_s": 45.0,
+      "switch_magnitude": 25.0,
+      "missing_rate": 0.002,
+      "missing_burst_every_s": 120.0,
+      "missing_burst_len_s": 3.0
+    },
+    {
+      "parameter_name": "HYD_PRESS_2",
+      "detected_type": "numeric",
+      "sampling_rate_hz": 20.0,
+      "mean": 3030.0,
+      "std": 3.0,
+      "min_value": 2910.0,
+      "max_value": 3150.0,
+      "noise_std": 3.0,
+      "drift_per_sec": 0.0,
+      "oscillation_amplitude": 8.0,
+      "oscillation_hz": 0.08,
+      "switch_interval_s": 45.0,
+      "switch_magnitude": 25.0,
+      "missing_rate": 0.002,
+      "missing_burst_every_s": 120.0,
+      "missing_burst_len_s": 3.0
+    },
+    {
+      "parameter_name": "PUMP_STATE",
+      "detected_type": "categorical",
+      "sampling_rate_hz": 2.0,
+      "categories": ["OFF", "ON", "STBY"],
+      "missing_rate": 0.001,
+      "switch_interval_s": 30.0,
+      "missing_burst_every_s": 150.0,
+      "missing_burst_len_s": 2.0
+    },
+    {
+      "parameter_name": "DOOR_STATE",
+      "detected_type": "binary",
+      "sampling_rate_hz": 1.0,
+      "categories": ["CLOSED", "OPEN"],
+      "missing_rate": 0.001
+    }
+  ]
+}

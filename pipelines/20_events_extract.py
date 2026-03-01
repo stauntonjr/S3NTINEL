@@ -1,0 +1,54 @@
+# File: pipelines/20_events_extract.py
+"""Extract event stream from mixed-rate sensor channels."""
+
+import os
+
+from libs.events.categorical import build_categorical_events
+from libs.events.cooccur import build_cooccurrence_events
+from libs.events.extrema import build_continuous_events
+from libs.io.delta import get_spark, read_table, write_table
+from libs.perf import get_logger, log_params_if_active, log_wall_time, track_mlflow_run
+from pipelines.common import build_context
+
+
+LOGGER = get_logger(__name__)
+
+
+@track_mlflow_run(stage_name="20_events_extract", logger=LOGGER)
+@log_wall_time(logger=LOGGER)
+def run() -> None:
+    context = build_context()
+    input_path = os.getenv("S3NTINEL_RAW_TABLE_PATH", "data/delta/raw_telemetry")
+    output_path = os.getenv("S3NTINEL_EVENTS_TABLE_PATH", "data/delta/events")
+    table_format = os.getenv("S3NTINEL_TABLE_FORMAT", "delta")
+    write_mode = os.getenv("S3NTINEL_WRITE_MODE", "append")
+    delta_threshold = float(os.getenv("S3NTINEL_EVENT_DELTA_THRESHOLD", "0.0"))
+
+    spark = get_spark("s3ntinel.events_extract")
+    raw_df = read_table(spark, input_path, fmt=table_format)
+
+    continuous_events = build_continuous_events(raw_df, delta_threshold=delta_threshold)
+    categorical_events = build_categorical_events(raw_df)
+    base_events = continuous_events.unionByName(categorical_events)
+    cooccur_events = build_cooccurrence_events(base_events)
+    events_df = base_events.unionByName(cooccur_events)
+
+    write_table(
+        events_df,
+        path=output_path,
+        mode=write_mode,
+        fmt=table_format,
+        partition_by=context.config["output"]["partition_by"],
+    )
+
+    log_params_if_active({"event_threshold": context.config["windowing"]["event_threshold"]})
+    LOGGER.info(
+        "pipeline=events_extract event_threshold=%s input=%s output=%s",
+        context.config["windowing"]["event_threshold"],
+        input_path,
+        output_path,
+    )
+
+
+if __name__ == "__main__":
+    run()

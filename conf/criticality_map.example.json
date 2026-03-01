@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "generated_by": "bootstrap_nlp",
+  "review_status": "pending_sme",
+  "subsystems": [
+    {
+      "id": "SYS_HYD",
+      "name": "Hydraulics",
+      "criticality": 0.9,
+      "blocks": {
+        "pivot": 1.0,
+        "cur": 1.1,
+        "events": 1.2,
+        "categorical": 1.0,
+        "cooccurrence": 1.1
+      }
+    },
+    {
+      "id": "SYS_ELEC",
+      "name": "Electrical",
+      "criticality": 0.8,
+      "blocks": {
+        "pivot": 1.0,
+        "cur": 1.0,
+        "events": 1.1,
+        "categorical": 1.0,
+        "cooccurrence": 1.0
+      }
+    }
+  ]
+}

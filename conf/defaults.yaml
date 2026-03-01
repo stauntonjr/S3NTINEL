@@ -1,0 +1,68 @@
+project:
+  name: S3NTINEL
+  expansion: Structural Streaming Sparse Event Nexus for Telemetry Inference with Network Envelope Learning
+
+runtime:
+  mode: historical_batch_v1
+  timezone: UTC
+  date_derivation: to_date(timestamp_utc)
+
+windowing:
+  strategy: bucketed
+  max_ms: 200
+  min_ms: 50
+  event_threshold: 20
+  inactivity_timeout_ms: 0
+
+cur:
+  pivots_k: 300
+  row_samples_k: 300
+  downsample_hz: 10
+  sampling_mode: deterministic
+  sampling_seed: 42
+  max_core_cells: 1000000
+  min_core_rows: 1
+  min_core_cols: 1
+  refresh:
+    schedule: monthly
+    drift_sigma: 3.0
+
+graph:
+  min_overlap: 30
+  min_abs_corr: 0.15
+  min_cooccur_count: 3
+  cur_weight_alpha: 0.7
+  normalization:
+    mode: zscore
+    clip_sigma: 6.0
+    min_sensor_points: 30
+
+phase:
+  persistence_reversal_cosine: -0.2
+  tau_near_quantile: 0.25
+  tau_far_quantile: 0.90
+  persistence_quantile: 0.95
+
+conformal:
+  min_warm: 100
+  hold_until_warm: true
+  emit_backlog_with_original_timestamps: true
+
+scoring:
+  event_metrics:
+    - hamming
+    - jaccard
+    - chi2
+    - emd
+  combine_pvalues: cauchy
+  block_weight_init: uniform
+
+output:
+  anomalies_merge_key:
+    - tail_id
+    - flight_id
+    - win_id
+  partition_by:
+    - tail_id
+    - flight_id
+    - date_utc

@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		}
+	],
+	"settings": {
+		"python.defaultInterpreterPath": "/home/jrs/anaconda3/envs/sentinel/bin/python",
+		"python.terminal.activateEnvironment": true,
+		"python.condaPath": "/home/jrs/anaconda3/bin/conda"
+	}
+}
