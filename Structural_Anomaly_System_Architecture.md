@@ -2,7 +2,6 @@
 
 **S3NTINEL:** Structural Streaming Sparse Event Nexus for Telemetry Inference with Network Envelope Learning
 
-**Naming Convention (Canonical):** First `N` = **Nexus**; second `N` = **Network**.
 
 > **Final output:** asynchronous emission of anomaly objects as rows in Delta Lake tables.  
 > **Scope:** motivation, design, full architecture, layer specs, code structure, modeling workplan (CUR fit; hierarchy discovery from event & precision graphs), and streaming plan.
@@ -52,7 +51,7 @@
 
 ## 3) Data Contracts & Delta Schemas
 
-> All tables are **append‑only** with schema evolution disabled outside controlled releases; partition by `(tail_id, flight_id, date)` where applicable. citeturn1search2
+> Tables are append-first with schema evolution disabled outside controlled releases; **`anomalies` is MERGE-upsert keyed by `(tail_id, flight_id, win_id)`**. Partition by `(tail_id, flight_id, date_utc)` where applicable. citeturn1search2
 
 ### 3.1 Raw Telemetry (Delta)
 ```
@@ -377,7 +376,7 @@ Buffers per phase; warm‑up; exclude transitions/anomalies; reuse on phase retu
 **Window size:** 200 ms default; adaptive by event count (15–25); min 50 ms.  
 **Performance:** single‑driver foreachBatch preferred for determinism; memory footprint <100 MB per tail; throughput 1–3 hrs/flight at large scale; scales linearly.  
 **Maintenance:** CUR refresh on sketch‑drift; version all artifacts; avoid per‑window re‑fitting.  
-**Partitioning:** anomalies, signatures partitioned by (tail_id, flight_id, date).  
+**Partitioning:** anomalies, signatures partitioned by (tail_id, flight_id, date_utc).  
 **Governance:** schema contracts & lineage from raw → windows → signatures → anomalies. citeturn1search2
 
 ---
@@ -460,8 +459,8 @@ Primary v1 telemetry input is long form:
 `parameter_value` is parsed into continuous/categorical/ASCII features by parameter metadata and extraction rules. Continuous values are cast to `DOUBLE` where valid; categorical and panel text remain string features.
 
 ### 11.2 Partitioning & Time Semantics
-- `date` is always derived as `to_date(timestamp_utc)`.
-- Delta partition convention for v1 analytic outputs (`events`, `windows`, `signatures`, `anomalies`) is `(tail_id, flight_id, date)`.
+- `date_utc` is always derived as `to_date(timestamp_utc)`.
+- Delta partition convention for v1 analytic outputs (`events`, `windows`, `signatures`, `anomalies`) is `(tail_id, flight_id, date_utc)`.
 - Historical replay preserves original event/window timestamps end-to-end.
 
 ### 11.3 Processing Mode & Emission Semantics

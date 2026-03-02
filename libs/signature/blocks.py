@@ -22,6 +22,7 @@ def build_signatures_df(
     raw_df: "DataFrame",
     events_df: "DataFrame",
     windows_df: "DataFrame",
+    sampled_sensors_df: "DataFrame | None" = None,
     sig_version: int = 1,
     event_threshold: int = 20,
 ) -> "DataFrame":
@@ -77,6 +78,7 @@ def build_signatures_df(
             F.col("w.win_id").alias("win_id"),
             F.col("w.date_utc").alias("date_utc"),
             F.col("w.duration_ms").alias("duration_ms"),
+            F.col("r.sensor").alias("sensor"),
             F.col("r.val").alias("val"),
         )
     )
@@ -114,6 +116,20 @@ def build_signatures_df(
         ),
     )
 
+    sampled_selected_sensor_count = 0
+    sampled_window_stats = None
+    if sampled_sensors_df is not None:
+        sampled_sensors = sampled_sensors_df.select("sensor").distinct()
+        sampled_selected_sensor_count = sampled_sensors.count()
+        sampled_window_stats = (
+            raw_in_windows.join(sampled_sensors, on="sensor", how="inner")
+            .groupBy("tail_id", "flight_id", "win_id", "date_utc")
+            .agg(
+                F.countDistinct("sensor").alias("sampled_sensor_hits"),
+                F.count(F.when(F.col("val").isNotNull(), F.lit(1))).alias("sampled_val_count"),
+            )
+        )
+
     signature_base = (
         windows.alias("w")
         .join(
@@ -123,6 +139,19 @@ def build_signatures_df(
         )
         .join(
             event_stats.alias("e"),
+            on=["tail_id", "flight_id", "win_id", "date_utc"],
+            how="left",
+        )
+        .join(
+            sampled_window_stats.alias("cs") if sampled_window_stats is not None else windows.select(
+                "tail_id",
+                "flight_id",
+                "win_id",
+                "date_utc",
+            )
+            .withColumn("sampled_sensor_hits", F.lit(0))
+            .withColumn("sampled_val_count", F.lit(0))
+            .alias("cs"),
             on=["tail_id", "flight_id", "win_id", "date_utc"],
             how="left",
         )
@@ -139,6 +168,15 @@ def build_signatures_df(
         .withColumn("state_enter_count", F.coalesce(F.col("state_enter_count"), F.lit(0)).cast("double"))
         .withColumn("slope_pos_count", F.coalesce(F.col("slope_pos_count"), F.lit(0)).cast("double"))
         .withColumn("slope_neg_count", F.coalesce(F.col("slope_neg_count"), F.lit(0)).cast("double"))
+        .withColumn("sampled_sensor_hits", F.coalesce(F.col("sampled_sensor_hits"), F.lit(0)).cast("double"))
+        .withColumn("sampled_val_count", F.coalesce(F.col("sampled_val_count"), F.lit(0)).cast("double"))
+        .withColumn(
+            "sampled_sensor_coverage",
+            F.when(
+                F.lit(sampled_selected_sensor_count) > F.lit(0),
+                F.col("sampled_sensor_hits") / F.lit(float(max(sampled_selected_sensor_count, 1))),
+            ).otherwise(F.lit(0.0)),
+        )
         .withColumn("range_val", (F.col("val_max") - F.col("val_min")).cast("double"))
         .withColumn(
             "slope_balance",
@@ -164,7 +202,13 @@ def build_signatures_df(
         F.lit(0).cast("int").alias("phase_id"),
         F.lit(sig_version).cast("int").alias("sig_version"),
         F.array("val_mean", "val_std", "val_min", "val_max").alias("pivot_block"),
-        F.array("val_count", "range_val", F.col("duration_ms").cast("double")).alias("cur_block"),
+        F.array(
+            "val_count",
+            "range_val",
+            F.col("duration_ms").cast("double"),
+            F.col("sampled_val_count").cast("double"),
+            F.col("sampled_sensor_coverage").cast("double"),
+        ).alias("cur_block"),
         F.array("event_total", "threshold_count", "cooccur_count").alias("event_block"),
         F.array("transition_count", "dropped_count", "state_enter_count").alias("cat_block"),
         F.col("breadth").cast("float").alias("breadth"),

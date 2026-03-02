@@ -46,6 +46,53 @@ def create_sample_raw_input_df(spark: "SparkSession") -> "DataFrame":
     return spark.createDataFrame(rows)
 
 
+def create_scaled_raw_input_df(
+    spark: "SparkSession",
+    tail_count: int,
+    flights_per_tail: int,
+    sensor_count: int,
+    timestamp_count: int,
+    step_ms: int,
+) -> "DataFrame":
+    base = _base_time()
+    rows: list[dict[str, object]] = []
+
+    numeric_sensor_count = max(1, sensor_count - 1)
+    numeric_sensors = [f"NUM_SENSOR_{sensor_index + 1:03d}" for sensor_index in range(numeric_sensor_count)]
+    categorical_sensor = "PUMP_STATE"
+
+    for tail_index in range(tail_count):
+        tail_id = f"T{tail_index + 1:03d}"
+        for flight_index in range(flights_per_tail):
+            flight_id = f"F{flight_index + 1:03d}"
+            flight_base = base + timedelta(days=tail_index, minutes=flight_index * 30)
+            for timestamp_index in range(timestamp_count):
+                ts = flight_base + timedelta(milliseconds=step_ms * timestamp_index)
+                for sensor_index, sensor_name in enumerate(numeric_sensors):
+                    baseline = 100.0 + sensor_index * 10.0 + tail_index * 2.5 + flight_index * 1.5
+                    oscillation = ((timestamp_index % 7) - 3) * (0.6 + sensor_index * 0.02)
+                    rows.append(
+                        {
+                            "tail_id": tail_id,
+                            "flight_id": flight_id,
+                            "timestamp": ts,
+                            "parameter_name": sensor_name,
+                            "parameter_value": str(baseline + timestamp_index * 0.35 + oscillation),
+                        }
+                    )
+                rows.append(
+                    {
+                        "tail_id": tail_id,
+                        "flight_id": flight_id,
+                        "timestamp": ts,
+                        "parameter_name": categorical_sensor,
+                        "parameter_value": "ON" if ((timestamp_index + flight_index + tail_index) % 5) else "OFF",
+                    }
+                )
+
+    return spark.createDataFrame(rows)
+
+
 def create_sample_raw_table_df(spark: "SparkSession") -> "DataFrame":
     from pyspark.sql import functions as F
 
@@ -228,6 +275,7 @@ def create_sample_scores_df(spark: "SparkSession") -> "DataFrame":
             "severity": "low",
             "dominant_subsystem": "unknown",
             "dominant_block": "event_block",
+            "subsystem_scores": {"SUBSYS_0001": 0.8, "SUBSYS_0002": 0.2},
             "block_scores": {"pivot": 1.1, "cur": 1.0, "events": 0.8, "categorical": 0.3},
             "date_utc": base.date(),
         },
@@ -246,6 +294,7 @@ def create_sample_scores_df(spark: "SparkSession") -> "DataFrame":
             "severity": "medium",
             "dominant_subsystem": "unknown",
             "dominant_block": "cur_block",
+            "subsystem_scores": {"SUBSYS_0002": 0.7, "SUBSYS_0001": 0.3},
             "block_scores": {"pivot": 2.1, "cur": 3.0, "events": 2.4, "categorical": 0.9},
             "date_utc": base.date(),
         },
@@ -271,6 +320,7 @@ def create_sample_calibrated_df(spark: "SparkSession") -> "DataFrame":
             "severity": "low",
             "dominant_subsystem": "unknown",
             "dominant_block": "event_block",
+            "subsystem_scores": {"SUBSYS_0001": 0.8, "SUBSYS_0002": 0.2},
             "block_scores": {"pivot": 1.1, "cur": 1.0, "events": 0.8, "categorical": 0.3},
             "warm": True,
             "emit_ready": True,
@@ -292,6 +342,7 @@ def create_sample_calibrated_df(spark: "SparkSession") -> "DataFrame":
             "severity": "medium",
             "dominant_subsystem": "unknown",
             "dominant_block": "cur_block",
+            "subsystem_scores": {"SUBSYS_0002": 0.7, "SUBSYS_0001": 0.3},
             "block_scores": {"pivot": 2.1, "cur": 3.0, "events": 2.4, "categorical": 0.9},
             "warm": True,
             "emit_ready": True,
@@ -307,6 +358,12 @@ def seed_sample_dataset(
     base_dir: str = "data",
     mode: str = "overwrite",
     table_format: str = "delta",
+    tail_count: int = 1,
+    flights_per_tail: int = 1,
+    sensor_count: int = 3,
+    timestamp_count: int = 12,
+    step_ms: int = 100,
+    include_intermediate_tables: bool = True,
 ) -> dict[str, str]:
     """Write deterministic sample inputs/intermediate tables for smoke testing.
 
@@ -327,16 +384,44 @@ def seed_sample_dataset(
         "calibrated": str(delta_path / "calibrated"),
     }
 
-    create_sample_raw_input_df(spark).write.mode(mode).parquet(paths["raw_input"])
+    if (
+        tail_count == 1
+        and flights_per_tail == 1
+        and sensor_count == 3
+        and timestamp_count == 12
+        and step_ms == 100
+    ):
+        raw_input_df = create_sample_raw_input_df(spark)
+    else:
+        raw_input_df = create_scaled_raw_input_df(
+            spark=spark,
+            tail_count=tail_count,
+            flights_per_tail=flights_per_tail,
+            sensor_count=sensor_count,
+            timestamp_count=timestamp_count,
+            step_ms=step_ms,
+        )
+
+    raw_input_df.write.mode(mode).parquet(paths["raw_input"])
 
     writer_fmt = table_format
-    create_sample_raw_table_df(spark).write.format(writer_fmt).mode(mode).save(paths["raw_telemetry"])
-    create_sample_events_df(spark).write.format(writer_fmt).mode(mode).save(paths["events"])
-    create_sample_windows_df(spark).write.format(writer_fmt).mode(mode).save(paths["windows"])
-    create_sample_signatures_df(spark).write.format(writer_fmt).mode(mode).save(paths["signatures"])
-    create_sample_phase_windows_df(spark).write.format(writer_fmt).mode(mode).save(paths["phase_windows"])
-    create_sample_scores_df(spark).write.format(writer_fmt).mode(mode).save(paths["scores"])
-    create_sample_calibrated_df(spark).write.format(writer_fmt).mode(mode).save(paths["calibrated"])
+    canonical_partitions = ["tail_id", "flight_id", "date_utc"]
+
+    def _write_seed_table(df: "DataFrame", path: str) -> None:
+        writer = df.write.format(writer_fmt).mode(mode)
+        partition_cols = [col for col in canonical_partitions if col in df.columns]
+        if partition_cols:
+            writer = writer.partitionBy(*partition_cols)
+        writer.save(path)
+
+    _write_seed_table(create_sample_raw_table_df(spark), paths["raw_telemetry"])
+    if include_intermediate_tables:
+        _write_seed_table(create_sample_events_df(spark), paths["events"])
+        _write_seed_table(create_sample_windows_df(spark), paths["windows"])
+        _write_seed_table(create_sample_signatures_df(spark), paths["signatures"])
+        _write_seed_table(create_sample_phase_windows_df(spark), paths["phase_windows"])
+        _write_seed_table(create_sample_scores_df(spark), paths["scores"])
+        _write_seed_table(create_sample_calibrated_df(spark), paths["calibrated"])
     return paths
 
 

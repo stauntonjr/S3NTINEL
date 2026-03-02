@@ -67,6 +67,23 @@ def detect_extrema(values: list[float]) -> list[str]:
     return events
 
 
+def classify_continuous_delta_event(
+    prev_value: float | None,
+    delta: float | None,
+    delta_threshold: float,
+) -> str | None:
+    if prev_value is None or delta is None:
+        return None
+    threshold = float(delta_threshold)
+    if threshold > 0.0 and abs(float(delta)) >= threshold:
+        return "threshold"
+    if float(delta) > 0.0:
+        return "slope_pos"
+    if float(delta) < 0.0:
+        return "slope_neg"
+    return None
+
+
 def detect_continuous_events_stream(
     samples: Iterable[ContinuousSample],
     config: ContinuousDetectorConfig | None = None,
@@ -389,12 +406,20 @@ def build_continuous_events(raw_df: "DataFrame", delta_threshold: float = 0.0) -
         .withColumn("delta", F.col("val") - F.col("prev_val"))
     )
 
-    event_type = (
-        F.when(F.col("prev_val").isNull(), F.lit(None).cast("string"))
-        .when(F.abs(F.col("delta")) >= F.lit(delta_threshold), F.lit("threshold"))
-        .when(F.col("delta") > 0, F.lit("slope_pos"))
-        .when(F.col("delta") < 0, F.lit("slope_neg"))
-    )
+    effective_threshold = float(delta_threshold)
+    if effective_threshold > 0.0:
+        event_type = (
+            F.when(F.col("prev_val").isNull(), F.lit(None).cast("string"))
+            .when(F.abs(F.col("delta")) >= F.lit(effective_threshold), F.lit("threshold"))
+            .when(F.col("delta") > 0, F.lit("slope_pos"))
+            .when(F.col("delta") < 0, F.lit("slope_neg"))
+        )
+    else:
+        event_type = (
+            F.when(F.col("prev_val").isNull(), F.lit(None).cast("string"))
+            .when(F.col("delta") > 0, F.lit("slope_pos"))
+            .when(F.col("delta") < 0, F.lit("slope_neg"))
+        )
 
     return (
         enriched.withColumn("event_type", event_type)

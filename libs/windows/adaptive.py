@@ -7,12 +7,10 @@ from datetime import date
 
 from libs.perf.annotations import hot_path
 
-@hot_path
 def _window_date_from_start(start_ts: "datetime") -> date:
     return start_ts.date()
 
 
-@hot_path
 def should_close_window(duration_ms: int, event_count: int, max_ms: int, event_threshold: int) -> bool:
     # HOT PATH: evaluated for each sample/event tick; keep logic branch-light and deterministic.
     return duration_ms >= max_ms or event_count >= event_threshold
@@ -84,7 +82,6 @@ def build_adaptive_windows(
     )
 
 
-@hot_path
 def build_adaptive_windows_stream_parity(
     events_df: "DataFrame",
     max_ms: int,

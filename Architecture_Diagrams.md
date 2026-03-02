@@ -18,50 +18,31 @@ These diagrams reflect the locked v1 spec in `Structural_Anomaly_System_Architec
 
 ```mermaid
 flowchart TD
-  A[Raw Telemetry Ingest (Parquet)
-  Advana BLADE IL5
-  ~33k sensors, mixed rates up to 200 Hz]
-  B[Normalization + Type Parsing
-  continuous/categorical/ASCII]
-  C[Delta: raw_telemetry]
+  A[Raw Telemetry Ingest Parquet Advana BLADE IL5 33k sensors mixed rates up to 200 Hz]
+  B[Normalization and Type Parsing continuous categorical ASCII]
+  C[Delta raw_telemetry]
 
-  D[Global CUR Backbone Fit
-  sketch -> leverage -> sample C,R -> U]
-  E[Graph Fusion + Hierarchy
-  precision graph + event cooccur graph
-  -> hierarchical Louvain/Leiden]
-  F[Delta: cur_backbone + column_sketch]
+  D[Global CUR Backbone Fit sketch leverage sample C and R build U]
+  E[Graph Fusion and Hierarchy precision and event graphs to hierarchy]
+  F[Delta cur_backbone and column_sketch]
 
-  G[Event Extraction
-  extrema/threshold/slope
-  transitions/illegal/dwell/missing/dropped
-  cooccurrence]
-  H[Adaptive Windowing
-  close if MAX_MS=200 or EVT_THRESH=20
-  min=50ms, ZOH buffers]
-  I[Signature Build
-  pivot + CUR + event + categorical blocks]
+  G[Event Extraction extrema threshold slope transition illegal dwell missing dropped cooccurrence]
+  H[Adaptive Windowing close at MAX_MS 200 or EVT_THRESH 20 min 50ms ZOH buffers]
+  I[Signature Build pivot CUR event categorical blocks]
 
-  J[Phase Detection
-  per-tail centroids + persistence evidence]
-  K[Anomaly Scoring
-  block metrics -> subsystem projection -> global]
-  L[Conformal Calibration
-  per-tail, per-phase buffer
-  warmup MIN_WARM=100]
+  J[Phase Detection per tail centroids and persistence evidence]
+  K[Anomaly Scoring block metrics to subsystem projection to global]
+  L[Conformal Calibration per tail per phase buffer warmup MIN_WARM 100]
 
-  M{Warm?}
-  N[Backlog Buffer
-  keep original window timestamps]
-  O[Async Anomaly Emit
-  MERGE key:
-  (tail_id, flight_id, win_id)]
+  M{Warm}
+  N[Backlog Buffer keep original window timestamps]
+  O[Async Anomaly Emit MERGE key tail_id flight_id win_id]
 
-  P[Delta: events]
-  Q[Delta: windows]
-  R[Delta: signatures]
-  S[Delta: phases + calibration_buffers]
-  T[Delta: anomalies]
+  P[Delta events]
+  Q[Delta windows]
+  R[Delta signatures]
+  S[Delta phases and calibration_buffers]
+  T[Delta anomalies]
 
   A --> B --> C
   C --> D --> E --> F
@@ -73,8 +54,8 @@ flowchart TD
   M -- no --> N --> M
   M -- yes --> O --> T
 
-  F -. backbone version .-> I
-  F -. subsystem map/criticality .-> K
+  F --> I
+  F --> K
 ```
 
 ## 2) Runtime Sequence (Per Window)
@@ -243,39 +224,32 @@ erDiagram
 
   COLUMN_SKETCH }o--|| CUR_BACKBONE : refreshes
   CUR_BACKBONE ||--o{ SIGNATURES : backbone_version
-  CUR_BACKBONE ||--o{ ANOMALIES : versions.backbone
+  CUR_BACKBONE ||--o{ ANOMALIES : versions_backbone
 ```
 
 ## 5) CUR + Graph Fusion + Hierarchy Discovery
 
 ```mermaid
 graph TD
-  A[Continuous Training Matrix X
-  (10 Hz downsample)] --> B[Column Sketching
-  Y = XΩ, aggregate sketch covariance]
-  B --> C[Leverage Scores (Columns)]
-  C --> D[Sample Representative Sensors C
-  (K pivots ~200-500)]
+  A[Continuous Training Matrix X at 10Hz downsample] --> B[Column Sketching Y equals X times Omega aggregate sketch covariance]
+  B --> C[Leverage Scores Columns]
+  C --> D[Sample Representative Sensors C K pivots 200 to 500]
 
-  D --> E[Row Sketching + Leverage]
-  E --> F[Sample Representative Rows R
-  (~200-500)]
-  D --> G[Compute Core U = C⁺ X R⁺]
+  D --> E[Row Sketching and Leverage]
+  E --> F[Sample Representative Rows R 200 to 500]
+  D --> G[Compute Core U equals C_plus X R_plus]
   F --> G
 
-  G --> H[CUR Backbone Artifact
-  selected_sensors, selected_rows, U, weights]
+  G --> H[CUR Backbone Artifact selected_sensors selected_rows U weights]
 
-  H --> I[Structural Dependency Graph
-  covariance/precision (Graphical Lasso)]
-  J[Event Co-occurrence Graph
-  PMI/Jaccard/Chi2 from events] --> K[Graph Normalization]
+  H --> I[Structural Dependency Graph covariance precision Graphical Lasso]
+  J[Event Cooccurrence Graph PMI Jaccard Chi2 from events] --> K[Graph Normalization]
   I --> K
   K --> L[Weighted Graph Fusion]
-  L --> M[Hierarchical Louvain/Leiden]
-  M --> N[Subsystem Tree + Sensor Index Sets]
+  L --> M[Hierarchical Louvain Leiden]
+  M --> N[Subsystem Tree and Sensor Index Sets]
 
-  N --> O[Used by scoring projection A_k(t)]
+  N --> O[Used by scoring projection Ak_t]
   H --> O
 ```
 
@@ -320,44 +294,33 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-  A[Input Scale
-  5-10 GB per flight-hour
-  up to 200 Hz channels
-  ~33k sensors] --> B[Pre-shard by
-  tail_id/flight_id/date_utc]
+  A[Input Scale 5 to 10 GB per flight hour up to 200Hz channels about 33k sensors] --> B[Pre shard by tail_id flight_id date_utc]
 
-  B --> C[Bronze->Silver Normalize
-  schema + type parsing
-  mixed-rate alignment via ZOH]
+  B --> C[Bronze to Silver Normalize schema and type parsing mixed rate alignment via ZOH]
 
-  C --> D[Event Extraction Stage
-  CPU-bound per sensor family]
-  C --> E[CUR/Signature Stage
-  vector ops + sparse blocks]
+  C --> D[Event Extraction Stage CPU bound per sensor family]
+  C --> E[CUR Signature Stage vector ops and sparse blocks]
 
-  D --> F[Adaptive Windows
-  MAX_MS=200, EVT_THRESH=20]
+  D --> F[Adaptive Windows MAX_MS 200 EVT_THRESH 20]
   E --> F
 
-  F --> G[Score + Conformal
-  per-tail phase buffers]
-  G --> H[Anomaly Emit
-  MERGE (tail_id, flight_id, win_id)]
+  F --> G[Score and Conformal per tail phase buffers]
+  G --> H[Anomaly Emit MERGE tail_id flight_id win_id]
 
-  I[Capacity Controls] --> I1[Target file size 256-512 MB]
-  I --> I2[Partition outputs by tail_id/flight_id/date_utc]
+  I[Capacity Controls] --> I1[Target file size 256 to 512 MB]
+  I --> I2[Partition outputs by tail_id flight_id date_utc]
   I --> I3[Autoscale shuffle partitions by input bytes]
-  I --> I4[Bound state by per-tail processing slices]
+  I --> I4[Bound state by per tail processing slices]
 
-  J[Planning Equations] --> J1[Ingest MB/s = flight_hours * GB_per_hour * 1024 / 3600]
-  J --> J2[Window rate approx = max events/20, time/0.2s]
-  J --> J3[CPU budget dominated by event extraction + sparse distance ops]
+  J[Planning Equations] --> J1[Ingest MB per s equals flight_hours times GB_per_hour times 1024 over 3600]
+  J --> J2[Window rate approx equals max events over 20 or time over 0.2s]
+  J --> J3[CPU budget dominated by event extraction and sparse distance ops]
 
   H --> K[Observed KPIs]
-  K --> K1[rows/s per stage]
-  K --> K2[spill/shuffle read-write]
+  K --> K1[rows per second per stage]
+  K --> K2[spill and shuffle read write]
   K --> K3[p95 stage duration]
-  K --> K4[cost per flight-hour]
+  K --> K4[cost per flight hour]
 ```
 
 ## Notes

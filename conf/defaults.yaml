@@ -30,7 +30,13 @@ cur:
 graph:
   min_overlap: 30
   min_abs_corr: 0.15
+  min_abs_partial_corr: 0.10
+  precision_ridge_lambda: 1.0e-6
   min_cooccur_count: 3
+  subsystem_min_edge_weight: 0.20
+  hierarchy_k_system: 8
+  hierarchy_k_subsystem: 24
+  hierarchy_k_module: 64
   cur_weight_alpha: 0.7
   normalization:
     mode: zscore

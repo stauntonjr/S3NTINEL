@@ -3,7 +3,6 @@
 **S3NTINEL**
 Structural Streaming Sparse Event Nexus for Telemetry Inference with Network Envelope Learning
 
-**Naming Convention (Canonical):** First `N` = **Nexus**; second `N` = **Network**.
 
 These visuals are simplified for reviews, roadmap decks, and cross-functional alignment.
 
@@ -81,8 +80,8 @@ graph TD
   A[Sensor/Event Signals] --> B[Dependency Graphs]
   B --> C[Hierarchical System Graph]
   C --> D[Nested Envelopes by Subsystem]
-  D --> E[Local Scores A_k(t)]
-  E --> F[Global Risk A(t)]
+  D --> E[Local Scores Ak_t]
+  E --> F[Global Risk At]
 ```
 
 ## 6) System Context
@@ -112,11 +111,3 @@ flowchart LR
   F --> F3[Monitor p95 stage time + spill]
   F --> F4[Track cost per flight-hour]
 ```
-
-## Canonical Name
-
-Use this expansion across technical and external materials:
-
-**S3NTINEL: Structural Streaming Sparse Event Nexus for Telemetry Inference with Network Envelope Learning**
-
-This keeps the two `N`s semantically distinct (`Nexus` vs `Network`).

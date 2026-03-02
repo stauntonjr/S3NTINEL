@@ -41,6 +41,7 @@ def build_calibrated_scores_df(scores_df: "DataFrame", min_warm: int) -> "DataFr
         "severity",
         "dominant_subsystem",
         "dominant_block",
+        "subsystem_scores",
         "block_scores",
         "warm",
         F.col("warm").alias("emit_ready"),

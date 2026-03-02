@@ -46,10 +46,23 @@ This command seeds sample data, runs pipeline stages `00` through `80`, and prin
 	- `data/delta/cur_c_matrix`, `data/delta/cur_r_matrix`, `data/delta/cur_w_matrix`, `data/delta/cur_u_matrix` (CUR factors/core artifacts)
 	- Sampling controls: `S3NTINEL_CUR_SAMPLING_MODE=deterministic|weighted`, `S3NTINEL_CUR_SAMPLING_SEED` (recorded under `cur_matrices.sampling_mode` and `cur_matrices.sampling_seed`)
 	- U-core guardrails: `S3NTINEL_CUR_MAX_CORE_CELLS`, `S3NTINEL_CUR_MIN_CORE_ROWS`, `S3NTINEL_CUR_MIN_CORE_COLS` (effective reductions reported under `cur_matrices.u_core`)
+	- Hierarchy artifacts (Spark PIC multi-level):
+		- `data/delta/sensor_hierarchy_map`
+		- `data/delta/hierarchy_nodes`
+		- `data/delta/hierarchy_edges`
 	- `data/delta/cur_sensor_graph` (continuous CUR-proxy edge weights)
 	- `data/delta/event_cooccurrence_graph` (event co-occurrence edge weights)
 	- `data/delta/fused_sensor_graph` (weighted fusion via `S3NTINEL_GRAPH_FUSE_ALPHA`)
 	- `reports/fitting_graph_report.json` (edge-source mix, weight stats, top fused edges)
+
+### Stage-10 hierarchy smoke check
+
+- Run stage-10 then print hierarchy cardinalities + sample paths:
+	- `python -m scripts.smoke_hierarchy_stage10 --table-format parquet --raw-table-path data/fleet_seed/delta/raw_telemetry --output-json reports/hierarchy_smoke_summary.json`
+- Inspect pre-existing hierarchy outputs without re-running stage-10:
+	- `python -m scripts.smoke_hierarchy_stage10 --skip-run-stage10 --table-format parquet --hierarchy-nodes-path data/fleet_seed/profile_hierarchy_e2e/hierarchy_nodes --hierarchy-sensor-map-path data/fleet_seed/profile_hierarchy_e2e/sensor_hierarchy_map`
+- Compare two smoke summaries side-by-side:
+	- `python -m scripts.compare_hierarchy_smoke --left-json reports/hierarchy_smoke_summary.json --right-json reports/hierarchy_smoke_summary_fixture.json --left-label stage10 --right-label fixture --output-json reports/hierarchy_smoke_comparison.json`
 
 ## CUR sampling A/B evaluation (deterministic vs weighted)
 
@@ -62,6 +75,20 @@ This command seeds sample data, runs pipeline stages `00` through `80`, and prin
 	- sampled pair precision for module/subsystem labels,
 	- module/subsystem coverage ratios,
 	- U-core guardrail usage (`u_guardrail_applied`, `u_effective_core_cells`).
+
+## CUR contraction-mode profiling (core_w vs pivot_restricted_a vs full_a)
+
+- Compare stage-10 runtime and U sparsity across contraction modes:
+	- `python -m scripts.profile_cur_contraction_modes --raw-table-path data/fleet_seed/delta/raw_telemetry --table-format parquet --modes core_w,pivot_restricted_a,full_a --repeats 2 --work-dir data/cur_profile --output-json reports/cur_contraction_profile.json`
+- Report includes:
+	- per-run elapsed time and CUR nnz (`c_nnz`, `r_nnz`, `w_nnz`, `u_nnz`),
+	- per-mode aggregate elapsed stats,
+	- complexity notes for each contraction strategy.
+- Stability flags for long runs:
+	- `--disable-broadcast-joins` (sets `spark.sql.autoBroadcastJoinThreshold=-1`)
+	- `--driver-memory <value>` (for example `--driver-memory 8g`)
+- Render profile JSON into a one-page markdown summary:
+	- `python -m scripts.render_cur_profile_report --input-json reports/cur_contraction_profile_stable.json --output-md reports/cur_contraction_profile_stable.md`
 
 ## Telemetry profiling and routing
 

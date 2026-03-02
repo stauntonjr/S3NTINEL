@@ -40,6 +40,9 @@ S3NTINEL stands for Structural Streaming Sparse Event Nexus for Telemetry Infere
 	- `export S3NTINEL_TABLE_FORMAT=parquet`
 - Generate deterministic sample test data: `python -m scripts.generate_sample_data --base-dir data --mode overwrite`
 - Run end-to-end smoke test (00->80): `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format parquet --min-warm 1`
+- Smoke test now seeds a deterministic `sensor_subsystem_map` and asserts emitted anomaly quality gates: non-empty output, no duplicate `(tail_id, flight_id, win_id)`, at least one non-null `panel_context`, and at least one populated `subsystems[].top_sensors`.
+- For stage-80 merge idempotence validation in smoke: `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format delta --min-warm 1 --write-mode merge`
+- Merge smoke checks require a Spark runtime with Delta JVM classes available.
 - Generate bucketed vs stream_parity window diagnostics in smoke: `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format parquet --compare-window-strategies`
 - Profile telemetry parameters + channel routing: `python -m scripts.profile_telemetry --input-path data/sample/raw_input --input-format parquet --output-dir data/profile`
 - Generate synthetic hierarchy artifacts (global/system/subsystem/module/sensor map) for simulation-only correlation injection: `python -m scripts.generate_synthetic_hierarchy_profile --profile-parameter-profile-path data/profile/parameter_profile --profile-format parquet --output-dir data/profile_hierarchy --hierarchy-profile-id HIER_SYNTH_V1 --system-count 3 --subsystems-per-system 2 --modules-per-subsystem 3`
@@ -85,6 +88,10 @@ S3NTINEL stands for Structural Streaming Sparse Event Nexus for Telemetry Infere
 
 ## Stage I/O defaults
 
+- `20_events_extract` continuous event typing:
+	- `S3NTINEL_EVENT_DELTA_THRESHOLD` controls `threshold` event emission.
+	- When `S3NTINEL_EVENT_DELTA_THRESHOLD <= 0`, `threshold` events are disabled and continuous deltas emit only `slope_pos|slope_neg` (plus first-sample null suppression).
+
 - `10_cur_backbone_fit` reads normalized telemetry and writes fitting-phase graph artifacts:
 	- Reads `S3NTINEL_RAW_TABLE_PATH` (default `data/delta/raw_telemetry`)
 	- Writes `S3NTINEL_CUR_NORMALIZATION_TABLE_PATH` (default `data/delta/cur_normalization_profile`)
@@ -106,8 +113,15 @@ S3NTINEL stands for Structural Streaming Sparse Event Nexus for Telemetry Infere
 		- `S3NTINEL_CUR_MIN_CORE_ROWS` (default `cur.min_core_rows`)
 		- `S3NTINEL_CUR_MIN_CORE_COLS` (default `cur.min_core_cols`)
 	- Writes `S3NTINEL_CUR_GRAPH_TABLE_PATH` (default `data/delta/cur_sensor_graph`)
+	- Writes `S3NTINEL_PRECISION_GRAPH_TABLE_PATH` (default `data/delta/precision_sensor_graph`)
 	- Writes `S3NTINEL_EVENT_GRAPH_TABLE_PATH` (default `data/delta/event_cooccurrence_graph`)
 	- Writes `S3NTINEL_FUSED_GRAPH_TABLE_PATH` (default `data/delta/fused_sensor_graph`)
+	- Writes `S3NTINEL_SUBSYSTEM_MAP_TABLE_PATH` (default `data/delta/sensor_subsystem_map`)
+	- Writes hierarchical structure artifacts:
+		- `S3NTINEL_HIERARCHY_SENSOR_MAP_TABLE_PATH` (default `data/delta/sensor_hierarchy_map`)
+		- `S3NTINEL_HIERARCHY_NODES_TABLE_PATH` (default `data/delta/hierarchy_nodes`)
+		- `S3NTINEL_HIERARCHY_EDGES_TABLE_PATH` (default `data/delta/hierarchy_edges`)
+		- hierarchy source/profile metadata via `S3NTINEL_HIERARCHY_SOURCE`, `S3NTINEL_HIERARCHY_PROFILE_ID`
 	- Writes fitting quality report `S3NTINEL_FIT_GRAPH_REPORT_PATH` (default `reports/fitting_graph_report.json`)
 	- A/B evaluator: `python -m scripts.evaluate_cur_sampling_ab` compares `deterministic|weighted` sampling across seeds and writes aggregate report metrics.
 	- Threshold/fusion controls:
@@ -119,20 +133,46 @@ S3NTINEL stands for Structural Streaming Sparse Event Nexus for Telemetry Infere
 		- `S3NTINEL_CUR_NORMALIZATION_MIN_POINTS` (default `graph.normalization.min_sensor_points`)
 		- If no sensors meet `S3NTINEL_CUR_NORMALIZATION_MIN_POINTS`, stage 10 automatically falls back to `1` point and records this in `reports/fitting_graph_report.json`.
 		- `S3NTINEL_EVENT_GRAPH_MIN_COUNT` (default `graph.min_cooccur_count`)
+		- `S3NTINEL_PRECISION_GRAPH_MIN_ABS_PARTIAL_CORR` (default `graph.min_abs_partial_corr`)
+		- `S3NTINEL_PRECISION_GRAPH_RIDGE_LAMBDA` (default `graph.precision_ridge_lambda`)
+		- `S3NTINEL_SUBSYSTEM_MIN_EDGE_WEIGHT` (default `graph.subsystem_min_edge_weight`)
+		- Multi-level hierarchy cluster controls (Spark PIC):
+			- `S3NTINEL_HIERARCHY_K_SYSTEM` (default `graph.hierarchy_k_system`)
+			- `S3NTINEL_HIERARCHY_K_SUBSYSTEM` (default `graph.hierarchy_k_subsystem`)
+			- `S3NTINEL_HIERARCHY_K_MODULE` (default `graph.hierarchy_k_module`)
 		- `S3NTINEL_GRAPH_FUSE_ALPHA` (default `graph.cur_weight_alpha`)
 - `50_phase_detect` writes:
 	- `S3NTINEL_PHASE_WINDOWS_TABLE_PATH` (default `data/delta/phase_windows`)
 	- `S3NTINEL_PHASES_TABLE_PATH` (default `data/delta/phases`)
 - `60_anomaly_score` reads phase windows + signatures and writes:
 	- `S3NTINEL_SCORES_TABLE_PATH` (default `data/delta/scores`)
+	- If `S3NTINEL_SUBSYSTEM_MAP_TABLE_PATH` exists, stage 60 also derives per-window `dominant_subsystem` from mapped event activity within each adaptive window.
+	- Stage 60 also emits `subsystem_scores` (map of subsystem evidence ratios), propagated through calibration and used by stage 80 to populate `anomalies.subsystems`.
+	- Severity thresholds are configurable for normalized score scale:
+		- `S3NTINEL_SEVERITY_LOW_THRESHOLD` (default `0.25`)
+		- `S3NTINEL_SEVERITY_MEDIUM_THRESHOLD` (default `0.75`)
+		- `S3NTINEL_SEVERITY_HIGH_THRESHOLD` (default `1.50`)
 - `70_conformal_calibrate` reads scores and writes:
 	- `S3NTINEL_CALIBRATED_TABLE_PATH` (default `data/delta/calibrated`)
 	- `S3NTINEL_MIN_WARM` (optional override; defaults to config value)
 - `80_emit_anomalies` reads calibrated + phase windows + signatures + windows and writes:
 	- `S3NTINEL_ANOMALIES_TABLE_PATH` (default `data/delta/anomalies`)
+	- `S3NTINEL_WRITE_MODE` defaults to `merge` for this stage, enforcing upsert semantics on `(tail_id, flight_id, win_id)`.
+	- `S3NTINEL_RAW_TABLE_PATH` (default `data/delta/raw_telemetry`) is used when available for panel-context enrichment.
+	- If `S3NTINEL_EVENTS_TABLE_PATH` and `S3NTINEL_SUBSYSTEM_MAP_TABLE_PATH` are available, stage 80 populates `subsystems[].top_sensors` using windowed event evidence.
+	- If `S3NTINEL_RAW_TABLE_PATH` is available, stage 80 populates `panel_context` from window-local ASCII/LCD text features.
+	- `S3NTINEL_SUBSYSTEM_TOP_SENSORS_K` controls top sensors per subsystem in anomaly payload (default `5`).
+- `scripts/smoke_test_pipeline.py` synthetic seed scaling options:
+	- `--tail-count` (default `1`)
+	- `--flights-per-tail` (default `1`)
+	- `--sensor-count` (default `3`)
+	- `--timestamp-count` (default `12`)
+	- `--step-ms` (default `100`)
 - `30_windows_adaptive` strategy:
 	- `S3NTINEL_WINDOW_STRATEGY` supports `bucketed` (legacy) and `stream_parity` (stateful max_ms/event_threshold parity with stream windower)
 	- `S3NTINEL_WINDOW_INACTIVITY_TIMEOUT_MS` controls timeout-based closure in `stream_parity` mode (default `0` = disabled)
+- `40_signatures_build` optional CUR context:
+	- Reads `S3NTINEL_CUR_SENSOR_SAMPLE_TABLE_PATH` when present and appends sampled-sensor coverage features into `cur_block` for first-pass structural-context wiring.
 
 ## v1 conventions
 
@@ -157,3 +197,10 @@ S3NTINEL stands for Structural Streaming Sparse Event Nexus for Telemetry Infere
 	- `register_model_if_available(...)`
 
 These helpers no-op when MLflow is not available, allowing local development without Databricks dependencies.
+
+## Test fixtures
+
+- Shared Spark fixtures live in `tests/conftest.py`:
+	- `spark`: standard local SparkSession with pinned `PYSPARK_PYTHON`/`PYSPARK_DRIVER_PYTHON` and matching Spark configs.
+	- `spark_delta`: Delta-enabled SparkSession that auto-skips when Delta JVM classes are unavailable.
+- Spark-heavy regression tests should consume these shared fixtures instead of defining per-file SparkSession setup.
