@@ -4,8 +4,13 @@
 import os
 
 from libs.io.delta import get_spark, read_table, write_table
-from libs.perf import get_logger, log_params_if_active, log_wall_time, track_mlflow_run
-from libs.windows.adaptive import build_adaptive_windows, build_adaptive_windows_stream_parity
+from libs.perf import get_logger, log_dict_artifact_if_active, log_params_if_active, log_wall_time, track_mlflow_run
+from libs.windows.adaptive import (
+    DEFAULT_MIN_SAMPLING_RATE_HZ,
+    build_adaptive_windows,
+    build_adaptive_windows_stream_parity,
+    max_window_ms_from_min_sampling_rate,
+)
 from pipelines.common import build_context
 
 
@@ -21,7 +26,12 @@ def run() -> None:
     table_format = os.getenv("S3NTINEL_TABLE_FORMAT", "delta")
     write_mode = os.getenv("S3NTINEL_WRITE_MODE", "append")
 
-    max_ms = int(context.config["windowing"]["max_ms"])
+    min_sampling_rate_hz = float(
+        context.config.get("windowing", {}).get("min_sampling_rate_hz", DEFAULT_MIN_SAMPLING_RATE_HZ)
+    )
+    derived_max_ms = max_window_ms_from_min_sampling_rate(min_sampling_rate_hz)
+    configured_max_ms = int(context.config.get("windowing", {}).get("max_ms", derived_max_ms))
+    max_ms = int(os.getenv("S3NTINEL_WINDOW_MAX_MS", str(configured_max_ms if configured_max_ms > 0 else derived_max_ms)))
     min_ms = int(context.config["windowing"]["min_ms"])
     event_threshold = int(context.config["windowing"]["event_threshold"])
     default_inactivity_timeout_ms = int(context.config.get("windowing", {}).get("inactivity_timeout_ms", 0))
@@ -57,13 +67,33 @@ def run() -> None:
     log_params_if_active(
         {
             "max_ms": max_ms,
+            "min_sampling_rate_hz": min_sampling_rate_hz,
             "min_ms": min_ms,
             "window_strategy": window_strategy,
             "window_inactivity_timeout_ms": inactivity_timeout_ms,
         }
     )
+    log_dict_artifact_if_active(
+        {
+            "stage": "30_windows_adaptive",
+            "input_path": input_path,
+            "output_path": output_path,
+            "table_format": table_format,
+            "write_mode": write_mode,
+            "window_strategy": window_strategy,
+            "max_ms": max_ms,
+            "min_sampling_rate_hz": min_sampling_rate_hz,
+            "min_ms": min_ms,
+            "event_threshold": event_threshold,
+            "inactivity_timeout_ms": inactivity_timeout_ms,
+            "partition_by": list(context.config["output"]["partition_by"]),
+        },
+        "reports/stages/30_windows_adaptive_summary.json",
+    )
     LOGGER.info(
-        "pipeline=windows_adaptive strategy=%s max_ms=%s event_threshold=%s inactivity_timeout_ms=%s input=%s output=%s",
+        "pipeline=windows_adaptive format=%s write_mode=%s strategy=%s max_ms=%s event_threshold=%s inactivity_timeout_ms=%s input=%s output=%s",
+        table_format,
+        write_mode,
         window_strategy,
         max_ms,
         event_threshold,

@@ -7,19 +7,41 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Iterable, Iterator
 
+import pandas as pd
+
+from libs.common import AdaptiveWindowRow, DetectedEventRow
 from libs.events.buffers import buffer_snapshot, event_value_for_buffer, update_sensor_buffer
 from libs.perf.annotations import hot_path
-from libs.windows.adaptive import close_reason_for_thresholds, should_close_window
-from libs.windows.zoh import zoh_snapshot
+from libs.windows.adaptive import (
+    DEFAULT_MIN_SAMPLING_RATE_HZ,
+    close_reason_for_thresholds,
+    max_window_ms_from_min_sampling_rate,
+    should_close_window,
+)
 
 
 @dataclass(frozen=True)
 class StreamWindowConfig:
-    max_ms: int = 200
+    max_ms: int = max_window_ms_from_min_sampling_rate(DEFAULT_MIN_SAMPLING_RATE_HZ)
     min_ms: int = 50
     event_threshold: int = 20
     inactivity_timeout_ms: int = 0
     include_window_events: bool = False
+
+
+def _start_window(ts: datetime, *, include_window_events: bool) -> dict[str, Any]:
+    return {
+        "t_start": ts,
+        "t_end": ts,
+        "event_count": 0,
+        "last_seen": {},
+        "event_type_counts": {},
+        "window_events": [] if include_window_events else None,
+    }
+
+
+def _window_cap_timestamp(current: dict[str, Any], *, max_ms: int) -> datetime:
+    return current["t_start"] + pd.Timedelta(milliseconds=int(max_ms))
 
 
 def _emit_window(
@@ -31,11 +53,11 @@ def _emit_window(
     min_ms: int,
     close_reason: str,
     include_window_events: bool,
-) -> dict[str, Any]:
+) -> AdaptiveWindowRow:
     duration_ms = int((current["t_end"] - current["t_start"]).total_seconds() * 1000.0)
     duration_ms_effective = max(duration_ms, int(min_ms))
 
-    out: dict[str, Any] = {
+    out: AdaptiveWindowRow = {
         "tail_id": tail_id,
         "flight_id": flight_id,
         "win_id": int(win_id),
@@ -47,7 +69,7 @@ def _emit_window(
         "date_utc": current["t_start"].date(),
         "sensor_count": len(current["last_seen"]),
         "event_type_counts": dict(current["event_type_counts"]),
-        "zoh_snapshot": zoh_snapshot(buffer_snapshot(current["last_seen"])),
+        "zoh_snapshot": dict(buffer_snapshot(current["last_seen"])),
         "close_reason": close_reason,
     }
     if include_window_events:
@@ -57,20 +79,20 @@ def _emit_window(
 
 @hot_path
 def build_adaptive_windows_stream(
-    events: Iterable[dict[str, Any]],
+    events: Iterable[DetectedEventRow],
     config: StreamWindowConfig | None = None,
-) -> Iterator[dict[str, Any]]:
+) -> Iterator[AdaptiveWindowRow]:
     active = config if config else StreamWindowConfig()
     state_by_flight: dict[tuple[str, str], dict[str, Any]] = {}
 
     for event in events:
-        ts = event.get("ts")
+        ts = event.get("timestamp_utc", event.get("ts"))
         if not isinstance(ts, datetime):
             continue
 
         tail_id = str(event.get("tail_id", ""))
         flight_id = str(event.get("flight_id", ""))
-        sensor = str(event.get("sensor", ""))
+        sensor = str(event.get("parameter_name", event.get("sensor", "")))
         if not tail_id or not flight_id:
             continue
 
@@ -85,14 +107,7 @@ def build_adaptive_windows_stream(
 
         current = state.get("current")
         if current is None:
-            current = {
-                "t_start": ts,
-                "t_end": ts,
-                "event_count": 0,
-                "last_seen": {},
-                "event_type_counts": {},
-                "window_events": [] if active.include_window_events else None,
-            }
+            current = _start_window(ts, include_window_events=active.include_window_events)
             state["current"] = current
         else:
             inactivity_timeout_ms = int(active.inactivity_timeout_ms)
@@ -110,15 +125,31 @@ def build_adaptive_windows_stream(
                         close_reason="inactivity_timeout",
                         include_window_events=active.include_window_events,
                     )
-                    current = {
-                        "t_start": ts,
-                        "t_end": ts,
-                        "event_count": 0,
-                        "last_seen": {},
-                        "event_type_counts": {},
-                        "window_events": [] if active.include_window_events else None,
-                    }
+                    current = _start_window(ts, include_window_events=active.include_window_events)
                     state["current"] = current
+
+            if int(current.get("event_count", 0)) > 0:
+                window_cap = _window_cap_timestamp(current, max_ms=int(active.max_ms))
+                if ts >= window_cap:
+                    capped_current = dict(current)
+                    capped_current["t_end"] = window_cap
+                    win_id = int(state["next_win_id"])
+                    state["next_win_id"] = win_id + 1
+                    yield _emit_window(
+                        tail_id=tail_id,
+                        flight_id=flight_id,
+                        win_id=win_id,
+                        current=capped_current,
+                        min_ms=int(active.min_ms),
+                        close_reason="max_ms",
+                        include_window_events=active.include_window_events,
+                    )
+                    current = _start_window(ts, include_window_events=active.include_window_events)
+                    state["current"] = current
+
+        event_type_detected = str(event.get("event_type_detected", "")).strip()
+        if not event_type_detected:
+            continue
 
         current["t_end"] = ts
         current["event_count"] = int(current["event_count"]) + 1
@@ -129,9 +160,8 @@ def build_adaptive_windows_stream(
             last_seen=current["last_seen"],
         )
 
-        event_type = str(event.get("event_type", "unknown"))
         event_type_counts: dict[str, int] = current["event_type_counts"]
-        event_type_counts[event_type] = int(event_type_counts.get(event_type, 0)) + 1
+        event_type_counts[event_type_detected] = int(event_type_counts.get(event_type_detected, 0)) + 1
         if active.include_window_events:
             current["window_events"].append(event)
 
@@ -184,9 +214,9 @@ def build_adaptive_windows_stream(
 
 
 def build_window_cooccurrence_events(
-    windows: Iterable[dict[str, Any]],
+    windows: Iterable[AdaptiveWindowRow],
     min_distinct_sensors: int = 2,
-) -> Iterator[dict[str, Any]]:
+) -> Iterator[DetectedEventRow]:
     for window in windows:
         sensor_set = set(str(item) for item in window.get("zoh_snapshot", {}).keys() if str(item))
         if len(sensor_set) < int(min_distinct_sensors):
@@ -195,10 +225,11 @@ def build_window_cooccurrence_events(
         yield {
             "tail_id": str(window.get("tail_id", "")),
             "flight_id": str(window.get("flight_id", "")),
-            "sensor": "cooccurrence",
-            "ts": window.get("t_end"),
-            "event_type": "cooccur",
+            "parameter_name": "cooccurrence",
+            "timestamp_utc": window.get("t_end"),
+            "event_type_detected": "cooccur_window",
             "payload": {
+                "cooccurrence_detected_kind": "window_aggregate",
                 "win_id": int(window.get("win_id", 0)),
                 "sensor_count": len(sensor_set),
                 "event_count": int(window.get("event_count", 0)),

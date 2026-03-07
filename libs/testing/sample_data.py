@@ -99,27 +99,8 @@ def create_sample_raw_table_df(spark: "SparkSession") -> "DataFrame":
     raw_input = create_sample_raw_input_df(spark)
     return (
         raw_input.withColumnRenamed("timestamp", "timestamp_utc")
-        .withColumn("sensor", F.col("parameter_name"))
-        .withColumn("val", F.expr("try_cast(parameter_value as double)"))
-        .withColumn("state", F.when(F.col("val").isNull(), F.col("parameter_value")))
-        .withColumn("unit", F.lit(None).cast("string"))
-        .withColumn("rate_hz", F.lit(None).cast("double"))
-        .withColumn("meta", F.expr("cast(map() as map<string,string>)"))
         .withColumn("date_utc", F.to_date("timestamp_utc"))
-        .select(
-            "tail_id",
-            "flight_id",
-            "timestamp_utc",
-            "parameter_name",
-            "parameter_value",
-            "sensor",
-            "val",
-            "state",
-            "unit",
-            "rate_hz",
-            "meta",
-            "date_utc",
-        )
+        .select("tail_id", "flight_id", "timestamp_utc", "parameter_name", "parameter_value", "date_utc")
     )
 
 
@@ -143,10 +124,11 @@ def create_sample_events_df(spark: "SparkSession") -> "DataFrame":
                 "tail_id": "T001",
                 "flight_id": "F001",
                 "win_id": (idx - 1) // 4 + 1,
-                "ts": ts,
-                "sensor": "ENG_TEMP_1" if idx % 2 else "PUMP_STATE",
-                "subsystem": "unknown",
-                "event_type": event_type,
+                "timestamp_utc": ts,
+                "parameter_name": "ENG_TEMP_1" if idx % 2 else "PUMP_STATE",
+                "event_type_detected": event_type,
+                "anomaly_type_detected": "",
+                "anomaly_score_detected": 0.0,
                 "payload": {"idx": str(idx)},
                 "date_utc": ts.date(),
             }
@@ -183,39 +165,34 @@ def create_sample_windows_df(spark: "SparkSession") -> "DataFrame":
     return spark.createDataFrame(rows)
 
 
-def create_sample_signatures_df(spark: "SparkSession") -> "DataFrame":
+def create_sample_phase_labels_df(spark: "SparkSession") -> "DataFrame":
     base = _base_time()
     rows = [
         {
             "tail_id": "T001",
             "flight_id": "F001",
             "win_id": 1,
-            "phase_id": 0,
-            "sig_version": 1,
-            "pivot_block": [451.0, 0.9, 450.0, 452.0],
-            "cur_block": [6.0, 2.0, 400.0],
-            "event_block": [4.0, 2.0, 1.0],
-            "cat_block": [1.0, 0.0, 1.0],
-            "breadth": 0.35,
-            "drift_mag": 1.8,
-            "drift_dir": [0.2],
+            "phase_label": "steady",
+            "timestamp_utc": base + timedelta(milliseconds=500),
             "date_utc": base.date(),
         },
         {
             "tail_id": "T001",
             "flight_id": "F001",
             "win_id": 2,
-            "phase_id": 1,
-            "sig_version": 1,
-            "pivot_block": [453.0, 1.2, 451.0, 454.0],
-            "cur_block": [6.0, 3.0, 500.0],
-            "event_block": [4.0, 1.0, 2.0],
-            "cat_block": [2.0, 1.0, 0.0],
-            "breadth": 0.72,
-            "drift_mag": 4.5,
-            "drift_dir": [0.8],
+            "phase_label": "transition",
+            "timestamp_utc": base + timedelta(milliseconds=1100),
             "date_utc": base.date(),
         },
+    ]
+    return spark.createDataFrame(rows)
+
+
+def create_sample_hierarchy_sensor_map_label_df(spark: "SparkSession") -> "DataFrame":
+    rows = [
+        {"parameter_name": "ENG_TEMP_1", "system_id": "SYS_0001", "subsystem_id": "SUBSYS_0001", "module_id": "MOD_0001"},
+        {"parameter_name": "HYD_PRESS_1", "system_id": "SYS_0001", "subsystem_id": "SUBSYS_0001", "module_id": "MOD_0002"},
+        {"parameter_name": "PUMP_STATE", "system_id": "SYS_0001", "subsystem_id": "SUBSYS_0002", "module_id": "MOD_0003"},
     ]
     return spark.createDataFrame(rows)
 
@@ -227,30 +204,40 @@ def create_sample_phase_windows_df(spark: "SparkSession") -> "DataFrame":
             "tail_id": "T001",
             "flight_id": "F001",
             "win_id": 1,
-            "phase_id": 0,
-            "phase_state": "stable",
-            "phase_confidence": 0.91,
-            "distance_to_centroid": 0.12,
+            "t_start": base + timedelta(milliseconds=100),
+            "t_end": base + timedelta(milliseconds=500),
+            "duration_ms": 400,
+            "event_count": 4,
+            "phase_id_detected": 0,
+            "phase_state_detected": "stable",
+            "phase_confidence_detected": 0.91,
+            "distance_to_centroid_detected": 0.12,
             "drift_magnitude": 1.8,
             "breadth": 0.35,
-            "persistence": 0.63,
-            "is_stable": True,
-            "phase_persistent": False,
+            "backbone_reconstruction_error": 0.22,
+            "backbone_residual_by_parameter": {"ENG_TEMP_1": 0.15, "HYD_PRESS_1": -0.07},
+            "x_c": [0.2],
+            "s_w": [0.2, 0.5, 0.0, 10.0, 0.5, 0.5, 1.0],
             "date_utc": base.date(),
         },
         {
             "tail_id": "T001",
             "flight_id": "F001",
             "win_id": 2,
-            "phase_id": 3,
-            "phase_state": "transition_region",
-            "phase_confidence": 0.44,
-            "distance_to_centroid": 0.88,
+            "t_start": base + timedelta(milliseconds=600),
+            "t_end": base + timedelta(milliseconds=1100),
+            "duration_ms": 500,
+            "event_count": 4,
+            "phase_id_detected": 3,
+            "phase_state_detected": "transition_region",
+            "phase_confidence_detected": 0.44,
+            "distance_to_centroid_detected": 0.88,
             "drift_magnitude": 4.5,
             "breadth": 0.72,
-            "persistence": 3.24,
-            "is_stable": False,
-            "phase_persistent": True,
+            "backbone_reconstruction_error": 0.91,
+            "backbone_residual_by_parameter": {"ENG_TEMP_1": 0.62, "HYD_PRESS_1": 0.29},
+            "x_c": [0.8],
+            "s_w": [0.8, 0.3, 1.0, 8.0, 0.25, 0.75, 1.0],
             "date_utc": base.date(),
         },
     ]
@@ -264,38 +251,38 @@ def create_sample_scores_df(spark: "SparkSession") -> "DataFrame":
             "tail_id": "T001",
             "flight_id": "F001",
             "win_id": 1,
-            "phase_state": "stable",
-            "phase_id": 0,
-            "phase_confidence": 0.91,
-            "distance_to_centroid": 0.12,
+            "phase_state_detected": "stable",
+            "phase_id_detected": 0,
+            "phase_confidence_detected": 0.91,
+            "distance_to_centroid_detected": 0.12,
             "drift_magnitude": 1.8,
             "breadth": 0.35,
             "global_score": 3.2,
             "p_value": 0.65,
             "severity": "low",
-            "dominant_subsystem": "unknown",
-            "dominant_block": "event_block",
+            "dominant_subsystem_id": "",
+            "dominant_score_component": "structure",
             "subsystem_scores": {"SUBSYS_0001": 0.8, "SUBSYS_0002": 0.2},
-            "block_scores": {"pivot": 1.1, "cur": 1.0, "events": 0.8, "categorical": 0.3},
+            "score_component_scores": {"structure": 1.1, "reconstruction": 0.8},
             "date_utc": base.date(),
         },
         {
             "tail_id": "T001",
             "flight_id": "F001",
             "win_id": 2,
-            "phase_state": "transition_region",
-            "phase_id": 3,
-            "phase_confidence": 0.44,
-            "distance_to_centroid": 0.88,
+            "phase_state_detected": "transition_region",
+            "phase_id_detected": 3,
+            "phase_confidence_detected": 0.44,
+            "distance_to_centroid_detected": 0.88,
             "drift_magnitude": 4.5,
             "breadth": 0.72,
             "global_score": 8.4,
             "p_value": 0.22,
             "severity": "medium",
-            "dominant_subsystem": "unknown",
-            "dominant_block": "cur_block",
+            "dominant_subsystem_id": "",
+            "dominant_score_component": "reconstruction",
             "subsystem_scores": {"SUBSYS_0002": 0.7, "SUBSYS_0001": 0.3},
-            "block_scores": {"pivot": 2.1, "cur": 3.0, "events": 2.4, "categorical": 0.9},
+            "score_component_scores": {"structure": 2.1, "reconstruction": 3.0},
             "date_utc": base.date(),
         },
     ]
@@ -309,19 +296,19 @@ def create_sample_calibrated_df(spark: "SparkSession") -> "DataFrame":
             "tail_id": "T001",
             "flight_id": "F001",
             "win_id": 1,
-            "phase_state": "stable",
-            "phase_id": 0,
-            "phase_confidence": 0.91,
-            "distance_to_centroid": 0.12,
+            "phase_state_detected": "stable",
+            "phase_id_detected": 0,
+            "phase_confidence_detected": 0.91,
+            "distance_to_centroid_detected": 0.12,
             "drift_magnitude": 1.8,
             "breadth": 0.35,
             "global_score": 3.2,
             "p_value": 0.60,
             "severity": "low",
-            "dominant_subsystem": "unknown",
-            "dominant_block": "event_block",
+            "dominant_subsystem_id": "",
+            "dominant_score_component": "structure",
             "subsystem_scores": {"SUBSYS_0001": 0.8, "SUBSYS_0002": 0.2},
-            "block_scores": {"pivot": 1.1, "cur": 1.0, "events": 0.8, "categorical": 0.3},
+            "score_component_scores": {"structure": 1.1, "reconstruction": 0.8},
             "warm": True,
             "emit_ready": True,
             "min_warm": 1,
@@ -331,19 +318,19 @@ def create_sample_calibrated_df(spark: "SparkSession") -> "DataFrame":
             "tail_id": "T001",
             "flight_id": "F001",
             "win_id": 2,
-            "phase_state": "transition_region",
-            "phase_id": 3,
-            "phase_confidence": 0.44,
-            "distance_to_centroid": 0.88,
+            "phase_state_detected": "transition_region",
+            "phase_id_detected": 3,
+            "phase_confidence_detected": 0.44,
+            "distance_to_centroid_detected": 0.88,
             "drift_magnitude": 4.5,
             "breadth": 0.72,
             "global_score": 8.4,
             "p_value": 0.20,
             "severity": "medium",
-            "dominant_subsystem": "unknown",
-            "dominant_block": "cur_block",
+            "dominant_subsystem_id": "",
+            "dominant_score_component": "reconstruction",
             "subsystem_scores": {"SUBSYS_0002": 0.7, "SUBSYS_0001": 0.3},
-            "block_scores": {"pivot": 2.1, "cur": 3.0, "events": 2.4, "categorical": 0.9},
+            "score_component_scores": {"structure": 2.1, "reconstruction": 3.0},
             "warm": True,
             "emit_ready": True,
             "min_warm": 1,
@@ -378,10 +365,11 @@ def seed_sample_dataset(
         "raw_telemetry": str(delta_path / "raw_telemetry"),
         "events": str(delta_path / "events"),
         "windows": str(delta_path / "windows"),
-        "signatures": str(delta_path / "signatures"),
+        "phase_labels": str(delta_path / "phase_labels"),
+        "hierarchy_sensor_map_label": str(delta_path / "hierarchy_sensor_map_label"),
         "phase_windows": str(delta_path / "phase_windows"),
-        "scores": str(delta_path / "scores"),
-        "calibrated": str(delta_path / "calibrated"),
+        "window_scores_raw": str(delta_path / "window_scores_raw"),
+        "window_scores_calibrated": str(delta_path / "window_scores_calibrated"),
     }
 
     if (
@@ -418,10 +406,11 @@ def seed_sample_dataset(
     if include_intermediate_tables:
         _write_seed_table(create_sample_events_df(spark), paths["events"])
         _write_seed_table(create_sample_windows_df(spark), paths["windows"])
-        _write_seed_table(create_sample_signatures_df(spark), paths["signatures"])
+        _write_seed_table(create_sample_phase_labels_df(spark), paths["phase_labels"])
+        _write_seed_table(create_sample_hierarchy_sensor_map_label_df(spark), paths["hierarchy_sensor_map_label"])
         _write_seed_table(create_sample_phase_windows_df(spark), paths["phase_windows"])
-        _write_seed_table(create_sample_scores_df(spark), paths["scores"])
-        _write_seed_table(create_sample_calibrated_df(spark), paths["calibrated"])
+        _write_seed_table(create_sample_scores_df(spark), paths["window_scores_raw"])
+        _write_seed_table(create_sample_calibrated_df(spark), paths["window_scores_calibrated"])
     return paths
 
 

@@ -3,11 +3,12 @@
 
 import os
 
+from pyspark.sql import functions as F
+
 from libs.events.categorical import build_categorical_events
-from libs.events.cooccur import build_cooccurrence_events
 from libs.events.extrema import build_continuous_events
 from libs.io.delta import get_spark, read_table, write_table
-from libs.perf import get_logger, log_params_if_active, log_wall_time, track_mlflow_run
+from libs.perf import get_logger, log_dict_artifact_if_active, log_params_if_active, log_wall_time, track_mlflow_run
 from pipelines.common import build_context
 
 
@@ -23,15 +24,28 @@ def run() -> None:
     table_format = os.getenv("S3NTINEL_TABLE_FORMAT", "delta")
     write_mode = os.getenv("S3NTINEL_WRITE_MODE", "append")
     delta_threshold = float(os.getenv("S3NTINEL_EVENT_DELTA_THRESHOLD", "0.0"))
+    slope_source = str(os.getenv("S3NTINEL_EVENT_SLOPE_SOURCE", "ema"))
+    ema_alpha = float(os.getenv("S3NTINEL_EVENT_EMA_ALPHA", "0.2"))
 
     spark = get_spark("s3ntinel.events_extract")
     raw_df = read_table(spark, input_path, fmt=table_format)
 
-    continuous_events = build_continuous_events(raw_df, delta_threshold=delta_threshold)
+    continuous_events = build_continuous_events(
+        raw_df,
+        delta_threshold=delta_threshold,
+        slope_source=slope_source,
+        ema_alpha=ema_alpha,
+    )
     categorical_events = build_categorical_events(raw_df)
-    base_events = continuous_events.unionByName(categorical_events)
-    cooccur_events = build_cooccurrence_events(base_events)
-    events_df = base_events.unionByName(cooccur_events)
+    events_df = continuous_events.unionByName(categorical_events)
+    if "sensor" in events_df.columns and "parameter_name" not in events_df.columns:
+        events_df = events_df.withColumnRenamed("sensor", "parameter_name")
+    if "ts" in events_df.columns and "timestamp_utc" not in events_df.columns:
+        events_df = events_df.withColumnRenamed("ts", "timestamp_utc")
+    if "anomaly_type_detected" not in events_df.columns:
+        events_df = events_df.withColumn("anomaly_type_detected", F.lit(None).cast("string"))
+    if "anomaly_score_detected" not in events_df.columns:
+        events_df = events_df.withColumn("anomaly_score_detected", F.lit(None).cast("double"))
 
     write_table(
         events_df,
@@ -41,10 +55,34 @@ def run() -> None:
         partition_by=context.config["output"]["partition_by"],
     )
 
-    log_params_if_active({"event_threshold": context.config["windowing"]["event_threshold"]})
+    log_params_if_active(
+        {
+            "event_threshold": context.config["windowing"]["event_threshold"],
+        }
+    )
+    log_dict_artifact_if_active(
+        {
+            "stage": "20_events_extract",
+            "input_path": input_path,
+            "output_path": output_path,
+            "table_format": table_format,
+            "write_mode": write_mode,
+            "delta_threshold": delta_threshold,
+            "slope_source": slope_source,
+            "ema_alpha": ema_alpha,
+            "event_threshold": int(context.config["windowing"]["event_threshold"]),
+            "partition_by": list(context.config["output"]["partition_by"]),
+        },
+        "reports/stages/20_events_extract_summary.json",
+    )
     LOGGER.info(
-        "pipeline=events_extract event_threshold=%s input=%s output=%s",
+        "pipeline=events_extract format=%s write_mode=%s event_threshold=%s delta_threshold=%s slope_source=%s ema_alpha=%s input=%s output=%s",
+        table_format,
+        write_mode,
         context.config["windowing"]["event_threshold"],
+        delta_threshold,
+        slope_source,
+        ema_alpha,
         input_path,
         output_path,
     )

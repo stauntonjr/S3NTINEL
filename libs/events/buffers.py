@@ -36,7 +36,7 @@ def event_value_for_buffer(event: dict[str, Any]) -> str:
             return str(payload.get("value"))
         if payload.get("state") is not None:
             return str(payload.get("state"))
-    return str(event.get("event_type", "unknown"))
+    return str(event.get("event_type_detected", "unknown"))
 
 
 def buffer_snapshot(last_seen: dict[str, dict[str, Any]]) -> dict[str, str]:

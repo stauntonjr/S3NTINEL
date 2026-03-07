@@ -30,7 +30,7 @@ def normalize_raw_telemetry(raw_df: "DataFrame") -> "DataFrame":
         .where(F.col("timestamp_utc").isNotNull() & F.col("parameter_name").isNotNull())
         .withColumn("sensor", F.col("parameter_name"))
         .withColumn("val", F.expr("try_cast(parameter_value as double)"))
-        .withColumn("state", F.when(F.col("val").isNull(), F.col("parameter_value")))
+        
         .withColumn("unit", F.lit(None).cast("string"))
         .withColumn("rate_hz", F.lit(None).cast("double"))
         .withColumn("meta", F.expr("cast(map() as map<string,string>)"))

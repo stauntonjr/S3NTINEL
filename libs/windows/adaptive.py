@@ -7,6 +7,16 @@ from datetime import date
 
 from libs.perf.annotations import hot_path
 
+
+DEFAULT_MIN_SAMPLING_RATE_HZ = 1.0
+
+
+def max_window_ms_from_min_sampling_rate(min_sampling_rate_hz: float) -> int:
+    rate_hz = max(float(min_sampling_rate_hz), 1e-6)
+    # Use a 10-sample span for default window horizon.
+    return max(int(round((10.0 / rate_hz) * 1000.0)), 1)
+
+
 def _window_date_from_start(start_ts: "datetime") -> date:
     return start_ts.date()
 
@@ -37,12 +47,12 @@ def build_adaptive_windows(
     from pyspark.sql.window import Window
 
     events_with_ms = (
-        events_df.withColumn("ts_ms", F.unix_millis(F.col("ts")))
-        .withColumn("bucket_start_ms", (F.floor(F.col("ts_ms") / F.lit(max_ms)) * F.lit(max_ms)).cast("long"))
+        events_df.withColumn("timestamp_ms", F.unix_millis(F.col("timestamp_utc")))
+        .withColumn("bucket_start_ms", (F.floor(F.col("timestamp_ms") / F.lit(max_ms)) * F.lit(max_ms)).cast("long"))
         .withColumn("bucket_ts", F.timestamp_millis(F.col("bucket_start_ms")))
     )
 
-    order_window = Window.partitionBy("tail_id", "flight_id", "bucket_start_ms").orderBy("ts")
+    order_window = Window.partitionBy("tail_id", "flight_id", "bucket_start_ms").orderBy("timestamp_utc")
     segmented = events_with_ms.withColumn("rn", F.row_number().over(order_window)).withColumn(
         "sub_bucket", F.floor((F.col("rn") - F.lit(1)) / F.lit(max(event_threshold, 1))).cast("long")
     )
@@ -50,8 +60,8 @@ def build_adaptive_windows(
     grouped = (
         segmented.groupBy("tail_id", "flight_id", "date_utc", "bucket_start_ms", "sub_bucket")
         .agg(
-            F.min("ts").alias("t_start"),
-            F.max("ts").alias("t_end"),
+            F.min("timestamp_utc").alias("t_start"),
+            F.max("timestamp_utc").alias("t_end"),
             F.count(F.lit(1)).alias("event_count"),
         )
         .withColumn("raw_duration_ms", F.unix_millis("t_end") - F.unix_millis("t_start"))
@@ -108,8 +118,8 @@ def build_adaptive_windows_stream_parity(
     )
 
     base = (
-        events_df.select("tail_id", "flight_id", "ts", "date_utc")
-        .where(F.col("tail_id").isNotNull() & F.col("flight_id").isNotNull() & F.col("ts").isNotNull())
+        events_df.select("tail_id", "flight_id", "timestamp_utc", "date_utc")
+        .where(F.col("tail_id").isNotNull() & F.col("flight_id").isNotNull() & F.col("timestamp_utc").isNotNull())
     )
 
     def _emit_windows(pdf: "pd.DataFrame") -> "pd.DataFrame":
@@ -131,7 +141,7 @@ def build_adaptive_windows_stream_parity(
                 ]
             )
 
-        ordered = pdf.sort_values(by=["ts"], kind="mergesort")
+        ordered = pdf.sort_values(by=["timestamp_utc"], kind="mergesort")
         rows: list[dict[str, object]] = []
 
         first = ordered.iloc[0]
@@ -145,7 +155,7 @@ def build_adaptive_windows_stream_parity(
         timeout_ms = max(int(inactivity_timeout_ms), 0)
 
         for _, row in ordered.iterrows():
-            ts = row["ts"]
+            ts = row["timestamp_utc"]
             if pd.isna(ts):
                 continue
 
@@ -168,6 +178,29 @@ def build_adaptive_windows_stream_parity(
                             "duration_ms": int(duration_ms_effective),
                             "event_count": int(event_count_current),
                             "close_reason": "inactivity_timeout",
+                            "zoh_version": 1,
+                            "date_utc": _window_date_from_start(window_start),
+                        }
+                    )
+                    win_id += 1
+                    window_start = ts
+                    window_end = ts
+                    event_count_current = 0
+
+            if window_start is not None and event_count_current > 0:
+                window_cap = window_start + pd.Timedelta(milliseconds=int(max_ms))
+                if ts >= window_cap:
+                    duration_ms_effective = max(int(max_ms), int(min_ms))
+                    rows.append(
+                        {
+                            "tail_id": tail_id,
+                            "flight_id": flight_id,
+                            "win_id": int(win_id),
+                            "t_start": window_start,
+                            "t_end": window_cap,
+                            "duration_ms": int(duration_ms_effective),
+                            "event_count": int(event_count_current),
+                            "close_reason": "max_ms",
                             "zoh_version": 1,
                             "date_utc": _window_date_from_start(window_start),
                         }

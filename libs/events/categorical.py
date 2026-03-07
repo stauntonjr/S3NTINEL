@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Iterable, Iterator
 
+from libs.common import SensorDataType, spark_normalized_datatype_expr
+from libs.common.event_types import EventType
 from libs.perf.annotations import hot_path
 
 
@@ -76,7 +78,7 @@ def detect_categorical_events_stream(
                         "flight_id": sample.flight_id,
                         "sensor": sample.sensor,
                         "ts": sample.ts,
-                        "event_type": "state_exit",
+                        "event_type_detected": EventType.STATE_EXIT,
                         "payload": {
                             "from": str(last_state),
                             "to": "missing",
@@ -87,7 +89,7 @@ def detect_categorical_events_stream(
                     "flight_id": sample.flight_id,
                     "sensor": sample.sensor,
                     "ts": sample.ts,
-                    "event_type": "dropped",
+                    "event_type_detected": EventType.DROPPED,
                     "payload": {"from": str(last_state) if last_state is not None else "none", "to": "missing"},
                 }
             state["missing"] = True
@@ -102,7 +104,7 @@ def detect_categorical_events_stream(
                 "flight_id": sample.flight_id,
                 "sensor": sample.sensor,
                 "ts": sample.ts,
-                "event_type": "state_enter",
+                "event_type_detected": EventType.STATE_ENTER,
                 "payload": {"from": "none", "to": current_state},
             }
             state["missing"] = False
@@ -131,7 +133,7 @@ def detect_categorical_events_stream(
                     "flight_id": sample.flight_id,
                     "sensor": sample.sensor,
                     "ts": sample.ts,
-                    "event_type": "state_exit",
+                    "event_type_detected": EventType.STATE_EXIT,
                     "payload": {
                         "from": last_state,
                         "to": current_state,
@@ -145,7 +147,7 @@ def detect_categorical_events_stream(
                     "flight_id": sample.flight_id,
                     "sensor": sample.sensor,
                     "ts": sample.ts,
-                    "event_type": "dwell_bucket",
+                    "event_type_detected": EventType.DWELL_BUCKET,
                     "payload": {
                         "state": last_state,
                         "dwell_seconds": dwell_seconds,
@@ -158,7 +160,7 @@ def detect_categorical_events_stream(
                 "flight_id": sample.flight_id,
                 "sensor": sample.sensor,
                 "ts": sample.ts,
-                "event_type": "transition",
+                "event_type_detected": EventType.TRANSITION,
                 "payload": {
                     "from": last_state,
                     "to": current_state,
@@ -172,7 +174,7 @@ def detect_categorical_events_stream(
                     "flight_id": sample.flight_id,
                     "sensor": sample.sensor,
                     "ts": sample.ts,
-                    "event_type": "dwell_violation",
+                    "event_type_detected": EventType.DWELL_VIOLATION,
                     "payload": {
                         "from": last_state,
                         "to": current_state,
@@ -187,7 +189,7 @@ def detect_categorical_events_stream(
                     "flight_id": sample.flight_id,
                     "sensor": sample.sensor,
                     "ts": sample.ts,
-                    "event_type": "illegal_transition",
+                    "event_type_detected": EventType.ILLEGAL_TRANSITION,
                     "payload": {
                         "from": last_state,
                         "to": current_state,
@@ -215,7 +217,7 @@ def detect_categorical_events_stream(
                     "flight_id": sample.flight_id,
                     "sensor": sample.sensor,
                     "ts": sample.ts,
-                    "event_type": "dwell_guard",
+                    "event_type_detected": EventType.DWELL_GUARD,
                     "payload": {
                         "state": current_state,
                         "dwell_seconds": dwell_seconds,
@@ -232,31 +234,41 @@ def build_categorical_events(raw_df: "DataFrame") -> "DataFrame":
     from pyspark.sql import functions as F
     from pyspark.sql.window import Window
 
-    order_window = Window.partitionBy("tail_id", "flight_id", "sensor").orderBy("timestamp_utc")
+    parameter_col = "parameter_name" if "parameter_name" in raw_df.columns else "sensor"
+    order_window = Window.partitionBy("tail_id", "flight_id", parameter_col).orderBy("timestamp_utc")
+
+    source_df = raw_df
+    if "parameter_datatype" in raw_df.columns:
+        source_df = source_df.where(
+            spark_normalized_datatype_expr(F.col("parameter_datatype")).isin(
+                SensorDataType.BINARY.value,
+                SensorDataType.CATEGORICAL.value,
+            )
+        )
 
     categorical = (
-        raw_df.where(F.col("state").isNotNull() | F.col("parameter_value").isNull())
-        .withColumn("current_state", F.coalesce(F.col("state"), F.lit("missing")))
+            source_df
+            .withColumn("current_state", F.coalesce(F.col("parameter_value"), F.lit("missing")))
         .withColumn("prev_state", F.lag("current_state").over(order_window))
         .withColumn(
-            "event_type",
-            F.when(F.col("parameter_value").isNull(), F.lit("dropped"))
-            .when(F.col("prev_state").isNull(), F.lit("state_enter"))
-            .when(F.col("current_state") != F.col("prev_state"), F.lit("transition"))
+            "event_type_detected",
+            F.when(F.col("parameter_value").isNull(), F.lit(EventType.DROPPED))
+            .when(F.col("prev_state").isNull(), F.lit(EventType.STATE_ENTER))
+            .when(F.col("current_state") != F.col("prev_state"), F.lit(EventType.TRANSITION))
             .otherwise(F.lit(None).cast("string")),
         )
     )
 
     return (
-        categorical.where(F.col("event_type").isNotNull())
+        categorical.where(F.col("event_type_detected").isNotNull())
         .select(
             "tail_id",
             "flight_id",
             F.lit(None).cast("long").alias("win_id"),
-            F.col("timestamp_utc").alias("ts"),
-            "sensor",
+            F.col("timestamp_utc").alias("timestamp_utc"),
+            F.col(parameter_col).alias("parameter_name"),
             F.lit("unknown").alias("subsystem"),
-            "event_type",
+            "event_type_detected",
             F.create_map(
                 F.lit("from"),
                 F.coalesce(F.col("prev_state"), F.lit("none")).cast("string"),

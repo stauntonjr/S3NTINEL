@@ -8,6 +8,8 @@ from dataclasses import dataclass
 import math
 from typing import Any, Iterable, Iterator
 
+from libs.common import SensorDataType, spark_normalized_datatype_expr
+from libs.common.event_types import EventType
 from libs.perf.annotations import hot_path
 
 
@@ -23,6 +25,7 @@ class ContinuousSample:
 @dataclass(frozen=True)
 class ContinuousDetectorConfig:
     ema_alpha: float = 0.2
+    slope_source: str = "ema"
     residual_z_threshold: float = 3.0
     slope_abs_threshold: float = 0.0
     switch_z_threshold: float = 4.0
@@ -48,6 +51,13 @@ class ContinuousDetectorConfig:
     drift_guard_max_gap_samples: int = 0
     emit_extrema_events: bool = False
     warmup_points: int = 5
+
+
+def _normalize_slope_source(slope_source: str) -> str:
+    source = str(slope_source).strip().lower()
+    if source not in {"raw", "ema"}:
+        raise ValueError(f"Unsupported slope_source '{slope_source}'. Expected one of: raw, ema")
+    return source
 
 
 @hot_path
@@ -76,11 +86,11 @@ def classify_continuous_delta_event(
         return None
     threshold = float(delta_threshold)
     if threshold > 0.0 and abs(float(delta)) >= threshold:
-        return "threshold"
+        return EventType.THRESHOLD
     if float(delta) > 0.0:
-        return "slope_pos"
+        return EventType.SLOPE_POS
     if float(delta) < 0.0:
-        return "slope_neg"
+        return EventType.SLOPE_NEG
     return None
 
 
@@ -90,6 +100,7 @@ def detect_continuous_events_stream(
 ) -> Iterator[dict[str, Any]]:
     """Yield continuous-channel events from streaming samples without DataFrame materialization."""
     active = config if config else ContinuousDetectorConfig()
+    slope_source = _normalize_slope_source(active.slope_source)
     sensor_state: dict[tuple[str, str, str], dict[str, Any]] = {}
 
     for sample in samples:
@@ -148,6 +159,11 @@ def detect_continuous_events_stream(
         sigma = max(math.sqrt(max(var_new, 0.0)), float(active.min_sigma))
 
         delta = 0.0 if prev_value is None else value - float(prev_value)
+        if slope_source == "ema":
+            slope_delta = ema_new - float(ema_prev)
+        else:
+            slope_delta = delta
+
         state["drift_guard_cum_abs"] = float(state["drift_guard_cum_abs"]) + abs(delta)
         osc_delta = 0.0 if osc_ema_prev is None else (osc_value - float(osc_ema_prev))
         delta_sign = 1 if osc_delta > 0 else (-1 if osc_delta < 0 else 0)
@@ -276,7 +292,7 @@ def detect_continuous_events_stream(
                     "flight_id": sample.flight_id,
                     "sensor": sample.sensor,
                     "ts": sample.ts,
-                    "event_type": "threshold",
+                    "event_type_detected": EventType.THRESHOLD,
                     "payload": {
                         "value": value,
                         "ema": float(ema_prev),
@@ -285,23 +301,33 @@ def detect_continuous_events_stream(
                     },
                 }
 
-            if delta > float(active.slope_abs_threshold):
+            if slope_delta > float(active.slope_abs_threshold):
                 yield {
                     "tail_id": sample.tail_id,
                     "flight_id": sample.flight_id,
                     "sensor": sample.sensor,
                     "ts": sample.ts,
-                    "event_type": "slope_pos",
-                    "payload": {"delta": delta, "value": value},
+                    "event_type_detected": EventType.SLOPE_POS,
+                    "payload": {
+                        "delta": slope_delta,
+                        "delta_raw": delta,
+                        "value": value,
+                        "slope_source": slope_source,
+                    },
                 }
-            elif delta < -float(active.slope_abs_threshold):
+            elif slope_delta < -float(active.slope_abs_threshold):
                 yield {
                     "tail_id": sample.tail_id,
                     "flight_id": sample.flight_id,
                     "sensor": sample.sensor,
                     "ts": sample.ts,
-                    "event_type": "slope_neg",
-                    "payload": {"delta": delta, "value": value},
+                    "event_type_detected": EventType.SLOPE_NEG,
+                    "payload": {
+                        "delta": slope_delta,
+                        "delta_raw": delta,
+                        "value": value,
+                        "slope_source": slope_source,
+                    },
                 }
 
             if switch_detected or (switch_refractory_ready and abs(residual) >= float(active.switch_z_threshold) * sigma):
@@ -311,7 +337,7 @@ def detect_continuous_events_stream(
                     "flight_id": sample.flight_id,
                     "sensor": sample.sensor,
                     "ts": sample.ts,
-                    "event_type": "switch",
+                    "event_type_detected": EventType.SWITCH,
                     "payload": {
                         "value": value,
                         "ema": float(ema_prev),
@@ -327,7 +353,7 @@ def detect_continuous_events_stream(
                     "flight_id": sample.flight_id,
                     "sensor": sample.sensor,
                     "ts": new_extrema[3],
-                    "event_type": "extrema",
+                    "event_type_detected": EventType.EXTREMA,
                     "payload": {
                         "kind": new_extrema[0],
                         "legacy_type": "max" if new_extrema[0] == "peak" else "min",
@@ -346,7 +372,7 @@ def detect_continuous_events_stream(
                     "flight_id": sample.flight_id,
                     "sensor": sample.sensor,
                     "ts": new_extrema[3],
-                    "event_type": "oscillation",
+                    "event_type_detected": EventType.OSCILLATION,
                     "payload": {
                         "sign_changes": sign_changes,
                         "window": int(active.oscillation_window),
@@ -373,7 +399,7 @@ def detect_continuous_events_stream(
                     "flight_id": sample.flight_id,
                     "sensor": sample.sensor,
                     "ts": sample.ts,
-                    "event_type": "drift_guard",
+                    "event_type_detected": EventType.DRIFT_GUARD,
                     "payload": {
                         "reason": reason,
                         "cum_abs_change": float(state["drift_guard_cum_abs"]),
@@ -394,49 +420,156 @@ def detect_continuous_events_stream(
 
 
 @hot_path
-def build_continuous_events(raw_df: "DataFrame", delta_threshold: float = 0.0) -> "DataFrame":
+def build_continuous_events(
+    raw_df: "DataFrame",
+    delta_threshold: float = 0.0,
+    *,
+    slope_source: str = "ema",
+    ema_alpha: float = 0.2,
+) -> "DataFrame":
+    import pandas as pd
     from pyspark.sql import functions as F
+    from pyspark.sql import types as T
     from pyspark.sql.window import Window
 
-    order_window = Window.partitionBy("tail_id", "flight_id", "sensor").orderBy("timestamp_utc")
+    slope_mode = _normalize_slope_source(slope_source)
+    alpha = float(ema_alpha)
+    if not (0.0 < alpha <= 1.0):
+        raise ValueError(f"ema_alpha must be in (0, 1], got {ema_alpha}")
 
-    enriched = (
-        raw_df.where(F.col("val").isNotNull())
-        .withColumn("prev_val", F.lag("val").over(order_window))
-        .withColumn("delta", F.col("val") - F.col("prev_val"))
+    parameter_col = "parameter_name" if "parameter_name" in raw_df.columns else "sensor"
+    order_window = Window.partitionBy("tail_id", "flight_id", parameter_col).orderBy("timestamp_utc")
+
+    source_df = raw_df
+    if "parameter_datatype" in raw_df.columns:
+        source_df = source_df.where(
+            spark_normalized_datatype_expr(F.col("parameter_datatype")) == F.lit(SensorDataType.NUMERIC.value)
+        )
+
+    source_df = source_df.where(F.col("val").isNotNull())
+
+    if slope_mode == "raw":
+        enriched = source_df.withColumn("prev_val", F.lag("val").over(order_window)).withColumn("delta", F.col("val") - F.col("prev_val"))
+
+        effective_threshold = float(delta_threshold)
+        if effective_threshold > 0.0:
+            event_type = (
+                F.when(F.col("prev_val").isNull(), F.lit(None).cast("string"))
+                .when(F.abs(F.col("delta")) >= F.lit(effective_threshold), F.lit(EventType.THRESHOLD))
+                .when(F.col("delta") > 0, F.lit(EventType.SLOPE_POS))
+                .when(F.col("delta") < 0, F.lit(EventType.SLOPE_NEG))
+            )
+        else:
+            event_type = (
+                F.when(F.col("prev_val").isNull(), F.lit(None).cast("string"))
+                .when(F.col("delta") > 0, F.lit(EventType.SLOPE_POS))
+                .when(F.col("delta") < 0, F.lit(EventType.SLOPE_NEG))
+            )
+
+        return (
+            enriched.withColumn("event_type_detected", event_type)
+            .where(F.col("event_type_detected").isNotNull())
+            .select(
+                "tail_id",
+                "flight_id",
+                F.lit(None).cast("long").alias("win_id"),
+                F.col("timestamp_utc").alias("timestamp_utc"),
+                F.col(parameter_col).alias("parameter_name"),
+                F.lit("unknown").alias("subsystem"),
+                "event_type_detected",
+                F.create_map(
+                    F.lit("delta"),
+                    F.col("delta").cast("string"),
+                    F.lit("value"),
+                    F.col("val").cast("string"),
+                    F.lit("slope_source"),
+                    F.lit("raw"),
+                ).alias("payload"),
+                "date_utc",
+            )
+        )
+
+    schema = T.StructType(
+        [
+            T.StructField("tail_id", T.StringType(), False),
+            T.StructField("flight_id", T.StringType(), False),
+            T.StructField("parameter_name", T.StringType(), False),
+            T.StructField("timestamp_utc", T.TimestampType(), True),
+            T.StructField("event_type_detected", T.StringType(), True),
+            T.StructField("delta", T.DoubleType(), True),
+            T.StructField("delta_raw", T.DoubleType(), True),
+            T.StructField("value", T.DoubleType(), True),
+            T.StructField("date_utc", T.StringType(), True),
+        ]
     )
 
     effective_threshold = float(delta_threshold)
-    if effective_threshold > 0.0:
-        event_type = (
-            F.when(F.col("prev_val").isNull(), F.lit(None).cast("string"))
-            .when(F.abs(F.col("delta")) >= F.lit(effective_threshold), F.lit("threshold"))
-            .when(F.col("delta") > 0, F.lit("slope_pos"))
-            .when(F.col("delta") < 0, F.lit("slope_neg"))
+
+    def _emit_group_events(pdf: pd.DataFrame) -> pd.DataFrame:
+        if pdf.empty:
+            return pd.DataFrame(columns=["tail_id", "flight_id", "parameter_name", "timestamp_utc", "event_type_detected", "delta", "delta_raw", "value", "date_utc"])
+
+        ordered = pdf.sort_values("timestamp_utc").copy()
+        value_series = ordered["val"].astype(float)
+        ema_series = value_series.ewm(alpha=alpha, adjust=False).mean()
+        delta_raw = value_series.diff()
+        delta_series = ema_series.diff()
+
+        event_type: list[str | None] = []
+        for idx in range(len(ordered)):
+            d = delta_series.iloc[idx]
+            if pd.isna(d):
+                event_type.append(None)
+                continue
+            if effective_threshold > 0.0 and abs(float(d)) >= effective_threshold:
+                event_type.append(EventType.THRESHOLD)
+            elif d > 0:
+                event_type.append(EventType.SLOPE_POS)
+            elif d < 0:
+                event_type.append(EventType.SLOPE_NEG)
+            else:
+                event_type.append(None)
+
+        out = pd.DataFrame(
+            {
+                "tail_id": ordered["tail_id"].astype(str),
+                "flight_id": ordered["flight_id"].astype(str),
+                "parameter_name": ordered[parameter_col].astype(str),
+                "timestamp_utc": ordered["timestamp_utc"],
+                "event_type_detected": event_type,
+                "delta": delta_series,
+                "delta_raw": delta_raw,
+                "value": value_series,
+                "date_utc": ordered["date_utc"].astype(str),
+            }
         )
-    else:
-        event_type = (
-            F.when(F.col("prev_val").isNull(), F.lit(None).cast("string"))
-            .when(F.col("delta") > 0, F.lit("slope_pos"))
-            .when(F.col("delta") < 0, F.lit("slope_neg"))
-        )
+        return out[out["event_type_detected"].notna()].reset_index(drop=True)
+
+    grouped = (
+        source_df.select("tail_id", "flight_id", F.col(parameter_col).alias("parameter_name"), "timestamp_utc", "val", "date_utc")
+        .groupBy("tail_id", "flight_id", "parameter_name")
+        .applyInPandas(_emit_group_events, schema=schema)
+    )
 
     return (
-        enriched.withColumn("event_type", event_type)
-        .where(F.col("event_type").isNotNull())
+        grouped
         .select(
             "tail_id",
             "flight_id",
             F.lit(None).cast("long").alias("win_id"),
-            F.col("timestamp_utc").alias("ts"),
-            "sensor",
+            "timestamp_utc",
+            "parameter_name",
             F.lit("unknown").alias("subsystem"),
-            "event_type",
+            "event_type_detected",
             F.create_map(
                 F.lit("delta"),
                 F.col("delta").cast("string"),
+                F.lit("delta_raw"),
+                F.col("delta_raw").cast("string"),
                 F.lit("value"),
-                F.col("val").cast("string"),
+                F.col("value").cast("string"),
+                F.lit("slope_source"),
+                F.lit("ema"),
             ).alias("payload"),
             "date_utc",
         )
