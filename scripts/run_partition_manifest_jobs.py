@@ -16,11 +16,15 @@ PIPELINE_STAGE_SCRIPTS = [
     "00_ingest_raw.py",
     "20_events_extract.py",
     "30_windows_adaptive.py",
-    "40_signatures_build.py",
-    "50_phase_detect.py",
-    "60_anomaly_score.py",
-    "70_conformal_calibrate.py",
-    "80_emit_anomalies.py",
+    "50_phase_fit.py",
+    "60_window_scores_raw.py",
+    "70_window_scores_calibrate.py",
+    "80_anomaly_attribution.py",
+]
+
+GROUPED_PIPELINE_SCRIPTS = [
+    "91_run_fitting_pipeline.py",
+    "92_run_inference_pipeline.py",
 ]
 
 
@@ -32,7 +36,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--flight-id", default=None, help="Optional filter for flight_id")
     parser.add_argument("--limit", default=0, type=int, help="Optional max manifest rows to process (0 = all)")
 
-    parser.add_argument("--job", default="pipeline", choices=["pipeline", "custom"])
+    parser.add_argument("--job", default="pipeline", choices=["pipeline", "grouped", "custom"])
     parser.add_argument(
         "--command",
         action="append",
@@ -95,12 +99,14 @@ def _set_pipeline_env(
     os.environ["S3NTINEL_RAW_TABLE_PATH"] = str(run_dir / "delta" / "raw_telemetry")
     os.environ["S3NTINEL_EVENTS_TABLE_PATH"] = str(run_dir / "delta" / "events")
     os.environ["S3NTINEL_WINDOWS_TABLE_PATH"] = str(run_dir / "delta" / "windows")
-    os.environ["S3NTINEL_SIGNATURES_TABLE_PATH"] = str(run_dir / "delta" / "signatures")
     os.environ["S3NTINEL_PHASE_WINDOWS_TABLE_PATH"] = str(run_dir / "delta" / "phase_windows")
-    os.environ["S3NTINEL_PHASES_TABLE_PATH"] = str(run_dir / "delta" / "phases")
-    os.environ["S3NTINEL_SCORES_TABLE_PATH"] = str(run_dir / "delta" / "scores")
-    os.environ["S3NTINEL_CALIBRATED_TABLE_PATH"] = str(run_dir / "delta" / "calibrated")
-    os.environ["S3NTINEL_ANOMALIES_TABLE_PATH"] = str(run_dir / "delta" / "anomalies")
+    os.environ["S3NTINEL_PHASE_BASELINES_TABLE_PATH"] = str(run_dir / "delta" / "phase_baselines")
+    os.environ["S3NTINEL_HIERARCHY_SENSOR_MAP_TABLE_PATH"] = str(run_dir / "delta" / "hierarchy_sensor_map")
+    os.environ["S3NTINEL_WINDOW_SCORES_RAW_TABLE_PATH"] = str(run_dir / "delta" / "window_scores_raw")
+    os.environ["S3NTINEL_WINDOW_SCORES_CALIBRATED_TABLE_PATH"] = str(run_dir / "delta" / "window_scores_calibrated")
+    os.environ["S3NTINEL_ANOMALY_WINDOW_ATTRIBUTION_TABLE_PATH"] = str(run_dir / "delta" / "anomaly_window_attribution")
+    os.environ["S3NTINEL_ANOMALY_TELEMETRY_ATTRIBUTION_TABLE_PATH"] = str(run_dir / "delta" / "anomaly_telemetry_attribution")
+    os.environ["S3NTINEL_ANOMALY_EVENT_ATTRIBUTION_TABLE_PATH"] = str(run_dir / "delta" / "anomaly_event_attribution")
     os.environ["S3NTINEL_TABLE_FORMAT"] = str(table_format)
     os.environ["S3NTINEL_RAW_OUTPUT_FORMAT"] = str(table_format)
     os.environ["S3NTINEL_WRITE_MODE"] = str(write_mode)
@@ -126,6 +132,27 @@ def _run_pipeline_for_row(row: dict[str, str], args: argparse.Namespace) -> None
         if args.dry_run:
             continue
         runpy.run_path(str(stage_path), run_name="__main__")
+
+
+def _run_grouped_pipeline_for_row(row: dict[str, str], args: argparse.Namespace) -> None:
+    pipeline_dir = Path(__file__).resolve().parent.parent / "pipelines"
+    run_dir = Path(args.jobs_base_dir) / f"tail_id={row['tail_id']}" / f"flight_id={row['flight_id']}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    _set_pipeline_env(
+        run_dir=run_dir,
+        raw_input_path=row["output_path"],
+        table_format=args.table_format,
+        write_mode=args.write_mode,
+        min_warm=args.min_warm,
+    )
+
+    for grouped_script in GROUPED_PIPELINE_SCRIPTS:
+        grouped_path = pipeline_dir / grouped_script
+        print(f"[manifest-jobs] tail={row['tail_id']} flight={row['flight_id']} grouped={grouped_script}")
+        if args.dry_run:
+            continue
+        runpy.run_path(str(grouped_path), run_name="__main__")
 
 
 def _run_custom_for_row(row: dict[str, str], args: argparse.Namespace) -> None:
@@ -168,6 +195,8 @@ def main() -> None:
         try:
             if args.job == "pipeline":
                 _run_pipeline_for_row(row, args)
+            elif args.job == "grouped":
+                _run_grouped_pipeline_for_row(row, args)
             else:
                 _run_custom_for_row(row, args)
             completed += 1

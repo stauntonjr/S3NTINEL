@@ -1,0 +1,16 @@
+name: sentinel-spark35
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - openjdk=17
+  - pandas>=2.0,<3
+  - pyarrow>=11
+  - pyyaml>=6
+  - pytest>=8
+  - pip:
+      - -e .
+      - pyspark==3.5.1
+      - delta-spark==3.0.0

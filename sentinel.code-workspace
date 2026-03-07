@@ -1,16 +1,16 @@
 {
 	"folders": [
 		{
-			"path": "../.."
+			"path": "."
 		}
 	],
 	"settings": {
-		"python.defaultInterpreterPath": "/home/jrs/anaconda3/envs/sentinel/bin/python",
+		"python.defaultInterpreterPath": "/home/jrs/anaconda3/envs/sentinel-spark35/bin/python",
 		"python.terminal.activateEnvironment": true,
 		"python.condaPath": "/home/jrs/anaconda3/bin/conda",
 		"terminal.integrated.env.linux": {
 			"VIRTUAL_ENV": "",
-			"PATH": "/home/jrs/anaconda3/envs/sentinel/bin:${env:PATH}"
+			"PATH": "/home/jrs/anaconda3/envs/sentinel-spark35/bin:${env:PATH}"
 		}
 	}
 }

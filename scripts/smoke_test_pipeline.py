@@ -1,5 +1,5 @@
 # File: scripts/smoke_test_pipeline.py
-"""Run an end-to-end local smoke test for stages 00->80 using sample data."""
+"""Run an end-to-end local smoke test for the active V2 pipeline using sample data."""
 
 from __future__ import annotations
 
@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from libs.io.delta import get_spark, read_table
+from libs.io.schemas import ACTIVE_V2_TABLES
+from libs.phase import evaluate_detected_phases
 from libs.testing.sample_data import seed_sample_dataset
 from libs.testing.window_diagnostics import close_reason_tv_distance, compute_numeric_deltas, compute_window_diagnostics
 
@@ -120,47 +122,45 @@ def set_env_paths(base_dir: str, table_format: str, write_mode: str, min_warm: i
     os.environ["S3NTINEL_RAW_TABLE_PATH"] = str(base / "delta" / "raw_telemetry")
     os.environ["S3NTINEL_EVENTS_TABLE_PATH"] = str(base / "delta" / "events")
     os.environ["S3NTINEL_WINDOWS_TABLE_PATH"] = str(base / "delta" / "windows")
-    os.environ["S3NTINEL_SIGNATURES_TABLE_PATH"] = str(base / "delta" / "signatures")
+    os.environ["S3NTINEL_PHASE_LABELS_TABLE_PATH"] = str(base / "delta" / "phase_labels")
+    os.environ["S3NTINEL_HIERARCHY_SENSOR_MAP_LABEL_TABLE_PATH"] = str(base / "delta" / "hierarchy_sensor_map_label")
+    os.environ["S3NTINEL_BACKBONE_TABLE_PATH"] = str(base / "delta" / "backbone")
+    os.environ["S3NTINEL_BACKBONE_SENSOR_ENERGY_TABLE_PATH"] = str(base / "delta" / "backbone_sensor_energy")
+    os.environ["S3NTINEL_PRECISION_GRAPH_TABLE_PATH"] = str(base / "delta" / "precision_graph")
+    os.environ["S3NTINEL_EVENT_GRAPH_TABLE_PATH"] = str(base / "delta" / "event_graph")
+    os.environ["S3NTINEL_LAG_GRAPH_TABLE_PATH"] = str(base / "delta" / "lag_graph")
+    os.environ["S3NTINEL_TRANSITION_GRAPH_TABLE_PATH"] = str(base / "delta" / "transition_graph")
+    os.environ["S3NTINEL_FUSED_GRAPH_TABLE_PATH"] = str(base / "delta" / "fused_graph")
     os.environ["S3NTINEL_PHASE_WINDOWS_TABLE_PATH"] = str(base / "delta" / "phase_windows")
-    os.environ["S3NTINEL_PHASES_TABLE_PATH"] = str(base / "delta" / "phases")
-    os.environ["S3NTINEL_SUBSYSTEM_MAP_TABLE_PATH"] = str(base / "delta" / "sensor_subsystem_map")
-    os.environ["S3NTINEL_SCORES_TABLE_PATH"] = str(base / "delta" / "scores")
-    os.environ["S3NTINEL_CALIBRATED_TABLE_PATH"] = str(base / "delta" / "calibrated")
-    os.environ["S3NTINEL_ANOMALIES_TABLE_PATH"] = str(base / "delta" / "anomalies")
+    os.environ["S3NTINEL_PHASE_BASELINES_TABLE_PATH"] = str(base / "delta" / "phase_baselines")
+    os.environ["S3NTINEL_HIERARCHY_SENSOR_MAP_TABLE_PATH"] = str(base / "delta" / "hierarchy_sensor_map")
+    os.environ["S3NTINEL_WINDOW_SCORES_RAW_TABLE_PATH"] = str(base / "delta" / "window_scores_raw")
+    os.environ["S3NTINEL_WINDOW_SCORES_CALIBRATED_TABLE_PATH"] = str(base / "delta" / "window_scores_calibrated")
+    os.environ["S3NTINEL_ANOMALY_WINDOW_ATTRIBUTION_TABLE_PATH"] = str(base / "delta" / "anomaly_window_attribution")
+    os.environ["S3NTINEL_ANOMALY_TELEMETRY_ATTRIBUTION_TABLE_PATH"] = str(base / "delta" / "anomaly_telemetry_attribution")
+    os.environ["S3NTINEL_ANOMALY_EVENT_ATTRIBUTION_TABLE_PATH"] = str(base / "delta" / "anomaly_event_attribution")
     os.environ["S3NTINEL_TABLE_FORMAT"] = table_format
     os.environ["S3NTINEL_RAW_OUTPUT_FORMAT"] = table_format
     os.environ["S3NTINEL_WRITE_MODE"] = "overwrite" if write_mode == "merge" else write_mode
     os.environ["S3NTINEL_MIN_WARM"] = str(min_warm)
 
 
-def seed_subsystem_map_for_smoke(spark: "SparkSession", table_format: str) -> None:
-    raw_path = os.environ["S3NTINEL_RAW_TABLE_PATH"]
-    output_path = os.environ["S3NTINEL_SUBSYSTEM_MAP_TABLE_PATH"]
-    raw_df = read_table(spark, path=raw_path, fmt=table_format)
-    sensors = sorted(
-        [str(row["sensor"]) for row in raw_df.select("sensor").where("sensor is not null").distinct().collect()]
-    )
-    if not sensors:
-        raise RuntimeError("smoke subsystem-map seed failed: no sensors found in raw table")
-    rows = [{"sensor": sensor, "subsystem_id": f"SUBSYS_{index + 1:04d}"} for index, sensor in enumerate(sensors)]
-    spark.createDataFrame(rows).write.format(table_format).mode("overwrite").save(output_path)
-
-
 def run_stages(stage_80_write_mode: str) -> None:
     pipeline_dir = Path(__file__).resolve().parent.parent / "pipelines"
     stage_scripts = [
         "00_ingest_raw.py",
+        "10_backbone_fit.py",
+        "11_graph_fit.py",
         "20_events_extract.py",
         "30_windows_adaptive.py",
-        "40_signatures_build.py",
-        "50_phase_detect.py",
-        "60_anomaly_score.py",
-        "70_conformal_calibrate.py",
-        "80_emit_anomalies.py",
+        "50_phase_fit.py",
+        "60_window_scores_raw.py",
+        "70_window_scores_calibrate.py",
+        "80_anomaly_attribution.py",
     ]
 
     for stage_script in stage_scripts:
-        if stage_script == "80_emit_anomalies.py":
+        if stage_script == "80_anomaly_attribution.py":
             os.environ["S3NTINEL_WRITE_MODE"] = stage_80_write_mode
         stage_path = pipeline_dir / stage_script
         print(f"[smoke] running {stage_script}")
@@ -172,12 +172,23 @@ def print_row_counts(spark: "SparkSession", table_format: str) -> None:
         "raw_telemetry": os.environ["S3NTINEL_RAW_TABLE_PATH"],
         "events": os.environ["S3NTINEL_EVENTS_TABLE_PATH"],
         "windows": os.environ["S3NTINEL_WINDOWS_TABLE_PATH"],
-        "signatures": os.environ["S3NTINEL_SIGNATURES_TABLE_PATH"],
+        "phase_labels": os.environ["S3NTINEL_PHASE_LABELS_TABLE_PATH"],
+        "hierarchy_sensor_map_label": os.environ["S3NTINEL_HIERARCHY_SENSOR_MAP_LABEL_TABLE_PATH"],
+        "backbone": os.environ["S3NTINEL_BACKBONE_TABLE_PATH"],
+        "backbone_sensor_energy": os.environ["S3NTINEL_BACKBONE_SENSOR_ENERGY_TABLE_PATH"],
+        "precision_graph": os.environ["S3NTINEL_PRECISION_GRAPH_TABLE_PATH"],
+        "event_graph": os.environ["S3NTINEL_EVENT_GRAPH_TABLE_PATH"],
+        "lag_graph": os.environ["S3NTINEL_LAG_GRAPH_TABLE_PATH"],
+        "transition_graph": os.environ["S3NTINEL_TRANSITION_GRAPH_TABLE_PATH"],
+        "fused_graph": os.environ["S3NTINEL_FUSED_GRAPH_TABLE_PATH"],
+        "hierarchy_sensor_map": os.environ["S3NTINEL_HIERARCHY_SENSOR_MAP_TABLE_PATH"],
         "phase_windows": os.environ["S3NTINEL_PHASE_WINDOWS_TABLE_PATH"],
-        "phases": os.environ["S3NTINEL_PHASES_TABLE_PATH"],
-        "scores": os.environ["S3NTINEL_SCORES_TABLE_PATH"],
-        "calibrated": os.environ["S3NTINEL_CALIBRATED_TABLE_PATH"],
-        "anomalies": os.environ["S3NTINEL_ANOMALIES_TABLE_PATH"],
+        "phase_baselines": os.environ["S3NTINEL_PHASE_BASELINES_TABLE_PATH"],
+        "window_scores_raw": os.environ["S3NTINEL_WINDOW_SCORES_RAW_TABLE_PATH"],
+        "window_scores_calibrated": os.environ["S3NTINEL_WINDOW_SCORES_CALIBRATED_TABLE_PATH"],
+        "anomaly_window_attribution": os.environ["S3NTINEL_ANOMALY_WINDOW_ATTRIBUTION_TABLE_PATH"],
+        "anomaly_telemetry_attribution": os.environ["S3NTINEL_ANOMALY_TELEMETRY_ATTRIBUTION_TABLE_PATH"],
+        "anomaly_event_attribution": os.environ["S3NTINEL_ANOMALY_EVENT_ATTRIBUTION_TABLE_PATH"],
     }
 
     print("\n[smoke] row counts")
@@ -196,38 +207,38 @@ def print_row_counts(spark: "SparkSession", table_format: str) -> None:
 def assert_anomaly_payload_quality(spark: "SparkSession", table_format: str, write_mode: str) -> None:
     from pyspark.sql import functions as F
 
-    anomalies_path = os.environ["S3NTINEL_ANOMALIES_TABLE_PATH"]
-    anomalies_df = read_table(spark, path=anomalies_path, fmt=table_format)
-    row_count = anomalies_df.count()
+    anomaly_window_attribution_path = os.environ["S3NTINEL_ANOMALY_WINDOW_ATTRIBUTION_TABLE_PATH"]
+    anomaly_window_attribution_df = read_table(spark, path=anomaly_window_attribution_path, fmt=table_format)
+    row_count = anomaly_window_attribution_df.count()
     if row_count <= 0:
         raise SystemExit("[smoke] anomaly quality assertion failed: no anomaly rows emitted")
 
     duplicate_key_rows = (
-        anomalies_df.groupBy("tail_id", "flight_id", "win_id").agg(F.count(F.lit(1)).alias("n")).where(F.col("n") > F.lit(1)).count()
+        anomaly_window_attribution_df.groupBy("tail_id", "flight_id", "win_id").agg(F.count(F.lit(1)).alias("n")).where(F.col("n") > F.lit(1)).count()
     )
     if duplicate_key_rows > 0:
         raise SystemExit("[smoke] anomaly quality assertion failed: duplicate anomaly merge keys found")
 
-    panel_rows = anomalies_df.where(F.col("panel_context").isNotNull()).count()
+    panel_rows = anomaly_window_attribution_df.where(F.col("panel_context").isNotNull()).count()
     if panel_rows <= 0:
         raise SystemExit("[smoke] anomaly quality assertion failed: panel_context is null for all rows")
 
-    top_sensor_rows = anomalies_df.where(F.expr("exists(subsystems, s -> size(s.top_sensors) > 0)")).count()
+    top_sensor_rows = anomaly_window_attribution_df.where(F.expr("exists(subsystems, s -> size(s.top_sensors) > 0)")).count()
     if top_sensor_rows <= 0:
         raise SystemExit("[smoke] anomaly quality assertion failed: no subsystem top_sensors populated")
 
     if str(write_mode).lower() == "merge":
-        stage_80_path = Path(__file__).resolve().parent.parent / "pipelines" / "80_emit_anomalies.py"
+        stage_80_path = Path(__file__).resolve().parent.parent / "pipelines" / "80_anomaly_attribution.py"
         os.environ["S3NTINEL_WRITE_MODE"] = "merge"
         runpy.run_path(str(stage_80_path), run_name="__main__")
-        anomalies_df_post = read_table(spark, path=anomalies_path, fmt=table_format)
-        post_count = anomalies_df_post.count()
+        anomaly_window_attribution_df_post = read_table(spark, path=anomaly_window_attribution_path, fmt=table_format)
+        post_count = anomaly_window_attribution_df_post.count()
         if post_count != row_count:
             raise SystemExit(
                 f"[smoke] anomaly quality assertion failed: merge mode idempotence violated (before={row_count}, after={post_count})"
             )
         duplicate_key_rows_post = (
-            anomalies_df_post.groupBy("tail_id", "flight_id", "win_id")
+            anomaly_window_attribution_df_post.groupBy("tail_id", "flight_id", "win_id")
             .agg(F.count(F.lit(1)).alias("n"))
             .where(F.col("n") > F.lit(1))
             .count()
@@ -239,6 +250,101 @@ def assert_anomaly_payload_quality(spark: "SparkSession", table_format: str, wri
         "[smoke] anomaly quality assertions passed "
         f"(rows={row_count}, panel_rows={panel_rows}, top_sensor_rows={top_sensor_rows}, write_mode={write_mode})"
     )
+
+
+def assert_active_v2_table_contracts(spark: "SparkSession", table_format: str) -> None:
+    path_by_table = {
+        "events": os.environ["S3NTINEL_EVENTS_TABLE_PATH"],
+        "windows": os.environ["S3NTINEL_WINDOWS_TABLE_PATH"],
+        "backbone": os.environ["S3NTINEL_BACKBONE_TABLE_PATH"],
+        "backbone_sensor_energy": os.environ["S3NTINEL_BACKBONE_SENSOR_ENERGY_TABLE_PATH"],
+        "precision_graph": os.environ["S3NTINEL_PRECISION_GRAPH_TABLE_PATH"],
+        "event_graph": os.environ["S3NTINEL_EVENT_GRAPH_TABLE_PATH"],
+        "lag_graph": os.environ["S3NTINEL_LAG_GRAPH_TABLE_PATH"],
+        "transition_graph": os.environ["S3NTINEL_TRANSITION_GRAPH_TABLE_PATH"],
+        "fused_graph": os.environ["S3NTINEL_FUSED_GRAPH_TABLE_PATH"],
+        "hierarchy_sensor_map": os.environ["S3NTINEL_HIERARCHY_SENSOR_MAP_TABLE_PATH"],
+        "phase_windows": os.environ["S3NTINEL_PHASE_WINDOWS_TABLE_PATH"],
+        "phase_baselines": os.environ["S3NTINEL_PHASE_BASELINES_TABLE_PATH"],
+        "window_scores_raw": os.environ["S3NTINEL_WINDOW_SCORES_RAW_TABLE_PATH"],
+        "window_scores_calibrated": os.environ["S3NTINEL_WINDOW_SCORES_CALIBRATED_TABLE_PATH"],
+        "anomaly_window_attribution": os.environ["S3NTINEL_ANOMALY_WINDOW_ATTRIBUTION_TABLE_PATH"],
+        "anomaly_telemetry_attribution": os.environ["S3NTINEL_ANOMALY_TELEMETRY_ATTRIBUTION_TABLE_PATH"],
+        "anomaly_event_attribution": os.environ["S3NTINEL_ANOMALY_EVENT_ATTRIBUTION_TABLE_PATH"],
+    }
+    for table_name, required_columns in ACTIVE_V2_TABLES.items():
+        df = read_table(spark, path=path_by_table[table_name], fmt=table_format)
+        missing_columns = [column for column in required_columns if column not in df.columns]
+        if missing_columns:
+            raise SystemExit(
+                f"[smoke] active contract assertion failed: {table_name} missing columns {missing_columns}"
+            )
+    print("[smoke] active V2 table contract assertions passed")
+
+
+def write_quality_report(spark: "SparkSession", base_dir: str, table_format: str) -> None:
+    report: dict[str, object] = {}
+
+    phase_labels_path = Path(os.environ["S3NTINEL_PHASE_LABELS_TABLE_PATH"])
+    if phase_labels_path.exists():
+        phase_windows_df = read_table(spark, path=os.environ["S3NTINEL_PHASE_WINDOWS_TABLE_PATH"], fmt=table_format)
+        phase_labels_df = read_table(spark, path=os.environ["S3NTINEL_PHASE_LABELS_TABLE_PATH"], fmt=table_format)
+        assignments = (
+            phase_windows_df.alias("pw")
+            .join(phase_labels_df.alias("pl"), on=["tail_id", "flight_id", "win_id"], how="inner")
+            .select(
+                "pw.tail_id",
+                "pw.flight_id",
+                "pw.win_id",
+                "pw.phase_id_detected",
+                "pw.phase_state_detected",
+                "pw.phase_confidence_detected",
+                "pw.distance_to_centroid_detected",
+                "pl.phase_label",
+            )
+            .toPandas()
+            .to_dict(orient="records")
+        )
+        report["phase_detection"] = evaluate_detected_phases(assignments)
+
+    hierarchy_label_path = Path(os.environ["S3NTINEL_HIERARCHY_SENSOR_MAP_LABEL_TABLE_PATH"])
+    if hierarchy_label_path.exists():
+        hierarchy_sensor_map_df = read_table(spark, path=os.environ["S3NTINEL_HIERARCHY_SENSOR_MAP_TABLE_PATH"], fmt=table_format)
+        hierarchy_label_df = read_table(spark, path=os.environ["S3NTINEL_HIERARCHY_SENSOR_MAP_LABEL_TABLE_PATH"], fmt=table_format)
+        joined = (
+            hierarchy_sensor_map_df.alias("det")
+            .join(hierarchy_label_df.alias("lab"), on="parameter_name", how="inner")
+            .select(
+                "parameter_name",
+                "det.system_id",
+                "det.subsystem_id",
+                "det.module_id",
+                "lab.system_id",
+                "lab.subsystem_id",
+                "lab.module_id",
+            )
+            .toPandas()
+        )
+        total = int(len(joined))
+        report["hierarchy_recovery"] = {
+            "sensor_count": total,
+            "system_exact_match": (float((joined.iloc[:, 1] == joined.iloc[:, 4]).sum()) / float(max(total, 1))) if total else None,
+            "subsystem_exact_match": (float((joined.iloc[:, 2] == joined.iloc[:, 5]).sum()) / float(max(total, 1))) if total else None,
+            "module_exact_match": (float((joined.iloc[:, 3] == joined.iloc[:, 6]).sum()) / float(max(total, 1))) if total else None,
+        }
+
+    report_path = Path(base_dir) / "reports" / "smoke_quality_report.json"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    print(f"\n[smoke] quality_report: {report_path}")
+    phase_detection = report.get("phase_detection")
+    if isinstance(phase_detection, dict):
+        print(f"- phase_detection.overall_accuracy: {phase_detection.get('overall_accuracy')}")
+    hierarchy_recovery = report.get("hierarchy_recovery")
+    if isinstance(hierarchy_recovery, dict):
+        print(f"- hierarchy_recovery.system_exact_match: {hierarchy_recovery.get('system_exact_match')}")
+        print(f"- hierarchy_recovery.subsystem_exact_match: {hierarchy_recovery.get('subsystem_exact_match')}")
+        print(f"- hierarchy_recovery.module_exact_match: {hierarchy_recovery.get('module_exact_match')}")
 
 
 def _print_window_report(report: dict[str, object]) -> None:
@@ -416,9 +522,8 @@ def main() -> None:
         sensor_count=int(args.sensor_count),
         timestamp_count=int(args.timestamp_count),
         step_ms=int(args.step_ms),
-        include_intermediate_tables=False,
+        include_intermediate_tables=True,
     )
-    seed_subsystem_map_for_smoke(spark=spark, table_format=args.format)
 
     run_stages(stage_80_write_mode=args.write_mode)
 
@@ -432,7 +537,9 @@ def main() -> None:
         apply_window_regression_guard(report, args)
 
     print_row_counts(spark, table_format=args.format)
+    assert_active_v2_table_contracts(spark=spark, table_format=args.format)
     assert_anomaly_payload_quality(spark=spark, table_format=args.format, write_mode=args.write_mode)
+    write_quality_report(spark=spark, base_dir=args.base_dir, table_format=args.format)
     print("\n[smoke] completed successfully")
 
 

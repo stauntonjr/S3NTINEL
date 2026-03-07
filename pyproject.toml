@@ -15,6 +15,10 @@ dependencies = [
 dev = [
   "pytest>=8.0",
 ]
+spark = [
+  "pyspark>=3.5,<3.6",
+  "delta-spark>=3.0,<3.1",
+]
 
 [tool.setuptools.packages.find]
 include = ["libs*", "pipelines*"]

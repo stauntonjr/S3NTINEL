@@ -50,6 +50,9 @@ Thumbs.db
 # Runtime output artifacts
 data/
 reports/
+mlflow.db
+mlruns/
+*.egg-info/
 
 # Applications
 *.app
@@ -63,4 +66,3 @@ reports/
 *.flv
 *.mov
 *.wmv
-
