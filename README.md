@@ -2,88 +2,155 @@
 
 S3NTINEL stands for Structural Streaming Sparse Event Nexus for Telemetry Inference with Network Envelope Learning.
 
+## Active architecture
+
+The active path is now the V2 pipeline. Use [v2_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/v2_architecture.md) as the source of truth for current fitting/inference semantics.
+Use [theory_foundations.md](/home/jrs/code/S3NTINEL/sentinel/docs/theory_foundations.md) for the mathematical/statistical interpretation of the active representations, graph weights, and scoring quantities.
+Use [glossary.md](/home/jrs/code/S3NTINEL/sentinel/docs/glossary.md) for the active code/data taxonomy and naming rules.
+Use [avionics_simulation_guidelines.md](/home/jrs/code/S3NTINEL/sentinel/docs/avionics_simulation_guidelines.md) for domain guidance on avionics-system behavior, coupling, and simulation inputs.
+Use [artifact_replay_design.md](/home/jrs/code/S3NTINEL/sentinel/docs/artifact_replay_design.md) for artifact persistence, replay, cache, and MLflow lineage design.
+Use [simulation_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/simulation_architecture.md) for the proposed next simulation architecture and extensibility model.
+Use [behavior_profiling_design.md](/home/jrs/code/S3NTINEL/sentinel/docs/behavior_profiling_design.md) for the planned mirror of simulation behavior semantics in telemetry profiling.
+Use [behavior_family_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/behavior_family_architecture.md) and [behavior_family_skeletons.md](/home/jrs/code/S3NTINEL/sentinel/docs/behavior_family_skeletons.md) for the per-family file/class layout.
+Use [misbehavior_taxonomy.md](/home/jrs/code/S3NTINEL/sentinel/docs/misbehavior_taxonomy.md) for the planned structured deviation/anomaly ontology.
+Use [anomaly_injection_and_backbone_validation.md](/home/jrs/code/S3NTINEL/sentinel/docs/anomaly_injection_and_backbone_validation.md) for anomaly-injection design and backbone-fit validation guidance.
+
+### Active fitting path
+
+1. `pipelines/00_ingest_raw.py`
+2. `pipelines/10_backbone_fit.py`
+3. `pipelines/11_graph_fit.py`
+
+Run with:
+
+- `python -m pipelines.91_run_fitting_pipeline`
+
+### Active inference path
+
+1. `pipelines/20_events_extract.py`
+2. `pipelines/30_windows_adaptive.py`
+3. `pipelines/50_phase_fit.py`
+4. `pipelines/60_window_scores_raw.py`
+5. `pipelines/70_window_scores_calibrate.py`
+6. `pipelines/80_anomaly_attribution.py`
+
+Run with:
+
+- `python -m pipelines.92_run_inference_pipeline`
+
+### V2 artifacts
+
+- `backbone`
+- `backbone_sensor_energy`
+- `phase_windows`
+- `phase_baselines`
+- `window_scores_raw`
+- `window_scores_calibrated`
+- `precision_graph`
+- `event_graph`
+- `lag_graph`
+- `transition_graph`
+- `fused_graph`
+- `hierarchy_sensor_map`
+
 ## Repo layout
 
-- `conf/defaults.yaml`: v1 runtime defaults and threshold settings.
+- `conf/defaults.yaml`: runtime defaults and threshold settings.
 - `pipelines/`: ordered job entrypoints (`00_...` through `80_...`).
-- `libs/`: reusable domain modules (`cur`, `events`, `windows`, `signature`, `phase`, `scoring`, `conformal`, `io`).
+- `libs/`: reusable domain modules (`backbone`, `graph`, `events`, `windows`, `phase`, `scoring`, `conformal`, `io`, `anomaly`).
 - `notebooks/`: exploratory and validation notebooks.
 - `scripts/`: local-to-AVD handoff helpers (bundle/patch export-import).
-- `Structural_Anomaly_System_Architecture.md`: architecture and spec lock.
-- `Architecture_Diagrams.md`: technical mermaid diagrams.
-- `S3NTINEL_Presentation_Diagrams.md`: stakeholder-friendly diagrams.
+- `docs/v2_architecture.md`: architecture and contract source of truth.
+- `docs/glossary.md`: active code/data taxonomy and naming conventions.
+- `docs/theory_foundations.md`: theory-to-code map for active mathematical/statistical choices.
+- `docs/avionics_simulation_guidelines.md`: domain guidance for realistic avionics simulation inputs and couplings.
+- `docs/artifact_replay_design.md`: replayable stage artifacts, manifests, caches, and MLflow lineage policy.
+- `docs/simulation_architecture.md`: proposed simulation architecture for an open-ended hierarchy.
+- `docs/behavior_profiling_design.md`: proposed mirrored behavior profiling layer for real telemetry.
+- `docs/behavior_family_architecture.md`: proposed per-family package/file/class layout.
+- `docs/behavior_family_skeletons.md`: concrete family skeletons for `regulated` and `inertial`.
+- `docs/misbehavior_taxonomy.md`: planned structured misbehavior ontology and pipeline mapping.
+- `docs/anomaly_injection_and_backbone_validation.md`: research note for simulator anomaly families and backbone-fit validation.
+- `docs/v2_1_notes.md`: deferred notes for a future rate- and type-aware representation layer.
 
 ## Pipeline order
 
 1. `pipelines/00_ingest_raw.py`
-2. `pipelines/10_cur_backbone_fit.py`
-3. `pipelines/20_events_extract.py`
-4. `pipelines/30_windows_adaptive.py`
-5. `pipelines/40_signatures_build.py`
-6. `pipelines/50_phase_detect.py`
-7. `pipelines/60_anomaly_score.py`
-8. `pipelines/70_conformal_calibrate.py`
-9. `pipelines/80_emit_anomalies.py`
+2. `pipelines/10_backbone_fit.py`
+3. `pipelines/11_graph_fit.py`
+4. `pipelines/20_events_extract.py`
+5. `pipelines/30_windows_adaptive.py`
+6. `pipelines/50_phase_fit.py`
+7. `pipelines/60_window_scores_raw.py`
+8. `pipelines/70_window_scores_calibrate.py`
+9. `pipelines/80_anomaly_attribution.py`
 
 ## Quick start
 
 - Install editable package: `pip install -e .`
 - Install dev extras for local checks: `pip install -e .[dev]`
+- Install Spark extras for Spark/Delta pipelines and Spark-backed tests: `pip install -e .[dev,spark]`
+- Recommended Spark env spec: `conda env create -f environment.spark35.yml`
 - Run any pipeline stage directly: `python -m pipelines.00_ingest_raw`
+- Run fitting stages together (00 + 10) under one parent MLflow run: `python -m pipelines.91_run_fitting_pipeline`
+- Run inference stages together (20 -> 80) under one parent MLflow run: `python -m pipelines.92_run_inference_pipeline`
+- Run fitting: `python -m pipelines.91_run_fitting_pipeline`
+- Run inference: `python -m pipelines.92_run_inference_pipeline`
 - Run unit tests: `pytest`
-- Run fitting-phase graph fusion (CUR-proxy + event cooccur + fused graph): `python -m pipelines.10_cur_backbone_fit`
+- Run V2 backbone fitting stage directly: `python -m pipelines.10_backbone_fit`
+- Run V2 graph fitting stage directly: `python -m pipelines.11_graph_fit`
 - Run full pipeline under one parent MLflow run: `python -m pipelines.90_run_full_pipeline`
 - Pipeline module commands assume default table/input paths exist (for example `data/input/raw_telemetry`) or that `S3NTINEL_*` path environment variables are set.
 - First-run example (bash):
 	- `export S3NTINEL_RAW_INPUT_PATH=data/input/raw_telemetry`
 	- `export S3NTINEL_RAW_TABLE_PATH=data/delta/raw_telemetry`
 	- `export S3NTINEL_TABLE_FORMAT=parquet`
+- Active Spark baseline: `sentinel-spark35` on Python `3.11` with Spark `3.5.1` and Delta `3.0.0`.
+- Local smoke/default recommendation: use `sentinel-spark35` and `S3NTINEL_TABLE_FORMAT=parquet` unless your Spark runtime already has Delta JVM jars available. The `delta-spark` Python package alone is not sufficient for offline Delta writes.
+- Spark bootstrap also supports:
+	- `S3NTINEL_DELTA_JAR_PATH=/abs/path/to/delta.jar[,more.jar]`
+	- `S3NTINEL_SPARK_EXTRA_JARS=/abs/path/to/extra.jar[,more.jar]`
+	- `S3NTINEL_DELTA_ALLOW_MAVEN=false` to disable Maven fallback when you want local jars only
 - Generate deterministic sample test data: `python -m scripts.generate_sample_data --base-dir data --mode overwrite`
 - Run end-to-end smoke test (00->80): `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format parquet --min-warm 1`
 - Smoke test now seeds a deterministic `sensor_subsystem_map` and asserts emitted anomaly quality gates: non-empty output, no duplicate `(tail_id, flight_id, win_id)`, at least one non-null `panel_context`, and at least one populated `subsystems[].top_sensors`.
 - For stage-80 merge idempotence validation in smoke: `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format delta --min-warm 1 --write-mode merge`
 - Merge smoke checks require a Spark runtime with Delta JVM classes available.
 - Generate bucketed vs stream_parity window diagnostics in smoke: `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format parquet --compare-window-strategies`
-- Profile telemetry parameters + channel routing: `python -m scripts.profile_telemetry --input-path data/sample/raw_input --input-format parquet --output-dir data/profile`
-- Generate synthetic hierarchy artifacts (global/system/subsystem/module/sensor map) for simulation-only correlation injection: `python -m scripts.generate_synthetic_hierarchy_profile --profile-parameter-profile-path data/profile/parameter_profile --profile-format parquet --output-dir data/profile_hierarchy --hierarchy-profile-id HIER_SYNTH_V1 --system-count 3 --subsystems-per-system 2 --modules-per-subsystem 3`
-- Generate fleet-scoped profiles (`m` tails x `n` flights) with controlled variance: `python -m scripts.generate_fleet_profiles --base-parameter-profile-path data/profile/parameter_profile --base-categorical-distribution-path data/profile/categorical_distribution --tail-count 3 --flights-per-tail 2 --output-dir data/profile_fleet`
-- Add hierarchy-aware correlation offsets during fleet profile generation (optional): append `--hierarchy-sensor-map-path data/profile_hierarchy/sensor_hierarchy_map --hier-correlation-preset medium` and, if needed, override per-knob hierarchy values such as `--hier-mean-system-std-ratio 0.03 --hier-mean-subsystem-std-ratio 0.015 --hier-mean-module-std-ratio 0.01`
-- Generate synthetic normal telemetry: `python -m scripts.generate_synthetic_normal --output-path data/synthetic/raw_telemetry`
-- Generate synthetic telemetry for an entire fleet manifest: `python -m scripts.generate_synthetic_fleet --fleet-manifest-path data/profile_fleet/fleet_manifest --profile-parameter-profile-path data/profile_fleet/parameter_profile --profile-categorical-distribution-path data/profile_fleet/categorical_distribution --profile-format parquet --output-path data/synthetic/fleet_raw_telemetry`
-- Generate partitioned per-flight fleet telemetry + manifest: `python -m scripts.generate_synthetic_fleet --fleet-manifest-path data/profile_fleet/fleet_manifest --profile-parameter-profile-path data/profile_fleet/parameter_profile --profile-categorical-distribution-path data/profile_fleet/categorical_distribution --profile-format parquet --output-path data/synthetic/fleet_partitioned --emit-manifest-partitions`
-- Run downstream pipeline/evaluation jobs per partition row: `python -m scripts.run_partition_manifest_jobs --partition-manifest-path data/synthetic/fleet_partitioned/_partition_manifest --manifest-format parquet --job pipeline --jobs-base-dir data/fleet_jobs`
-- Safety contract: keep synthetic hierarchy artifacts (`hierarchy_source=synthetic_injected`) separate from discovered hierarchy outputs; never use injected hierarchy artifacts as learned/discovered structure.
-- Score hierarchy recovery difficulty across presets (`easy,medium,hard`) for CUR-graph validation proxy: `conda run -n sentinel --no-capture-output python -m scripts.evaluate_hierarchy_recovery --base-parameter-profile-path data/fleet_seed/profile/parameter_profile --hierarchy-sensor-map-path data/fleet_seed/profile_hierarchy_e2e/sensor_hierarchy_map --profile-format parquet --presets easy,medium,hard --tail-count 2 --flights-per-tail 2 --duration-seconds 180 --max-corr-sensors 32 --output-json reports/hierarchy_recovery_metrics.json`
-- Score hierarchy recovery from existing partition telemetry outputs (no inline generation): append `--telemetry-partition-manifest-path data/fleet_seed/synthetic/fleet_partitioned_hier_e2e/_partition_manifest --telemetry-manifest-format parquet --telemetry-format parquet`
-- Sentinel-validated hierarchy orchestration flow (copy/paste with `conda run -n sentinel`):
-	- `conda run -n sentinel --no-capture-output python -m scripts.generate_synthetic_hierarchy_profile --profile-parameter-profile-path data/fleet_seed/profile/parameter_profile --profile-format parquet --output-dir data/fleet_seed/profile_hierarchy_e2e --output-format parquet --hierarchy-profile-id HIER_SYNTH_E2E --system-count 3 --subsystems-per-system 2 --modules-per-subsystem 3 --seed 7`
-	- `conda run -n sentinel --no-capture-output python -m scripts.generate_fleet_profiles --base-parameter-profile-path data/fleet_seed/profile/parameter_profile --base-categorical-distribution-path data/fleet_seed/profile/categorical_distribution --input-format parquet --hierarchy-sensor-map-path data/fleet_seed/profile_hierarchy_e2e/sensor_hierarchy_map --output-dir data/fleet_seed/profile_fleet_hier_e2e --output-format parquet --tail-count 2 --flights-per-tail 2 --seed 11 --hier-mean-system-std-ratio 0.03 --hier-mean-subsystem-std-ratio 0.015 --hier-mean-module-std-ratio 0.01 --hier-std-system-std-ratio 0.02 --hier-std-subsystem-std-ratio 0.01 --hier-std-module-std-ratio 0.005 --hier-rate-system-std-ratio 0.03 --hier-rate-subsystem-std-ratio 0.015 --hier-rate-module-std-ratio 0.01 --hier-missing-system-std 0.02 --hier-missing-subsystem-std 0.01 --hier-missing-module-std 0.005`
-	- `conda run -n sentinel --no-capture-output python -m scripts.generate_synthetic_fleet --fleet-manifest-path data/fleet_seed/profile_fleet_hier_e2e/fleet_manifest --profile-parameter-profile-path data/fleet_seed/profile_fleet_hier_e2e/parameter_profile --profile-categorical-distribution-path data/fleet_seed/profile_fleet_hier_e2e/categorical_distribution --profile-format parquet --output-format parquet --output-path data/fleet_seed/synthetic/fleet_partitioned_hier_e2e --emit-manifest-partitions --partition-manifest-path data/fleet_seed/synthetic/fleet_partitioned_hier_e2e/_partition_manifest --duration-seconds 120 --seed 23`
-	- `conda run -n sentinel --no-capture-output python -m scripts.run_partition_manifest_jobs --partition-manifest-path data/fleet_seed/synthetic/fleet_partitioned_hier_e2e/_partition_manifest --manifest-format parquet --job pipeline --jobs-base-dir data/fleet_seed/fleet_jobs_hier_e2e --table-format parquet --min-warm 1 --limit 4`
-	- Note: `scripts.generate_synthetic_fleet` does not accept `--rate-hz`.
-- Run generator-based synthetic + EMA/switch/oscillation detector (no Spark): `python -m scripts.stream_synthetic_events_demo --duration-seconds 180 --rate-hz 20`
-- Run profile-driven mixed-type stream demo + window cooccurrence: `python -m scripts.stream_synthetic_events_demo --profile-json conf/demo_stream_profile.json --duration-seconds 180 --emit-extrema-events --emit-cooccur-events`
-- Run stream demo from profiling outputs directly: `python -m scripts.stream_synthetic_events_demo --profile-parameter-profile-path data/profile_smoke/profile/parameter_profile --profile-categorical-distribution-path data/profile_smoke/profile/categorical_distribution --profile-format parquet --duration-seconds 180 --emit-extrema-events --emit-cooccur-events`
-- Run stream demo from fleet-scoped profile tables: `python -m scripts.stream_synthetic_events_demo --profile-parameter-profile-path data/profile_fleet/parameter_profile --profile-categorical-distribution-path data/profile_fleet/categorical_distribution --profile-tail-id FLEET_T001 --profile-flight-id FL001 --profile-format parquet --duration-seconds 180 --emit-extrema-events --emit-cooccur-events`
-- Evaluate stream detectors vs synthetic truth (precision/recall): `python -m scripts.evaluate_stream_event_detection --duration-seconds 300 --tolerance-seconds 0.5`
-- Evaluate stream detectors from profile JSON/table inputs: `python -m scripts.evaluate_stream_event_detection --profile-json conf/demo_stream_profile.json --duration-seconds 300 --event-types transition,dropped,oscillation,switch`
-- Evaluate from fleet-scoped profile tables: `python -m scripts.evaluate_stream_event_detection --profile-parameter-profile-path data/profile_fleet/parameter_profile --profile-categorical-distribution-path data/profile_fleet/categorical_distribution --profile-tail-id FLEET_T001 --profile-flight-id FL001 --profile-format parquet --duration-seconds 300 --event-types transition,dropped,oscillation,switch`
+- Run grouped fitting+inference per partition row from any manifest: `python -m scripts.run_partition_manifest_jobs --partition-manifest-path data/smoke/_partition_manifest --manifest-format parquet --job grouped --jobs-base-dir data/fleet_jobs_grouped --table-format parquet --write-mode overwrite`
+- Run the simulation/event-detection evaluation harness: `python -m scripts.run_sim_detection_eval --output-json reports/eda/sim_detection_eval_report.json`
 - Use handoff helpers for AVD transfer: see `scripts/README.md`
 - Update defaults in `conf/defaults.yaml` and keep versioned changes in source control.
 - CI workflow: `.github/workflows/ci.yml` runs tests on push/PR.
 
-## Event taxonomy coverage (legacy -> current)
+## Event taxonomy coverage
 
 - Continuous: `extrema` (with payload `legacy_type=max|min`), `threshold`, `slope_pos|slope_neg`, `drift_guard`, `switch`, `oscillation`.
 - Categorical: `state_enter`, `state_exit`, `transition`, `dropped`, `dwell_bucket`, `dwell_guard`, `dwell_violation`, `illegal_transition`.
-- Co-occurrence: `cooccur` remains available in Spark batch event construction (`libs/events/cooccur.py`).
-- Stream evaluation also emits `cooccur` from detected events in a configurable short window for graph population diagnostics.
+- Graph artifacts: cooccurrence and precedence belong in graph outputs, not the active V2 detector event contract.
 - Legacy name mapping: `CAT_CHANGE -> transition`, `DWELL_GUARD -> dwell_guard`, `EXTREMA/max/min -> extrema` with payload kind/legacy type.
+
+## Simulation notes
+
+- `libs/simulation/experiment_setup.py` simulator outputs now return telemetry + phase labels only (`simulate_fleet_dataset`, `simulate_fleet_dataset_spark`).
+- Simulators keep explicit label metadata in telemetry: anomaly labels (`anomaly_type_label`, `anomaly_score_label`) and detector-event label (`event_type_label`).
+- Event rows should be derived from telemetry via detector tooling (`pipelines/20_events_extract.py`, or `libs.events` builders).
+- For system-level behavior, coupling, and dynamics priors, use [docs/avionics_simulation_guidelines.md](/home/jrs/code/S3NTINEL/sentinel/docs/avionics_simulation_guidelines.md).
+- For the next extensible simulator design, use [docs/simulation_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/simulation_architecture.md).
+- Optional causal delay realism is available in `flight_setup.causal_delay` via:
+	- `mode` (`random_pair` default, or `fixed_group` for legacy behavior)
+	- `default_lag_sec` (default baseline lag in seconds; defaults to `0`)
+	- `random_pair_delay_sec` (`{"min": 0.0, "max": ...}` positive-only extra delay range per sensor)
+	- `jitter_sec_std` (Gaussian jitter stddev in seconds; optional)
+	- `jitter_cap_steps` (max absolute jitter clamp in sample steps; default `3`)
+	- `seed_offset` (optional deterministic offset for per-flight pair-delay sampling)
+	- `per_corr_group_sec` (map of `corr_group -> delay_seconds`, used as group baseline and for `fixed_group` mode)
+	- `startup_fill` (`hold_first` default, or `hold_current`)
 
 ## Sample DataFrames for testing
 
 - Module: `libs.testing.sample_data`
-- Includes builders for `raw_input`, `raw_telemetry`, `events`, `windows`, `signatures`, `phase_windows`, `scores`, and `calibrated`.
+- Includes builders for `raw_input`, `raw_telemetry`, `events`, `windows`, `phase_windows`, `window_scores_raw`, and `window_scores_calibrated`.
 - Main helper: `seed_sample_dataset(spark, base_dir="data")` writes all sample datasets for local smoke tests.
 
 ## Stage I/O defaults
@@ -92,41 +159,19 @@ S3NTINEL stands for Structural Streaming Sparse Event Nexus for Telemetry Infere
 	- `S3NTINEL_EVENT_DELTA_THRESHOLD` controls `threshold` event emission.
 	- When `S3NTINEL_EVENT_DELTA_THRESHOLD <= 0`, `threshold` events are disabled and continuous deltas emit only `slope_pos|slope_neg` (plus first-sample null suppression).
 
-- `10_cur_backbone_fit` reads normalized telemetry and writes fitting-phase graph artifacts:
-	- Reads `S3NTINEL_RAW_TABLE_PATH` (default `data/delta/raw_telemetry`)
-	- Writes `S3NTINEL_CUR_NORMALIZATION_TABLE_PATH` (default `data/delta/cur_normalization_profile`)
-	- Writes CUR matrix artifacts:
-		- `S3NTINEL_CUR_COLUMN_SKETCH_TABLE_PATH` (default `data/delta/cur_column_sketch`)
-		- `S3NTINEL_CUR_COLUMN_LEVERAGE_TABLE_PATH` (default `data/delta/cur_column_leverage`)
-		- `S3NTINEL_CUR_ROW_SKETCH_TABLE_PATH` (default `data/delta/cur_row_sketch`)
-		- `S3NTINEL_CUR_SENSOR_SAMPLE_TABLE_PATH` (default `data/delta/cur_sensor_sample`)
-		- `S3NTINEL_CUR_ROW_SAMPLE_TABLE_PATH` (default `data/delta/cur_row_sample`)
-		- `S3NTINEL_CUR_C_MATRIX_TABLE_PATH` (default `data/delta/cur_c_matrix`)
-		- `S3NTINEL_CUR_R_MATRIX_TABLE_PATH` (default `data/delta/cur_r_matrix`)
-		- `S3NTINEL_CUR_W_MATRIX_TABLE_PATH` (default `data/delta/cur_w_matrix`)
-		- `S3NTINEL_CUR_U_MATRIX_TABLE_PATH` (default `data/delta/cur_u_matrix`)
-		- `S3NTINEL_CUR_PIVOTS_K` (default `cur.pivots_k`)
-		- `S3NTINEL_CUR_ROW_SAMPLES_K` (default `cur.row_samples_k`)
-		- `S3NTINEL_CUR_SAMPLING_MODE` (default `cur.sampling_mode`, supports `deterministic|weighted`)
-		- `S3NTINEL_CUR_SAMPLING_SEED` (default `cur.sampling_seed`)
-		- `S3NTINEL_CUR_MAX_CORE_CELLS` (default `cur.max_core_cells`)
-		- `S3NTINEL_CUR_MIN_CORE_ROWS` (default `cur.min_core_rows`)
-		- `S3NTINEL_CUR_MIN_CORE_COLS` (default `cur.min_core_cols`)
-	- Writes `S3NTINEL_CUR_GRAPH_TABLE_PATH` (default `data/delta/cur_sensor_graph`)
-	- Writes `S3NTINEL_PRECISION_GRAPH_TABLE_PATH` (default `data/delta/precision_sensor_graph`)
-	- Writes `S3NTINEL_EVENT_GRAPH_TABLE_PATH` (default `data/delta/event_cooccurrence_graph`)
-	- Writes `S3NTINEL_FUSED_GRAPH_TABLE_PATH` (default `data/delta/fused_sensor_graph`)
-	- Writes `S3NTINEL_SUBSYSTEM_MAP_TABLE_PATH` (default `data/delta/sensor_subsystem_map`)
-	- Writes hierarchical structure artifacts:
-		- `S3NTINEL_HIERARCHY_SENSOR_MAP_TABLE_PATH` (default `data/delta/sensor_hierarchy_map`)
-		- `S3NTINEL_HIERARCHY_NODES_TABLE_PATH` (default `data/delta/hierarchy_nodes`)
-		- `S3NTINEL_HIERARCHY_EDGES_TABLE_PATH` (default `data/delta/hierarchy_edges`)
-		- hierarchy source/profile metadata via `S3NTINEL_HIERARCHY_SOURCE`, `S3NTINEL_HIERARCHY_PROFILE_ID`
-	- Writes fitting quality report `S3NTINEL_FIT_GRAPH_REPORT_PATH` (default `reports/fitting_graph_report.json`)
-	- A/B evaluator: `python -m scripts.evaluate_cur_sampling_ab` compares `deterministic|weighted` sampling across seeds and writes aggregate report metrics.
-	- Threshold/fusion controls:
-		- `S3NTINEL_CUR_GRAPH_MAX_SENSORS` (default `cur.pivots_k`)
-		- `S3NTINEL_CUR_GRAPH_MIN_OVERLAP` (default `graph.min_overlap`)
+- `10_backbone_fit` reads normalized telemetry and adaptive windows and writes backbone artifacts:
+	- `S3NTINEL_BACKBONE_TABLE_PATH` (default `data/delta/backbone`)
+	- `S3NTINEL_BACKBONE_SENSOR_ENERGY_TABLE_PATH` (default `data/delta/backbone_sensor_energy`)
+	- key controls:
+		- `S3NTINEL_BACKBONE_SENSOR_COUNT`
+		- `S3NTINEL_BACKBONE_RIDGE_LAMBDA`
+	- `11_graph_fit` writes:
+		- `S3NTINEL_PRECISION_GRAPH_TABLE_PATH`
+		- `S3NTINEL_EVENT_GRAPH_TABLE_PATH`
+		- `S3NTINEL_LAG_GRAPH_TABLE_PATH`
+		- `S3NTINEL_TRANSITION_GRAPH_TABLE_PATH`
+		- `S3NTINEL_FUSED_GRAPH_TABLE_PATH`
+		- `S3NTINEL_HIERARCHY_SENSOR_MAP_TABLE_PATH`
 		- `S3NTINEL_CUR_GRAPH_MIN_ABS_CORR` (default `graph.min_abs_corr`)
 		- `S3NTINEL_CUR_NORMALIZATION_MODE` (default `graph.normalization.mode`, supports `none|zscore|robust`)
 		- `S3NTINEL_CUR_NORMALIZATION_CLIP_SIGMA` (default `graph.normalization.clip_sigma`)
@@ -141,26 +186,30 @@ S3NTINEL stands for Structural Streaming Sparse Event Nexus for Telemetry Infere
 			- `S3NTINEL_HIERARCHY_K_SUBSYSTEM` (default `graph.hierarchy_k_subsystem`)
 			- `S3NTINEL_HIERARCHY_K_MODULE` (default `graph.hierarchy_k_module`)
 		- `S3NTINEL_GRAPH_FUSE_ALPHA` (default `graph.cur_weight_alpha`)
-- `50_phase_detect` writes:
+- `50_phase_fit` writes:
 	- `S3NTINEL_PHASE_WINDOWS_TABLE_PATH` (default `data/delta/phase_windows`)
-	- `S3NTINEL_PHASES_TABLE_PATH` (default `data/delta/phases`)
-- `60_anomaly_score` reads phase windows + signatures and writes:
-	- `S3NTINEL_SCORES_TABLE_PATH` (default `data/delta/scores`)
-	- If `S3NTINEL_SUBSYSTEM_MAP_TABLE_PATH` exists, stage 60 also derives per-window `dominant_subsystem` from mapped event activity within each adaptive window.
-	- Stage 60 also emits `subsystem_scores` (map of subsystem evidence ratios), propagated through calibration and used by stage 80 to populate `anomalies.subsystems`.
+	- `S3NTINEL_PHASE_BASELINES_TABLE_PATH` (default `data/delta/phase_baselines`)
+- `60_window_scores_raw` reads phase windows + phase baselines and writes:
+	- `S3NTINEL_WINDOW_SCORES_RAW_TABLE_PATH` (default `data/delta/window_scores_raw`)
+	- Stage 60 also emits `subsystem_scores` (map of subsystem evidence ratios), propagated through calibration and used by stage 80 to populate `anomaly_window_attribution.subsystems`.
 	- Severity thresholds are configurable for normalized score scale:
 		- `S3NTINEL_SEVERITY_LOW_THRESHOLD` (default `0.25`)
 		- `S3NTINEL_SEVERITY_MEDIUM_THRESHOLD` (default `0.75`)
 		- `S3NTINEL_SEVERITY_HIGH_THRESHOLD` (default `1.50`)
-- `70_conformal_calibrate` reads scores and writes:
-	- `S3NTINEL_CALIBRATED_TABLE_PATH` (default `data/delta/calibrated`)
+- `70_window_scores_calibrate` reads raw window scores and writes:
+	- `S3NTINEL_WINDOW_SCORES_CALIBRATED_TABLE_PATH` (default `data/delta/window_scores_calibrated`)
 	- `S3NTINEL_MIN_WARM` (optional override; defaults to config value)
-- `80_emit_anomalies` reads calibrated + phase windows + signatures + windows and writes:
-	- `S3NTINEL_ANOMALIES_TABLE_PATH` (default `data/delta/anomalies`)
+- `80_anomaly_attribution` reads calibrated window scores + phase windows + windows and writes:
+	- `S3NTINEL_ANOMALY_WINDOW_ATTRIBUTION_TABLE_PATH` (default `data/delta/anomaly_window_attribution`)
+	- `S3NTINEL_ANOMALY_TELEMETRY_ATTRIBUTION_TABLE_PATH` (default `data/delta/anomaly_telemetry_attribution`)
+	- `S3NTINEL_ANOMALY_EVENT_ATTRIBUTION_TABLE_PATH` (default `data/delta/anomaly_event_attribution`)
 	- `S3NTINEL_WRITE_MODE` defaults to `merge` for this stage, enforcing upsert semantics on `(tail_id, flight_id, win_id)`.
-	- `S3NTINEL_RAW_TABLE_PATH` (default `data/delta/raw_telemetry`) is used when available for panel-context enrichment.
-	- If `S3NTINEL_EVENTS_TABLE_PATH` and `S3NTINEL_SUBSYSTEM_MAP_TABLE_PATH` are available, stage 80 populates `subsystems[].top_sensors` using windowed event evidence.
-	- If `S3NTINEL_RAW_TABLE_PATH` is available, stage 80 populates `panel_context` from window-local ASCII/LCD text features.
+	- Required inputs for V2 emission:
+		- `S3NTINEL_EVENTS_TABLE_PATH`
+		- `S3NTINEL_HIERARCHY_SENSOR_MAP_TABLE_PATH`
+		- `S3NTINEL_RAW_TABLE_PATH`
+	- Stage 80 populates `subsystems[].top_sensors` from windowed event evidence joined through `hierarchy_sensor_map`.
+	- Stage 80 populates `panel_context` from window-local ASCII/LCD text features.
 	- `S3NTINEL_SUBSYSTEM_TOP_SENSORS_K` controls top sensors per subsystem in anomaly payload (default `5`).
 - `scripts/smoke_test_pipeline.py` synthetic seed scaling options:
 	- `--tail-count` (default `1`)
@@ -171,8 +220,6 @@ S3NTINEL stands for Structural Streaming Sparse Event Nexus for Telemetry Infere
 - `30_windows_adaptive` strategy:
 	- `S3NTINEL_WINDOW_STRATEGY` supports `bucketed` (legacy) and `stream_parity` (stateful max_ms/event_threshold parity with stream windower)
 	- `S3NTINEL_WINDOW_INACTIVITY_TIMEOUT_MS` controls timeout-based closure in `stream_parity` mode (default `0` = disabled)
-- `40_signatures_build` optional CUR context:
-	- Reads `S3NTINEL_CUR_SENSOR_SAMPLE_TABLE_PATH` when present and appends sampled-sensor coverage features into `cur_block` for first-pass structural-context wiring.
 
 ## v1 conventions
 
