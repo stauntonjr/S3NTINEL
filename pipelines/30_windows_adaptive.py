@@ -7,10 +7,9 @@ from libs.io.delta import get_spark, read_table, write_table
 from libs.perf import get_logger, log_dict_artifact_if_active, log_params_if_active, log_wall_time, track_mlflow_run
 from libs.windows.adaptive import (
     DEFAULT_MIN_SAMPLING_RATE_HZ,
-    build_adaptive_windows,
-    build_adaptive_windows_stream_parity,
     max_window_ms_from_min_sampling_rate,
 )
+from libs.windows import build_windows_table
 from pipelines.common import build_context
 
 
@@ -41,21 +40,14 @@ def run() -> None:
 
     spark = get_spark("s3ntinel.windows_adaptive")
     events_df = read_table(spark, input_path, fmt=table_format)
-    if window_strategy == "stream_parity":
-        windows_df = build_adaptive_windows_stream_parity(
-            events_df,
-            max_ms=max_ms,
-            event_threshold=event_threshold,
-            min_ms=min_ms,
-            inactivity_timeout_ms=inactivity_timeout_ms,
-        )
-    else:
-        windows_df = build_adaptive_windows(
-            events_df,
-            max_ms=max_ms,
-            event_threshold=event_threshold,
-            min_ms=min_ms,
-        )
+    windows_df = build_windows_table(
+        events_df,
+        max_ms=max_ms,
+        event_threshold=event_threshold,
+        min_ms=min_ms,
+        inactivity_timeout_ms=inactivity_timeout_ms,
+        strategy=window_strategy,
+    )
     write_table(
         windows_df,
         path=output_path,

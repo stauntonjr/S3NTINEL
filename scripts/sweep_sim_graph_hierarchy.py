@@ -183,7 +183,7 @@ def _hierarchy_recovery_metrics(
     hierarchy_pred_df: pd.DataFrame,
 ) -> dict[str, Any]:
     if hierarchy_label_df.empty or hierarchy_pred_df.empty:
-        return {"sensor_count_compared": 0, "levels": {}}
+        return {"parameter_count_compared": 0, "levels": {}}
 
     label_df = hierarchy_label_df.copy()
     pred_df = hierarchy_pred_df.copy()
@@ -213,7 +213,7 @@ def _hierarchy_recovery_metrics(
             "detected_cluster_count": int(len(set(labels_pred) - {""})),
         }
     return {
-        "sensor_count_compared": int(len(merged)),
+        "parameter_count_compared": int(len(merged)),
         "levels": levels,
     }
 

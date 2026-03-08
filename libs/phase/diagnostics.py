@@ -24,7 +24,10 @@ def compute_phase_behavior_diagnostics(
         frame["parameter_datatype_norm"] = frame["parameter_datatype"].map(normalize_sensor_datatype)
 
     numeric = frame[frame["parameter_datatype_norm"] == SensorDataType.NUMERIC.value].copy()
-    numeric["value_num"] = pd.to_numeric(numeric.get("parameter_value_clean"), errors="coerce")
+    value_source = numeric.get("parameter_value")
+    if value_source is None:
+        value_source = numeric.get("parameter_value_clean")
+    numeric["value_num"] = pd.to_numeric(value_source, errors="coerce")
     numeric = numeric.dropna(subset=["value_num"])
 
     continuous_rows: list[dict[str, Any]] = []

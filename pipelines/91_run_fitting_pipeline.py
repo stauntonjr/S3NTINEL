@@ -7,6 +7,7 @@ from pipelines._pipeline_runner import run_stage_group
 
 FITTING_STAGE_SCRIPTS = [
     "00_ingest_raw.py",
+    "05_parameter_profiles_fit.py",
     "10_backbone_fit.py",
     "11_graph_fit.py",
 ]

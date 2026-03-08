@@ -16,7 +16,10 @@ def build_continuous_robust_scaler(telemetry_df: pd.DataFrame) -> dict[str, dict
     if "parameter_name" not in values.columns and "sensor" in values.columns:
         values["parameter_name"] = values["sensor"]
     values["parameter_name"] = values.get("parameter_name", "").astype(str)
-    values["value_num"] = pd.to_numeric(values.get("parameter_value_clean"), errors="coerce")
+    value_source = values.get("parameter_value")
+    if value_source is None:
+        value_source = values.get("parameter_value_clean")
+    values["value_num"] = pd.to_numeric(value_source, errors="coerce")
     values = values.dropna(subset=["parameter_name", "value_num"])
     if values.empty:
         return {}

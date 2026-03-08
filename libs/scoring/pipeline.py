@@ -190,6 +190,7 @@ def build_window_scores_raw_spark_table(
         }
         for row in baseline_rows
     ]
+    phase_baselines_pdf = pd.DataFrame(phase_baselines)
 
     parameter_col = (
         "parameter_name"
@@ -203,6 +204,12 @@ def build_window_scores_raw_spark_table(
             subsystem_id = str(row["subsystem_id"] or "").strip()
             if parameter_name and subsystem_id:
                 parameter_to_subsystem[parameter_name] = subsystem_id
+    hierarchy_sensor_map_pdf = pd.DataFrame(
+        [
+            {"parameter_name": parameter_name, "subsystem_id": subsystem_id}
+            for parameter_name, subsystem_id in parameter_to_subsystem.items()
+        ]
+    )
 
     schema = T.StructType(
         [
@@ -230,13 +237,8 @@ def build_window_scores_raw_spark_table(
         for phase_windows_pdf in pdf_iter:
             scores_pdf = build_window_scores_raw_table(
                 phase_windows_pdf,
-                pd.DataFrame(phase_baselines),
-                pd.DataFrame(
-                    [
-                        {"parameter_name": parameter_name, "subsystem_id": subsystem_id}
-                        for parameter_name, subsystem_id in parameter_to_subsystem.items()
-                    ]
-                ),
+                phase_baselines_pdf,
+                hierarchy_sensor_map_pdf,
             )
             yield scores_pdf
 

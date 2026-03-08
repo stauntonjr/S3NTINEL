@@ -3,10 +3,7 @@
 
 import os
 
-from pyspark.sql import functions as F
-
-from libs.events.categorical import build_categorical_events
-from libs.events.extrema import build_continuous_events
+from libs.events import build_events_table
 from libs.io.delta import get_spark, read_table, write_table
 from libs.perf import get_logger, log_dict_artifact_if_active, log_params_if_active, log_wall_time, track_mlflow_run
 from pipelines.common import build_context
@@ -30,22 +27,12 @@ def run() -> None:
     spark = get_spark("s3ntinel.events_extract")
     raw_df = read_table(spark, input_path, fmt=table_format)
 
-    continuous_events = build_continuous_events(
+    events_df = build_events_table(
         raw_df,
         delta_threshold=delta_threshold,
         slope_source=slope_source,
         ema_alpha=ema_alpha,
     )
-    categorical_events = build_categorical_events(raw_df)
-    events_df = continuous_events.unionByName(categorical_events)
-    if "sensor" in events_df.columns and "parameter_name" not in events_df.columns:
-        events_df = events_df.withColumnRenamed("sensor", "parameter_name")
-    if "ts" in events_df.columns and "timestamp_utc" not in events_df.columns:
-        events_df = events_df.withColumnRenamed("ts", "timestamp_utc")
-    if "anomaly_type_detected" not in events_df.columns:
-        events_df = events_df.withColumn("anomaly_type_detected", F.lit(None).cast("string"))
-    if "anomaly_score_detected" not in events_df.columns:
-        events_df = events_df.withColumn("anomaly_score_detected", F.lit(None).cast("double"))
 
     write_table(
         events_df,

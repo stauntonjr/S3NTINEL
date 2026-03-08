@@ -1,8 +1,10 @@
 from libs.graph import (
     build_event_graph_spark_table,
+    build_fused_graph_spark_table,
     build_graph_fusion_from_component_tables,
     build_graph_artifact_tables,
     build_graph_artifacts_from_window_x_table,
+    build_hierarchy_from_fused_spark_table,
     build_lag_graph_spark_table,
     build_precision_graph_from_window_x_spark_table,
     build_transition_graph_spark_table,
@@ -39,10 +41,10 @@ def test_build_graph_artifact_tables_produces_graph_families_and_hierarchy(spark
         min_fused_edge_weight=0.0,
     )
 
-    assert set(["sensor_u", "sensor_v", "edge_family"]).issubset(event_df.columns)
-    assert set(["sensor_u", "sensor_v", "mean_lag_seconds", "edge_family"]).issubset(lag_df.columns)
-    assert set(["sensor_u", "sensor_v", "precedence_count", "precedence_weight", "edge_family"]).issubset(transition_df.columns)
-    assert set(["sensor_u", "sensor_v", "fused_weight", "edge_family"]).issubset(fused_df.columns)
+    assert set(["parameter_name_u", "parameter_name_v", "edge_family"]).issubset(event_df.columns)
+    assert set(["parameter_name_u", "parameter_name_v", "mean_lag_seconds", "edge_family"]).issubset(lag_df.columns)
+    assert set(["parameter_name_u", "parameter_name_v", "precedence_count", "precedence_weight", "edge_family"]).issubset(transition_df.columns)
+    assert set(["parameter_name_u", "parameter_name_v", "fused_weight", "edge_family"]).issubset(fused_df.columns)
     assert set(["parameter_name", "system_id", "subsystem_id", "module_id"]).issubset(hierarchy_df.columns)
     assert len(hierarchy_df) >= 1
 
@@ -117,14 +119,14 @@ def test_spark_graph_tables_feed_fusion_helper(spark):
         ]
     ).toPandas()
 
-    event_pdf = build_event_graph_spark_table(events_sdf, windows_sdf, min_count=1, min_npmi=0.0, top_k_per_sensor=8).toPandas()
-    lag_pdf = build_lag_graph_spark_table(
+    event_sdf = build_event_graph_spark_table(events_sdf, windows_sdf, min_count=1, min_npmi=0.0, top_k_per_parameter_name=8)
+    lag_sdf = build_lag_graph_spark_table(
         events_sdf,
         tau_max_seconds=30.0,
         min_count=1,
         max_mean_lag_seconds=None,
         top_k_outgoing=8,
-    ).toPandas()
+    )
     transition_pdf = build_transition_graph_spark_table(events_sdf, min_count=1).toPandas()
     precision_df = build_precision_graph_from_window_x_spark_table(
         spark.createDataFrame(window_x_df),
@@ -132,7 +134,24 @@ def test_spark_graph_tables_feed_fusion_helper(spark):
         ridge_lambda=1.0,
         min_abs_partial_corr=0.0,
     )
-    fused_df, hierarchy_df = build_graph_fusion_from_component_tables(
+    fused_sdf = build_fused_graph_spark_table(
+        spark.createDataFrame(precision_df),
+        event_sdf,
+        lag_sdf,
+        alpha=1.0,
+        beta=1.0,
+        gamma=1.0,
+    )
+    hierarchy_df = build_hierarchy_from_fused_spark_table(
+        fused_sdf,
+        parameter_names=["ENG_TEMP_1", "HYD_PRESS_1"],
+        min_fused_edge_weight=0.0,
+        hierarchy_top_k_per_parameter_name=3,
+    )
+    event_pdf = event_sdf.toPandas()
+    lag_pdf = lag_sdf.toPandas()
+    fused_df = fused_sdf.toPandas()
+    fused_df_pandas, hierarchy_df_pandas = build_graph_fusion_from_component_tables(
         precision_df,
         event_pdf,
         lag_pdf,
@@ -140,12 +159,14 @@ def test_spark_graph_tables_feed_fusion_helper(spark):
         min_fused_edge_weight=0.0,
     )
 
-    assert set(["sensor_u", "sensor_v", "cooccur_count", "event_weight", "edge_family"]).issubset(event_pdf.columns)
-    assert set(["sensor_u", "sensor_v", "lag_count", "lag_weight", "mean_lag_seconds", "edge_family"]).issubset(lag_pdf.columns)
-    assert set(["sensor_u", "sensor_v", "precedence_count", "precedence_weight", "edge_family"]).issubset(transition_pdf.columns)
-    assert set(["sensor_u", "sensor_v", "partial_corr", "precision_weight", "edge_family"]).issubset(precision_df.columns)
-    assert set(["sensor_u", "sensor_v", "fused_weight", "edge_family"]).issubset(fused_df.columns)
+    assert set(["parameter_name_u", "parameter_name_v", "cooccur_count", "event_weight", "edge_family"]).issubset(event_pdf.columns)
+    assert set(["parameter_name_u", "parameter_name_v", "lag_count", "lag_weight", "mean_lag_seconds", "edge_family"]).issubset(lag_pdf.columns)
+    assert set(["parameter_name_u", "parameter_name_v", "precedence_count", "precedence_weight", "edge_family"]).issubset(transition_pdf.columns)
+    assert set(["parameter_name_u", "parameter_name_v", "partial_corr", "precision_weight", "edge_family"]).issubset(precision_df.columns)
+    assert set(["parameter_name_u", "parameter_name_v", "fused_weight", "edge_family"]).issubset(fused_df.columns)
     assert set(["parameter_name", "system_id", "subsystem_id", "module_id"]).issubset(hierarchy_df.columns)
+    assert len(fused_df) == len(fused_df_pandas)
+    assert len(hierarchy_df) == len(hierarchy_df_pandas)
 
 
 def test_build_precision_graph_from_window_x_spark_table_matches_pandas_builder(spark):
@@ -191,17 +212,17 @@ def test_hierarchy_assignment_requires_mutual_local_support():
 
     fused_df = __import__("pandas").DataFrame(
         [
-            {"sensor_u": "A", "sensor_v": "B", "fused_weight": 0.9},
-            {"sensor_u": "A", "sensor_v": "C", "fused_weight": 0.8},
-            {"sensor_u": "B", "sensor_v": "C", "fused_weight": 0.1},
-            {"sensor_u": "D", "sensor_v": "E", "fused_weight": 0.85},
+            {"parameter_name_u": "A", "parameter_name_v": "B", "fused_weight": 0.9},
+            {"parameter_name_u": "A", "parameter_name_v": "C", "fused_weight": 0.8},
+            {"parameter_name_u": "B", "parameter_name_v": "C", "fused_weight": 0.1},
+            {"parameter_name_u": "D", "parameter_name_v": "E", "fused_weight": 0.85},
         ]
     )
     hierarchy_df = _assign_hierarchy(
         fused_df,
         ["A", "B", "C", "D", "E"],
         min_edge_weight=0.2,
-        top_k_per_sensor=1,
+        top_k_per_parameter_name=1,
     )
     by_parameter = {row["parameter_name"]: row["module_id"] for row in hierarchy_df.to_dict(orient="records")}
 
@@ -216,9 +237,9 @@ def test_hierarchy_assignment_respects_explicit_weight_thresholds():
 
     fused_df = __import__("pandas").DataFrame(
         [
-            {"sensor_u": "A", "sensor_v": "B", "fused_weight": 0.95},
-            {"sensor_u": "C", "sensor_v": "D", "fused_weight": 0.94},
-            {"sensor_u": "B", "sensor_v": "C", "fused_weight": 0.72},
+            {"parameter_name_u": "A", "parameter_name_v": "B", "fused_weight": 0.95},
+            {"parameter_name_u": "C", "parameter_name_v": "D", "fused_weight": 0.94},
+            {"parameter_name_u": "B", "parameter_name_v": "C", "fused_weight": 0.72},
         ]
     )
 
@@ -226,7 +247,7 @@ def test_hierarchy_assignment_respects_explicit_weight_thresholds():
         fused_df,
         ["A", "B", "C", "D"],
         min_edge_weight=0.7,
-        top_k_per_sensor=1,
+        top_k_per_parameter_name=1,
         subsystem_min_edge_weight=0.7,
         system_min_edge_weight=0.3,
     )
@@ -234,7 +255,7 @@ def test_hierarchy_assignment_respects_explicit_weight_thresholds():
         fused_df,
         ["A", "B", "C", "D"],
         min_edge_weight=0.7,
-        top_k_per_sensor=1,
+        top_k_per_parameter_name=1,
         subsystem_min_edge_weight=0.8,
         system_min_edge_weight=0.7,
     )

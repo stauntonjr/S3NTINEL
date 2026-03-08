@@ -1,5 +1,5 @@
 from libs.common import SensorDataType, normalize_sensor_datatype
-from libs.simulation import build_default_sensor_behavior, flatten_hierarchy_spec
+from libs.simulation import build_default_parameter_behavior, flatten_hierarchy_spec
 
 
 def test_normalize_sensor_datatype_aliases():
@@ -35,7 +35,7 @@ def test_simulation_hierarchy_and_behavior_use_canonical_datatypes():
     assert by_sensor["s_int"] == SensorDataType.NUMERIC.value
     assert by_sensor["s_hc"] == SensorDataType.HIGH_CARDINALITY.value
 
-    behavior = build_default_sensor_behavior(hierarchy_df)
+    behavior = build_default_parameter_behavior(hierarchy_df)
     assert behavior["s_bool"]["datatype"] == SensorDataType.BINARY.value
     assert behavior["s_int"]["datatype"] == SensorDataType.NUMERIC.value
     assert behavior["s_hc"]["datatype"] == SensorDataType.HIGH_CARDINALITY.value

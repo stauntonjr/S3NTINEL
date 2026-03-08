@@ -13,7 +13,6 @@ from libs.perf import (
 )
 from libs.io.delta import get_spark, read_parquet, write_table
 from libs.io.transforms import normalize_raw_telemetry
-from libs.profiling import build_sensor_datatype_profile
 from pipelines.common import build_context
 
 
@@ -30,7 +29,6 @@ def run() -> None:
     context = build_context()
     input_path = os.getenv("S3NTINEL_RAW_INPUT_PATH", "data/input/raw_telemetry")
     output_path = os.getenv("S3NTINEL_RAW_TABLE_PATH", "data/delta/raw_telemetry")
-    sensor_type_profile_path = os.getenv("S3NTINEL_SENSOR_TYPE_PROFILE_TABLE_PATH", "data/delta/sensor_type_profile")
     output_format = resolve_output_format()
     write_mode = os.getenv("S3NTINEL_WRITE_MODE", "append")
 
@@ -43,16 +41,9 @@ def run() -> None:
         logger=LOGGER,
     )
     normalized_df = normalize_raw_telemetry(raw_df)
-    sensor_type_profile_df = build_sensor_datatype_profile(normalized_df)
     log_dataframe_dataset_if_active(
         name="stage00_normalized_output",
         dataframe=normalized_df,
-        context="stage00_output",
-        logger=LOGGER,
-    )
-    log_dataframe_dataset_if_active(
-        name="stage00_sensor_type_profile",
-        dataframe=sensor_type_profile_df,
         context="stage00_output",
         logger=LOGGER,
     )
@@ -63,12 +54,6 @@ def run() -> None:
         fmt=output_format,
         partition_by=context.config["output"]["partition_by"],
     )
-    write_table(
-        sensor_type_profile_df,
-        path=sensor_type_profile_path,
-        mode=write_mode,
-        fmt=output_format,
-    )
 
     log_params_if_active({"runtime_mode": context.config["runtime"]["mode"]})
     log_dict_artifact_if_active(
@@ -76,7 +61,6 @@ def run() -> None:
             "stage": "00_ingest_raw",
             "input_path": input_path,
             "output_path": output_path,
-            "sensor_type_profile_path": sensor_type_profile_path,
             "output_format": output_format,
             "write_mode": write_mode,
             "partition_by": list(context.config["output"]["partition_by"]),

@@ -132,7 +132,7 @@ def build_categorical_distribution(raw_input_df: "DataFrame", top_k: int = 10) -
 
 
 @hot_path
-def build_sensor_datatype_profile(
+def build_parameter_datatype_profile(
     telemetry_df: "DataFrame",
     numeric_ratio_threshold: float = 0.8,
     categorical_cardinality_max: int = 200,
@@ -144,7 +144,7 @@ def build_sensor_datatype_profile(
     elif "parameter_name" in telemetry_df.columns:
         sensor_col = F.col("parameter_name")
     else:
-        raise ValueError("telemetry dataframe must include either 'sensor' or 'parameter_name' column")
+        raise ValueError("telemetry dataframe must include 'parameter_name' column")
 
     if "parameter_value" in telemetry_df.columns:
         value_text = F.trim(F.col("parameter_value").cast("string"))
@@ -158,7 +158,7 @@ def build_sensor_datatype_profile(
 
     prepped = (
         telemetry_df.select(
-            sensor_col.cast("string").alias("sensor"),
+            sensor_col.cast("string").alias("parameter_name"),
             value_text.alias("value_text"),
             value_num.alias("value_num"),
         )
@@ -175,7 +175,7 @@ def build_sensor_datatype_profile(
         .withColumn("is_numeric", F.col("value_num").isNotNull())
     )
 
-    base_stats = prepped.groupBy("sensor").agg(
+    base_stats = prepped.groupBy("parameter_name").agg(
         F.count(F.lit(1)).alias("total_count"),
         F.sum(F.when(F.col("is_missing"), F.lit(1)).otherwise(F.lit(0))).alias("missing_count"),
         F.sum(F.when(F.col("is_numeric"), F.lit(1)).otherwise(F.lit(0))).alias("numeric_count"),

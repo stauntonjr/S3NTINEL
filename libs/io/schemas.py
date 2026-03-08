@@ -38,6 +38,49 @@ WINDOWS_COLUMNS = [
     "date_utc",
 ]
 
+PARAMETER_DATATYPE_PROFILE_COLUMNS = [
+    "parameter_name",
+    "parameter_datatype_profiled",
+    "total_count",
+    "missing_count",
+    "missing_rate",
+    "numeric_rate",
+    "distinct_value_count",
+    "num_mean",
+    "num_std",
+    "num_min",
+    "num_max",
+    "num_q01",
+    "num_q50",
+    "num_q99",
+    "median_interval_ms",
+    "sampling_rate_profiled_hz",
+]
+
+CONTINUOUS_SCALING_PROFILE_COLUMNS = [
+    "parameter_name",
+    "support_count",
+    "scaling_q25",
+    "scaling_center_median",
+    "scaling_q75",
+    "scaling_iqr",
+]
+
+PARAMETER_BEHAVIOR_PROFILE_COLUMNS = [
+    "parameter_name",
+    "parameter_datatype_profiled",
+    "behavior_family_profiled",
+    "behavior_profile_confidence",
+    "regulated_score_profiled",
+    "inertial_score_profiled",
+    "accumulative_score_profiled",
+    "discrete_state_score_profiled",
+    "mixed_unknown_score_profiled",
+    "sample_count",
+    "profile_window_start_utc",
+    "profile_window_end_utc",
+]
+
 V2_PHASE_WINDOWS_COLUMNS = [
     "tail_id",
     "flight_id",
@@ -90,24 +133,24 @@ V2_BACKBONE_SENSOR_ENERGY_COLUMNS = [
 ]
 
 V2_PRECISION_GRAPH_COLUMNS = [
-    "sensor_u",
-    "sensor_v",
+    "parameter_name_u",
+    "parameter_name_v",
     "partial_corr",
     "precision_weight",
     "edge_family",
 ]
 
 V2_EVENT_GRAPH_COLUMNS = [
-    "sensor_u",
-    "sensor_v",
+    "parameter_name_u",
+    "parameter_name_v",
     "cooccur_count",
     "event_weight",
     "edge_family",
 ]
 
 V2_LAG_GRAPH_COLUMNS = [
-    "sensor_u",
-    "sensor_v",
+    "parameter_name_u",
+    "parameter_name_v",
     "lag_count",
     "lag_weight",
     "mean_lag_seconds",
@@ -115,16 +158,16 @@ V2_LAG_GRAPH_COLUMNS = [
 ]
 
 V2_TRANSITION_GRAPH_COLUMNS = [
-    "sensor_u",
-    "sensor_v",
+    "parameter_name_u",
+    "parameter_name_v",
     "precedence_count",
     "precedence_weight",
     "edge_family",
 ]
 
 V2_FUSED_GRAPH_COLUMNS = [
-    "sensor_u",
-    "sensor_v",
+    "parameter_name_u",
+    "parameter_name_v",
     "precision_weight",
     "event_weight",
     "lag_weight",
@@ -224,6 +267,9 @@ V2_ANOMALY_EVENT_ATTRIBUTION_COLUMNS = [
 ]
 
 ACTIVE_V2_TABLES = {
+    "parameter_datatype_profile": PARAMETER_DATATYPE_PROFILE_COLUMNS,
+    "continuous_scaling_profile": CONTINUOUS_SCALING_PROFILE_COLUMNS,
+    "parameter_behavior_profile": PARAMETER_BEHAVIOR_PROFILE_COLUMNS,
     "events": EVENTS_COLUMNS,
     "windows": WINDOWS_COLUMNS,
     "backbone": V2_BACKBONE_COLUMNS,

@@ -35,8 +35,8 @@ def _prepare_raw_telemetry(raw_df: pd.DataFrame) -> pd.DataFrame:
         rows["timestamp_utc"] = rows["timestamp"]
     if "parameter_name" not in rows.columns and "sensor" in rows.columns:
         rows["parameter_name"] = rows["sensor"]
-    if "parameter_value_clean" not in rows.columns and "parameter_value" in rows.columns:
-        rows["parameter_value_clean"] = rows["parameter_value"]
+    if "parameter_value" not in rows.columns and "parameter_value_clean" in rows.columns:
+        rows["parameter_value"] = rows["parameter_value_clean"]
     rows["tail_id"] = rows.get("tail_id", "").astype(str)
     rows["flight_id"] = rows.get("flight_id", "").astype(str)
     rows["parameter_name"] = rows.get("parameter_name", "").astype(str)
@@ -113,7 +113,7 @@ def _build_window_context_rows(
                 timestamp_utc = pd.to_datetime(row["timestamp_utc"], utc=True)
                 if timestamp_utc > t_end:
                     break
-                zoh_snapshot[str(row["parameter_name"])] = row.get("parameter_value_clean")
+                zoh_snapshot[str(row["parameter_name"])] = row.get("parameter_value")
                 raw_idx += 1
 
             window_events: list[DetectedEventRow] = []
@@ -174,10 +174,10 @@ def build_window_x_spark_table(raw_df: "DataFrame", events_df: "DataFrame", wind
     from pyspark.sql import functions as F
 
     raw_columns = set(raw_df.columns)
-    if "parameter_value_clean" in raw_columns:
-        raw_value_expr = F.col("parameter_value_clean").cast("string")
-    elif "parameter_value" in raw_columns:
+    if "parameter_value" in raw_columns:
         raw_value_expr = F.col("parameter_value").cast("string")
+    elif "parameter_value_clean" in raw_columns:
+        raw_value_expr = F.col("parameter_value_clean").cast("string")
     else:
         raw_value_expr = F.lit(None).cast("string")
 
@@ -192,7 +192,7 @@ def build_window_x_spark_table(raw_df: "DataFrame", events_df: "DataFrame", wind
         F.lit(None).cast("int").alias("duration_ms"),
         F.lit(None).cast("int").alias("event_count"),
         F.col("parameter_name"),
-        raw_value_expr.alias("parameter_value_clean"),
+        raw_value_expr.alias("parameter_value"),
         F.lit(None).cast("string").alias("event_type_detected"),
         F.expr("cast(null as map<string,string>)").alias("payload"),
     )
@@ -207,7 +207,7 @@ def build_window_x_spark_table(raw_df: "DataFrame", events_df: "DataFrame", wind
         F.lit(None).cast("int").alias("duration_ms"),
         F.lit(None).cast("int").alias("event_count"),
         F.col("parameter_name"),
-        F.lit(None).cast("string").alias("parameter_value_clean"),
+        F.lit(None).cast("string").alias("parameter_value"),
         F.col("event_type_detected"),
         F.col("payload").cast("map<string,string>").alias("payload"),
     )
@@ -222,7 +222,7 @@ def build_window_x_spark_table(raw_df: "DataFrame", events_df: "DataFrame", wind
         F.col("duration_ms"),
         F.col("event_count"),
         F.lit(None).cast("string").alias("parameter_name"),
-        F.lit(None).cast("string").alias("parameter_value_clean"),
+        F.lit(None).cast("string").alias("parameter_value"),
         F.lit(None).cast("string").alias("event_type_detected"),
         F.expr("cast(null as map<string,string>)").alias("payload"),
     )
@@ -230,7 +230,7 @@ def build_window_x_spark_table(raw_df: "DataFrame", events_df: "DataFrame", wind
 
     def _emit_window_x(group_pdf: pd.DataFrame) -> pd.DataFrame:
         raw_pdf = group_pdf[group_pdf["row_type"] == "raw"][
-            ["tail_id", "flight_id", "timestamp_utc", "parameter_name", "parameter_value_clean"]
+            ["tail_id", "flight_id", "timestamp_utc", "parameter_name", "parameter_value"]
         ].copy()
         event_pdf = group_pdf[group_pdf["row_type"] == "event"][
             ["tail_id", "flight_id", "timestamp_utc", "parameter_name", "event_type_detected", "payload"]

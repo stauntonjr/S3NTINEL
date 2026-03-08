@@ -120,6 +120,9 @@ def set_env_paths(base_dir: str, table_format: str, write_mode: str, min_warm: i
     base = Path(base_dir)
     os.environ["S3NTINEL_RAW_INPUT_PATH"] = str(base / "input" / "raw_telemetry")
     os.environ["S3NTINEL_RAW_TABLE_PATH"] = str(base / "delta" / "raw_telemetry")
+    os.environ["S3NTINEL_PARAMETER_DATATYPE_PROFILE_TABLE_PATH"] = str(base / "delta" / "parameter_datatype_profile")
+    os.environ["S3NTINEL_CONTINUOUS_SCALING_PROFILE_TABLE_PATH"] = str(base / "delta" / "continuous_scaling_profile")
+    os.environ["S3NTINEL_PARAMETER_BEHAVIOR_PROFILE_TABLE_PATH"] = str(base / "delta" / "parameter_behavior_profile")
     os.environ["S3NTINEL_EVENTS_TABLE_PATH"] = str(base / "delta" / "events")
     os.environ["S3NTINEL_WINDOWS_TABLE_PATH"] = str(base / "delta" / "windows")
     os.environ["S3NTINEL_PHASE_LABELS_TABLE_PATH"] = str(base / "delta" / "phase_labels")
@@ -149,6 +152,7 @@ def run_stages(stage_80_write_mode: str) -> None:
     pipeline_dir = Path(__file__).resolve().parent.parent / "pipelines"
     stage_scripts = [
         "00_ingest_raw.py",
+        "05_parameter_profiles_fit.py",
         "10_backbone_fit.py",
         "11_graph_fit.py",
         "20_events_extract.py",
@@ -170,6 +174,9 @@ def run_stages(stage_80_write_mode: str) -> None:
 def print_row_counts(spark: "SparkSession", table_format: str) -> None:
     table_paths = {
         "raw_telemetry": os.environ["S3NTINEL_RAW_TABLE_PATH"],
+        "parameter_datatype_profile": os.environ["S3NTINEL_PARAMETER_DATATYPE_PROFILE_TABLE_PATH"],
+        "continuous_scaling_profile": os.environ["S3NTINEL_CONTINUOUS_SCALING_PROFILE_TABLE_PATH"],
+        "parameter_behavior_profile": os.environ["S3NTINEL_PARAMETER_BEHAVIOR_PROFILE_TABLE_PATH"],
         "events": os.environ["S3NTINEL_EVENTS_TABLE_PATH"],
         "windows": os.environ["S3NTINEL_WINDOWS_TABLE_PATH"],
         "phase_labels": os.environ["S3NTINEL_PHASE_LABELS_TABLE_PATH"],
@@ -255,6 +262,9 @@ def assert_anomaly_payload_quality(spark: "SparkSession", table_format: str, wri
 def assert_active_v2_table_contracts(spark: "SparkSession", table_format: str) -> None:
     path_by_table = {
         "events": os.environ["S3NTINEL_EVENTS_TABLE_PATH"],
+        "parameter_datatype_profile": os.environ["S3NTINEL_PARAMETER_DATATYPE_PROFILE_TABLE_PATH"],
+        "continuous_scaling_profile": os.environ["S3NTINEL_CONTINUOUS_SCALING_PROFILE_TABLE_PATH"],
+        "parameter_behavior_profile": os.environ["S3NTINEL_PARAMETER_BEHAVIOR_PROFILE_TABLE_PATH"],
         "windows": os.environ["S3NTINEL_WINDOWS_TABLE_PATH"],
         "backbone": os.environ["S3NTINEL_BACKBONE_TABLE_PATH"],
         "backbone_sensor_energy": os.environ["S3NTINEL_BACKBONE_SENSOR_ENERGY_TABLE_PATH"],

@@ -4,7 +4,8 @@ import os
 
 from libs.graph import (
     build_event_graph_spark_table,
-    build_graph_fusion_from_component_tables,
+    build_fused_graph_spark_table,
+    build_hierarchy_from_fused_spark_table,
     build_lag_graph_spark_table,
     build_precision_graph_from_window_x_spark_table,
     build_transition_graph_spark_table,
@@ -110,7 +111,7 @@ def run() -> None:
         windows_df,
         min_count=min_event_count,
         min_npmi=min_event_npmi,
-        top_k_per_sensor=int(os.getenv("S3NTINEL_V2_EVENT_GRAPH_TOP_K_PER_SENSOR", "8")),
+        top_k_per_parameter_name=int(os.getenv("S3NTINEL_V2_EVENT_GRAPH_TOP_K_PER_SENSOR", "8")),
     )
     lag_sdf = build_lag_graph_spark_table(
         events_df,
@@ -125,42 +126,81 @@ def run() -> None:
     )
 
     backbone_pdf = backbone_df.toPandas()
-    event_pdf = event_sdf.toPandas()
-    lag_pdf = lag_sdf.toPandas()
-    transition_pdf = transition_sdf.toPandas()
+    selected_sensors = backbone_pdf.iloc[0]["selected_sensors_c"] if not backbone_pdf.empty else []
     precision_pdf = build_precision_graph_from_window_x_spark_table(
         window_x_df,
-        selected_sensors=(backbone_pdf.iloc[0]["selected_sensors_c"] if not backbone_pdf.empty else []),
+        selected_sensors=selected_sensors,
         ridge_lambda=precision_ridge_lambda,
         min_abs_partial_corr=min_abs_partial_corr,
     )
-    fused_pdf, hierarchy_pdf = build_graph_fusion_from_component_tables(
-        precision_pdf,
-        event_pdf,
-        lag_pdf,
-        backbone_pdf,
+
+    precision_df = (
+        spark.createDataFrame(precision_pdf)
+        if not precision_pdf.empty
+        else spark.createDataFrame(
+            [],
+            schema="sensor_u string, sensor_v string, partial_corr double, precision_weight double, edge_family string",
+        )
+    )
+    fused_df = build_fused_graph_spark_table(
+        precision_df,
+        event_sdf,
+        lag_sdf,
         alpha=alpha,
         beta=beta,
         gamma=gamma,
+    )
+
+    from pyspark.sql import functions as F
+
+    parameter_name_union = set(str(item) for item in selected_sensors if str(item))
+    if not backbone_pdf.empty:
+        all_sensors = backbone_pdf.iloc[0].get("all_sensors", [])
+        if isinstance(all_sensors, list):
+            parameter_name_union.update(str(item) for item in all_sensors if str(item))
+    event_parameters = (
+        event_sdf.select(F.col("sensor_u").alias("parameter_name"))
+        .unionByName(event_sdf.select(F.col("sensor_v").alias("parameter_name")))
+        .distinct()
+        .collect()
+    )
+    lag_parameters = (
+        lag_sdf.select(F.col("sensor_u").alias("parameter_name"))
+        .unionByName(lag_sdf.select(F.col("sensor_v").alias("parameter_name")))
+        .distinct()
+        .collect()
+    )
+    parameter_name_union.update(str(row["parameter_name"]) for row in event_parameters if str(row["parameter_name"]))
+    parameter_name_union.update(str(row["parameter_name"]) for row in lag_parameters if str(row["parameter_name"]))
+    hierarchy_pdf = build_hierarchy_from_fused_spark_table(
+        fused_df,
+        parameter_names=sorted(parameter_name_union),
         min_fused_edge_weight=min_fused_edge_weight,
-        hierarchy_top_k_per_sensor=hierarchy_top_k_per_sensor,
+        hierarchy_top_k_per_parameter_name=hierarchy_top_k_per_sensor,
         hierarchy_subsystem_min_edge_weight=hierarchy_subsystem_min_edge_weight,
         hierarchy_system_min_edge_weight=hierarchy_system_min_edge_weight,
     )
-
-    precision_df = spark.createDataFrame(precision_pdf) if not precision_pdf.empty else spark.createDataFrame([], schema="sensor_u string, sensor_v string, partial_corr double, precision_weight double, edge_family string")
-    event_df = spark.createDataFrame(event_pdf) if not event_pdf.empty else spark.createDataFrame([], schema="sensor_u string, sensor_v string, cooccur_count int, event_weight double, edge_family string")
-    lag_df = spark.createDataFrame(lag_pdf) if not lag_pdf.empty else spark.createDataFrame([], schema="sensor_u string, sensor_v string, lag_count int, lag_weight double, mean_lag_seconds double, edge_family string")
-    transition_df = spark.createDataFrame(transition_pdf) if not transition_pdf.empty else spark.createDataFrame([], schema="sensor_u string, sensor_v string, precedence_count int, precedence_weight double, edge_family string")
-    fused_df = spark.createDataFrame(fused_pdf) if not fused_pdf.empty else spark.createDataFrame([], schema="sensor_u string, sensor_v string, precision_weight double, event_weight double, lag_weight double, fused_weight double, edge_family string")
-    hierarchy_df = spark.createDataFrame(hierarchy_pdf) if not hierarchy_pdf.empty else spark.createDataFrame([], schema="parameter_name string, system_id string, subsystem_id string, module_id string, hierarchy_source string, hierarchy_profile_id string")
+    hierarchy_df = (
+        spark.createDataFrame(hierarchy_pdf)
+        if not hierarchy_pdf.empty
+        else spark.createDataFrame(
+            [],
+            schema="parameter_name string, system_id string, subsystem_id string, module_id string, hierarchy_source string, hierarchy_profile_id string",
+        )
+    )
 
     write_table(precision_df, path=precision_graph_path, mode=write_mode, fmt=table_format)
-    write_table(event_df, path=event_graph_path, mode=write_mode, fmt=table_format)
-    write_table(lag_df, path=lag_graph_path, mode=write_mode, fmt=table_format)
-    write_table(transition_df, path=transition_graph_path, mode=write_mode, fmt=table_format)
+    write_table(event_sdf, path=event_graph_path, mode=write_mode, fmt=table_format)
+    write_table(lag_sdf, path=lag_graph_path, mode=write_mode, fmt=table_format)
+    write_table(transition_sdf, path=transition_graph_path, mode=write_mode, fmt=table_format)
     write_table(fused_df, path=fused_graph_path, mode=write_mode, fmt=table_format)
     write_table(hierarchy_df, path=hierarchy_map_path, mode=write_mode, fmt=table_format)
+
+    event_count_out = int(event_sdf.count())
+    lag_count_out = int(lag_sdf.count())
+    transition_count_out = int(transition_sdf.count())
+    fused_count_out = int(fused_df.count())
+    hierarchy_count_out = int(hierarchy_df.count())
 
     log_params_if_active(
         {
@@ -194,11 +234,11 @@ def run() -> None:
             "fused_graph_path": fused_graph_path,
             "hierarchy_map_path": hierarchy_map_path,
             "precision_edge_count": int(len(precision_pdf)),
-            "event_edge_count": int(len(event_pdf)),
-            "lag_edge_count": int(len(lag_pdf)),
-            "transition_edge_count": int(len(transition_pdf)),
-            "fused_edge_count": int(len(fused_pdf)),
-            "hierarchy_sensor_count": int(len(hierarchy_pdf)),
+            "event_edge_count": event_count_out,
+            "lag_edge_count": lag_count_out,
+            "transition_edge_count": transition_count_out,
+            "fused_edge_count": fused_count_out,
+            "hierarchy_sensor_count": hierarchy_count_out,
             "min_event_npmi": min_event_npmi,
             "hierarchy_top_k_per_sensor": hierarchy_top_k_per_sensor,
             "hierarchy_subsystem_min_edge_weight": hierarchy_subsystem_min_edge_weight,
@@ -244,11 +284,11 @@ def run() -> None:
         },
         output_artifacts={
             "precision_graph": build_artifact_manifest(path=precision_graph_path, dataframe=precision_df, row_count=len(precision_pdf)),
-            "event_graph": build_artifact_manifest(path=event_graph_path, dataframe=event_df, row_count=len(event_pdf)),
-            "lag_graph": build_artifact_manifest(path=lag_graph_path, dataframe=lag_df, row_count=len(lag_pdf)),
-            "transition_graph": build_artifact_manifest(path=transition_graph_path, dataframe=transition_df, row_count=len(transition_pdf)),
-            "fused_graph": build_artifact_manifest(path=fused_graph_path, dataframe=fused_df, row_count=len(fused_pdf)),
-            "hierarchy_sensor_map": build_artifact_manifest(path=hierarchy_map_path, dataframe=hierarchy_df, row_count=len(hierarchy_pdf)),
+            "event_graph": build_artifact_manifest(path=event_graph_path, dataframe=event_sdf, row_count=event_count_out),
+            "lag_graph": build_artifact_manifest(path=lag_graph_path, dataframe=lag_sdf, row_count=lag_count_out),
+            "transition_graph": build_artifact_manifest(path=transition_graph_path, dataframe=transition_sdf, row_count=transition_count_out),
+            "fused_graph": build_artifact_manifest(path=fused_graph_path, dataframe=fused_df, row_count=fused_count_out),
+            "hierarchy_sensor_map": build_artifact_manifest(path=hierarchy_map_path, dataframe=hierarchy_df, row_count=hierarchy_count_out),
         },
         replayable_from=["window_x", "events", "windows", "backbone"],
         cache_artifacts={
@@ -266,11 +306,11 @@ def run() -> None:
         table_format,
         write_mode,
         len(precision_pdf),
-        len(event_pdf),
-        len(lag_pdf),
-        len(transition_pdf),
-        len(fused_pdf),
-        len(hierarchy_pdf),
+        event_count_out,
+        lag_count_out,
+        transition_count_out,
+        fused_count_out,
+        hierarchy_count_out,
     )
 
 

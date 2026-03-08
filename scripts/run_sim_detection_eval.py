@@ -47,11 +47,17 @@ from libs.graph import build_graph_artifact_tables, build_graph_component_tables
 from libs.profiling import stream_profiler_validation
 from libs.scoring import build_phase_score_baselines, score_window_s_rows
 from libs.simulation import (
-    build_default_sensor_behavior,
+    HierarchyAssemblySpec,
+    InterModuleCouplingSpec,
+    ModuleSpec,
+    ParameterSpec,
+    PortSpec,
+    build_default_parameter_behavior,
     build_fleet_manifest,
     build_tail_profiles,
+    build_hierarchy_assembly_spec,
     default_phase_definitions,
-    flatten_hierarchy_spec,
+    flatten_assembly_spec,
     simulate_fleet_dataset,
 )
 from libs.windows import (
@@ -79,6 +85,18 @@ _BINARY_TOKENS = {
     "enabled",
     "disabled",
 }
+
+
+def _parameter_name_from_row(row: Any) -> str:
+    return str(getattr(row, "parameter_name", getattr(row, "sensor", "")))
+
+
+def _parameter_name_from_mapping(row: dict[str, Any]) -> str:
+    return str(row.get("parameter_name", row.get("sensor", "")))
+
+
+def _telemetry_parameter_key(df: pd.DataFrame) -> str:
+    return "parameter_name" if "parameter_name" in df.columns else "sensor"
 
 
 def _normalized_mutual_information(labels_true: list[str], labels_pred: list[str]) -> float | None:
@@ -127,7 +145,7 @@ def _hierarchy_recovery_metrics(
     hierarchy_pred_df: pd.DataFrame,
 ) -> dict[str, Any]:
     if hierarchy_label_df.empty or hierarchy_pred_df.empty:
-        return {"sensor_count_compared": 0, "levels": {}}
+        return {"parameter_count_compared": 0, "levels": {}}
 
     label_df = hierarchy_label_df.copy()
     pred = hierarchy_pred_df.copy()
@@ -157,7 +175,7 @@ def _hierarchy_recovery_metrics(
             "detected_cluster_count": int(len(set(labels_pred) - {""})),
         }
     return {
-        "sensor_count_compared": int(len(merged)),
+        "parameter_count_compared": int(len(merged)),
         "levels": levels,
     }
 
@@ -169,8 +187,8 @@ def _graph_violation_scores(
 ) -> list[dict[str, Any]]:
     edge_weights: dict[tuple[str, str], float] = {}
     for row in fused_graph_df.to_dict(orient="records"):
-        left = str(row.get("sensor_u", ""))
-        right = str(row.get("sensor_v", ""))
+        left = str(row.get("parameter_name_u", ""))
+        right = str(row.get("parameter_name_v", ""))
         if not left or not right:
             continue
         edge_weights[(left, right)] = float(row.get("fused_weight", 0.0) or 0.0)
@@ -178,12 +196,17 @@ def _graph_violation_scores(
 
     out: list[dict[str, Any]] = []
     for window in windows:
-        sensors = sorted(set(str(item) for item in window.get("event_sensors", []) if str(item)))
+        event_parameter_names = window.get("event_parameter_names")
+        if not isinstance(event_parameter_names, list):
+            event_parameter_names = window.get("event_sensors", [])
+        parameter_names = sorted(
+            set(str(item) for item in event_parameter_names if str(item))
+        )
         pair_total = 0
         supported_pairs = 0
         supported_weight_sum = 0.0
-        for idx, left in enumerate(sensors):
-            for right in sensors[idx + 1 :]:
+        for idx, left in enumerate(parameter_names):
+            for right in parameter_names[idx + 1 :]:
                 pair_total += 1
                 weight = float(edge_weights.get((left, right), 0.0) or 0.0)
                 if weight > 0.0:
@@ -197,7 +220,7 @@ def _graph_violation_scores(
                 "flight_id": str(window.get("flight_id", "")),
                 "win_id": int(window.get("win_id", 0)),
                 "graph_violation_score": float(graph_violation_score),
-                "active_event_sensor_count": int(len(sensors)),
+                "active_event_parameter_count": int(len(parameter_names)),
                 "pair_total": int(pair_total),
                 "supported_pairs": int(supported_pairs),
                 "supported_weight_sum": float(supported_weight_sum),
@@ -277,191 +300,296 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _sample_hierarchy_spec() -> dict[str, Any]:
-    return {
-        "systems": {
-            "SYS_FLIGHT_CONTROLS": {
-                "subsystems": {
-                    "SUB_PRIMARY_CONTROL": {
-                        "modules": {
-                            "MOD_ELAC": [
-                                {"sensor": "fc_elac_elevator_cmd_deg", "datatype": "numeric", "unit": "deg"},
-                                {"sensor": "fc_elac_aileron_cmd_deg", "datatype": "numeric", "unit": "deg"},
-                                {"sensor": "fc_elac_mode", "datatype": "categorical", "unit": "state"},
-                                {"sensor": "fc_elac_active", "datatype": "binary", "unit": "flag"},
-                            ],
-                            "MOD_SEC": [
-                                {"sensor": "fc_sec_spoiler_cmd_deg", "datatype": "numeric", "unit": "deg"},
-                                {"sensor": "fc_sec_rudder_cmd_deg", "datatype": "numeric", "unit": "deg"},
-                                {"sensor": "fc_sec_mode", "datatype": "categorical", "unit": "state"},
-                                {"sensor": "fc_sec_active", "datatype": "binary", "unit": "flag"},
-                            ],
-                        }
-                    },
-                    "SUB_TRIM_STABILITY": {
-                        "modules": {
-                            "MOD_TRIM": [
-                                {"sensor": "fc_trim_pitch_pos_deg", "datatype": "numeric", "unit": "deg"},
-                                {"sensor": "fc_trim_roll_pos_deg", "datatype": "numeric", "unit": "deg"},
-                                {"sensor": "fc_trim_mode", "datatype": "categorical", "unit": "state"},
-                                {"sensor": "fc_trim_manual_engaged", "datatype": "binary", "unit": "flag"},
-                            ],
-                            "MOD_YAW_DAMPER": [
-                                {"sensor": "fc_yd_yaw_rate_deg_s", "datatype": "numeric", "unit": "deg/s"},
-                                {"sensor": "fc_yd_rudder_demand_deg", "datatype": "numeric", "unit": "deg"},
-                                {"sensor": "fc_yd_mode", "datatype": "categorical", "unit": "state"},
-                                {"sensor": "fc_yd_engaged", "datatype": "binary", "unit": "flag"},
-                            ],
-                        }
-                    },
-                }
-            },
-            "SYS_PROPULSION": {
-                "subsystems": {
-                    "SUB_ENGINE_1": {
-                        "modules": {
-                            "MOD_E1_CORE": [
-                                {"sensor": "eng1_n1_pct", "datatype": "numeric", "unit": "pct"},
-                                {"sensor": "eng1_n2_pct", "datatype": "numeric", "unit": "pct"},
-                                {"sensor": "eng1_thrust_mode", "datatype": "categorical", "unit": "state"},
-                                {"sensor": "eng1_fadec_active", "datatype": "binary", "unit": "flag"},
-                            ],
-                            "MOD_E1_THERMAL": [
-                                {"sensor": "eng1_egt_c", "datatype": "numeric", "unit": "c"},
-                                {"sensor": "eng1_fuel_flow_kgph", "datatype": "numeric", "unit": "kg/h"},
-                                {"sensor": "eng1_start_mode", "datatype": "categorical", "unit": "state"},
-                                {"sensor": "eng1_igniter_on", "datatype": "binary", "unit": "flag"},
-                            ],
-                        }
-                    },
-                    "SUB_ENGINE_2": {
-                        "modules": {
-                            "MOD_E2_CORE": [
-                                {"sensor": "eng2_n1_pct", "datatype": "numeric", "unit": "pct"},
-                                {"sensor": "eng2_n2_pct", "datatype": "numeric", "unit": "pct"},
-                                {"sensor": "eng2_thrust_mode", "datatype": "categorical", "unit": "state"},
-                                {"sensor": "eng2_fadec_active", "datatype": "binary", "unit": "flag"},
-                            ],
-                            "MOD_E2_THERMAL": [
-                                {"sensor": "eng2_egt_c", "datatype": "numeric", "unit": "c"},
-                                {"sensor": "eng2_fuel_flow_kgph", "datatype": "numeric", "unit": "kg/h"},
-                                {"sensor": "eng2_start_mode", "datatype": "categorical", "unit": "state"},
-                                {"sensor": "eng2_igniter_on", "datatype": "binary", "unit": "flag"},
-                            ],
-                        }
-                    },
-                }
-            },
-            "SYS_ELECTRICAL_POWER": {
-                "subsystems": {
-                    "SUB_AC_POWER": {
-                        "modules": {
-                            "MOD_GEN_BUS": [
-                                {"sensor": "elec_ac_bus_v", "datatype": "numeric", "unit": "v"},
-                                {"sensor": "elec_ac_bus_hz", "datatype": "numeric", "unit": "hz"},
-                                {"sensor": "elec_ac_tie_mode", "datatype": "categorical", "unit": "state"},
-                                {"sensor": "elec_gen_contact_closed", "datatype": "binary", "unit": "flag"},
-                            ],
-                            "MOD_APU_GEN": [
-                                {"sensor": "elec_apu_gen_kw", "datatype": "numeric", "unit": "kw"},
-                                {"sensor": "elec_apu_gen_load_pct", "datatype": "numeric", "unit": "pct"},
-                                {"sensor": "elec_apu_mode", "datatype": "categorical", "unit": "state"},
-                                {"sensor": "elec_apu_gen_on", "datatype": "binary", "unit": "flag"},
-                            ],
-                        }
-                    },
-                    "SUB_DC_POWER": {
-                        "modules": {
-                            "MOD_BATTERY": [
-                                {"sensor": "elec_dc_bus_v", "datatype": "numeric", "unit": "v"},
-                                {"sensor": "elec_battery_soc_pct", "datatype": "numeric", "unit": "pct"},
-                                {"sensor": "elec_battery_mode", "datatype": "categorical", "unit": "state"},
-                                {"sensor": "elec_battery_charging", "datatype": "binary", "unit": "flag"},
-                            ],
-                            "MOD_INVERTER": [
-                                {"sensor": "elec_inv_out_v", "datatype": "numeric", "unit": "v"},
-                                {"sensor": "elec_inv_temp_c", "datatype": "numeric", "unit": "c"},
-                                {"sensor": "elec_inv_mode", "datatype": "categorical", "unit": "state"},
-                                {"sensor": "elec_inv_fault", "datatype": "binary", "unit": "flag"},
-                            ],
-                        }
-                    },
-                }
-            },
-            "SYS_ENVIRONMENTAL_CONTROL": {
-                "subsystems": {
-                    "SUB_AIR_CONDITIONING": {
-                        "modules": {
-                            "MOD_PACK_LEFT": [
-                                {"sensor": "ecs_pack_l_flow_kg_s", "datatype": "numeric", "unit": "kg/s"},
-                                {"sensor": "ecs_pack_l_out_temp_c", "datatype": "numeric", "unit": "c"},
-                                {"sensor": "ecs_pack_l_mode", "datatype": "categorical", "unit": "state"},
-                                {"sensor": "ecs_pack_l_valve_open", "datatype": "binary", "unit": "flag"},
-                            ],
-                            "MOD_PACK_RIGHT": [
-                                {"sensor": "ecs_pack_r_flow_kg_s", "datatype": "numeric", "unit": "kg/s"},
-                                {"sensor": "ecs_pack_r_out_temp_c", "datatype": "numeric", "unit": "c"},
-                                {"sensor": "ecs_pack_r_mode", "datatype": "categorical", "unit": "state"},
-                                {"sensor": "ecs_pack_r_valve_open", "datatype": "binary", "unit": "flag"},
-                            ],
-                        }
-                    },
-                    "SUB_PRESSURIZATION": {
-                        "modules": {
-                            "MOD_CABIN_PRESSURE": [
-                                {"sensor": "ecs_cabin_alt_ft", "datatype": "numeric", "unit": "ft"},
-                                {"sensor": "ecs_delta_p_psi", "datatype": "numeric", "unit": "psi"},
-                                {"sensor": "ecs_press_mode", "datatype": "categorical", "unit": "state"},
-                                {"sensor": "ecs_outflow_valve_open", "datatype": "binary", "unit": "flag"},
-                            ],
-                            "MOD_CABIN_TEMP": [
-                                {"sensor": "ecs_cabin_temp_c", "datatype": "numeric", "unit": "c"},
-                                {"sensor": "ecs_cockpit_temp_c", "datatype": "numeric", "unit": "c"},
-                                {"sensor": "ecs_temp_ctl_mode", "datatype": "categorical", "unit": "state"},
-                                {"sensor": "ecs_trim_air_open", "datatype": "binary", "unit": "flag"},
-                            ],
-                        }
-                    },
-                }
-            },
-            "SYS_NAVIGATION_GUIDANCE": {
-                "subsystems": {
-                    "SUB_AIR_DATA": {
-                        "modules": {
-                            "MOD_ADC_1": [
-                                {"sensor": "nav_adc1_ias_kt", "datatype": "numeric", "unit": "kt"},
-                                {"sensor": "nav_adc1_alt_ft", "datatype": "numeric", "unit": "ft"},
-                                {"sensor": "nav_adc1_source_mode", "datatype": "categorical", "unit": "state"},
-                                {"sensor": "nav_adc1_valid", "datatype": "binary", "unit": "flag"},
-                            ],
-                            "MOD_ADC_2": [
-                                {"sensor": "nav_adc2_ias_kt", "datatype": "numeric", "unit": "kt"},
-                                {"sensor": "nav_adc2_alt_ft", "datatype": "numeric", "unit": "ft"},
-                                {"sensor": "nav_adc2_source_mode", "datatype": "categorical", "unit": "state"},
-                                {"sensor": "nav_adc2_valid", "datatype": "binary", "unit": "flag"},
-                            ],
-                        }
-                    },
-                    "SUB_INERTIAL_REFERENCE": {
-                        "modules": {
-                            "MOD_IRS_1": [
-                                {"sensor": "nav_irs1_pitch_deg", "datatype": "numeric", "unit": "deg"},
-                                {"sensor": "nav_irs1_roll_deg", "datatype": "numeric", "unit": "deg"},
-                                {"sensor": "nav_irs1_align_mode", "datatype": "categorical", "unit": "state"},
-                                {"sensor": "nav_irs1_valid", "datatype": "binary", "unit": "flag"},
-                            ],
-                            "MOD_IRS_2": [
-                                {"sensor": "nav_irs2_pitch_deg", "datatype": "numeric", "unit": "deg"},
-                                {"sensor": "nav_irs2_roll_deg", "datatype": "numeric", "unit": "deg"},
-                                {"sensor": "nav_irs2_align_mode", "datatype": "categorical", "unit": "state"},
-                                {"sensor": "nav_irs2_valid", "datatype": "binary", "unit": "flag"},
-                            ],
-                        }
-                    },
-                }
-            },
-        }
-    }
+def _module_spec(
+    *,
+    system_id: str,
+    subsystem_id: str,
+    module_id: str,
+    sensors: list[tuple[str, str, str]],
+    input_ports: tuple[PortSpec, ...] = (),
+    output_ports: tuple[PortSpec, ...] = (),
+    parameter_input_ports: dict[str, tuple[str, ...]] | None = None,
+    parameter_output_ports: dict[str, str] | None = None,
+) -> ModuleSpec:
+    parameter_input_ports = dict(parameter_input_ports or {})
+    parameter_output_ports = dict(parameter_output_ports or {})
+    return ModuleSpec(
+        module_id=module_id,
+        subsystem_id=subsystem_id,
+        system_id=system_id,
+        parameters=tuple(
+            ParameterSpec(
+                parameter_name=parameter_name,
+                system_id=system_id,
+                subsystem_id=subsystem_id,
+                module_id=module_id,
+                parameter_datatype_label=datatype,
+                unit=unit,
+                input_port_names=parameter_input_ports.get(parameter_name, ()),
+                output_port_name=parameter_output_ports.get(parameter_name),
+            )
+            for parameter_name, datatype, unit in sensors
+        ),
+        input_ports=input_ports,
+        output_ports=output_ports,
+    )
+
+
+def _sample_hierarchy_assembly_spec() -> HierarchyAssemblySpec:
+    module_defs: list[tuple[str, str, str, list[tuple[str, str, str]]]] = [
+        ("SYS_FLIGHT_CONTROLS", "SUB_PRIMARY_CONTROL", "MOD_ELAC", [
+            ("fc_elac_elevator_cmd_deg", "numeric", "deg"),
+            ("fc_elac_aileron_cmd_deg", "numeric", "deg"),
+            ("fc_elac_mode", "categorical", "state"),
+            ("fc_elac_active", "binary", "flag"),
+        ]),
+        ("SYS_FLIGHT_CONTROLS", "SUB_PRIMARY_CONTROL", "MOD_SEC", [
+            ("fc_sec_spoiler_cmd_deg", "numeric", "deg"),
+            ("fc_sec_rudder_cmd_deg", "numeric", "deg"),
+            ("fc_sec_mode", "categorical", "state"),
+            ("fc_sec_active", "binary", "flag"),
+        ]),
+        ("SYS_FLIGHT_CONTROLS", "SUB_TRIM_STABILITY", "MOD_TRIM", [
+            ("fc_trim_pitch_pos_deg", "numeric", "deg"),
+            ("fc_trim_roll_pos_deg", "numeric", "deg"),
+            ("fc_trim_mode", "categorical", "state"),
+            ("fc_trim_manual_engaged", "binary", "flag"),
+        ]),
+        ("SYS_FLIGHT_CONTROLS", "SUB_TRIM_STABILITY", "MOD_YAW_DAMPER", [
+            ("fc_yd_yaw_rate_deg_s", "numeric", "deg/s"),
+            ("fc_yd_rudder_demand_deg", "numeric", "deg"),
+            ("fc_yd_mode", "categorical", "state"),
+            ("fc_yd_engaged", "binary", "flag"),
+        ]),
+        ("SYS_PROPULSION", "SUB_ENGINE_1", "MOD_E1_CORE", [
+            ("eng1_n1_pct", "numeric", "pct"),
+            ("eng1_n2_pct", "numeric", "pct"),
+            ("eng1_thrust_mode", "categorical", "state"),
+            ("eng1_fadec_active", "binary", "flag"),
+        ]),
+        ("SYS_PROPULSION", "SUB_ENGINE_1", "MOD_E1_THERMAL", [
+            ("eng1_egt_c", "numeric", "c"),
+            ("eng1_fuel_flow_kgph", "numeric", "kg/h"),
+            ("eng1_start_mode", "categorical", "state"),
+            ("eng1_igniter_on", "binary", "flag"),
+        ]),
+        ("SYS_PROPULSION", "SUB_ENGINE_2", "MOD_E2_CORE", [
+            ("eng2_n1_pct", "numeric", "pct"),
+            ("eng2_n2_pct", "numeric", "pct"),
+            ("eng2_thrust_mode", "categorical", "state"),
+            ("eng2_fadec_active", "binary", "flag"),
+        ]),
+        ("SYS_PROPULSION", "SUB_ENGINE_2", "MOD_E2_THERMAL", [
+            ("eng2_egt_c", "numeric", "c"),
+            ("eng2_fuel_flow_kgph", "numeric", "kg/h"),
+            ("eng2_start_mode", "categorical", "state"),
+            ("eng2_igniter_on", "binary", "flag"),
+        ]),
+        ("SYS_ELECTRICAL_POWER", "SUB_AC_POWER", "MOD_GEN_BUS", [
+            ("elec_ac_bus_v", "numeric", "v"),
+            ("elec_ac_bus_hz", "numeric", "hz"),
+            ("elec_ac_tie_mode", "categorical", "state"),
+            ("elec_gen_contact_closed", "binary", "flag"),
+        ]),
+        ("SYS_ELECTRICAL_POWER", "SUB_AC_POWER", "MOD_APU_GEN", [
+            ("elec_apu_gen_kw", "numeric", "kw"),
+            ("elec_apu_gen_load_pct", "numeric", "pct"),
+            ("elec_apu_mode", "categorical", "state"),
+            ("elec_apu_gen_on", "binary", "flag"),
+        ]),
+        ("SYS_ELECTRICAL_POWER", "SUB_DC_POWER", "MOD_BATTERY", [
+            ("elec_dc_bus_v", "numeric", "v"),
+            ("elec_battery_soc_pct", "numeric", "pct"),
+            ("elec_battery_mode", "categorical", "state"),
+            ("elec_battery_charging", "binary", "flag"),
+        ]),
+        ("SYS_ELECTRICAL_POWER", "SUB_DC_POWER", "MOD_INVERTER", [
+            ("elec_inv_out_v", "numeric", "v"),
+            ("elec_inv_temp_c", "numeric", "c"),
+            ("elec_inv_mode", "categorical", "state"),
+            ("elec_inv_fault", "binary", "flag"),
+        ]),
+        ("SYS_ENVIRONMENTAL_CONTROL", "SUB_AIR_CONDITIONING", "MOD_PACK_LEFT", [
+            ("ecs_pack_l_flow_kg_s", "numeric", "kg/s"),
+            ("ecs_pack_l_out_temp_c", "numeric", "c"),
+            ("ecs_pack_l_mode", "categorical", "state"),
+            ("ecs_pack_l_valve_open", "binary", "flag"),
+        ]),
+        ("SYS_ENVIRONMENTAL_CONTROL", "SUB_AIR_CONDITIONING", "MOD_PACK_RIGHT", [
+            ("ecs_pack_r_flow_kg_s", "numeric", "kg/s"),
+            ("ecs_pack_r_out_temp_c", "numeric", "c"),
+            ("ecs_pack_r_mode", "categorical", "state"),
+            ("ecs_pack_r_valve_open", "binary", "flag"),
+        ]),
+        ("SYS_ENVIRONMENTAL_CONTROL", "SUB_PRESSURIZATION", "MOD_CABIN_PRESSURE", [
+            ("ecs_cabin_alt_ft", "numeric", "ft"),
+            ("ecs_delta_p_psi", "numeric", "psi"),
+            ("ecs_press_mode", "categorical", "state"),
+            ("ecs_outflow_valve_open", "binary", "flag"),
+        ]),
+        ("SYS_ENVIRONMENTAL_CONTROL", "SUB_PRESSURIZATION", "MOD_CABIN_TEMP", [
+            ("ecs_cabin_temp_c", "numeric", "c"),
+            ("ecs_cockpit_temp_c", "numeric", "c"),
+            ("ecs_temp_ctl_mode", "categorical", "state"),
+            ("ecs_trim_air_open", "binary", "flag"),
+        ]),
+        ("SYS_NAVIGATION_GUIDANCE", "SUB_AIR_DATA", "MOD_ADC_1", [
+            ("nav_adc1_ias_kt", "numeric", "kt"),
+            ("nav_adc1_alt_ft", "numeric", "ft"),
+            ("nav_adc1_source_mode", "categorical", "state"),
+            ("nav_adc1_valid", "binary", "flag"),
+        ]),
+        ("SYS_NAVIGATION_GUIDANCE", "SUB_AIR_DATA", "MOD_ADC_2", [
+            ("nav_adc2_ias_kt", "numeric", "kt"),
+            ("nav_adc2_alt_ft", "numeric", "ft"),
+            ("nav_adc2_source_mode", "categorical", "state"),
+            ("nav_adc2_valid", "binary", "flag"),
+        ]),
+        ("SYS_NAVIGATION_GUIDANCE", "SUB_INERTIAL_REFERENCE", "MOD_IRS_1", [
+            ("nav_irs1_pitch_deg", "numeric", "deg"),
+            ("nav_irs1_roll_deg", "numeric", "deg"),
+            ("nav_irs1_align_mode", "categorical", "state"),
+            ("nav_irs1_valid", "binary", "flag"),
+        ]),
+        ("SYS_NAVIGATION_GUIDANCE", "SUB_INERTIAL_REFERENCE", "MOD_IRS_2", [
+            ("nav_irs2_pitch_deg", "numeric", "deg"),
+            ("nav_irs2_roll_deg", "numeric", "deg"),
+            ("nav_irs2_align_mode", "categorical", "state"),
+            ("nav_irs2_valid", "binary", "flag"),
+        ]),
+    ]
+    module_specs: list[ModuleSpec] = []
+    for system_id, subsystem_id, module_id, sensors in module_defs:
+        kwargs: dict[str, Any] = {}
+        if module_id == "MOD_APU_GEN":
+            kwargs = {
+                "output_ports": (
+                    PortSpec("apu_power_out", "output", "numeric", unit="kw"),
+                ),
+                "parameter_output_ports": {
+                    "elec_apu_gen_kw": "apu_power_out",
+                },
+            }
+        elif module_id == "MOD_GEN_BUS":
+            kwargs = {
+                "input_ports": (
+                    PortSpec("apu_power_in", "input", "numeric", unit="kw"),
+                ),
+                "output_ports": (
+                    PortSpec("ac_bus_voltage_out", "output", "numeric", unit="v"),
+                ),
+                "parameter_input_ports": {
+                    "elec_ac_bus_v": ("apu_power_in",),
+                },
+                "parameter_output_ports": {
+                    "elec_ac_bus_v": "ac_bus_voltage_out",
+                },
+            }
+        elif module_id == "MOD_INVERTER":
+            kwargs = {
+                "input_ports": (
+                    PortSpec("ac_bus_voltage_in", "input", "numeric", unit="v"),
+                ),
+                "parameter_input_ports": {
+                    "elec_inv_out_v": ("ac_bus_voltage_in",),
+                },
+            }
+        elif module_id == "MOD_PACK_LEFT":
+            kwargs = {
+                "output_ports": (
+                    PortSpec("pack_left_flow_out", "output", "numeric", unit="kg/s"),
+                ),
+                "parameter_output_ports": {
+                    "ecs_pack_l_flow_kg_s": "pack_left_flow_out",
+                },
+            }
+        elif module_id == "MOD_PACK_RIGHT":
+            kwargs = {
+                "output_ports": (
+                    PortSpec("pack_right_flow_out", "output", "numeric", unit="kg/s"),
+                ),
+                "parameter_output_ports": {
+                    "ecs_pack_r_flow_kg_s": "pack_right_flow_out",
+                },
+            }
+        elif module_id == "MOD_CABIN_PRESSURE":
+            kwargs = {
+                "input_ports": (
+                    PortSpec("aircraft_altitude_in", "input", "numeric", unit="ft"),
+                    PortSpec("pack_left_flow_in", "input", "numeric", unit="kg/s"),
+                    PortSpec("pack_right_flow_in", "input", "numeric", unit="kg/s"),
+                ),
+                "parameter_input_ports": {
+                    "ecs_cabin_alt_ft": ("aircraft_altitude_in", "pack_left_flow_in", "pack_right_flow_in"),
+                    "ecs_delta_p_psi": ("aircraft_altitude_in",),
+                },
+            }
+        elif module_id == "MOD_ADC_1":
+            kwargs = {
+                "output_ports": (
+                    PortSpec("aircraft_altitude_out", "output", "numeric", unit="ft"),
+                ),
+                "parameter_output_ports": {
+                    "nav_adc1_alt_ft": "aircraft_altitude_out",
+                },
+            }
+        module_specs.append(
+            _module_spec(
+                system_id=system_id,
+                subsystem_id=subsystem_id,
+                module_id=module_id,
+                sensors=sensors,
+                **kwargs,
+            )
+        )
+
+    inter_module_couplings = (
+        InterModuleCouplingSpec(
+            source_module_id="MOD_APU_GEN",
+            source_port_name="apu_power_out",
+            target_module_id="MOD_GEN_BUS",
+            target_port_name="apu_power_in",
+            relation_type="drive",
+            gain=1.0,
+        ),
+        InterModuleCouplingSpec(
+            source_module_id="MOD_GEN_BUS",
+            source_port_name="ac_bus_voltage_out",
+            target_module_id="MOD_INVERTER",
+            target_port_name="ac_bus_voltage_in",
+            relation_type="drive",
+            gain=1.0,
+        ),
+        InterModuleCouplingSpec(
+            source_module_id="MOD_ADC_1",
+            source_port_name="aircraft_altitude_out",
+            target_module_id="MOD_CABIN_PRESSURE",
+            target_port_name="aircraft_altitude_in",
+            relation_type="drive",
+            gain=1.0,
+        ),
+        InterModuleCouplingSpec(
+            source_module_id="MOD_PACK_LEFT",
+            source_port_name="pack_left_flow_out",
+            target_module_id="MOD_CABIN_PRESSURE",
+            target_port_name="pack_left_flow_in",
+            relation_type="drive",
+            gain=1.0,
+        ),
+        InterModuleCouplingSpec(
+            source_module_id="MOD_PACK_RIGHT",
+            source_port_name="pack_right_flow_out",
+            target_module_id="MOD_CABIN_PRESSURE",
+            target_port_name="pack_right_flow_in",
+            relation_type="drive",
+            gain=1.0,
+        ),
+    )
+    return build_hierarchy_assembly_spec(
+        module_specs=tuple(module_specs),
+        inter_module_couplings=inter_module_couplings,
+        metadata={"source": "run_sim_detection_eval"},
+    )
 
 
 def _phase_by_key(telemetry_df: pd.DataFrame) -> dict[tuple[str, str, str, pd.Timestamp], str]:
@@ -470,7 +598,7 @@ def _phase_by_key(telemetry_df: pd.DataFrame) -> dict[tuple[str, str, str, pd.Ti
         key = (
             str(getattr(row, "tail_id")),
             str(getattr(row, "flight_id")),
-            str(getattr(row, "sensor")),
+            _parameter_name_from_row(row),
             pd.to_datetime(getattr(row, "timestamp_utc"), utc=True),
         )
         phase_map[key] = str(getattr(row, "phase_name"))
@@ -497,11 +625,11 @@ def _event_key(
     *,
     tail_id: str,
     flight_id: str,
-    sensor: str,
+    parameter_name: str,
     ts: pd.Timestamp,
     event_type: str,
 ) -> tuple[str, str, str, pd.Timestamp, str]:
-    return (str(tail_id), str(flight_id), str(sensor), pd.to_datetime(ts, utc=True), str(event_type))
+    return (str(tail_id), str(flight_id), str(parameter_name), pd.to_datetime(ts, utc=True), str(event_type))
 
 
 def _row_datatype_for_detection(row: Any) -> str:
@@ -515,7 +643,8 @@ def _row_datatype_for_detection(row: Any) -> str:
 
 
 def _iter_detected_events_stream(telemetry_df: pd.DataFrame) -> Iterator[dict[str, Any]]:
-    ordered = telemetry_df.sort_values(["tail_id", "flight_id", "sensor", "timestamp_utc"], kind="mergesort")
+    parameter_key = _telemetry_parameter_key(telemetry_df)
+    ordered = telemetry_df.sort_values(["tail_id", "flight_id", parameter_key, "timestamp_utc"], kind="mergesort")
 
     def _iter_continuous_samples() -> Iterator[ContinuousSample]:
         for row in ordered.itertuples(index=False):
@@ -531,7 +660,7 @@ def _iter_detected_events_stream(telemetry_df: pd.DataFrame) -> Iterator[dict[st
             yield ContinuousSample(
                 tail_id=str(getattr(row, "tail_id")),
                 flight_id=str(getattr(row, "flight_id")),
-                sensor=str(getattr(row, "sensor")),
+                sensor=_parameter_name_from_row(row),
                 ts=_to_ts(getattr(row, "timestamp_utc")),
                 value=value,
             )
@@ -546,7 +675,7 @@ def _iter_detected_events_stream(telemetry_df: pd.DataFrame) -> Iterator[dict[st
             yield CategoricalSample(
                 tail_id=str(getattr(row, "tail_id")),
                 flight_id=str(getattr(row, "flight_id")),
-                sensor=str(getattr(row, "sensor")),
+                sensor=_parameter_name_from_row(row),
                 ts=_to_ts(getattr(row, "timestamp_utc")),
                 state=state,
             )
@@ -561,30 +690,32 @@ def _iter_detected_events_stream(telemetry_df: pd.DataFrame) -> Iterator[dict[st
             str(event.get("tail_id", "")),
             str(event.get("flight_id", "")),
             pd.to_datetime(event.get("ts"), utc=True),
-            str(event.get("sensor", "")),
+            _parameter_name_from_mapping(event),
             str(event.get("event_type_detected", "")),
         ),
     )
 
     for event in merged:
         out = dict(event)
+        out["parameter_name"] = _parameter_name_from_mapping(out)
         out["anomaly_type_detected"] = None
         out["anomaly_score_detected"] = None
         yield out
 
 
 def _iter_profiled_datatype_rows(telemetry_df: pd.DataFrame) -> Iterator[dict[str, Any]]:
-    ordered = telemetry_df.sort_values(["tail_id", "flight_id", "sensor", "timestamp_utc"], kind="mergesort")
+    parameter_key = _telemetry_parameter_key(telemetry_df)
+    ordered = telemetry_df.sort_values(["tail_id", "flight_id", parameter_key, "timestamp_utc"], kind="mergesort")
 
-    # O(1)-state online datatype profile per sensor stream.
+    # O(1)-state online datatype profile per parameter stream.
     state: dict[tuple[str, str, str], dict[str, Any]] = {}
 
     for row in ordered.itertuples(index=False):
         tail_id = str(getattr(row, "tail_id"))
         flight_id = str(getattr(row, "flight_id"))
-        sensor = str(getattr(row, "sensor"))
+        parameter_name = _parameter_name_from_row(row)
         ts = pd.to_datetime(getattr(row, "timestamp_utc"), utc=True)
-        key = (tail_id, flight_id, sensor)
+        key = (tail_id, flight_id, parameter_name)
 
         row_state = state.setdefault(
             key,
@@ -677,7 +808,7 @@ def _iter_profiled_datatype_rows(telemetry_df: pd.DataFrame) -> Iterator[dict[st
         yield {
             "tail_id": tail_id,
             "flight_id": flight_id,
-            "sensor": sensor,
+            "parameter_name": parameter_name,
             "timestamp_utc": ts,
             "parameter_datatype_profiled": profiled_type,
             "sampling_rate_profiled_hz": sampling_rate_profiled_hz,
@@ -706,14 +837,15 @@ def _cooccurrence_buffer_sizes_ms(
     max_window_ms: int,
     n: int,
 ) -> list[int]:
-    sorted_df = telemetry_df.sort_values(["tail_id", "flight_id", "sensor", "timestamp_utc"], kind="mergesort")
+    parameter_key = _telemetry_parameter_key(telemetry_df)
+    sorted_df = telemetry_df.sort_values(["tail_id", "flight_id", parameter_key, "timestamp_utc"], kind="mergesort")
     interval_state: dict[tuple[str, str, str], dict[str, Any]] = {}
     min_interval_ms_global: float | None = None
     for row in sorted_df.itertuples(index=False):
         key = (
             str(getattr(row, "tail_id", "")),
             str(getattr(row, "flight_id", "")),
-            str(getattr(row, "sensor", "")),
+            _parameter_name_from_row(row),
         )
         ts = pd.to_datetime(getattr(row, "timestamp_utc"), utc=True)
         state = interval_state.setdefault(key, {"prev_ts": None, "sum_ms": 0.0, "count": 0})
@@ -748,13 +880,14 @@ def _rate_metrics_from_rows(
     profiler_rows: list[dict[str, Any]],
 ) -> dict[str, Any]:
     # Build label sampling-rate baseline from observed simulator inter-arrival intervals.
-    sorted_df = telemetry_df.sort_values(["tail_id", "flight_id", "sensor", "timestamp_utc"], kind="mergesort")
+    parameter_key = _telemetry_parameter_key(telemetry_df)
+    sorted_df = telemetry_df.sort_values(["tail_id", "flight_id", parameter_key, "timestamp_utc"], kind="mergesort")
     interval_state: dict[tuple[str, str, str], dict[str, Any]] = {}
     for row in sorted_df.itertuples(index=False):
         key = (
             str(getattr(row, "tail_id", "")),
             str(getattr(row, "flight_id", "")),
-            str(getattr(row, "sensor", "")),
+            _parameter_name_from_row(row),
         )
         ts = pd.to_datetime(getattr(row, "timestamp_utc"), utc=True)
         state = interval_state.setdefault(key, {"prev_ts": None, "sum_ms": 0.0, "count": 0})
@@ -781,13 +914,13 @@ def _rate_metrics_from_rows(
         key = (
             str(item.get("tail_id", "")),
             str(item.get("flight_id", "")),
-            str(item.get("sensor", "")),
+            _parameter_name_from_mapping(item),
             pd.to_datetime(item.get("timestamp_utc"), utc=True),
         )
         value = item.get("sampling_rate_profiled_hz")
         profiled_by_key[key] = None if value is None else float(value)
 
-    sensor_stats: dict[str, dict[str, float]] = {}
+    parameter_stats: dict[str, dict[str, float]] = {}
     total_count = 0
     profiled_count = 0
     abs_err_sum = 0.0
@@ -798,11 +931,11 @@ def _rate_metrics_from_rows(
     within_20 = 0
 
     for row in telemetry_df.itertuples(index=False):
-        sensor = str(getattr(row, "sensor", ""))
+        parameter_name = _parameter_name_from_row(row)
         stream_key = (
             str(getattr(row, "tail_id", "")),
             str(getattr(row, "flight_id", "")),
-            sensor,
+            parameter_name,
         )
         label_rate_hz = label_rate_by_key.get(stream_key)
         if label_rate_hz is None:
@@ -813,7 +946,7 @@ def _rate_metrics_from_rows(
         key = (
             str(getattr(row, "tail_id", "")),
             str(getattr(row, "flight_id", "")),
-            sensor,
+            parameter_name,
             pd.to_datetime(getattr(row, "timestamp_utc"), utc=True),
         )
         profiled_rate_hz = profiled_by_key.get(key)
@@ -832,8 +965,8 @@ def _rate_metrics_from_rows(
         if rel_err <= 0.20:
             within_20 += 1
 
-        stat = sensor_stats.setdefault(
-            sensor,
+        stat = parameter_stats.setdefault(
+            parameter_name,
             {
                 "count": 0.0,
                 "label_rate_hz": label_rate_hz,
@@ -845,13 +978,13 @@ def _rate_metrics_from_rows(
         stat["abs_err_sum"] += abs_err
         stat["ape_sum"] += rel_err
 
-    by_sensor: list[dict[str, Any]] = []
-    for sensor in sorted(sensor_stats.keys()):
-        item = sensor_stats[sensor]
+    by_parameter_name: list[dict[str, Any]] = []
+    for parameter_name in sorted(parameter_stats.keys()):
+        item = parameter_stats[parameter_name]
         count = max(int(item["count"]), 1)
-        by_sensor.append(
+        by_parameter_name.append(
             {
-                "sensor": sensor,
+                "parameter_name": parameter_name,
                 "label_rate_hz": float(item["label_rate_hz"]),
                 "mae_hz": float(item["abs_err_sum"]) / float(count),
                 "mape_pct": (float(item["ape_sum"]) / float(count)) * 100.0,
@@ -870,7 +1003,7 @@ def _rate_metrics_from_rows(
             "within_5pct": None,
             "within_10pct": None,
             "within_20pct": None,
-            "by_sensor": by_sensor,
+            "by_parameter_name": by_parameter_name,
         }
 
     return {
@@ -883,7 +1016,7 @@ def _rate_metrics_from_rows(
         "within_5pct": float(within_5) / float(profiled_count),
         "within_10pct": float(within_10) / float(profiled_count),
         "within_20pct": float(within_20) / float(profiled_count),
-        "by_sensor": by_sensor,
+        "by_parameter_name": by_parameter_name,
     }
 
 
@@ -912,12 +1045,12 @@ def _build_continuous_robust_scaler(telemetry_df: pd.DataFrame) -> dict[str, dic
 
 def _window_continuous_vectors(
     window_events: list[dict[str, Any]],
-    scaler_by_sensor: dict[str, dict[str, float]],
+    scaler_by_parameter_name: dict[str, dict[str, float]],
 ) -> tuple[dict[str, float], dict[str, float]]:
-    raw_by_sensor: dict[str, float] = {}
+    raw_by_parameter_name: dict[str, float] = {}
     for event in window_events:
-        sensor = str(event.get("sensor", ""))
-        if not sensor:
+        parameter_name = _parameter_name_from_mapping(event)
+        if not parameter_name:
             continue
         payload = event.get("payload")
         if not isinstance(payload, dict):
@@ -929,17 +1062,17 @@ def _window_continuous_vectors(
             value_num = float(value)
         except Exception:
             continue
-        raw_by_sensor[sensor] = value_num
+        raw_by_parameter_name[parameter_name] = value_num
 
-    scaled_by_sensor: dict[str, float] = {}
-    for sensor, value in raw_by_sensor.items():
-        scaler = scaler_by_sensor.get(sensor)
+    scaled_by_parameter_name: dict[str, float] = {}
+    for parameter_name, value in raw_by_parameter_name.items():
+        scaler = scaler_by_parameter_name.get(parameter_name)
         if scaler is None:
             continue
         median = float(scaler.get("median", 0.0))
         iqr = max(float(scaler.get("iqr", 1.0)), 1e-6)
-        scaled_by_sensor[sensor] = (float(value) - median) / iqr
-    return raw_by_sensor, scaled_by_sensor
+        scaled_by_parameter_name[parameter_name] = (float(value) - median) / iqr
+    return raw_by_parameter_name, scaled_by_parameter_name
 
 
 def _window_categorical_state_t_end(window: dict[str, Any]) -> dict[str, str]:
@@ -947,9 +1080,9 @@ def _window_categorical_state_t_end(window: dict[str, Any]) -> dict[str, str]:
     if not isinstance(snapshot, dict):
         return {}
     out: dict[str, str] = {}
-    for sensor, value in snapshot.items():
-        sensor_name = str(sensor)
-        if not sensor_name:
+    for parameter_name, value in snapshot.items():
+        parameter_name_text = str(parameter_name)
+        if not parameter_name_text:
             continue
         value_text = "" if value is None else str(value).strip()
         if not value_text:
@@ -959,26 +1092,30 @@ def _window_categorical_state_t_end(window: dict[str, Any]) -> dict[str, str]:
             continue
         except Exception:
             pass
-        out[sensor_name] = value_text
+        out[parameter_name_text] = value_text
     return out
 
 
 def _window_vector_drift_magnitude(previous_scaled: dict[str, float], current_scaled: dict[str, float]) -> float:
-    sensor_union = set(previous_scaled.keys()) | set(current_scaled.keys())
-    if not sensor_union:
+    parameter_name_union = set(previous_scaled.keys()) | set(current_scaled.keys())
+    if not parameter_name_union:
         return 0.0
     drift_sq = 0.0
-    for sensor in sensor_union:
-        prev = float(previous_scaled.get(sensor, 0.0))
-        curr = float(current_scaled.get(sensor, 0.0))
+    for parameter_name in parameter_name_union:
+        prev = float(previous_scaled.get(parameter_name, 0.0))
+        curr = float(current_scaled.get(parameter_name, 0.0))
         delta = curr - prev
         drift_sq += delta * delta
     return drift_sq ** 0.5
 
 
-def _top_phase_sensors(sensor_energy_rows: list[dict[str, Any]], *, k: int) -> list[str]:
+def _top_phase_parameter_names(parameter_energy_rows: list[dict[str, Any]], *, k: int) -> list[str]:
     limit = max(int(k), 1)
-    return [str(item.get("parameter_name", "")) for item in sensor_energy_rows[:limit] if str(item.get("parameter_name", ""))]
+    return [
+        str(item.get("parameter_name", ""))
+        for item in parameter_energy_rows[:limit]
+        if str(item.get("parameter_name", ""))
+    ]
 
 
 def _top_phase_event_types(window_vectors: list[dict[str, Any]], *, k: int) -> list[str]:
@@ -1014,8 +1151,8 @@ def _top_categorical_state_pairs(window_vectors: list[dict[str, Any]], *, k: int
         categorical_state_t_end = item.get("categorical_state_t_end")
         if not isinstance(categorical_state_t_end, dict):
             continue
-        for sensor, state in categorical_state_t_end.items():
-            counts[(str(sensor), str(state))] += 1
+        for parameter_name, state in categorical_state_t_end.items():
+            counts[(str(parameter_name), str(state))] += 1
     return [pair for pair, _ in counts.most_common(max(int(k), 0))]
 
 
@@ -1025,9 +1162,9 @@ def main() -> None:
         print("warning: streaming mode uses exact timestamp/type matching; --tolerance-seconds is ignored")
 
     rng = np.random.default_rng(int(args.seed))
-    hierarchy_spec = _sample_hierarchy_spec()
-    hierarchy_df = flatten_hierarchy_spec(hierarchy_spec)
-    behavior = build_default_sensor_behavior(hierarchy_df)
+    assembly_spec = _sample_hierarchy_assembly_spec()
+    hierarchy_df = flatten_assembly_spec(assembly_spec)
+    behavior = build_default_parameter_behavior(hierarchy_df)
     phases = default_phase_definitions()[: max(int(args.phase_count), 1)]
     flight_setup = {
         "phase_sequence": [item["phase_name"] for item in phases],
@@ -1050,12 +1187,12 @@ def main() -> None:
         },
     }
 
-    system_ids = sorted(str(item) for item in hierarchy_spec.get("systems", {}).keys())
+    system_ids = sorted({str(module_spec.system_id) for module_spec in assembly_spec.module_specs})
     tails = build_tail_profiles(system_ids, m_tails=max(int(args.tail_count), 1), rng=rng)
     fleet = build_fleet_manifest(tails, n_flights_per_tail=max(int(args.flights_per_tail), 1), rng=rng)
     telemetry_df, phase_labels_df = simulate_fleet_dataset(
         hierarchy_df=hierarchy_df,
-        sensor_behavior=behavior,
+        parameter_behavior=behavior,
         phase_definitions=phases,
         flight_setup=flight_setup,
         tail_profiles=tails,
@@ -1067,15 +1204,20 @@ def main() -> None:
 
     phase_map = _phase_by_key(telemetry_df)
     phase_label_by_tail_flight_ts = _phase_label_by_tail_flight_ts(phase_labels_df)
-    robust_scaler_by_sensor = build_continuous_robust_scaler(telemetry_df)
+    robust_scaler_by_parameter_name = build_continuous_robust_scaler(telemetry_df)
     phase_behavior_diagnostics = compute_phase_behavior_diagnostics(
         telemetry_df,
         top_k=max(int(args.phase_diagnostics_top_k), 0),
     )
 
-    profiler_simulator_rows = telemetry_df[
-        ["tail_id", "flight_id", "sensor", "timestamp_utc", "parameter_datatype_label"]
-    ].to_dict(orient="records")
+    telemetry_parameter_key = _telemetry_parameter_key(telemetry_df)
+    profiler_simulator_rows = (
+        telemetry_df[
+            ["tail_id", "flight_id", telemetry_parameter_key, "timestamp_utc", "parameter_datatype_label"]
+        ]
+        .rename(columns={telemetry_parameter_key: "parameter_name"})
+        .to_dict(orient="records")
+    )
     profiler_rows = list(_iter_profiled_datatype_rows(telemetry_df))
     sampling_rate_metrics = _rate_metrics_from_rows(
         telemetry_df=telemetry_df,
@@ -1113,12 +1255,19 @@ def main() -> None:
             continue
         tail_id = str(getattr(row, "tail_id"))
         flight_id = str(getattr(row, "flight_id"))
-        sensor = str(getattr(row, "sensor"))
+        parameter_name = _parameter_name_from_row(row)
         ts = pd.to_datetime(getattr(row, "timestamp_utc"), utc=True)
         phase_name = str(getattr(row, "phase_name"))
-        parameter_name = sensor
 
-        label_key_counts[_event_key(tail_id=tail_id, flight_id=flight_id, sensor=sensor, ts=ts, event_type=event_type_label)] += 1
+        label_key_counts[
+            _event_key(
+                tail_id=tail_id,
+                flight_id=flight_id,
+                parameter_name=parameter_name,
+                ts=ts,
+                event_type=event_type_label,
+            )
+        ] += 1
         label_by_tail_flight[(tail_id, flight_id)] += 1
         label_by_phase[phase_name] += 1
         label_by_parameter[parameter_name] += 1
@@ -1214,7 +1363,7 @@ def main() -> None:
         window_x = build_window_x_row(
             window=window,
             window_events=window_events,
-            scaler_by_sensor=robust_scaler_by_sensor,
+            scaler_by_parameter_name=robust_scaler_by_parameter_name,
             previous_scaled_by_flight=previous_scaled_vector_by_flight,
             phase_label=phase_label_by_tail_flight_ts.get(
                 (
@@ -1228,7 +1377,13 @@ def main() -> None:
         window["continuous_vector_t_end_scaled"] = dict(window_x["continuous_vector_t_end_scaled"])
         window["categorical_state_t_end"] = dict(window_x["categorical_state_t_end"])
         window["drift_magnitude_profiled"] = float(window_x["drift_magnitude_profiled"])
-        window_x["event_sensors"] = sorted({str(event.get("sensor", "")) for event in window_events if str(event.get("sensor", ""))})
+        window_x["event_parameter_names"] = sorted(
+            {
+                _parameter_name_from_mapping(event)
+                for event in window_events
+                if _parameter_name_from_mapping(event)
+            }
+        )
         window_vectors.append(window_x)
         if windows_writer is not None:
             windows_writer.write(json.dumps(window, default=str) + "\n")
@@ -1238,12 +1393,11 @@ def main() -> None:
             total_detected += 1
             tail_id = str(event.get("tail_id", ""))
             flight_id = str(event.get("flight_id", ""))
-            sensor = str(event.get("sensor", ""))
+            parameter_name = _parameter_name_from_mapping(event)
             ts = pd.to_datetime(event.get("ts"), utc=True)
             detected_type = str(event.get("event_type_detected", ""))
 
-            phase_name = phase_map.get((tail_id, flight_id, sensor, ts), "unknown")
-            parameter_name = sensor
+            phase_name = phase_map.get((tail_id, flight_id, parameter_name, ts), "unknown")
             triplet = (phase_name, parameter_name, detected_type)
 
             detected_by_phase[phase_name] += 1
@@ -1252,13 +1406,13 @@ def main() -> None:
             detected_by_triplet[triplet] += 1
             detected_by_tail_flight[(tail_id, flight_id)] += 1
 
-            row_key = (tail_id, flight_id, sensor, ts)
+            row_key = (tail_id, flight_id, parameter_name, ts)
             detected_row_counts[row_key] += 1
 
             key = _event_key(
                 tail_id=tail_id,
                 flight_id=flight_id,
-                sensor=sensor,
+                parameter_name=parameter_name,
                 ts=ts,
                 event_type=detected_type,
             )
@@ -1304,7 +1458,7 @@ def main() -> None:
                 str(event.get("tail_id", "")),
                 str(event.get("flight_id", "")),
                 pd.to_datetime(event.get("ts"), utc=True),
-                str(event.get("sensor", "")),
+                _parameter_name_from_mapping(event),
                 str(event.get("event_type_detected", "")),
             ),
         )
@@ -1407,7 +1561,7 @@ def main() -> None:
         row_key = (
             str(getattr(row, "tail_id")),
             str(getattr(row, "flight_id")),
-            str(getattr(row, "sensor")),
+            _parameter_name_from_row(row),
             pd.to_datetime(getattr(row, "timestamp_utc"), utc=True),
         )
         if detected_row_counts.get(row_key, 0) <= 0:
@@ -1555,7 +1709,10 @@ def main() -> None:
             sensor_order=backbone_all_sensors,
         )
         item["backbone_reconstruction_error"] = float(error)
-        item["backbone_x_c"] = [float(x_true.get(sensor, 0.0) or 0.0) for sensor in backbone_selected_sensors]
+        item["backbone_x_c"] = [
+            float(x_true.get(parameter_name, 0.0) or 0.0)
+            for parameter_name in backbone_selected_sensors
+        ]
         top_residuals = sorted(
             residuals.items(),
             key=lambda kv: (-abs(float(kv[1])), kv[0]),
@@ -1567,13 +1724,16 @@ def main() -> None:
                 "win_id": int(item.get("win_id", 0)),
                 "reconstruction_error": float(error),
                 "top_residuals": [
-                    {"parameter_name": str(sensor), "residual": float(value)}
-                    for sensor, value in top_residuals
+                    {"parameter_name": str(parameter_name), "residual": float(value)}
+                    for parameter_name, value in top_residuals
                 ],
             }
         )
 
-    phase_selected_sensors = backbone_selected_sensors[: max(int(args.phase_detect_sensor_count), 1)]
+    phase_selected_sensors = _top_phase_parameter_names(
+        full_window_sensor_energy,
+        k=max(int(args.phase_detect_sensor_count), 1),
+    )
     phase_selected_event_types = top_phase_event_types(
         window_vectors,
         k=max(int(args.phase_detect_event_type_count), 0),
@@ -1680,7 +1840,7 @@ def main() -> None:
             min_abs_partial_corr=float(args.graph_min_abs_partial_corr),
             min_event_count=1,
             min_event_npmi=float(args.graph_min_event_npmi),
-            event_top_k_per_sensor=max(int(args.graph_event_top_k_per_sensor), 1),
+            event_top_k_per_parameter_name=max(int(args.graph_event_top_k_per_sensor), 1),
             lag_tau_max_seconds=min(
                 float(max(int(args.window_max_ms), 1)) / 1000.0 * float(max(int(args.cooccurrence_n), 1)),
                 causal_lag_cap_seconds,
@@ -1693,7 +1853,7 @@ def main() -> None:
             beta=float(args.graph_beta),
             gamma=float(args.graph_gamma),
             min_fused_edge_weight=float(args.graph_min_fused_edge_weight),
-            hierarchy_top_k_per_sensor=max(int(args.graph_hierarchy_top_k_per_sensor), 1),
+            hierarchy_top_k_per_parameter_name=max(int(args.graph_hierarchy_top_k_per_sensor), 1),
             hierarchy_subsystem_min_edge_weight=float(args.graph_hierarchy_subsystem_min_edge_weight),
             hierarchy_system_min_edge_weight=float(args.graph_hierarchy_system_min_edge_weight),
         )
@@ -1767,20 +1927,20 @@ def main() -> None:
     hierarchy_with_corr_group["corr_group"] = hierarchy_with_corr_group["parameter_name"].map(
         lambda parameter_name: str(behavior.get(str(parameter_name), {}).get("corr_group", ""))
     )
-    corr_group_by_sensor = {
+    corr_group_by_parameter_name = {
         str(row["parameter_name"]): str(row["corr_group"])
         for row in hierarchy_with_corr_group.to_dict(orient="records")
     }
     within_group_lag_rows = [
         row
         for row in graph_lag_df.to_dict(orient="records")
-        if str(corr_group_by_sensor.get(str(row.get("sensor_u", "")), "")) != ""
-        and str(corr_group_by_sensor.get(str(row.get("sensor_u", "")), "")) == str(corr_group_by_sensor.get(str(row.get("sensor_v", "")), ""))
+        if str(corr_group_by_parameter_name.get(str(row.get("parameter_name_u", "")), "")) != ""
+        and str(corr_group_by_parameter_name.get(str(row.get("parameter_name_u", "")), "")) == str(corr_group_by_parameter_name.get(str(row.get("parameter_name_v", "")), ""))
     ]
     between_group_lag_rows = [
         row
         for row in graph_lag_df.to_dict(orient="records")
-        if str(corr_group_by_sensor.get(str(row.get("sensor_u", "")), "")) != str(corr_group_by_sensor.get(str(row.get("sensor_v", "")), ""))
+        if str(corr_group_by_parameter_name.get(str(row.get("parameter_name_u", "")), "")) != str(corr_group_by_parameter_name.get(str(row.get("parameter_name_v", "")), ""))
     ]
     causal_lag_diagnostics = {
         "causal_delay_config": flight_setup.get("causal_delay", {}),
@@ -1800,15 +1960,15 @@ def main() -> None:
         "top_within_corr_group_lag_edges": sorted(
             [
                 {
-                    "sensor_u": str(item.get("sensor_u", "")),
-                    "sensor_v": str(item.get("sensor_v", "")),
+                    "parameter_name_u": str(item.get("parameter_name_u", "")),
+                    "parameter_name_v": str(item.get("parameter_name_v", "")),
                     "lag_count": int(item.get("lag_count", 0) or 0),
                     "mean_lag_seconds": float(item.get("mean_lag_seconds", 0.0) or 0.0),
-                    "corr_group": str(corr_group_by_sensor.get(str(item.get("sensor_u", "")), "")),
+                    "corr_group": str(corr_group_by_parameter_name.get(str(item.get("parameter_name_u", "")), "")),
                 }
                 for item in within_group_lag_rows
             ],
-            key=lambda item: (-item["lag_count"], -item["mean_lag_seconds"], item["sensor_u"], item["sensor_v"]),
+            key=lambda item: (-item["lag_count"], -item["mean_lag_seconds"], item["parameter_name_u"], item["parameter_name_v"]),
         )[:10],
     }
     phase_window_count_by_tail_flight: Counter[tuple[str, str]] = Counter()
@@ -1855,7 +2015,7 @@ def main() -> None:
         row_key = (
             tail_id,
             flight_id,
-            str(getattr(row, "sensor")),
+            _parameter_name_from_row(row),
             pd.to_datetime(getattr(row, "timestamp_utc"), utc=True),
         )
         if detected_row_counts.get(row_key, 0) <= 0:
@@ -2037,23 +2197,23 @@ def main() -> None:
         "graph_v2": {
             "precision_graph": {
                 "edge_count": int(len(graph_precision_df)),
-                "top_edges": graph_precision_df.sort_values(["precision_weight", "sensor_u", "sensor_v"], ascending=[False, True, True]).head(20).to_dict(orient="records"),
+                "top_edges": graph_precision_df.sort_values(["precision_weight", "parameter_name_u", "parameter_name_v"], ascending=[False, True, True]).head(20).to_dict(orient="records"),
             },
             "event_graph": {
                 "edge_count": int(len(graph_event_df)),
-                "top_edges": graph_event_df.sort_values(["event_weight", "sensor_u", "sensor_v"], ascending=[False, True, True]).head(20).to_dict(orient="records"),
+                "top_edges": graph_event_df.sort_values(["event_weight", "parameter_name_u", "parameter_name_v"], ascending=[False, True, True]).head(20).to_dict(orient="records"),
             },
             "lag_graph": {
                 "edge_count": int(len(graph_lag_df)),
-                "top_edges": graph_lag_df.sort_values(["lag_weight", "sensor_u", "sensor_v"], ascending=[False, True, True]).head(20).to_dict(orient="records"),
+                "top_edges": graph_lag_df.sort_values(["lag_weight", "parameter_name_u", "parameter_name_v"], ascending=[False, True, True]).head(20).to_dict(orient="records"),
             },
             "transition_graph": {
                 "edge_count": int(len(graph_transition_df)),
-                "top_edges": graph_transition_df.sort_values(["precedence_weight", "sensor_u", "sensor_v"], ascending=[False, True, True]).head(20).to_dict(orient="records"),
+                "top_edges": graph_transition_df.sort_values(["precedence_weight", "parameter_name_u", "parameter_name_v"], ascending=[False, True, True]).head(20).to_dict(orient="records"),
             },
             "fused_graph": {
                 "edge_count": int(len(graph_fused_df)),
-                "top_edges": graph_fused_df.sort_values(["fused_weight", "sensor_u", "sensor_v"], ascending=[False, True, True]).head(20).to_dict(orient="records"),
+                "top_edges": graph_fused_df.sort_values(["fused_weight", "parameter_name_u", "parameter_name_v"], ascending=[False, True, True]).head(20).to_dict(orient="records"),
             },
             "hierarchy_sensor_map": graph_hierarchy_df.to_dict(orient="records"),
             "hierarchy_recovery": hierarchy_recovery,
@@ -2064,11 +2224,11 @@ def main() -> None:
             "selected_sensors": phase_selected_sensors,
             "selected_event_types": phase_selected_event_types,
             "selected_categorical_state_pairs": [
-                {"sensor": sensor, "state": state}
-                for sensor, state in phase_selected_categorical_state_pairs
+                {"parameter_name": parameter_name, "state": state}
+                for parameter_name, state in phase_selected_categorical_state_pairs
             ],
             "selected_window_cooccurrence_pairs": [
-                {"sensor_left": left, "sensor_right": right}
+                {"parameter_name_left": left, "parameter_name_right": right}
                 for left, right in phase_selected_window_cooccurrence_pairs
             ],
             "structure_feature_names": phase_feature_names,

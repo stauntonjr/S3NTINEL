@@ -34,8 +34,8 @@ def _event_graph_schema():
 
     return T.StructType(
         [
-            T.StructField("sensor_u", T.StringType(), False),
-            T.StructField("sensor_v", T.StringType(), False),
+            T.StructField("parameter_name_u", T.StringType(), False),
+            T.StructField("parameter_name_v", T.StringType(), False),
             T.StructField("cooccur_count", T.IntegerType(), False),
             T.StructField("event_weight", T.DoubleType(), False),
             T.StructField("edge_family", T.StringType(), False),
@@ -48,8 +48,8 @@ def _lag_graph_schema():
 
     return T.StructType(
         [
-            T.StructField("sensor_u", T.StringType(), False),
-            T.StructField("sensor_v", T.StringType(), False),
+            T.StructField("parameter_name_u", T.StringType(), False),
+            T.StructField("parameter_name_v", T.StringType(), False),
             T.StructField("lag_count", T.IntegerType(), False),
             T.StructField("lag_weight", T.DoubleType(), False),
             T.StructField("mean_lag_seconds", T.DoubleType(), False),
@@ -63,10 +63,26 @@ def _transition_graph_schema():
 
     return T.StructType(
         [
-            T.StructField("sensor_u", T.StringType(), False),
-            T.StructField("sensor_v", T.StringType(), False),
+            T.StructField("parameter_name_u", T.StringType(), False),
+            T.StructField("parameter_name_v", T.StringType(), False),
             T.StructField("precedence_count", T.IntegerType(), False),
             T.StructField("precedence_weight", T.DoubleType(), False),
+            T.StructField("edge_family", T.StringType(), False),
+        ]
+    )
+
+
+def _fused_graph_schema():
+    from pyspark.sql import types as T
+
+    return T.StructType(
+        [
+            T.StructField("parameter_name_u", T.StringType(), False),
+            T.StructField("parameter_name_v", T.StringType(), False),
+            T.StructField("precision_weight", T.DoubleType(), False),
+            T.StructField("event_weight", T.DoubleType(), False),
+            T.StructField("lag_weight", T.DoubleType(), False),
+            T.StructField("fused_weight", T.DoubleType(), False),
             T.StructField("edge_family", T.StringType(), False),
         ]
     )
@@ -76,24 +92,24 @@ def _retain_top_k_undirected(
     rows: list[dict[str, Any]],
     *,
     weight_key: str,
-    top_k_per_sensor: int,
+    top_k_per_parameter_name: int,
 ) -> list[dict[str, Any]]:
-    if top_k_per_sensor <= 0 or not rows:
+    if top_k_per_parameter_name <= 0 or not rows:
         return rows
-    by_sensor: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+    by_parameter_name: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
-        by_sensor[str(row["sensor_u"])].append(row)
-        by_sensor[str(row["sensor_v"])].append(row)
+        by_parameter_name[str(row["parameter_name_u"])].append(row)
+        by_parameter_name[str(row["parameter_name_v"])].append(row)
 
     keep: set[tuple[str, str]] = set()
-    for parameter_name, parameter_rows in by_sensor.items():
+    for parameter_name, parameter_rows in by_parameter_name.items():
         ranked = sorted(
             parameter_rows,
-            key=lambda item: (-float(item.get(weight_key, 0.0) or 0.0), item["sensor_u"], item["sensor_v"]),
-        )[:top_k_per_sensor]
+            key=lambda item: (-float(item.get(weight_key, 0.0) or 0.0), item["parameter_name_u"], item["parameter_name_v"]),
+        )[:top_k_per_parameter_name]
         for item in ranked:
-            keep.add(tuple(sorted((str(item["sensor_u"]), str(item["sensor_v"])))))
-    return [row for row in rows if tuple(sorted((str(row["sensor_u"]), str(row["sensor_v"])))) in keep]
+            keep.add(tuple(sorted((str(item["parameter_name_u"]), str(item["parameter_name_v"])))))
+    return [row for row in rows if tuple(sorted((str(row["parameter_name_u"]), str(row["parameter_name_v"])))) in keep]
 
 
 def _retain_top_k_directed(
@@ -106,26 +122,26 @@ def _retain_top_k_directed(
         return rows
     by_source: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
-        by_source[str(row["sensor_u"])].append(row)
+        by_source[str(row["parameter_name_u"])].append(row)
     keep: set[tuple[str, str]] = set()
-    for sensor_u, sensor_rows in by_source.items():
+    for parameter_name_u, sensor_rows in by_source.items():
         ranked = sorted(
             sensor_rows,
-            key=lambda item: (-float(item.get(weight_key, 0.0) or 0.0), item["sensor_u"], item["sensor_v"]),
+            key=lambda item: (-float(item.get(weight_key, 0.0) or 0.0), item["parameter_name_u"], item["parameter_name_v"]),
         )[:top_k_outgoing]
         for item in ranked:
-            keep.add((str(item["sensor_u"]), str(item["sensor_v"])))
-    return [row for row in rows if (str(row["sensor_u"]), str(row["sensor_v"])) in keep]
+            keep.add((str(item["parameter_name_u"]), str(item["parameter_name_v"])))
+    return [row for row in rows if (str(row["parameter_name_u"]), str(row["parameter_name_v"])) in keep]
 
 
-def retain_event_graph_top_k(event_df: pd.DataFrame, *, top_k_per_sensor: int) -> pd.DataFrame:
+def retain_event_graph_top_k(event_df: pd.DataFrame, *, top_k_per_parameter_name: int) -> pd.DataFrame:
     """Retain the top-k undirected event edges per sensor from a precomputed event graph."""
     if event_df.empty:
         return event_df.copy()
     rows = _retain_top_k_undirected(
         event_df.to_dict(orient="records"),
         weight_key="event_weight",
-        top_k_per_sensor=int(top_k_per_sensor),
+        top_k_per_parameter_name=int(top_k_per_parameter_name),
     )
     if not rows:
         return pd.DataFrame(columns=event_df.columns)
@@ -222,14 +238,14 @@ def _build_precision_graph_from_covariance(
     min_abs_partial_corr: float,
 ) -> pd.DataFrame:
     if not selected_sensors:
-        return pd.DataFrame(columns=["sensor_u", "sensor_v", "partial_corr", "precision_weight", "edge_family"])
+        return pd.DataFrame(columns=["parameter_name_u", "parameter_name_v", "partial_corr", "precision_weight", "edge_family"])
     if covariance.size == 0 or covariance.shape[0] != len(selected_sensors):
-        return pd.DataFrame(columns=["sensor_u", "sensor_v", "partial_corr", "precision_weight", "edge_family"])
+        return pd.DataFrame(columns=["parameter_name_u", "parameter_name_v", "partial_corr", "precision_weight", "edge_family"])
     theta = _invert_small_matrix(covariance + (max(float(ridge_lambda), 1e-6) * np.eye(covariance.shape[0], dtype=float)))
     out: list[dict[str, Any]] = []
-    for i, sensor_u in enumerate(selected_sensors):
+    for i, parameter_name_u in enumerate(selected_sensors):
         for j in range(i + 1, len(selected_sensors)):
-            sensor_v = selected_sensors[j]
+            parameter_name_v = selected_sensors[j]
             denom = max(theta[i, i] * theta[j, j], 1e-12) ** 0.5
             partial_corr = float(0.0 if denom <= 0 else (-theta[i, j] / denom))
             weight = abs(partial_corr)
@@ -237,8 +253,8 @@ def _build_precision_graph_from_covariance(
                 continue
             out.append(
                 {
-                    "sensor_u": sensor_u,
-                    "sensor_v": sensor_v,
+                    "parameter_name_u": parameter_name_u,
+                    "parameter_name_v": parameter_name_v,
                     "partial_corr": partial_corr,
                     "precision_weight": weight,
                     "edge_family": "precision",
@@ -255,10 +271,10 @@ def _build_precision_graph(
     min_abs_partial_corr: float,
 ) -> pd.DataFrame:
     if not selected_sensors:
-        return pd.DataFrame(columns=["sensor_u", "sensor_v", "partial_corr", "precision_weight", "edge_family"])
+        return pd.DataFrame(columns=["parameter_name_u", "parameter_name_v", "partial_corr", "precision_weight", "edge_family"])
 
     if window_x_df.empty:
-        return pd.DataFrame(columns=["sensor_u", "sensor_v", "partial_corr", "precision_weight", "edge_family"])
+        return pd.DataFrame(columns=["parameter_name_u", "parameter_name_v", "partial_corr", "precision_weight", "edge_family"])
 
     rows: list[list[float]] = []
     for _, row in window_x_df.sort_values(["tail_id", "flight_id", "t_end", "win_id"], kind="mergesort").iterrows():
@@ -268,7 +284,7 @@ def _build_precision_graph(
         rows.append([float(scaled.get(parameter_name, 0.0) or 0.0) for parameter_name in selected_sensors])
 
     if len(rows) < 2:
-        return pd.DataFrame(columns=["sensor_u", "sensor_v", "partial_corr", "precision_weight", "edge_family"])
+        return pd.DataFrame(columns=["parameter_name_u", "parameter_name_v", "partial_corr", "precision_weight", "edge_family"])
 
     x = np.asarray(rows, dtype=float)
     means = [float(sum(float(row[col_idx]) for row in x.tolist())) / float(len(rows)) for col_idx in range(len(selected_sensors))]
@@ -294,12 +310,12 @@ def _build_event_graph(
     *,
     min_count: int,
     min_npmi: float,
-    top_k_per_sensor: int,
+    top_k_per_parameter_name: int,
 ) -> pd.DataFrame:
     if events_df.empty or windows_df.empty:
-        return pd.DataFrame(columns=["sensor_u", "sensor_v", "cooccur_count", "event_weight", "edge_family"])
+        return pd.DataFrame(columns=["parameter_name_u", "parameter_name_v", "cooccur_count", "event_weight", "edge_family"])
     pair_counts: Counter[tuple[str, str]] = Counter()
-    sensor_window_counts: Counter[str] = Counter()
+    parameter_name_window_counts: Counter[str] = Counter()
     max_count = 0
     by_events = {
         key: group.sort_values(["timestamp_utc", "parameter_name"], kind="mergesort").reset_index(drop=True)
@@ -329,7 +345,7 @@ def _build_event_graph(
                 idx += 1
             distinct = sorted(sensors)
             for parameter_name in distinct:
-                sensor_window_counts[parameter_name] += 1
+                parameter_name_window_counts[parameter_name] += 1
             for i, left in enumerate(distinct):
                 for right in distinct[i + 1 :]:
                     pair_counts[(left, right)] += 1
@@ -342,8 +358,8 @@ def _build_event_graph(
         if total_windows <= 0:
             continue
         p_xy = float(count) / float(total_windows)
-        p_x = float(sensor_window_counts[left]) / float(total_windows)
-        p_y = float(sensor_window_counts[right]) / float(total_windows)
+        p_x = float(parameter_name_window_counts[left]) / float(total_windows)
+        p_y = float(parameter_name_window_counts[right]) / float(total_windows)
         if p_xy <= 0.0 or p_x <= 0.0 or p_y <= 0.0:
             continue
         pmi = log(p_xy / max(p_x * p_y, 1e-12))
@@ -353,14 +369,14 @@ def _build_event_graph(
             continue
         out.append(
             {
-                "sensor_u": left,
-                "sensor_v": right,
+                "parameter_name_u": left,
+                "parameter_name_v": right,
                 "cooccur_count": int(count),
                 "event_weight": event_weight,
                 "edge_family": "event",
             }
         )
-    out = _retain_top_k_undirected(out, weight_key="event_weight", top_k_per_sensor=int(top_k_per_sensor))
+    out = _retain_top_k_undirected(out, weight_key="event_weight", top_k_per_parameter_name=int(top_k_per_parameter_name))
     return pd.DataFrame(out)
 
 
@@ -373,7 +389,7 @@ def _build_lag_graph(
     top_k_outgoing: int,
 ) -> pd.DataFrame:
     if events_df.empty:
-        return pd.DataFrame(columns=["sensor_u", "sensor_v", "lag_count", "lag_weight", "mean_lag_seconds", "edge_family"])
+        return pd.DataFrame(columns=["parameter_name_u", "parameter_name_v", "lag_count", "lag_weight", "mean_lag_seconds", "edge_family"])
     tau = max(float(tau_max_seconds), 0.0)
     pair_counts: Counter[tuple[str, str]] = Counter()
     lag_sums: defaultdict[tuple[str, str], float] = defaultdict(float)
@@ -410,8 +426,8 @@ def _build_lag_graph(
         conditional_probability = float(count) / float(max(outgoing_counts[left], 1))
         out.append(
             {
-                "sensor_u": left,
-                "sensor_v": right,
+                "parameter_name_u": left,
+                "parameter_name_v": right,
                 "lag_count": int(count),
                 "lag_weight": conditional_probability * shortness,
                 "mean_lag_seconds": mean_lag_seconds,
@@ -424,7 +440,7 @@ def _build_lag_graph(
 
 def _build_transition_graph(events_df: pd.DataFrame, *, min_count: int) -> pd.DataFrame:
     if events_df.empty:
-        return pd.DataFrame(columns=["sensor_u", "sensor_v", "precedence_count", "precedence_weight", "edge_family"])
+        return pd.DataFrame(columns=["parameter_name_u", "parameter_name_v", "precedence_count", "precedence_weight", "edge_family"])
     pair_counts: Counter[tuple[str, str]] = Counter()
     outgoing_counts: Counter[str] = Counter()
     for _, group in events_df.groupby(["tail_id", "flight_id"], sort=True):
@@ -442,8 +458,8 @@ def _build_transition_graph(events_df: pd.DataFrame, *, min_count: int) -> pd.Da
             continue
         out.append(
             {
-                "sensor_u": left,
-                "sensor_v": right,
+                "parameter_name_u": left,
+                "parameter_name_v": right,
                 "precedence_count": int(count),
                 "precedence_weight": float(count) / float(max(outgoing_counts[left], 1)),
                 "edge_family": "transition",
@@ -458,7 +474,7 @@ def build_event_graph_spark_table(
     *,
     min_count: int,
     min_npmi: float,
-    top_k_per_sensor: int,
+    top_k_per_parameter_name: int,
 ) -> DataFrame:
     """Build same-window cooccurrence edges in Spark using positive normalized PMI."""
     F = _spark_functions()
@@ -476,23 +492,23 @@ def build_event_graph_spark_table(
     grouped = joined.groupBy("tail_id", "flight_id", "win_id").agg(F.sort_array(F.collect_set("parameter_name")).alias("parameter_names"))
 
     pair_rows = grouped.select(
-        F.posexplode("parameter_names").alias("left_idx", "sensor_u"),
+        F.posexplode("parameter_names").alias("left_idx", "parameter_name_u"),
         F.col("parameter_names"),
     ).select(
-        "sensor_u",
+        "parameter_name_u",
         F.expr("slice(parameter_names, left_idx + 2, size(parameter_names))").alias("right_candidates"),
-    ).select("sensor_u", F.explode_outer("right_candidates").alias("sensor_v")).where(F.col("sensor_v").isNotNull())
+    ).select("parameter_name_u", F.explode_outer("right_candidates").alias("parameter_name_v")).where(F.col("parameter_name_v").isNotNull())
 
-    pair_counts = pair_rows.groupBy("sensor_u", "sensor_v").agg(F.count(F.lit(1)).cast("int").alias("cooccur_count"))
-    sensor_window_counts = grouped.select(F.explode("parameter_names").alias("parameter_name")).groupBy("parameter_name").agg(
-        F.count(F.lit(1)).cast("int").alias("sensor_window_count")
+    pair_counts = pair_rows.groupBy("parameter_name_u", "parameter_name_v").agg(F.count(F.lit(1)).cast("int").alias("cooccur_count"))
+    parameter_name_window_counts = grouped.select(F.explode("parameter_names").alias("parameter_name")).groupBy("parameter_name").agg(
+        F.count(F.lit(1)).cast("int").alias("parameter_name_window_count")
     )
     total_windows_df = grouped.agg(F.count(F.lit(1)).cast("double").alias("total_windows"))
     with_counts = (
-        pair_counts.join(sensor_window_counts.withColumnRenamed("parameter_name", "sensor_u"), on="sensor_u")
-        .withColumnRenamed("sensor_window_count", "left_window_count")
-        .join(sensor_window_counts.withColumnRenamed("parameter_name", "sensor_v"), on="sensor_v")
-        .withColumnRenamed("sensor_window_count", "right_window_count")
+        pair_counts.join(parameter_name_window_counts.withColumnRenamed("parameter_name", "parameter_name_u"), on="parameter_name_u")
+        .withColumnRenamed("parameter_name_window_count", "left_window_count")
+        .join(parameter_name_window_counts.withColumnRenamed("parameter_name", "parameter_name_v"), on="parameter_name_v")
+        .withColumnRenamed("parameter_name_window_count", "right_window_count")
         .crossJoin(total_windows_df)
         .withColumn("p_xy", F.col("cooccur_count") / F.col("total_windows"))
         .withColumn("p_x", F.col("left_window_count") / F.col("total_windows"))
@@ -504,42 +520,42 @@ def build_event_graph_spark_table(
         .withColumn("event_weight", F.greatest(F.col("event_weight_raw"), F.lit(0.0)))
         .where((F.col("cooccur_count") >= F.lit(max(int(min_count), 1))) & (F.col("event_weight") >= F.lit(float(min_npmi))))
     )
-    if int(top_k_per_sensor) > 0:
+    if int(top_k_per_parameter_name) > 0:
         from pyspark.sql import Window
 
         undirected = with_counts.select(
-            F.col("sensor_u"),
-            F.col("sensor_v"),
+            F.col("parameter_name_u"),
+            F.col("parameter_name_v"),
             F.col("cooccur_count"),
             F.col("event_weight"),
-            F.least("sensor_u", "sensor_v").alias("sensor_min"),
-            F.greatest("sensor_u", "sensor_v").alias("sensor_max"),
+            F.least("parameter_name_u", "parameter_name_v").alias("parameter_name_min"),
+            F.greatest("parameter_name_u", "parameter_name_v").alias("parameter_name_max"),
         )
         exploded = undirected.select(
-            F.col("sensor_u").alias("parameter_name"),
-            F.col("sensor_min"),
-            F.col("sensor_max"),
+            F.col("parameter_name_u").alias("parameter_name"),
+            F.col("parameter_name_min"),
+            F.col("parameter_name_max"),
             F.col("event_weight"),
         ).unionByName(
             undirected.select(
-                F.col("sensor_v").alias("parameter_name"),
-                F.col("sensor_min"),
-                F.col("sensor_max"),
+                F.col("parameter_name_v").alias("parameter_name"),
+                F.col("parameter_name_min"),
+                F.col("parameter_name_max"),
                 F.col("event_weight"),
             )
         )
-        rank_window = Window.partitionBy("parameter_name").orderBy(F.col("event_weight").desc(), F.col("sensor_min"), F.col("sensor_max"))
-        keep = exploded.withColumn("rank", F.row_number().over(rank_window)).where(F.col("rank") <= int(top_k_per_sensor)).select(
-            "sensor_min", "sensor_max"
+        rank_window = Window.partitionBy("parameter_name").orderBy(F.col("event_weight").desc(), F.col("parameter_name_min"), F.col("parameter_name_max"))
+        keep = exploded.withColumn("rank", F.row_number().over(rank_window)).where(F.col("rank") <= int(top_k_per_parameter_name)).select(
+            "parameter_name_min", "parameter_name_max"
         ).distinct()
         with_counts = with_counts.join(
             keep,
-            on=[with_counts.sensor_u == keep.sensor_min, with_counts.sensor_v == keep.sensor_max],
+            on=[with_counts.parameter_name_u == keep.parameter_name_min, with_counts.parameter_name_v == keep.parameter_name_max],
             how="inner",
         ).select(with_counts["*"])
     return with_counts.select(
-        "sensor_u",
-        "sensor_v",
+        "parameter_name_u",
+        "parameter_name_v",
         "cooccur_count",
         "event_weight",
         F.lit("event").alias("edge_family"),
@@ -570,24 +586,24 @@ def build_lag_graph_spark_table(
             schema=_lag_graph_schema(),
         )
     )
-    aggregated = grouped.groupBy("sensor_u", "sensor_v", "edge_family").agg(
+    aggregated = grouped.groupBy("parameter_name_u", "parameter_name_v", "edge_family").agg(
         F.sum("lag_count").cast("int").alias("lag_count"),
         F.sum(F.col("mean_lag_seconds") * F.col("lag_count")).alias("weighted_mean_lag"),
     ).select(
-        "sensor_u",
-        "sensor_v",
+        "parameter_name_u",
+        "parameter_name_v",
         "edge_family",
         "lag_count",
         (F.col("weighted_mean_lag") / F.col("lag_count")).alias("mean_lag_seconds"),
     )
-    source_totals = aggregated.groupBy("sensor_u").agg(F.sum("lag_count").cast("double").alias("source_total"))
+    source_totals = aggregated.groupBy("parameter_name_u").agg(F.sum("lag_count").cast("double").alias("source_total"))
     tau = max(float(tau_max_seconds), 1e-6)
     return (
-        aggregated.join(source_totals, on="sensor_u", how="inner")
+        aggregated.join(source_totals, on="parameter_name_u", how="inner")
         .withColumn("conditional_probability", F.col("lag_count") / F.col("source_total"))
         .withColumn("shortness", F.greatest(F.lit(0.0), F.lit(1.0) - (F.col("mean_lag_seconds") / F.lit(tau))))
         .withColumn("lag_weight", F.col("conditional_probability") * F.col("shortness"))
-        .select("sensor_u", "sensor_v", "edge_family", "lag_count", "lag_weight", "mean_lag_seconds")
+        .select("parameter_name_u", "parameter_name_v", "edge_family", "lag_count", "lag_weight", "mean_lag_seconds")
     )
 
 
@@ -603,13 +619,192 @@ def build_transition_graph_spark_table(events_df: DataFrame, *, min_count: int) 
             schema=_transition_graph_schema(),
         )
     )
-    count_df = grouped.groupBy("sensor_u", "sensor_v", "edge_family").agg(
+    count_df = grouped.groupBy("parameter_name_u", "parameter_name_v", "edge_family").agg(
         F.sum("precedence_count").cast("int").alias("precedence_count")
     )
-    source_totals = count_df.groupBy("sensor_u").agg(F.sum("precedence_count").cast("double").alias("source_total"))
-    return count_df.join(source_totals, on="sensor_u", how="inner").withColumn(
+    source_totals = count_df.groupBy("parameter_name_u").agg(F.sum("precedence_count").cast("double").alias("source_total"))
+    return count_df.join(source_totals, on="parameter_name_u", how="inner").withColumn(
         "precedence_weight",
         F.col("precedence_count") / F.col("source_total"),
+    )
+
+
+def build_fused_graph_spark_table(
+    precision_df: DataFrame,
+    event_df: DataFrame,
+    lag_df: DataFrame,
+    *,
+    alpha: float,
+    beta: float,
+    gamma: float,
+) -> DataFrame:
+    """Build fused graph edges in Spark from component graph tables."""
+    F = _spark_functions()
+    precision_edges = precision_df.select(
+        "parameter_name_u",
+        "parameter_name_v",
+        F.col("precision_weight").cast("double").alias("precision_weight"),
+    )
+    event_edges = event_df.select(
+        "parameter_name_u",
+        "parameter_name_v",
+        F.col("event_weight").cast("double").alias("event_weight"),
+    )
+    lag_edges = (
+        lag_df.select(
+            F.least("parameter_name_u", "parameter_name_v").alias("parameter_name_u"),
+            F.greatest("parameter_name_u", "parameter_name_v").alias("parameter_name_v"),
+            F.col("lag_weight").cast("double").alias("lag_weight"),
+        )
+        .groupBy("parameter_name_u", "parameter_name_v")
+        .agg(F.max("lag_weight").alias("lag_weight"))
+    )
+    fused = (
+        precision_edges.join(event_edges, on=["parameter_name_u", "parameter_name_v"], how="full_outer")
+        .join(lag_edges, on=["parameter_name_u", "parameter_name_v"], how="full_outer")
+        .na.fill({"precision_weight": 0.0, "event_weight": 0.0, "lag_weight": 0.0})
+        .withColumn(
+            "fused_weight",
+            (F.lit(float(alpha)) * F.col("precision_weight"))
+            + (F.lit(float(beta)) * F.col("event_weight"))
+            + (F.lit(float(gamma)) * F.col("lag_weight")),
+        )
+        .where(F.col("fused_weight") > F.lit(0.0))
+        .withColumn("edge_family", F.lit("fused"))
+    )
+    return fused.select(
+        "parameter_name_u",
+        "parameter_name_v",
+        "precision_weight",
+        "event_weight",
+        "lag_weight",
+        "fused_weight",
+        "edge_family",
+    )
+
+
+def build_hierarchy_from_fused_spark_table(
+    fused_df: DataFrame,
+    *,
+    parameter_names: list[str],
+    min_fused_edge_weight: float,
+    hierarchy_top_k_per_parameter_name: int,
+    hierarchy_subsystem_min_edge_weight: float | None = None,
+    hierarchy_system_min_edge_weight: float | None = None,
+) -> pd.DataFrame:
+    """Build hierarchy from a Spark fused-edge table using Spark pruning and small driver-side clustering."""
+    F = _spark_functions()
+    from pyspark.sql import Window
+
+    parameter_set = {str(item) for item in parameter_names if str(item)}
+    if not parameter_set:
+        return pd.DataFrame(
+            columns=["parameter_name", "system_id", "subsystem_id", "module_id", "hierarchy_source", "hierarchy_profile_id"]
+        )
+
+    filtered = fused_df.where(F.col("fused_weight") >= F.lit(float(min_fused_edge_weight))).select(
+        F.col("parameter_name_u").cast("string").alias("parameter_name_u"),
+        F.col("parameter_name_v").cast("string").alias("parameter_name_v"),
+        F.col("fused_weight").cast("double").alias("fused_weight"),
+    )
+    if filtered.limit(1).count() == 0:
+        return assign_hierarchy_from_weighted_edges(
+            sorted(parameter_set),
+            [],
+            module_min_edge_weight=float(min_fused_edge_weight),
+            subsystem_min_edge_weight=hierarchy_subsystem_min_edge_weight,
+            system_min_edge_weight=hierarchy_system_min_edge_weight,
+        ).pipe(
+            lambda rows: pd.DataFrame(
+                [
+                    {
+                        "parameter_name": str(row["parameter_name"]),
+                        "system_id": str(row["system_id"]),
+                        "subsystem_id": str(row["subsystem_id"]),
+                        "module_id": str(row["module_id"]),
+                        "hierarchy_source": "v2_fused_graph_mutual_topk_levels",
+                        "hierarchy_profile_id": "HIER_V2",
+                    }
+                    for row in rows
+                ]
+            )
+        )
+
+    edges = filtered.select(
+        "parameter_name_u",
+        "parameter_name_v",
+        "fused_weight",
+        F.least("parameter_name_u", "parameter_name_v").alias("parameter_name_min"),
+        F.greatest("parameter_name_u", "parameter_name_v").alias("parameter_name_max"),
+    )
+    neighbors = edges.select(
+        F.col("parameter_name_u").alias("parameter_name"),
+        F.col("parameter_name_v").alias("neighbor"),
+        "parameter_name_min",
+        "parameter_name_max",
+        "fused_weight",
+    ).unionByName(
+        edges.select(
+            F.col("parameter_name_v").alias("parameter_name"),
+            F.col("parameter_name_u").alias("neighbor"),
+            "parameter_name_min",
+            "parameter_name_max",
+            "fused_weight",
+        )
+    )
+    rank_window = Window.partitionBy("parameter_name").orderBy(
+        F.col("fused_weight").desc(),
+        F.col("parameter_name_min"),
+        F.col("parameter_name_max"),
+    )
+    retained_neighbors = neighbors.withColumn("rank", F.row_number().over(rank_window)).where(
+        F.col("rank") <= F.lit(max(int(hierarchy_top_k_per_parameter_name), 1))
+    )
+    mutual_pairs = retained_neighbors.alias("left").join(
+        retained_neighbors.alias("right"),
+        (F.col("left.parameter_name") == F.col("right.neighbor"))
+        & (F.col("left.neighbor") == F.col("right.parameter_name")),
+        how="inner",
+    ).select(
+        F.least(F.col("left.parameter_name"), F.col("left.neighbor")).alias("parameter_name_min"),
+        F.greatest(F.col("left.parameter_name"), F.col("left.neighbor")).alias("parameter_name_max"),
+    ).distinct()
+
+    retained_pdf = edges.join(mutual_pairs, on=["parameter_name_min", "parameter_name_max"], how="inner").select(
+        "parameter_name_u",
+        "parameter_name_v",
+        "fused_weight",
+    ).toPandas()
+    rollup_pdf = filtered.select("parameter_name_u", "parameter_name_v", "fused_weight").toPandas()
+
+    retained_edges = [
+        (str(row["parameter_name_u"]), str(row["parameter_name_v"]), float(row["fused_weight"]))
+        for row in retained_pdf.to_dict(orient="records")
+    ]
+    rollup_edges = [
+        (str(row["parameter_name_u"]), str(row["parameter_name_v"]), float(row["fused_weight"]))
+        for row in rollup_pdf.to_dict(orient="records")
+    ]
+    hierarchy_rows = assign_hierarchy_from_weighted_edges(
+        sorted(parameter_set),
+        retained_edges,
+        module_min_edge_weight=float(min_fused_edge_weight),
+        subsystem_min_edge_weight=hierarchy_subsystem_min_edge_weight,
+        system_min_edge_weight=hierarchy_system_min_edge_weight,
+        rollup_edges=rollup_edges,
+    )
+    return pd.DataFrame(
+        [
+            {
+                "parameter_name": str(row["parameter_name"]),
+                "system_id": str(row["system_id"]),
+                "subsystem_id": str(row["subsystem_id"]),
+                "module_id": str(row["module_id"]),
+                "hierarchy_source": "v2_fused_graph_mutual_topk_levels",
+                "hierarchy_profile_id": "HIER_V2",
+            }
+            for row in hierarchy_rows
+        ]
     )
 
 
@@ -624,7 +819,7 @@ def build_precision_graph_from_window_x_spark_table(
     F = _spark_functions()
     backbone_sensors = [str(item) for item in selected_sensors if str(item)]
     if not backbone_sensors:
-        return pd.DataFrame(columns=["sensor_u", "sensor_v", "partial_corr", "precision_weight", "edge_family"])
+        return pd.DataFrame(columns=["parameter_name_u", "parameter_name_v", "partial_corr", "precision_weight", "edge_family"])
 
     projection_exprs = [
         F.coalesce(
@@ -645,7 +840,7 @@ def build_precision_graph_from_window_x_spark_table(
     stats_row = projected.agg(*agg_exprs).collect()[0]
     row_count = int(stats_row["n"] or 0)
     if row_count < 2:
-        return pd.DataFrame(columns=["sensor_u", "sensor_v", "partial_corr", "precision_weight", "edge_family"])
+        return pd.DataFrame(columns=["parameter_name_u", "parameter_name_v", "partial_corr", "precision_weight", "edge_family"])
 
     means = [float(stats_row[f"sum_{idx}"] or 0.0) / float(row_count) for idx in range(len(backbone_sensors))]
     cov = np.zeros((len(backbone_sensors), len(backbone_sensors)), dtype=float)
@@ -676,30 +871,30 @@ def _fuse_graphs(
     gamma: float,
 ) -> pd.DataFrame:
     event_map = {
-        (str(row["sensor_u"]), str(row["sensor_v"])): float(row["event_weight"])
+        (str(row["parameter_name_u"]), str(row["parameter_name_v"])): float(row["event_weight"])
         for row in event_df.to_dict(orient="records")
     }
     lag_weight_map: dict[tuple[str, str], float] = {}
     lag_weight_lists: defaultdict[tuple[str, str], list[float]] = defaultdict(list)
     for row in lag_df.to_dict(orient="records"):
-        left = str(row["sensor_u"])
-        right = str(row["sensor_v"])
+        left = str(row["parameter_name_u"])
+        right = str(row["parameter_name_v"])
         key = tuple(sorted((left, right)))
         lag_weight_lists[key].append(float(row.get("lag_weight", 0.0) or 0.0))
     for key, weights in lag_weight_lists.items():
         lag_weight_map[key] = max(weights, default=0.0)
 
     all_pairs = set(event_map.keys()) | set(lag_weight_map.keys()) | {
-        (str(row["sensor_u"]), str(row["sensor_v"])) for row in precision_df.to_dict(orient="records")
+        (str(row["parameter_name_u"]), str(row["parameter_name_v"])) for row in precision_df.to_dict(orient="records")
     }
     precision_map = {
-        (str(row["sensor_u"]), str(row["sensor_v"])): float(row["precision_weight"])
+        (str(row["parameter_name_u"]), str(row["parameter_name_v"])): float(row["precision_weight"])
         for row in precision_df.to_dict(orient="records")
     }
 
     out: list[dict[str, Any]] = []
     for key in sorted(all_pairs):
-        sensor_u, sensor_v = key
+        parameter_name_u, parameter_name_v = key
         p = float(precision_map.get(key, 0.0))
         e = float(event_map.get(key, 0.0))
         l = float(lag_weight_map.get(tuple(sorted(key)), 0.0))
@@ -708,8 +903,8 @@ def _fuse_graphs(
             continue
         out.append(
             {
-                "sensor_u": sensor_u,
-                "sensor_v": sensor_v,
+                "parameter_name_u": parameter_name_u,
+                "parameter_name_v": parameter_name_v,
                 "precision_weight": p,
                 "event_weight": e,
                 "lag_weight": l,
@@ -725,7 +920,7 @@ def _assign_hierarchy(
     parameter_names: list[str],
     *,
     min_edge_weight: float,
-    top_k_per_sensor: int = 3,
+    top_k_per_parameter_name: int = 3,
     subsystem_min_edge_weight: float | None = None,
     system_min_edge_weight: float | None = None,
 ) -> pd.DataFrame:
@@ -736,8 +931,8 @@ def _assign_hierarchy(
         weight = float(row.get("fused_weight", 0.0) or 0.0)
         if weight < float(min_edge_weight):
             continue
-        a = str(row.get("sensor_u", ""))
-        b = str(row.get("sensor_v", ""))
+        a = str(row.get("parameter_name_u", ""))
+        b = str(row.get("parameter_name_v", ""))
         if not a or not b or a not in parameter_set or b not in parameter_set:
             continue
         filtered_rows.append(row)
@@ -747,17 +942,17 @@ def _assign_hierarchy(
     keep_neighbors: dict[str, set[str]] = {}
     for parameter_name, neighbors in ranked_neighbors.items():
         ranked = sorted(neighbors, key=lambda item: (-item[0], item[1]))
-        keep_neighbors[parameter_name] = {neighbor for _, neighbor in ranked[: max(int(top_k_per_sensor), 1)]}
+        keep_neighbors[parameter_name] = {neighbor for _, neighbor in ranked[: max(int(top_k_per_parameter_name), 1)]}
 
     retained_edges: list[tuple[str, str, float]] = []
     for row in filtered_rows:
-        a = str(row["sensor_u"])
-        b = str(row["sensor_v"])
+        a = str(row["parameter_name_u"])
+        b = str(row["parameter_name_v"])
         if b in keep_neighbors.get(a, set()) and a in keep_neighbors.get(b, set()):
             retained_edges.append((a, b, float(row["fused_weight"])))
 
     rollup_edges = [
-        (str(row["sensor_u"]), str(row["sensor_v"]), float(row["fused_weight"]))
+        (str(row["parameter_name_u"]), str(row["parameter_name_v"]), float(row["fused_weight"]))
         for row in filtered_rows
     ]
 
@@ -794,7 +989,7 @@ def build_graph_artifact_tables(
     min_abs_partial_corr: float = 0.05,
     min_event_count: int = 1,
     min_event_npmi: float = 0.0,
-    event_top_k_per_sensor: int = 8,
+    event_top_k_per_parameter_name: int = 8,
     lag_tau_max_seconds: float = 30.0,
     min_lag_count: int = 1,
     max_mean_lag_seconds: float | None = None,
@@ -804,7 +999,7 @@ def build_graph_artifact_tables(
     beta: float = 1.0,
     gamma: float = 1.0,
     min_fused_edge_weight: float = 0.05,
-    hierarchy_top_k_per_sensor: int = 3,
+    hierarchy_top_k_per_parameter_name: int = 3,
     hierarchy_subsystem_min_edge_weight: float | None = None,
     hierarchy_system_min_edge_weight: float | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -820,7 +1015,7 @@ def build_graph_artifact_tables(
         min_abs_partial_corr=min_abs_partial_corr,
         min_event_count=min_event_count,
         min_event_npmi=min_event_npmi,
-        event_top_k_per_sensor=event_top_k_per_sensor,
+        event_top_k_per_parameter_name=event_top_k_per_parameter_name,
         lag_tau_max_seconds=lag_tau_max_seconds,
         min_lag_count=min_lag_count,
         max_mean_lag_seconds=max_mean_lag_seconds,
@@ -830,7 +1025,7 @@ def build_graph_artifact_tables(
         beta=beta,
         gamma=gamma,
         min_fused_edge_weight=min_fused_edge_weight,
-        hierarchy_top_k_per_sensor=hierarchy_top_k_per_sensor,
+        hierarchy_top_k_per_parameter_name=hierarchy_top_k_per_parameter_name,
         hierarchy_subsystem_min_edge_weight=hierarchy_subsystem_min_edge_weight,
         hierarchy_system_min_edge_weight=hierarchy_system_min_edge_weight,
     )
@@ -846,7 +1041,7 @@ def build_graph_artifacts_from_window_x_table(
     min_abs_partial_corr: float = 0.05,
     min_event_count: int = 1,
     min_event_npmi: float = 0.0,
-    event_top_k_per_sensor: int = 8,
+    event_top_k_per_parameter_name: int = 8,
     lag_tau_max_seconds: float = 30.0,
     min_lag_count: int = 1,
     max_mean_lag_seconds: float | None = None,
@@ -856,7 +1051,7 @@ def build_graph_artifacts_from_window_x_table(
     beta: float = 1.0,
     gamma: float = 1.0,
     min_fused_edge_weight: float = 0.05,
-    hierarchy_top_k_per_sensor: int = 3,
+    hierarchy_top_k_per_parameter_name: int = 3,
     hierarchy_subsystem_min_edge_weight: float | None = None,
     hierarchy_system_min_edge_weight: float | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -875,7 +1070,7 @@ def build_graph_artifacts_from_window_x_table(
         window_rows,
         min_count=min_event_count,
         min_npmi=min_event_npmi,
-        top_k_per_sensor=event_top_k_per_sensor,
+        top_k_per_parameter_name=event_top_k_per_parameter_name,
     )
     lag_df = _build_lag_graph(
         event_rows,
@@ -905,7 +1100,7 @@ def build_graph_artifacts_from_window_x_table(
         fused_df,
         parameter_name_union,
         min_edge_weight=min_fused_edge_weight,
-        top_k_per_sensor=hierarchy_top_k_per_sensor,
+        top_k_per_parameter_name=hierarchy_top_k_per_parameter_name,
         subsystem_min_edge_weight=hierarchy_subsystem_min_edge_weight,
         system_min_edge_weight=hierarchy_system_min_edge_weight,
     )
@@ -943,7 +1138,7 @@ def build_graph_component_tables_from_window_x_table(
         window_rows,
         min_count=min_event_count,
         min_npmi=min_event_npmi,
-        top_k_per_sensor=0,
+        top_k_per_parameter_name=0,
     )
     lag_df = _build_lag_graph(
         event_rows,
@@ -971,7 +1166,7 @@ def build_graph_fusion_from_tables(
     beta: float = 1.0,
     gamma: float = 1.0,
     min_fused_edge_weight: float = 0.05,
-    hierarchy_top_k_per_sensor: int = 3,
+    hierarchy_top_k_per_parameter_name: int = 3,
     hierarchy_subsystem_min_edge_weight: float | None = None,
     hierarchy_system_min_edge_weight: float | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -992,7 +1187,7 @@ def build_graph_fusion_from_tables(
         beta=beta,
         gamma=gamma,
         min_fused_edge_weight=min_fused_edge_weight,
-        hierarchy_top_k_per_sensor=hierarchy_top_k_per_sensor,
+        hierarchy_top_k_per_parameter_name=hierarchy_top_k_per_parameter_name,
         hierarchy_subsystem_min_edge_weight=hierarchy_subsystem_min_edge_weight,
         hierarchy_system_min_edge_weight=hierarchy_system_min_edge_weight,
     )
@@ -1009,7 +1204,7 @@ def build_graph_fusion_from_component_tables(
     beta: float = 1.0,
     gamma: float = 1.0,
     min_fused_edge_weight: float = 0.05,
-    hierarchy_top_k_per_sensor: int = 3,
+    hierarchy_top_k_per_parameter_name: int = 3,
     hierarchy_subsystem_min_edge_weight: float | None = None,
     hierarchy_system_min_edge_weight: float | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -1030,17 +1225,17 @@ def build_graph_fusion_from_component_tables(
             backbone_all_sensors = [str(item) for item in all_sensors if str(item)]
     parameter_name_union = sorted(
         set(backbone_all_sensors)
-        | set(event_df.get("sensor_u", pd.Series(dtype=object)).dropna().astype(str).tolist())
-        | set(event_df.get("sensor_v", pd.Series(dtype=object)).dropna().astype(str).tolist())
-        | set(lag_df.get("sensor_u", pd.Series(dtype=object)).dropna().astype(str).tolist())
-        | set(lag_df.get("sensor_v", pd.Series(dtype=object)).dropna().astype(str).tolist())
+        | set(event_df.get("parameter_name_u", pd.Series(dtype=object)).dropna().astype(str).tolist())
+        | set(event_df.get("parameter_name_v", pd.Series(dtype=object)).dropna().astype(str).tolist())
+        | set(lag_df.get("parameter_name_u", pd.Series(dtype=object)).dropna().astype(str).tolist())
+        | set(lag_df.get("parameter_name_v", pd.Series(dtype=object)).dropna().astype(str).tolist())
         | set(selected_sensors)
     )
     hierarchy_df = _assign_hierarchy(
         fused_df,
         parameter_name_union,
         min_edge_weight=min_fused_edge_weight,
-        top_k_per_sensor=hierarchy_top_k_per_sensor,
+        top_k_per_parameter_name=hierarchy_top_k_per_parameter_name,
         subsystem_min_edge_weight=hierarchy_subsystem_min_edge_weight,
         system_min_edge_weight=hierarchy_system_min_edge_weight,
     )

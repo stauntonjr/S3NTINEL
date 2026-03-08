@@ -11,6 +11,7 @@ from libs.phase.pipeline import (
     build_phase_baselines_spark_table,
     build_phase_windows_spark_table,
     fit_phase_window_x_config,
+    fit_phase_window_x_config_from_spark,
 )
 from libs.windows import build_window_x_spark_table, build_window_x_table
 
@@ -26,6 +27,7 @@ __all__ = [
     "detect_phases_from_windows",
     "evaluate_detected_phases",
     "fit_phase_window_x_config",
+    "fit_phase_window_x_config_from_spark",
     "PHASE_BASELINES_SCHEMA",
     "PHASE_WINDOWS_SCHEMA",
 ]

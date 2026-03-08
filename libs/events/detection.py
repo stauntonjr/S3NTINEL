@@ -58,8 +58,11 @@ def detect_events_from_rows(
         timestamp_utc = _row_timestamp_utc(row)
 
         if dtype == SensorDataType.NUMERIC.value:
-            # detectors will consume the cleaned parameter value and cast to float
-            value = row.get("parameter_value_clean", None)
+            # Downstream detectors should consume the observed signal. The clean
+            # value is retained for simulation labels/validation only.
+            value = row.get("parameter_value", None)
+            if value is None or pd.isna(value):
+                value = row.get("parameter_value_clean", None)
             if value is None or pd.isna(value):
                 value_num = None
             else:

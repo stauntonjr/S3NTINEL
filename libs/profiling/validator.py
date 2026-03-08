@@ -21,7 +21,7 @@ def _row_key(row: TelemetryRow | DatatypeLabelRow | DatatypeProfiledRow, *, ts_f
     return (
         str(row.get("tail_id", "")),
         str(row.get("flight_id", "")),
-        str(row.get("sensor", "")),
+        str(row.get("parameter_name", "")),
         _row_ts(row, field=ts_field),
     )
 
@@ -46,7 +46,7 @@ def simulator_datatype_label_rows(
         yield {
             "tail_id": str(row.get("tail_id", "")),
             "flight_id": str(row.get("flight_id", "")),
-            "sensor": str(row.get("sensor", "")),
+            "parameter_name": str(row.get("parameter_name", "")),
             "timestamp_utc": _row_ts(row, field="timestamp_utc"),
             "parameter_datatype_label": _dtype_text(row.get("parameter_datatype_label")),
         }
@@ -63,7 +63,7 @@ def profiler_datatype_rows(
         yield {
             "tail_id": str(row.get("tail_id", "")),
             "flight_id": str(row.get("flight_id", "")),
-            "sensor": str(row.get("sensor", "")),
+            "parameter_name": str(row.get("parameter_name", "")),
             "timestamp_utc": _row_ts(row, field="timestamp_utc"),
             "parameter_datatype_profiled": _dtype_text(row.get("parameter_datatype_profiled")),
         }
@@ -114,7 +114,7 @@ def stream_profiler_validation(
         yield {
             "tail_id": key[0],
             "flight_id": key[1],
-            "sensor": key[2],
+            "parameter_name": key[2],
             "timestamp_utc": key[3],
             "parameter_datatype_label": label_value,
             "parameter_datatype_profiled": profiled_value,
@@ -132,7 +132,7 @@ def stream_profiler_validation(
         yield {
             "tail_id": key[0],
             "flight_id": key[1],
-            "sensor": key[2],
+            "parameter_name": key[2],
             "timestamp_utc": key[3],
             "parameter_datatype_label": "",
             "parameter_datatype_profiled": str(profiled_by_key[key]),

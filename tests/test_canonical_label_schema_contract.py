@@ -6,7 +6,7 @@ import numpy as np
 
 from libs.events.detection import detect_events_from_pandas
 from libs.simulation import (
-    build_default_sensor_behavior,
+    build_default_parameter_behavior,
     build_fleet_manifest,
     build_tail_profiles,
     default_phase_definitions,
@@ -45,7 +45,7 @@ def _sample_hierarchy_spec() -> dict:
 
 def test_simulation_and_detector_outputs_use_canonical_columns():
     hierarchy_df = flatten_hierarchy_spec(_sample_hierarchy_spec())
-    behavior = build_default_sensor_behavior(hierarchy_df)
+    behavior = build_default_parameter_behavior(hierarchy_df)
     phases = default_phase_definitions()[:2]
     flight_setup = {
         "phase_sequence": [item["phase_name"] for item in phases],
@@ -64,7 +64,7 @@ def test_simulation_and_detector_outputs_use_canonical_columns():
 
     telemetry_df, _ = simulate_fleet_dataset(
         hierarchy_df=hierarchy_df,
-        sensor_behavior=behavior,
+        parameter_behavior=behavior,
         phase_definitions=phases,
         flight_setup=flight_setup,
         tail_profiles=tails,
@@ -118,6 +118,9 @@ def test_profiler_validator_schema_rejects_legacy_datatype_names():
 
 
 def test_active_v2_schema_contracts_expose_phase_and_score_tables():
+    assert "parameter_datatype_profile" in ACTIVE_V2_TABLES
+    assert "continuous_scaling_profile" in ACTIVE_V2_TABLES
+    assert "parameter_behavior_profile" in ACTIVE_V2_TABLES
     assert "phase_windows" in ACTIVE_V2_TABLES
     assert "phase_baselines" in ACTIVE_V2_TABLES
     assert "window_scores_raw" in ACTIVE_V2_TABLES
@@ -125,6 +128,15 @@ def test_active_v2_schema_contracts_expose_phase_and_score_tables():
     assert "anomaly_telemetry_attribution" in ACTIVE_V2_TABLES
     assert "anomaly_event_attribution" in ACTIVE_V2_TABLES
     assert "transition_graph" in ACTIVE_V2_TABLES
+
+    datatype_profile = set(ACTIVE_V2_TABLES["parameter_datatype_profile"])
+    assert {"parameter_name", "parameter_datatype_profiled", "sampling_rate_profiled_hz"}.issubset(datatype_profile)
+
+    scaling_profile = set(ACTIVE_V2_TABLES["continuous_scaling_profile"])
+    assert {"parameter_name", "scaling_center_median", "scaling_iqr"}.issubset(scaling_profile)
+
+    behavior_profile = set(ACTIVE_V2_TABLES["parameter_behavior_profile"])
+    assert {"parameter_name", "behavior_family_profiled", "behavior_profile_confidence"}.issubset(behavior_profile)
 
     phase_windows = set(ACTIVE_V2_TABLES["phase_windows"])
     assert {"tail_id", "flight_id", "win_id", "x_c", "s_w", "backbone_reconstruction_error"}.issubset(phase_windows)

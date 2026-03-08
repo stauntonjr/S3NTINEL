@@ -21,7 +21,10 @@ class TelemetryRow(TypedDict, total=False):
     parameter_name: str
     timestamp_utc: datetime
     parameter_value: str | None
+    # Observed telemetry value after generator-side noise/measurement effects.
     parameter_value_clean: str | float | int | None
+    # Generator-side clean value before noise/measurement effects. Intended for
+    # labels, simulation truth, and validation; not the primary downstream signal.
     parameter_datatype_label: str | None
     parameter_datatype_profiled: str | None
     date_utc: date
@@ -167,7 +170,7 @@ class WindowScoreRow(TypedDict, total=False):
 class DatatypeLabelRow(TypedDict):
     tail_id: str
     flight_id: str
-    sensor: str
+    parameter_name: str
     timestamp_utc: datetime
     parameter_datatype_label: str
 
@@ -175,7 +178,7 @@ class DatatypeLabelRow(TypedDict):
 class DatatypeProfiledRow(TypedDict):
     tail_id: str
     flight_id: str
-    sensor: str
+    parameter_name: str
     timestamp_utc: datetime
     parameter_datatype_profiled: str
 
@@ -194,7 +197,7 @@ class EventValidatorSnapshot(TypedDict):
 class ProfilerValidatorSnapshot(TypedDict):
     tail_id: str
     flight_id: str
-    sensor: str
+    parameter_name: str
     timestamp_utc: datetime
     parameter_datatype_label: str
     parameter_datatype_profiled: str
