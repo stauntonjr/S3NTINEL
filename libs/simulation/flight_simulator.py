@@ -10,7 +10,7 @@ import pandas as pd
 from libs.common import SensorDataType, normalize_sensor_datatype
 from libs.simulation.delay_engine import _resolve_delay_map_for_groups
 from libs.simulation.phase_engine import blend_modifiers, build_timeline, phase_state_for_t
-from libs.simulation.sensor_generation import generate_sensor_observation
+from libs.simulation.sensor_generation import generate_parameter_observation
 from libs.simulation.anomaly_generation import generate_anomalies_for_t
 from libs.common.event_types import EventType, TruthAnomalyType
 
@@ -18,13 +18,13 @@ from libs.common.event_types import EventType, TruthAnomalyType
 def iter_single_flight_row_events(
     *,
     hierarchy_df: pd.DataFrame,
-    sensor_behavior: dict[str, dict],
+    parameter_behavior: dict[str, dict],
     flight_setup: dict,
     phase_map: dict[str, dict],
     tail_profile: dict,
     flight_row: pd.Series,
-    sensors_in_order: list[str],
-    sensors_by_group: dict[str, list[str]],
+    parameter_names_in_order: list[str],
+    parameter_names_by_group: dict[str, list[str]],
     reported_unknown_delay_keys: set[str],
     warning_prefix: str,
     timestamp_mode: str,
@@ -37,7 +37,8 @@ def iter_single_flight_row_events(
         rng_local=rng_local,
     )
     total_sec = timeline[-1]["t_end"]
-    corr_groups = sorted({str(sensor_behavior[sensor]["corr_group"]) for sensor in hierarchy_df["sensor"].tolist()})
+    parameter_name_series = hierarchy_df["parameter_name"] if "parameter_name" in hierarchy_df.columns else hierarchy_df["sensor"]
+    corr_groups = sorted({str(parameter_behavior[parameter_name]["corr_group"]) for parameter_name in parameter_name_series.astype(str).tolist()})
 
     flight_noise_scale = float(np.clip(rng_local.normal(flight_setup["flight_noise_scale_mean"], flight_setup["flight_noise_scale_std"]), 0.75, 1.4))
     latent_ar1_phi = float(np.clip(flight_setup.get("latent_ar1_phi", 0.92), 0.0, 0.999))
@@ -78,24 +79,24 @@ def iter_single_flight_row_events(
         for group in corr_groups
     }
 
-    delay_steps_by_sensor: dict[str, int] = {}
+    delay_steps_by_parameter: dict[str, int] = {}
     if delay_mode == "random_pair":
         pair_rng = np.random.default_rng(int(flight_row["flight_seed"]) + seed_offset + 97)
-        for corr_group_name, sensor_names in sensors_by_group.items():
+        for corr_group_name, parameter_names in parameter_names_by_group.items():
             group_base_sec = float(delay_map_sec.get(corr_group_name, default_lag_sec))
-            for sensor_name in sensor_names:
+            for parameter_name in parameter_names:
                 if random_delay_max_sec > random_delay_min_sec:
                     extra_delay_sec = float(pair_rng.uniform(random_delay_min_sec, random_delay_max_sec))
                 else:
                     extra_delay_sec = float(random_delay_min_sec)
                 total_delay_sec = max(group_base_sec + extra_delay_sec, 0.0)
-                delay_steps_by_sensor[sensor_name] = max(int(round(total_delay_sec / sample_period_sec)), 0)
+                delay_steps_by_parameter[parameter_name] = max(int(round(total_delay_sec / sample_period_sec)), 0)
     else:
-        for sensor_name in sensors_in_order:
-            corr_group_name = str(sensor_behavior[sensor_name]["corr_group"])
-            delay_steps_by_sensor[sensor_name] = int(delay_steps_by_group.get(corr_group_name, 0))
+        for parameter_name in parameter_names_in_order:
+            corr_group_name = str(parameter_behavior[parameter_name]["corr_group"])
+            delay_steps_by_parameter[parameter_name] = int(delay_steps_by_group.get(corr_group_name, 0))
 
-    max_delay_steps = max(delay_steps_by_sensor.values(), default=0) + jitter_cap_steps
+    max_delay_steps = max(delay_steps_by_parameter.values(), default=0) + jitter_cap_steps
     innovation_scale = math.sqrt(max(1.0 - latent_ar1_phi**2, 1e-8))
 
     latent_state_by_group = {group: float(rng_local.normal(0.0, 1.0)) for group in corr_groups}
@@ -132,14 +133,14 @@ def iter_single_flight_row_events(
         phase_corr_scale = (1.0 - blend_alpha) * float(primary_segment["corr_scale"]) + blend_alpha * float(secondary_segment["corr_scale"])
         phase_noise_scale = (1.0 - blend_alpha) * float(primary_segment["noise_scale"]) + blend_alpha * float(secondary_segment["noise_scale"])
 
-        # Prepare any anomalies affecting this timestep; returns mapping sensor->modifier/event
+        # Prepare any anomalies affecting this timestep; returns mapping parameter_name->modifier/event
         anomalies_map = generate_anomalies_for_t(
             flight_setup=flight_setup,
             rng_local=rng_local,
             phase_name=phase_name,
             t=int(t),
-            sensors_in_order=sensors_in_order,
-            sensor_behavior=sensor_behavior,
+            parameter_names_in_order=parameter_names_in_order,
+            parameter_behavior=parameter_behavior,
         )
         # If anomalies were generated for this timestep, emit an anomaly record into the stream.
         if anomalies_map:
@@ -147,9 +148,9 @@ def iter_single_flight_row_events(
             # pick anomaly type and aggregate score
             anomaly_type = None
             scores = []
-            per_sensor = {}
-            for s, info in anomalies_map.items():
-                per_sensor[s] = {
+            per_parameter = {}
+            for parameter_name, info in anomalies_map.items():
+                per_parameter[parameter_name] = {
                     "modifier": info.get("modifier"),
                     "event_type_label": info.get("event_type_label"),
                     "anomaly_score_label": float(info.get("anomaly_score_label", 0.0)),
@@ -162,23 +163,23 @@ def iter_single_flight_row_events(
                 "tail_id": str(tail_profile["tail_id"]),
                 "flight_id": str(flight_row["flight_id"]),
                 "timestamp_utc": ts_out,
-                "sensors": affected,
+                "parameter_names": affected,
                 "anomaly_type_label": str(anomaly_type) if anomaly_type is not None else None,
                 "anomaly_score_label": float(max(scores)) if scores else 0.0,
-                "payload": per_sensor,
+                "payload": per_parameter,
                 "date_utc": ts.date().isoformat(),
             }
             yield ("anomaly", anomaly_record)
 
         for row in hierarchy_df.itertuples(index=False):
-            sensor = str(row.sensor)
+            parameter_name = str(getattr(row, "parameter_name", getattr(row, "sensor")))
             system_id = str(row.system_id)
             subsystem_id = str(row.subsystem_id)
             module_id = str(row.module_id)
             datatype = normalize_sensor_datatype(getattr(row, "parameter_datatype", SensorDataType.UNKNOWN.value))
-            spec = sensor_behavior[sensor]
+            spec = parameter_behavior[parameter_name]
             corr_group_name = str(spec["corr_group"])
-            delay_steps = int(delay_steps_by_sensor.get(sensor, 0))
+            delay_steps = int(delay_steps_by_parameter.get(parameter_name, 0))
             if jitter_steps_std > 0:
                 jitter_steps = int(round(float(rng_local.normal(0.0, jitter_steps_std))))
                 jitter_steps = int(np.clip(jitter_steps, -jitter_cap_steps, jitter_cap_steps))
@@ -196,22 +197,22 @@ def iter_single_flight_row_events(
                 latent = float(group_history[0]) if group_history else float(latest_latent)
 
             modifier = blend_modifiers(
-                primary_segment["modifiers"].get(sensor, {}),
-                secondary_segment["modifiers"].get(sensor, {}),
+                primary_segment["modifiers"].get(parameter_name, {}),
+                secondary_segment["modifiers"].get(parameter_name, {}),
                 blend_alpha,
             )
 
-            # apply per-sensor anomaly modifiers when present (anomaly generator may have prepared them)
-            sensor_anom = anomalies_map.get(sensor, {})
-            mod_for_sensor = dict(modifier)
-            if isinstance(sensor_anom.get("modifier"), dict):
-                mod_for_sensor.update(sensor_anom.get("modifier", {}))
+            # apply per-parameter anomaly modifiers when present
+            parameter_anomaly = anomalies_map.get(parameter_name, {})
+            parameter_modifier = dict(modifier)
+            if isinstance(parameter_anomaly.get("modifier"), dict):
+                parameter_modifier.update(parameter_anomaly.get("modifier", {}))
 
-            obs = generate_sensor_observation(
+            obs = generate_parameter_observation(
                 datatype=datatype,
-                sensor=sensor,
+                parameter_name=parameter_name,
                 spec=spec,
-                modifier=mod_for_sensor,
+                modifier=parameter_modifier,
                 latent=float(latent),
                 phase_name=phase_name,
                 t=int(t),
@@ -225,10 +226,10 @@ def iter_single_flight_row_events(
                 categorical_state_cache=categorical_state_cache,
             )
 
-            # Attach per-sensor event label if anomaly generator marked this sensor.
+            # Attach per-parameter event label if anomaly generator marked this parameter.
             event_label_type = None
-            if sensor in anomalies_map:
-                event_label_type = anomalies_map[sensor].get("event_type_label")
+            if parameter_name in anomalies_map:
+                event_label_type = anomalies_map[parameter_name].get("event_type_label")
 
             yield (
                 "telemetry",
@@ -239,17 +240,17 @@ def iter_single_flight_row_events(
                     "system_id": system_id,
                     "subsystem_id": subsystem_id,
                     "module_id": module_id,
-                    "sensor": sensor,
-                    "parameter_name": sensor,
+                    "sensor": parameter_name,
+                    "parameter_name": parameter_name,
                     "parameter_datatype": datatype,
                     "parameter_value": str(obs.get("parameter_value")),
                     "parameter_value_clean": str(obs.get("parameter_value_clean")) if obs.get("parameter_value_clean") is not None else None,
                     "phase_id_detected": int(phase_id),
                     "phase_name": phase_name,
                     "anomaly_type_label": (
-                        str(sensor_anom.get("anomaly_type_label")) if sensor_anom.get("anomaly_type_label") is not None else TruthAnomalyType.NONE
+                        str(parameter_anomaly.get("anomaly_type_label")) if parameter_anomaly.get("anomaly_type_label") is not None else TruthAnomalyType.NONE
                     ),
-                    "anomaly_score_label": float(sensor_anom.get("anomaly_score_label", 0.0)),
+                    "anomaly_score_label": float(parameter_anomaly.get("anomaly_score_label", 0.0)),
                     "event_type_label": str(event_label_type) if event_label_type is not None else None,
                     "date_utc": ts.date().isoformat(),
                 },
@@ -277,13 +278,13 @@ def iter_single_flight_row_events(
 def simulate_single_flight_rows(
     *,
     hierarchy_df: pd.DataFrame,
-    sensor_behavior: dict[str, dict],
+    parameter_behavior: dict[str, dict],
     flight_setup: dict,
     phase_map: dict[str, dict],
     tail_profile: dict,
     flight_row: pd.Series,
-    sensors_in_order: list[str],
-    sensors_by_group: dict[str, list[str]],
+    parameter_names_in_order: list[str],
+    parameter_names_by_group: dict[str, list[str]],
     reported_unknown_delay_keys: set[str],
     warning_prefix: str,
     timestamp_mode: str,
@@ -293,13 +294,13 @@ def simulate_single_flight_rows(
 
     for row_type, row in iter_single_flight_row_events(
         hierarchy_df=hierarchy_df,
-        sensor_behavior=sensor_behavior,
+        parameter_behavior=parameter_behavior,
         flight_setup=flight_setup,
         phase_map=phase_map,
         tail_profile=tail_profile,
         flight_row=flight_row,
-        sensors_in_order=sensors_in_order,
-        sensors_by_group=sensors_by_group,
+        parameter_names_in_order=parameter_names_in_order,
+        parameter_names_by_group=parameter_names_by_group,
         reported_unknown_delay_keys=reported_unknown_delay_keys,
         warning_prefix=warning_prefix,
         timestamp_mode=timestamp_mode,

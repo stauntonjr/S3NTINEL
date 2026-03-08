@@ -1,11 +1,12 @@
-"""Generate a single sensor observation (no anomaly labeling).
+"""Generate a single parameter observation (no anomaly labeling).
 
 Returns a dict with keys:
-- parameter_value: str (possibly formatted numeric)
-- parameter_value_clean: str | None (pre-noise string; for categorical equals parameter_value)
+- parameter_value: str (observed downstream signal, after generator-side noise/effects)
+- parameter_value_clean: str | None (generator clean value before noise/effects)
 
-Detectors are responsible for parsing `parameter_value`/`parameter_value_clean`
-according to `parameter_datatype`.
+Downstream profilers, detectors, and structure builders should consume
+`parameter_value` as the observed signal. `parameter_value_clean` is retained for
+simulation labels, truth-oriented validation, and debug.
 """
 from __future__ import annotations
 
@@ -18,10 +19,10 @@ from libs.common import SensorDataType
 from libs.simulation.phase_engine import state_from_probs
 
 
-def generate_sensor_observation(
+def generate_parameter_observation(
     *,
     datatype: str,
-    sensor: str,
+    parameter_name: str,
     spec: dict,
     modifier: dict,
     latent: float,
@@ -73,7 +74,7 @@ def generate_sensor_observation(
         p_on = p_on + 0.08 * float(spec.get("latent_gain", 0.8)) * float(np.tanh(latent))
         p_on = float(np.clip(p_on, 0.01, 0.99))
         persistence = float(np.clip(spec.get("persistence", 0.985), 0.0, 0.9999))
-        prev_state = binary_state_cache.get(sensor)
+        prev_state = binary_state_cache.get(parameter_name)
         if prev_state is None:
             state = "1" if rng_local.random() < p_on else "0"
         elif prev_state == "1":
@@ -82,7 +83,7 @@ def generate_sensor_observation(
         else:
             p_turn_on = (1.0 - persistence) * p_on
             state = "1" if rng_local.random() < p_turn_on else "0"
-        binary_state_cache[sensor] = state
+        binary_state_cache[parameter_name] = state
         parameter_value = str(state)
         parameter_value_clean = str(state)
 
@@ -96,12 +97,12 @@ def generate_sensor_observation(
             probs[1] = max(0.01, probs[1] + 0.04 * np.tanh(latent))
         probs = probs / probs.sum()
         persistence = float(np.clip(spec.get("persistence", 0.97), 0.0, 0.999))
-        prev_state = categorical_state_cache.get(sensor)
+        prev_state = categorical_state_cache.get(parameter_name)
         if prev_state in states and rng_local.random() < persistence:
             state = str(prev_state)
         else:
             state = state_from_probs(states, probs.tolist(), rng_local)
-        categorical_state_cache[sensor] = state
+        categorical_state_cache[parameter_name] = state
         parameter_value = str(state)
         parameter_value_clean = str(state)
 

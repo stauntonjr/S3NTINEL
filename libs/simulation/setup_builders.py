@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from libs.common import SensorDataType, normalize_sensor_datatype
+from libs.simulation.behavior_defaults import build_default_parameter_behavior
 
 
 def flatten_hierarchy_spec(hierarchy_spec: dict) -> pd.DataFrame:
@@ -15,20 +16,32 @@ def flatten_hierarchy_spec(hierarchy_spec: dict) -> pd.DataFrame:
         for subsystem_id, subsystem_obj in system_obj.get("subsystems", {}).items():
             for module_id, module_sensors in subsystem_obj.get("modules", {}).items():
                 for sensor_obj in module_sensors:
+                    parameter_name = str(sensor_obj.get("parameter_name") or sensor_obj.get("sensor", ""))
                     rows.append(
                         {
                             "system_id": str(system_id),
                             "subsystem_id": str(subsystem_id),
                             "module_id": str(module_id),
-                            "sensor": str(sensor_obj.get("sensor", "")),
+                            "sensor": parameter_name,
+                            "parameter_name": parameter_name,
                             "parameter_datatype": normalize_sensor_datatype(sensor_obj.get("datatype", SensorDataType.UNKNOWN.value)),
                             "unit": str(sensor_obj.get("unit", "")),
                         }
                     )
     hierarchy_df = pd.DataFrame(rows)
     if hierarchy_df.empty:
-        return pd.DataFrame(columns=["system_id", "subsystem_id", "module_id", "sensor", "parameter_datatype", "unit"])
-    return hierarchy_df.sort_values(["system_id", "subsystem_id", "module_id", "sensor"]).reset_index(drop=True)
+        return pd.DataFrame(
+            columns=[
+                "system_id",
+                "subsystem_id",
+                "module_id",
+                "sensor",
+                "parameter_name",
+                "parameter_datatype",
+                "unit",
+            ]
+        )
+    return hierarchy_df.sort_values(["system_id", "subsystem_id", "module_id", "parameter_name"]).reset_index(drop=True)
 
 
 def build_mermaid_hierarchy(hierarchy_df: pd.DataFrame, max_sensors: int = 200) -> str:
@@ -47,147 +60,26 @@ def build_mermaid_hierarchy(hierarchy_df: pd.DataFrame, max_sensors: int = 200) 
         system_id = str(row["system_id"])
         subsystem_id = str(row["subsystem_id"])
         module_id = str(row["module_id"])
-        sensor = str(row["sensor"])
+        parameter_name = str(row.get("parameter_name", row["sensor"]))
         dtype = str(row.get("parameter_datatype", "unknown"))
 
         sys_node = safe_node_id("SYS", system_id)
         sub_node = safe_node_id("SUB", f"{system_id}_{subsystem_id}")
         mod_node = safe_node_id("MOD", f"{system_id}_{subsystem_id}_{module_id}")
-        sen_node = safe_node_id("SEN", sensor)
+        parameter_node = safe_node_id("SEN", parameter_name)
 
         node_lines.add(f"  {sys_node}[\"{system_id}\"]")
         node_lines.add(f"  {sub_node}[\"{subsystem_id}\"]")
         node_lines.add(f"  {mod_node}[\"{module_id}\"]")
-        node_lines.add(f"  {sen_node}[\"{sensor} ({dtype})\"]")
+        node_lines.add(f"  {parameter_node}[\"{parameter_name} ({dtype})\"]")
 
         edge_lines.add(f"  GLOBAL --> {sys_node}")
         edge_lines.add(f"  {sys_node} --> {sub_node}")
         edge_lines.add(f"  {sub_node} --> {mod_node}")
-        edge_lines.add(f"  {mod_node} --> {sen_node}")
+        edge_lines.add(f"  {mod_node} --> {parameter_node}")
 
     lines = ["flowchart TD"] + sorted(node_lines) + sorted(edge_lines)
     return "\n".join(lines)
-
-
-def build_default_sensor_behavior(hierarchy_df: pd.DataFrame) -> dict[str, dict]:
-    behavior_defaults = {
-        SensorDataType.NUMERIC.value: {
-            "trend_per_sec": 0.0,
-            "osc_amp": 0.5,
-            "osc_period_sec": 120.0,
-            "noise_sigma": 0.1,
-            "corr_scale": 0.4,
-            "min_val": None,
-            "max_val": None,
-        },
-        SensorDataType.BINARY.value: {
-            "base_on_prob": 0.5,
-            "latent_gain": 0.9,
-            "persistence": 0.985,
-        },
-        SensorDataType.CATEGORICAL.value: {
-            "states": ["STATE_A", "STATE_B", "STATE_C"],
-            "latent_gain": 0.6,
-            "persistence": 0.97,
-        },
-        SensorDataType.HIGH_CARDINALITY.value: {
-            "base_prob": 0.01,
-            "codes": [f"PFAULT_{i:03d}" for i in range(1, 40)],
-        },
-    }
-
-    behavior: dict[str, dict] = {}
-    for row in hierarchy_df.to_dict("records"):
-        sensor = str(row["sensor"])
-        dtype = normalize_sensor_datatype(row.get("parameter_datatype", SensorDataType.UNKNOWN.value))
-        system_id = str(row["system_id"])
-        subsystem_id = str(row["subsystem_id"])
-        corr_group = f"{system_id}::{subsystem_id}"
-
-        if dtype == SensorDataType.NUMERIC.value:
-            baseline = {
-                "elev_pos_l": 0.0,
-                "elev_pos_r": 0.0,
-                "ail_l_pos": 0.0,
-                "ail_r_pos": 0.0,
-                "rudder_pos": 0.0,
-                "ap_pitch_cmd": 0.0,
-                "fd_pitch_bar": 0.0,
-                "fd_roll_bar": 0.0,
-                "alpha_margin": 0.45,
-                "gen_l_freq": 400.0,
-                "gen_r_freq": 400.0,
-                "gen_l_voltage": 115.0,
-                "gen_r_voltage": 115.0,
-                "apu_gen_load": 0.0,
-                "ac_bus_a_load": 48.0,
-                "ac_bus_b_load": 52.0,
-                "dc_bus_v": 28.0,
-                "dc_bus_i": 220.0,
-                "bat_temp": 29.0,
-                "pack_l_temp_out": 12.0,
-                "pack_r_temp_out": 12.5,
-                "pack_l_flow": 1.6,
-                "pack_r_flow": 1.5,
-                "outflow_cmd": 35.0,
-                "outflow_pos": 34.0,
-                "cabin_alt": 800.0,
-                "cabin_rate": 0.0,
-            }.get(sensor, 1.0)
-            clip = {
-                "alpha_margin": (0.05, 1.5),
-                "ac_bus_a_load": (0.0, 140.0),
-                "ac_bus_b_load": (0.0, 140.0),
-                "outflow_cmd": (0.0, 100.0),
-                "outflow_pos": (0.0, 100.0),
-                "cabin_alt": (0.0, 12000.0),
-                "pack_l_flow": (0.0, 4.0),
-                "pack_r_flow": (0.0, 4.0),
-            }.get(sensor, (None, None))
-            behavior[sensor] = {
-                "datatype": SensorDataType.NUMERIC.value,
-                "baseline": float(baseline),
-                "corr_group": corr_group,
-                "trend_per_sec": behavior_defaults[SensorDataType.NUMERIC.value]["trend_per_sec"],
-                "osc_amp": 0.25 if "bus" in sensor else behavior_defaults[SensorDataType.NUMERIC.value]["osc_amp"],
-                "osc_period_sec": 90.0 if "pack" in sensor else behavior_defaults[SensorDataType.NUMERIC.value]["osc_period_sec"],
-                "noise_sigma": 0.15 if "cabin" in sensor else behavior_defaults[SensorDataType.NUMERIC.value]["noise_sigma"],
-                "corr_scale": behavior_defaults[SensorDataType.NUMERIC.value]["corr_scale"],
-                "min_val": clip[0],
-                "max_val": clip[1],
-            }
-        elif dtype == SensorDataType.BINARY.value:
-            behavior[sensor] = {
-                "datatype": SensorDataType.BINARY.value,
-                "corr_group": corr_group,
-                "base_on_prob": 0.15 if "apu" in sensor else 0.7,
-                "latent_gain": behavior_defaults[SensorDataType.BINARY.value]["latent_gain"],
-                "persistence": behavior_defaults[SensorDataType.BINARY.value]["persistence"],
-                "states": ["0", "1"],
-            }
-        elif dtype == SensorDataType.CATEGORICAL.value:
-            states = {
-                "yaw_damper_mode": ["OFF", "STBY", "ON"],
-                "bat_contact_state": ["OPEN", "TRANSIENT", "CLOSED"],
-                "press_mode": ["AUTO", "ALTN", "MANUAL"],
-            }.get(sensor, behavior_defaults[SensorDataType.CATEGORICAL.value]["states"])
-            behavior[sensor] = {
-                "datatype": SensorDataType.CATEGORICAL.value,
-                "corr_group": corr_group,
-                "states": states,
-                "base_probs": [0.65, 0.25, 0.10][: len(states)] if len(states) == 3 else None,
-                "latent_gain": behavior_defaults[SensorDataType.CATEGORICAL.value]["latent_gain"],
-                "persistence": behavior_defaults[SensorDataType.CATEGORICAL.value]["persistence"],
-            }
-        else:
-            behavior[sensor] = {
-                "datatype": SensorDataType.HIGH_CARDINALITY.value,
-                "corr_group": corr_group,
-                "base_prob": behavior_defaults[SensorDataType.HIGH_CARDINALITY.value]["base_prob"],
-                "codes": behavior_defaults[SensorDataType.HIGH_CARDINALITY.value]["codes"],
-            }
-    return behavior
-
 
 def default_phase_definitions() -> list[dict]:
     return [

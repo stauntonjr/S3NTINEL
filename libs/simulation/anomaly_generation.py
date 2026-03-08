@@ -1,8 +1,8 @@
-"""Generate multi-sensor anomaly descriptors and per-sensor modifiers.
+"""Generate multi-parameter anomaly descriptors and per-parameter modifiers.
 
 This module produces anomaly directives (modifiers + event labels) that the
 `flight_simulator` can apply when emitting telemetry. It does NOT emit
-telemetry itself; it returns per-sensor modifier/event mappings.
+telemetry itself; it returns per-parameter modifier/event mappings.
 """
 from __future__ import annotations
 
@@ -20,14 +20,14 @@ def generate_anomalies_for_t(
     rng_local: np.random.Generator,
     phase_name: str,
     t: int,
-    sensors_in_order: list[str],
-    sensor_behavior: dict[str, dict],
+    parameter_names_in_order: list[str],
+    parameter_behavior: dict[str, dict],
 ) -> dict[str, dict[str, Any]]:
-    """Return mapping sensor -> label metadata for sensors affected by anomalies at time t.
+    """Return mapping parameter_name -> label metadata for parameters affected by anomalies at time t.
 
     Simple policy: if the current phase is in burst_phases and a random draw
     triggers a burst, select a subset of primary_targets and assign each a
-    shock drawn from a normal distribution scaled by the sensor noise.
+    shock drawn from a normal distribution scaled by the parameter noise.
     """
     out: dict[str, dict[str, Any]] = {}
     anomaly_plan = flight_setup.get("anomaly_plan", {}) or {}
@@ -45,22 +45,22 @@ def generate_anomalies_for_t(
 
     primary = list(anomaly_plan.get("primary_targets", []))
     if not primary:
-        # fallback: use a small random subset of all sensors
-        primary = list(sensors_in_order)
+        # fallback: use a small random subset of all parameters
+        primary = list(parameter_names_in_order)
 
     # choose how many sensors to affect: at least 1 up to min(len(primary), 4)
     k = int(max(1, min(len(primary), int(round(rng_local.exponential(1.0)) + 1))))
     chosen = list(rng_local.choice(primary, size=min(k, len(primary)), replace=False))
 
-    for sensor in chosen:
-        spec = sensor_behavior.get(sensor, {})
+    for parameter_name in chosen:
+        spec = parameter_behavior.get(parameter_name, {})
         noise_sigma = float(spec.get("noise_sigma", 1.0))
         # scale shock by noise; follow prior behavior (mean ~4*noise_sigma)
         shock = float(rng_local.normal(4.0 * max(noise_sigma, 0.1), 1.5 * max(noise_sigma, 0.1)))
         score = abs(shock)
         # Use 'add' modifier to nudge the observation generation
         modifier = {"add": shock}
-        out[sensor] = {
+        out[parameter_name] = {
             "modifier": modifier,
             "event_type_label": EventType.THRESHOLD,
             "anomaly_type_label": TruthAnomalyType.BURST_NUMERIC_SHIFT,
