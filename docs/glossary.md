@@ -41,6 +41,21 @@ Canonical field:
 Deprecated/internal fallback only:
 - `sensor`
 
+### parameter value
+
+The observed telemetry value passed downstream to profilers, detectors, `window_x`,
+backbone fitting, phase fitting, and scoring.
+
+Canonical field:
+- `parameter_value`
+
+### clean parameter value
+
+The simulator-side clean value before observation noise and measurement effects.
+
+Canonical field:
+- `parameter_value_clean`
+
 ### timestamp
 
 A UTC timestamp associated with a telemetry sample, event, or attributed record.
@@ -142,6 +157,14 @@ If carried as label/profiled fields, use:
 
 These are preferred over unlabeled generic `sampling_rate_hz` in persisted interfaces.
 
+### datatype profile artifact
+
+The one-off fitted parameter metadata artifact that establishes datatype and observed
+rate semantics before structural fitting.
+
+Recommended artifact name:
+- `parameter_datatype_profile`
+
 ## 4. Behavior taxonomy
 
 ### behavior label
@@ -167,6 +190,14 @@ Optional future companion fields:
 - `inertial_score_profiled`
 - `accumulative_score_profiled`
 - `discrete_state_score_profiled`
+
+### behavior profile artifact
+
+The one-off fitted parameter metadata artifact that establishes nominal behavior
+family semantics before structural fitting and inference.
+
+Recommended artifact name:
+- `parameter_behavior_profile`
 
 ## 5. Misbehavior taxonomy
 
@@ -226,6 +257,18 @@ Concrete persisted field inside window-like artifacts.
 
 Canonical field:
 - `continuous_vector_t_end_scaled`
+
+### continuous scaling profile
+
+The reusable robust-scaling metadata artifact for continuous parameters.
+
+Recommended artifact name:
+- `continuous_scaling_profile`
+
+Expected fields:
+- `parameter_name`
+- `scaling_center_median`
+- `scaling_iqr`
 
 ## 7. Backbone taxonomy
 

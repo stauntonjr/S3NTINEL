@@ -4,6 +4,9 @@ This document tracks the mathematical and statistical ideas used in the active S
 
 The purpose is not to perform ritual citation. It is to keep the code honest. If an edge weight, score, or artifact has a mathematical interpretation, that interpretation should be written down here and tied to the implementation.
 
+For the intended sequential fitting workflow that should produce datatype, scaling,
+and behavior metadata before structural fitting, see [fitting_workflow.md](/home/jrs/code/S3NTINEL/sentinel/docs/fitting_workflow.md).
+
 ## Scope
 
 This document covers the active path:
@@ -44,6 +47,13 @@ This is preferable to mean/std in early heterogeneous telemetry settings because
 - many channels are non-Gaussian
 - a few excursions should not define the coordinate system
 
+The fitting workflow should persist these scaling statistics as a reusable artifact:
+
+- `continuous_scaling_profile`
+
+This keeps robust scaling from being an implicit side effect scattered across later
+stages.
+
 ### Code
 
 - [representations.py](/home/jrs/code/S3NTINEL/sentinel/libs/windows/representations.py)
@@ -64,6 +74,14 @@ This is the coordinate system used for:
 - drift magnitude
 - backbone fitting
 - reconstruction residuals
+
+The input signal for these calculations is the observed:
+
+- `parameter_value`
+
+not the clean simulator-side:
+
+- `parameter_value_clean`
 
 ## 2. Provisional Window Vector `window_x`
 
@@ -305,6 +323,7 @@ Its virtue is interpretability:
 
 - [pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/graph/pipeline.py)
   - `_fuse_graphs(...)`
+  - `build_fused_graph_spark_table(...)`
   - `build_graph_fusion_from_tables(...)`
   - `build_graph_fusion_from_component_tables(...)`
 
@@ -331,10 +350,24 @@ Step 5:
 
 This is not spectral clustering or modularity maximization. It is a baseline graph rollup with explicit local-support constraints.
 
+### Current Spark boundary
+
+In the active graph-fit stage:
+
+- `precision_graph` is built from Spark-aggregated covariance statistics
+- `event_graph`, `lag_graph`, and `transition_graph` are built in Spark
+- `fused_graph` is built in Spark from those component tables
+- only the already-pruned fused edge set and the parameter universe are brought to
+  the driver for the final connected-components hierarchy assignment
+
+So the remaining driver-side work is the hierarchy clustering itself, not graph
+construction or fusion.
+
 ### Code
 
 - [pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/graph/pipeline.py)
   - `_assign_hierarchy(...)`
+  - `build_hierarchy_from_fused_spark_table(...)`
 - [hierarchy.py](/home/jrs/code/S3NTINEL/sentinel/libs/graph/hierarchy.py)
   - `_connected_components_from_edges(...)`
   - `assign_hierarchy_from_weighted_edges(...)`

@@ -22,6 +22,7 @@ Incremental patches:
   - `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format parquet --min-warm 1`
   - this runs the active V2 stage sequence:
     - `00_ingest_raw.py`
+    - `05_parameter_profiles_fit.py`
     - `10_backbone_fit.py`
     - `11_graph_fit.py`
     - `20_events_extract.py`
@@ -50,6 +51,7 @@ Fitting:
 - `python -m pipelines.91_run_fitting_pipeline`
 - stages:
   - `00_ingest_raw.py`
+  - `05_parameter_profiles_fit.py`
   - `10_backbone_fit.py`
   - `11_graph_fit.py`
 
@@ -82,6 +84,29 @@ Optional row controls:
 
 - Run the simulation/event-detection evaluation harness:
   - `python -m scripts.run_sim_detection_eval --output-json reports/eda/sim_detection_eval_report.json`
+- Run a native subsystem slice directly into the fitting-stage profiling artifacts:
+  - `python -m scripts.profile_native_subsystem_slice --slice-name power_chain`
+  - this simulates a native slice, normalizes it to canonical `raw_telemetry`, and builds:
+    - `parameter_datatype_profile`
+    - `continuous_scaling_profile`
+    - `parameter_behavior_profile`
+- Run a native subsystem slice directly through canonical event extraction:
+  - `python -m scripts.detect_events_on_native_subsystem_slice --slice-name power_chain`
+  - this simulates a native slice, normalizes it to canonical `raw_telemetry`, and emits canonical event rows through the same builder used by `20_events_extract.py`
+- Run a native subsystem slice through canonical windows and `window_x`:
+  - `python -m scripts.build_window_x_on_native_subsystem_slice --slice-name power_chain`
+  - this simulates a native slice, normalizes it to canonical `raw_telemetry`, emits canonical windows through the same builder used by `30_windows_adaptive.py`, and then builds canonical `window_x`
+- Run a native subsystem slice through backbone and graph artifact fitting:
+  - `python -m scripts.fit_structural_artifacts_on_native_subsystem_slice --slice-name power_chain`
+  - this simulates a native slice, normalizes it to canonical `raw_telemetry`, builds canonical events/windows/`window_x`, then fits:
+    - `backbone`
+    - `backbone_sensor_energy`
+    - `precision_graph`
+    - `event_graph`
+    - `lag_graph`
+    - `transition_graph`
+    - `fused_graph`
+    - `hierarchy_sensor_map`
 
 ## Notes
 

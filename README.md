@@ -10,7 +10,8 @@ Use [glossary.md](/home/jrs/code/S3NTINEL/sentinel/docs/glossary.md) for the act
 Use [avionics_simulation_guidelines.md](/home/jrs/code/S3NTINEL/sentinel/docs/avionics_simulation_guidelines.md) for domain guidance on avionics-system behavior, coupling, and simulation inputs.
 Use [artifact_replay_design.md](/home/jrs/code/S3NTINEL/sentinel/docs/artifact_replay_design.md) for artifact persistence, replay, cache, and MLflow lineage design.
 Use [simulation_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/simulation_architecture.md) for the proposed next simulation architecture and extensibility model.
-Use [behavior_profiling_design.md](/home/jrs/code/S3NTINEL/sentinel/docs/behavior_profiling_design.md) for the planned mirror of simulation behavior semantics in telemetry profiling.
+Use [behavior_profiling_design.md](/home/jrs/code/S3NTINEL/sentinel/docs/behavior_profiling_design.md) for the behavior-profile artifact and the mirrored profiling design for simulation behavior semantics.
+Use [fitting_workflow.md](/home/jrs/code/S3NTINEL/sentinel/docs/fitting_workflow.md) for the intended one-off fitting sequence for datatype profiling, robust scaling, behavior profiling, and backbone fitting.
 Use [behavior_family_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/behavior_family_architecture.md) and [behavior_family_skeletons.md](/home/jrs/code/S3NTINEL/sentinel/docs/behavior_family_skeletons.md) for the per-family file/class layout.
 Use [misbehavior_taxonomy.md](/home/jrs/code/S3NTINEL/sentinel/docs/misbehavior_taxonomy.md) for the planned structured deviation/anomaly ontology.
 Use [anomaly_injection_and_backbone_validation.md](/home/jrs/code/S3NTINEL/sentinel/docs/anomaly_injection_and_backbone_validation.md) for anomaly-injection design and backbone-fit validation guidance.
@@ -18,8 +19,9 @@ Use [anomaly_injection_and_backbone_validation.md](/home/jrs/code/S3NTINEL/senti
 ### Active fitting path
 
 1. `pipelines/00_ingest_raw.py`
-2. `pipelines/10_backbone_fit.py`
-3. `pipelines/11_graph_fit.py`
+2. `pipelines/05_parameter_profiles_fit.py`
+3. `pipelines/10_backbone_fit.py`
+4. `pipelines/11_graph_fit.py`
 
 Run with:
 
@@ -52,6 +54,8 @@ Run with:
 - `transition_graph`
 - `fused_graph`
 - `hierarchy_sensor_map`
+  - graph components and `fused_graph` are now built in Spark; only the final
+    hierarchy assignment remains driver-side on the pruned fused edge set
 
 ## Repo layout
 
@@ -66,7 +70,8 @@ Run with:
 - `docs/avionics_simulation_guidelines.md`: domain guidance for realistic avionics simulation inputs and couplings.
 - `docs/artifact_replay_design.md`: replayable stage artifacts, manifests, caches, and MLflow lineage policy.
 - `docs/simulation_architecture.md`: proposed simulation architecture for an open-ended hierarchy.
-- `docs/behavior_profiling_design.md`: proposed mirrored behavior profiling layer for real telemetry.
+- `docs/behavior_profiling_design.md`: behavior-profile artifact and mirrored behavior-profiling design for real telemetry.
+- `docs/fitting_workflow.md`: intended one-off fitting workflow for datatype, scaling, behavior, and backbone artifacts.
 - `docs/behavior_family_architecture.md`: proposed per-family package/file/class layout.
 - `docs/behavior_family_skeletons.md`: concrete family skeletons for `regulated` and `inertial`.
 - `docs/misbehavior_taxonomy.md`: planned structured misbehavior ontology and pipeline mapping.
@@ -76,14 +81,15 @@ Run with:
 ## Pipeline order
 
 1. `pipelines/00_ingest_raw.py`
-2. `pipelines/10_backbone_fit.py`
-3. `pipelines/11_graph_fit.py`
-4. `pipelines/20_events_extract.py`
-5. `pipelines/30_windows_adaptive.py`
-6. `pipelines/50_phase_fit.py`
-7. `pipelines/60_window_scores_raw.py`
-8. `pipelines/70_window_scores_calibrate.py`
-9. `pipelines/80_anomaly_attribution.py`
+2. `pipelines/05_parameter_profiles_fit.py`
+3. `pipelines/10_backbone_fit.py`
+4. `pipelines/11_graph_fit.py`
+5. `pipelines/20_events_extract.py`
+6. `pipelines/30_windows_adaptive.py`
+7. `pipelines/50_phase_fit.py`
+8. `pipelines/60_window_scores_raw.py`
+9. `pipelines/70_window_scores_calibrate.py`
+10. `pipelines/80_anomaly_attribution.py`
 
 ## Quick start
 
@@ -97,6 +103,7 @@ Run with:
 - Run fitting: `python -m pipelines.91_run_fitting_pipeline`
 - Run inference: `python -m pipelines.92_run_inference_pipeline`
 - Run unit tests: `pytest`
+- Run parameter profile fitting stage directly: `python -m pipelines.05_parameter_profiles_fit`
 - Run V2 backbone fitting stage directly: `python -m pipelines.10_backbone_fit`
 - Run V2 graph fitting stage directly: `python -m pipelines.11_graph_fit`
 - Run full pipeline under one parent MLflow run: `python -m pipelines.90_run_full_pipeline`
@@ -112,7 +119,7 @@ Run with:
 	- `S3NTINEL_SPARK_EXTRA_JARS=/abs/path/to/extra.jar[,more.jar]`
 	- `S3NTINEL_DELTA_ALLOW_MAVEN=false` to disable Maven fallback when you want local jars only
 - Generate deterministic sample test data: `python -m scripts.generate_sample_data --base-dir data --mode overwrite`
-- Run end-to-end smoke test (00->80): `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format parquet --min-warm 1`
+- Run end-to-end smoke test (00->80, including `05_parameter_profiles_fit`): `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format parquet --min-warm 1`
 - Smoke test now seeds a deterministic `sensor_subsystem_map` and asserts emitted anomaly quality gates: non-empty output, no duplicate `(tail_id, flight_id, win_id)`, at least one non-null `panel_context`, and at least one populated `subsystems[].top_sensors`.
 - For stage-80 merge idempotence validation in smoke: `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format delta --min-warm 1 --write-mode merge`
 - Merge smoke checks require a Spark runtime with Delta JVM classes available.

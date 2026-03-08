@@ -61,6 +61,20 @@ A compact metadata object describing:
 
 ## 3. Artifact classes by stage
 
+## 3.0 Parameter metadata fitting
+
+These artifacts should be treated as replayable metadata inputs to later structural
+stages.
+
+### canonical outputs
+
+- `parameter_datatype_profile`
+- `continuous_scaling_profile`
+- `parameter_behavior_profile`
+
+These are the parameter-level artifacts that should normally be fit once from
+observed telemetry and reused during backbone, graph, phase, and inference work.
+
 ## 3.1 `10_backbone_fit`
 
 ### canonical outputs
@@ -91,6 +105,13 @@ This cache is what makes backbone-size or ridge sweeps cheap without rebuilding
 - `fused_graph`
 - `hierarchy_sensor_map`
 
+In the active implementation:
+
+- `precision_graph`, `event_graph`, `lag_graph`, `transition_graph`, and
+  `fused_graph` are built in Spark
+- `hierarchy_sensor_map` is derived from the already-pruned fused edge set on the
+  driver
+
 ### optional replay cache
 
 - `graph_component_cache`
@@ -102,6 +123,12 @@ This cache is what makes backbone-size or ridge sweeps cheap without rebuilding
   - `hierarchy_labels` when available in simulation/evaluation mode
 
 This is the cache needed for cheap hierarchy-only sweeps.
+
+The practical replay seam is now:
+
+1. reuse component graph tables directly
+2. rebuild `fused_graph` cheaply in Spark if fusion weights change
+3. rerun only the small hierarchy-assignment step on the pruned fused edge set
 
 ## 3.3 `50_phase_fit`
 

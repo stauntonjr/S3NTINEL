@@ -12,10 +12,12 @@ Without that symmetry, the simulator becomes richer than the runtime model and t
 sim-to-real gap widens.
 
 For the corresponding deviation/anomaly ontology, see [misbehavior_taxonomy.md](/home/jrs/code/S3NTINEL/sentinel/docs/misbehavior_taxonomy.md).
+For the intended fitting-stage placement of datatype profiling, robust scaling, and
+behavior profiling, see [fitting_workflow.md](/home/jrs/code/S3NTINEL/sentinel/docs/fitting_workflow.md).
 
 ## 1. Purpose
 
-The behavior profiler should sit next to the current datatype/rate profiler and infer
+The behavior profiler sits next to the datatype/rate profiler and infers
 parameter-level behavioral semantics from observed telemetry.
 
 This is not anomaly detection. It is structure inference and metadata generation.
@@ -34,6 +36,37 @@ The next layer should infer:
 - behavioral traits
 - confidence
 
+## 1.1 Placement in the fitting workflow
+
+Behavior profiling is implemented as a one-off fitting-stage artifact, not a
+mandatory always-on inference dependency.
+
+The intended sequence is:
+
+1. fit `parameter_datatype_profile`
+2. fit `continuous_scaling_profile`
+3. fit `parameter_behavior_profile`
+4. reuse those artifacts during backbone/graph/phase fitting and inference
+
+The active pipeline stage for this metadata is:
+
+- `pipelines/05_parameter_profiles_fit.py`
+
+That means:
+
+- the profiler operates on observed `parameter_value`
+- it produces stable nominal metadata
+- downstream stages normally consume the persisted profile rather than recomputing it
+  continuously
+
+An optional streaming behavior monitor may still exist later for:
+
+- new parameter bootstrap
+- confidence collapse
+- behavior drift monitoring
+
+but that monitor is secondary to the fitted metadata artifact.
+
 ## 2. Canonical planned fields
 
 Simulation/source side:
@@ -45,6 +78,10 @@ Runtime/profile side:
 
 - `behavior_family_profiled`
 - `behavior_profile_confidence`
+
+Artifact name:
+
+- `parameter_behavior_profile`
 
 Optional additional profiled fields:
 

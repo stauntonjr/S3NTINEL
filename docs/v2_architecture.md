@@ -4,6 +4,7 @@ This document describes the active V2 pipeline path.
 
 For the mathematical/statistical interpretation of the active representations and graph weights, see [theory_foundations.md](/home/jrs/code/S3NTINEL/sentinel/docs/theory_foundations.md).
 For the active code/data taxonomy and naming rules, see [glossary.md](/home/jrs/code/S3NTINEL/sentinel/docs/glossary.md).
+For the intended one-off fitting sequence for datatype profiling, robust scaling, behavior profiling, and backbone fitting, see [fitting_workflow.md](/home/jrs/code/S3NTINEL/sentinel/docs/fitting_workflow.md).
 For domain guidance on realistic avionics-system behavior and simulator priors, see [avionics_simulation_guidelines.md](/home/jrs/code/S3NTINEL/sentinel/docs/avionics_simulation_guidelines.md).
 For recommended simulator anomaly families and backbone-fit validation methods, see [anomaly_injection_and_backbone_validation.md](/home/jrs/code/S3NTINEL/sentinel/docs/anomaly_injection_and_backbone_validation.md).
 For replayable stage artifacts, caches, manifests, and MLflow lineage policy, see [artifact_replay_design.md](/home/jrs/code/S3NTINEL/sentinel/docs/artifact_replay_design.md).
@@ -20,9 +21,22 @@ Spark/Delta bootstrap controls:
 
 ### Fitting
 
+Before structural fitting, the intended one-off metadata workflow is:
+
+1. `parameter_datatype_profile`
+2. `continuous_scaling_profile`
+3. `parameter_behavior_profile`
+
+Those artifacts establish stable parameter semantics and should normally be fit once
+and reused. The current active code already performs datatype/rate profiling and
+robust scaling; behavior profiling is the next planned metadata artifact.
+
+Then the active structural stages are:
+
 1. `pipelines/00_ingest_raw.py`
-2. `pipelines/10_backbone_fit.py`
-3. `pipelines/11_graph_fit.py`
+2. `pipelines/05_parameter_profiles_fit.py`
+3. `pipelines/10_backbone_fit.py`
+4. `pipelines/11_graph_fit.py`
 
 ### Inference
 
@@ -48,6 +62,15 @@ Spark/Delta bootstrap controls:
     - compact scalar window summary
 
 ## Active V2 artifacts
+
+- `parameter_datatype_profile`
+  - profiled datatype and observed rate metadata
+
+- `continuous_scaling_profile`
+  - robust scaling metadata for continuous parameters
+
+- `parameter_behavior_profile`
+  - profiled nominal behavior-family metadata
 
 - `backbone`
   - `selected_sensors_c`
@@ -108,9 +131,14 @@ Spark/Delta bootstrap controls:
 ## Current Spark boundary
 
 - `20_events_extract.py` uses Spark grouped execution around generator-based detector cores.
-- `10_backbone_fit.py` is still a bounded pandas bridge.
-- `11_graph_fit.py` is still a bounded pandas bridge.
-- `50_phase_fit.py` is still a bounded pandas bridge and is not the final hot-path design.
+- `10_backbone_fit.py` keeps fact-table work in Spark and collects only bounded
+  sensor-energy and per-flight `G_f/H_f` aggregates for the final solve.
+- `11_graph_fit.py` keeps component-graph construction in Spark and collects only
+  small backbone metadata and the already-pruned fused edge set for final hierarchy
+  assignment. Precision, event, lag, transition, and fused graph construction are
+  all Spark-native.
+- `50_phase_fit.py` builds `window_x` and emits per-tail phase artifacts with grouped
+  Spark execution; the remaining driver-side work is bounded global configuration.
 - `60_window_scores_raw.py` keeps the main fact table distributed, but still collects bounded reference artifacts.
 
 Bridge rule:
