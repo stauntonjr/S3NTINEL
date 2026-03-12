@@ -1,7 +1,11 @@
 # V2.1 Notes: Rate- and Type-Aware Representation
 
 This note records a likely next-step architectural refinement for the continuous
-representation layer. It is intentionally not part of the active V2 cutover yet.
+window-feature layer. It is intentionally not part of the active path yet.
+
+For the current implementation shape, see:
+- [libs/windows/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/windows/README.md)
+- [libs/phase/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/phase/README.md)
 
 ## Status
 
@@ -13,8 +17,9 @@ Deferred. Keep in mind for the next modeling-focused iteration, especially once:
 
 ## Motivation
 
-The current V2 path uses a single continuous end-of-window snapshot for `window_x`,
-then adds compact event and categorical summaries in `window_s`.
+The current path uses a single continuous end-of-window snapshot inside the
+`WindowFeatures` / `WindowFeaturesDataFrame` representation, then adds compact event
+and categorical summaries.
 
 That is clean, but it under-represents mixed-rate continuous behavior:
 
@@ -78,7 +83,7 @@ Recommended split:
 - backbone-fit windows:
   - more regular
   - structurally comparable
-  - used for `window_x`, energy, `G/H`, and precision structure
+  - used for window features, energy, `G/H`, and precision structure
 
 This avoids event-density bias in backbone fitting.
 

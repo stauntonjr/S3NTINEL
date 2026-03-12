@@ -28,7 +28,7 @@ Current profiler responsibilities already include:
 - sampling-rate estimation
 
 See:
-- [libs/profiling/profile.py](/home/jrs/code/S3NTINEL/sentinel/libs/profiling/profile.py)
+- [libs/profiling/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/profiling/README.md)
 
 The next layer should infer:
 

@@ -7,7 +7,7 @@ from typing import Any
 
 import numpy as np
 
-from libs.common import PhaseAssignmentRow, PhaseBaselineRow, PhaseWindowRow, WindowScoreRow
+from libs.io.contracts import PhaseAssignmentRow, PhaseBaselineRow, PhaseWindowRow, WindowScoreRow
 
 def build_phase_score_baselines(
     window_s_rows: list[PhaseWindowRow],

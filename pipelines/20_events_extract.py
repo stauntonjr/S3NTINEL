@@ -5,7 +5,16 @@ import os
 
 from libs.events import build_events_table
 from libs.io.delta import get_spark, read_table, write_table
-from libs.perf import get_logger, log_dict_artifact_if_active, log_params_if_active, log_wall_time, track_mlflow_run
+from libs.perf import (
+    build_artifact_manifest,
+    build_stage_manifest,
+    get_logger,
+    log_dict_artifact_if_active,
+    log_params_if_active,
+    log_stage_manifest_if_active,
+    log_wall_time,
+    track_mlflow_run,
+)
 from pipelines.common import build_context
 
 
@@ -41,6 +50,8 @@ def run() -> None:
         fmt=table_format,
         partition_by=context.config["output"]["partition_by"],
     )
+    raw_count = int(raw_df.count())
+    events_count = int(events_df.count())
 
     log_params_if_active(
         {
@@ -62,6 +73,24 @@ def run() -> None:
         },
         "reports/stages/20_events_extract_summary.json",
     )
+    stage_manifest = build_stage_manifest(
+        stage_name="20_events_extract",
+        config={
+            "table_format": table_format,
+            "write_mode": write_mode,
+            "delta_threshold": delta_threshold,
+            "slope_source": slope_source,
+            "ema_alpha": ema_alpha,
+        },
+        input_artifacts={
+            "raw_telemetry": build_artifact_manifest(path=input_path, dataframe=raw_df, row_count=raw_count),
+        },
+        output_artifacts={
+            "events": build_artifact_manifest(path=output_path, dataframe=events_df, row_count=events_count),
+        },
+        replayable_from=["raw_telemetry"],
+    )
+    log_stage_manifest_if_active(stage_manifest, "reports/stages/20_events_extract_manifest.json")
     LOGGER.info(
         "pipeline=events_extract format=%s write_mode=%s event_threshold=%s delta_threshold=%s slope_source=%s ema_alpha=%s input=%s output=%s",
         table_format,

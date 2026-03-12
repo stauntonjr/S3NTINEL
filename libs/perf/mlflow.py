@@ -5,11 +5,13 @@ from __future__ import annotations
 
 import contextlib
 import functools
+import json
 import logging
 import os
 import uuid
 from collections.abc import Callable
 from contextlib import AbstractContextManager
+from pathlib import Path
 from typing import Any
 
 from libs.perf.logger import get_logger
@@ -88,6 +90,15 @@ def _log_dataset_records_if_active(
             context,
             exc.__class__.__name__,
         )
+
+
+def _write_local_json_artifact_if_configured(payload: dict[str, Any], artifact_file: str) -> None:
+    artifact_base_dir = str(os.getenv("S3NTINEL_LOCAL_ARTIFACT_BASE_DIR", "")).strip()
+    if not artifact_base_dir:
+        return
+    artifact_path = Path(artifact_base_dir) / str(artifact_file)
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+    artifact_path.write_text(json.dumps(payload, indent=2, sort_keys=True, default=str), encoding="utf-8")
 
 
 def log_dataframe_dataset_if_active(
@@ -178,6 +189,7 @@ def log_params_if_active(params: dict[str, Any]) -> None:
 
 def log_dict_artifact_if_active(payload: dict[str, Any], artifact_file: str) -> None:
     """Log dict payload as a JSON artifact when MLflow run is active."""
+    _write_local_json_artifact_if_configured(payload, artifact_file)
     mlflow = _get_mlflow()
     if mlflow is None or mlflow.active_run() is None:
         return

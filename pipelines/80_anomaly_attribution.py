@@ -9,7 +9,16 @@ from libs.anomaly.attribution import (
     build_anomaly_window_attribution_df,
 )
 from libs.io.delta import get_spark, read_table, upsert_table, write_table
-from libs.perf import get_logger, log_dict_artifact_if_active, log_params_if_active, log_wall_time, track_mlflow_run
+from libs.perf import (
+    build_artifact_manifest,
+    build_stage_manifest,
+    get_logger,
+    log_dict_artifact_if_active,
+    log_params_if_active,
+    log_stage_manifest_if_active,
+    log_wall_time,
+    track_mlflow_run,
+)
 from pipelines.common import build_context
 
 
@@ -115,6 +124,15 @@ def run() -> None:
             fmt=table_format,
             partition_by=context.config["output"]["partition_by"],
         )
+    calibrated_count = int(calibrated_df.count())
+    phase_windows_count = int(phase_windows_df.count())
+    windows_count = int(windows_df.count())
+    events_count = int(events_df.count())
+    hierarchy_sensor_map_count = int(hierarchy_sensor_map_df.count())
+    raw_count = int(raw_df.count())
+    anomaly_window_count = int(anomaly_window_attribution_df.count())
+    anomaly_telemetry_count = int(anomaly_telemetry_attribution_df.count())
+    anomaly_event_count = int(anomaly_event_attribution_df.count())
 
     log_params_if_active(
         {
@@ -154,6 +172,61 @@ def run() -> None:
         },
         "reports/stages/80_anomaly_attribution_summary.json",
     )
+    stage_manifest = build_stage_manifest(
+        stage_name="80_anomaly_attribution",
+        config={
+            "table_format": table_format,
+            "write_mode": write_mode,
+            "merge_key": list(context.config["output"]["anomalies_merge_key"]),
+            "subsystem_top_sensors_k": top_k_per_subsystem,
+        },
+        input_artifacts={
+            "window_scores_calibrated": build_artifact_manifest(
+                path=window_scores_calibrated_path,
+                dataframe=calibrated_df,
+                row_count=calibrated_count,
+            ),
+            "phase_windows": build_artifact_manifest(
+                path=phase_windows_path,
+                dataframe=phase_windows_df,
+                row_count=phase_windows_count,
+            ),
+            "windows": build_artifact_manifest(path=windows_path, dataframe=windows_df, row_count=windows_count),
+            "events": build_artifact_manifest(path=events_path, dataframe=events_df, row_count=events_count),
+            "hierarchy_sensor_map": build_artifact_manifest(
+                path=hierarchy_sensor_map_path,
+                dataframe=hierarchy_sensor_map_df,
+                row_count=hierarchy_sensor_map_count,
+            ),
+            "raw_telemetry": build_artifact_manifest(path=raw_path, dataframe=raw_df, row_count=raw_count),
+        },
+        output_artifacts={
+            "anomaly_window_attribution": build_artifact_manifest(
+                path=anomaly_window_attribution_path,
+                dataframe=anomaly_window_attribution_df,
+                row_count=anomaly_window_count,
+            ),
+            "anomaly_telemetry_attribution": build_artifact_manifest(
+                path=anomaly_telemetry_attribution_path,
+                dataframe=anomaly_telemetry_attribution_df,
+                row_count=anomaly_telemetry_count,
+            ),
+            "anomaly_event_attribution": build_artifact_manifest(
+                path=anomaly_event_attribution_path,
+                dataframe=anomaly_event_attribution_df,
+                row_count=anomaly_event_count,
+            ),
+        },
+        replayable_from=[
+            "window_scores_calibrated",
+            "phase_windows",
+            "windows",
+            "events",
+            "hierarchy_sensor_map",
+            "raw_telemetry",
+        ],
+    )
+    log_stage_manifest_if_active(stage_manifest, "reports/stages/80_anomaly_attribution_manifest.json")
     LOGGER.info(
         "pipeline=anomaly_attribution merge_key=%s write_mode=%s window_scores_calibrated=%s anomaly_window_attribution=%s anomaly_telemetry_attribution=%s anomaly_event_attribution=%s",
         context.config["output"]["anomalies_merge_key"],

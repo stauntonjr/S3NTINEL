@@ -147,15 +147,49 @@ class DiscreteStateViolator(BehaviorViolator):
         generated_stream: Iterable[BehaviorSample],
         context: Mapping[str, Any],
     ) -> Iterator[BehaviorSample]:
+        violation_type = str(context.get("violation_type") or "illegal_transition")
         anomaly_rate = clip01(float(context.get("anomaly_rate", 0.0)))
         violating_state = str(context.get("violating_state", "__ILLEGAL__"))
         rng = np.random.default_rng(int(context.get("rng_seed", 0)))
+        stuck_state = str(context.get("stuck_state", "")) or None
+        chatter_states = tuple(str(item) for item in context.get("chatter_states", ()) if str(item))
+        extra_dwell_steps = max(int(context.get("extra_dwell_steps", 1)), 1)
+        held_state = None
+        held_remaining = 0
+        last_output = None
         for sample in generated_stream:
             apply_violation = bool(rng.random() < anomaly_rate)
-            perturbed = violating_state if apply_violation else sample.parameter_value
+            base_state = sample.parameter_value
+            if apply_violation and violation_type == "illegal_transition":
+                perturbed = violating_state
+            elif apply_violation and violation_type == "dwell_violation":
+                if held_state is None:
+                    held_state = base_state
+                    held_remaining = extra_dwell_steps
+                elif base_state != held_state and held_remaining > 0:
+                    held_remaining -= 1
+                else:
+                    held_state = base_state
+                    held_remaining = extra_dwell_steps
+                perturbed = held_state
+            elif apply_violation and violation_type == "state_chatter":
+                if chatter_states:
+                    idx = 0
+                    if last_output is not None and last_output in chatter_states:
+                        idx = (chatter_states.index(str(last_output)) + 1) % len(chatter_states)
+                    perturbed = chatter_states[idx]
+                else:
+                    perturbed = base_state if last_output not in {None, base_state} else violating_state
+            elif apply_violation and violation_type == "stuck_state":
+                if stuck_state is None:
+                    stuck_state = str(base_state)
+                perturbed = stuck_state
+            else:
+                perturbed = base_state
+            last_output = perturbed
             metadata = dict(sample.metadata)
             metadata["misbehavior_applied"] = apply_violation
-            metadata["misbehavior_family_label"] = "illegal_transition" if apply_violation else None
+            metadata["misbehavior_family_label"] = violation_type if apply_violation else None
             yield BehaviorSample(
                 parameter_name=parameter_name,
                 parameter_value_clean=sample.parameter_value_clean,

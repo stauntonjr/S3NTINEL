@@ -1,6 +1,12 @@
 # S3NTINEL V2 Architecture
 
-This document describes the active V2 pipeline path.
+This document describes the active pipeline path at a high level.
+
+For current ownership and implementation names, prefer:
+- [pipelines/README.md](/home/jrs/code/S3NTINEL/sentinel/pipelines/README.md)
+- [libs/windows/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/windows/README.md)
+- [libs/phase/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/phase/README.md)
+- [libs/graph/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/graph/README.md)
 
 For the mathematical/statistical interpretation of the active representations and graph weights, see [theory_foundations.md](/home/jrs/code/S3NTINEL/sentinel/docs/theory_foundations.md).
 For the active code/data taxonomy and naming rules, see [glossary.md](/home/jrs/code/S3NTINEL/sentinel/docs/glossary.md).
@@ -49,9 +55,12 @@ Then the active structural stages are:
 
 ## Core representations
 
-- `window_x`
-  - provisional continuous-only robust-scaled end-of-window vector
-  - used for drift, energy, backbone fitting
+- `WindowFeaturesDataFrame`
+  - persisted many-window feature artifact
+  - used for drift, energy, backbone fitting, graph fitting, and phase fitting
+
+- `WindowFeatures`
+  - one-window semantic feature object used to build the dataframe artifact
 
 - `window_s`
   - final structure vector
@@ -137,7 +146,7 @@ Then the active structural stages are:
   small backbone metadata and the already-pruned fused edge set for final hierarchy
   assignment. Precision, event, lag, transition, and fused graph construction are
   all Spark-native.
-- `50_phase_fit.py` builds `window_x` and emits per-tail phase artifacts with grouped
+- `50_phase_fit.py` builds window features and emits per-tail phase artifacts with grouped
   Spark execution; the remaining driver-side work is bounded global configuration.
 - `60_window_scores_raw.py` keeps the main fact table distributed, but still collects bounded reference artifacts.
 

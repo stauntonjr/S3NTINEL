@@ -7,7 +7,8 @@ from typing import Generator, Iterable
 
 import pandas as pd
 
-from libs.common import DatatypeLabelRow, DatatypeProfiledRow, ProfilerValidatorSnapshot, TelemetryRow, normalize_sensor_datatype
+from libs.common import normalize_sensor_datatype
+from libs.io.contracts import DatatypeLabelRow, DatatypeProfiledRow, ProfilerValidatorSnapshot, TelemetryRow
 
 
 def _row_ts(row: TelemetryRow | DatatypeLabelRow | DatatypeProfiledRow, *, field: str = "timestamp_utc") -> datetime:

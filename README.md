@@ -156,7 +156,7 @@ Run with:
 
 ## Sample DataFrames for testing
 
-- Module: `libs.testing.sample_data`
+- Modules: `libs.testing.data` and `libs.testing.seed`
 - Includes builders for `raw_input`, `raw_telemetry`, `events`, `windows`, `phase_windows`, `window_scores_raw`, and `window_scores_calibrated`.
 - Main helper: `seed_sample_dataset(spark, base_dir="data")` writes all sample datasets for local smoke tests.
 

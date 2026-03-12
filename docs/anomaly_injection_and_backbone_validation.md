@@ -10,13 +10,14 @@ classification, see [misbehavior_taxonomy.md](/home/jrs/code/S3NTINEL/sentinel/d
 
 The intent is not to catalogue every anomaly type in the literature. The intent is
 to identify the families that are both scientifically defensible and operationally
-compatible with the current code path:
+compatible with the current code path.
 
-- `window_x` from [libs/windows/window_x.py](/home/jrs/code/S3NTINEL/sentinel/libs/windows/window_x.py)
-- backbone fit from [libs/backbone/fit.py](/home/jrs/code/S3NTINEL/sentinel/libs/backbone/fit.py)
-- graph fit from [libs/graph/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/graph/pipeline.py)
-- phase fit from [libs/phase/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/phase/pipeline.py)
-- anomaly attribution from [libs/anomaly/attribution.py](/home/jrs/code/S3NTINEL/sentinel/libs/anomaly/attribution.py)
+For current implementation ownership, see:
+- [libs/windows/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/windows/README.md)
+- [libs/backbone/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/backbone/README.md)
+- [libs/graph/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/graph/README.md)
+- [libs/phase/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/phase/README.md)
+- [libs/anomaly/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/anomaly/README.md)
 
 ## 1. Scientific framing
 
@@ -77,7 +78,7 @@ For S3NTINEL, these should be implemented in two layers:
 These directly stress:
 
 - event extraction
-- `window_x`
+- window features
 - reconstruction residuals
 
 They should remain the first-line anomaly families because they produce crisp labels:
@@ -243,7 +244,7 @@ Source:
 
 For S3NTINEL, the practical version is:
 
-1. split `window_x` rows by flight or tail
+1. split window-feature rows by flight or tail
 2. fit `C` and `B` on train windows
 3. compute held-out reconstruction error on validation windows
 4. compare against:

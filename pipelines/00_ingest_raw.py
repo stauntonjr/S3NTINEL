@@ -4,10 +4,13 @@
 import os
 
 from libs.perf import (
+    build_artifact_manifest,
+    build_stage_manifest,
     get_logger,
     log_dataframe_dataset_if_active,
     log_dict_artifact_if_active,
     log_params_if_active,
+    log_stage_manifest_if_active,
     log_wall_time,
     track_mlflow_run,
 )
@@ -54,6 +57,8 @@ def run() -> None:
         fmt=output_format,
         partition_by=context.config["output"]["partition_by"],
     )
+    raw_count = int(raw_df.count())
+    normalized_count = int(normalized_df.count())
 
     log_params_if_active({"runtime_mode": context.config["runtime"]["mode"]})
     log_dict_artifact_if_active(
@@ -67,6 +72,25 @@ def run() -> None:
         },
         "reports/stages/00_ingest_raw_summary.json",
     )
+    stage_manifest = build_stage_manifest(
+        stage_name="00_ingest_raw",
+        config={
+            "output_format": output_format,
+            "write_mode": write_mode,
+        },
+        input_artifacts={
+            "raw_input": build_artifact_manifest(path=input_path, dataframe=raw_df, row_count=raw_count),
+        },
+        output_artifacts={
+            "raw_telemetry": build_artifact_manifest(
+                path=output_path,
+                dataframe=normalized_df,
+                row_count=normalized_count,
+            ),
+        },
+        replayable_from=["raw_input"],
+    )
+    log_stage_manifest_if_active(stage_manifest, "reports/stages/00_ingest_raw_manifest.json")
     LOGGER.info(
         "pipeline=ingest_raw project=%s format=%s write_mode=%s input=%s output=%s",
         context.config["project"]["name"],

@@ -1,33 +1,50 @@
 # File: libs/phase/__init__.py
 """Phase detection package."""
 
-from libs.phase.detect import build_structure_vectors, detect_phases_from_windows, evaluate_detected_phases
-from libs.phase.diagnostics import compute_phase_behavior_diagnostics
+from libs.phase.analysis import analyze_phase_behavior
+from libs.phase.model import PhaseFeatureConfig, PhaseFeatures
 from libs.phase.pipeline import (
-    PHASE_BASELINES_SCHEMA,
-    PHASE_WINDOWS_SCHEMA,
     build_phase_artifact_tables,
-    build_phase_artifacts_from_window_x_table,
+    build_phase_features_from_window_features_dataframe,
     build_phase_baselines_spark_table,
     build_phase_windows_spark_table,
-    fit_phase_window_x_config,
-    fit_phase_window_x_config_from_spark,
+    fit_phase_feature_config,
+    fit_phase_feature_config_from_spark,
 )
-from libs.windows import build_window_x_spark_table, build_window_x_table
+from libs.phase.runtime import (
+    Phase,
+    PhaseBuffer,
+    PhaseClusterAssignment,
+    PhaseClustering,
+    PhaseDetectionPolicy,
+    PhaseStream,
+)
+from libs.phase.validator import (
+    build_phase_validation_assignments,
+    evaluate_detected_phases,
+    validate_detected_phases_from_tables,
+)
+from libs.windows import build_window_features_spark_dataframe, build_window_features_dataframe
 
 __all__ = [
-    "build_structure_vectors",
     "build_phase_artifact_tables",
-    "build_phase_artifacts_from_window_x_table",
+    "build_phase_features_from_window_features_dataframe",
     "build_phase_baselines_spark_table",
     "build_phase_windows_spark_table",
-    "build_window_x_spark_table",
-    "build_window_x_table",
-    "compute_phase_behavior_diagnostics",
-    "detect_phases_from_windows",
+    "build_window_features_spark_dataframe",
+    "build_window_features_dataframe",
+    "analyze_phase_behavior",
     "evaluate_detected_phases",
-    "fit_phase_window_x_config",
-    "fit_phase_window_x_config_from_spark",
-    "PHASE_BASELINES_SCHEMA",
-    "PHASE_WINDOWS_SCHEMA",
+    "Phase",
+    "PhaseBuffer",
+    "PhaseClusterAssignment",
+    "PhaseClustering",
+    "PhaseDetectionPolicy",
+    "PhaseFeatureConfig",
+    "PhaseFeatures",
+    "PhaseStream",
+    "fit_phase_feature_config",
+    "fit_phase_feature_config_from_spark",
+    "build_phase_validation_assignments",
+    "validate_detected_phases_from_tables",
 ]

@@ -3,37 +3,33 @@
 
 from __future__ import annotations
 
-from datetime import date
+import pandas as pd
 
 from libs.perf.annotations import hot_path
-
-
-DEFAULT_MIN_SAMPLING_RATE_HZ = 1.0
+from libs.windows.stream import StreamWindowConfig, WindowStream
+from libs.windows.window import WindowPolicy
 
 
 def max_window_ms_from_min_sampling_rate(min_sampling_rate_hz: float) -> int:
-    rate_hz = max(float(min_sampling_rate_hz), 1e-6)
-    # Use a 10-sample span for default window horizon.
-    return max(int(round((10.0 / rate_hz) * 1000.0)), 1)
-
-
-def _window_date_from_start(start_ts: "datetime") -> date:
-    return start_ts.date()
+    return WindowPolicy.max_ms_from_min_sampling_rate(min_sampling_rate_hz)
 
 
 def should_close_window(duration_ms: int, event_count: int, max_ms: int, event_threshold: int) -> bool:
-    # HOT PATH: evaluated for each sample/event tick; keep logic branch-light and deterministic.
-    return duration_ms >= max_ms or event_count >= event_threshold
+    return WindowPolicy(
+        max_ms=int(max_ms),
+        event_threshold=int(event_threshold),
+        min_ms=50,
+        inactivity_timeout_ms=0,
+    ).should_close(duration_ms=duration_ms, event_count=event_count)
 
 
 def close_reason_for_thresholds(duration_ms: int, event_count: int, max_ms: int, event_threshold: int) -> str:
-    by_duration = duration_ms >= int(max_ms)
-    by_count = event_count >= int(event_threshold)
-    if by_duration and by_count:
-        return "event_threshold+max_ms"
-    if by_count:
-        return "event_threshold"
-    return "max_ms"
+    return WindowPolicy(
+        max_ms=int(max_ms),
+        event_threshold=int(event_threshold),
+        min_ms=50,
+        inactivity_timeout_ms=0,
+    ).close_reason(duration_ms=duration_ms, event_count=event_count)
 
 
 @hot_path
@@ -100,22 +96,9 @@ def build_adaptive_windows_stream_parity(
     inactivity_timeout_ms: int = 0,
 ) -> "DataFrame":
     from pyspark.sql import functions as F
-    from pyspark.sql import types as T
+    from libs.io.schemas import WINDOWS_COLUMNS, WINDOWS_SCHEMA
 
-    schema = T.StructType(
-        [
-            T.StructField("tail_id", T.StringType(), nullable=False),
-            T.StructField("flight_id", T.StringType(), nullable=False),
-            T.StructField("win_id", T.LongType(), nullable=False),
-            T.StructField("t_start", T.TimestampType(), nullable=False),
-            T.StructField("t_end", T.TimestampType(), nullable=False),
-            T.StructField("duration_ms", T.LongType(), nullable=False),
-            T.StructField("event_count", T.LongType(), nullable=False),
-            T.StructField("close_reason", T.StringType(), nullable=False),
-            T.StructField("zoh_version", T.IntegerType(), nullable=False),
-            T.StructField("date_utc", T.DateType(), nullable=False),
-        ]
-    )
+    schema = WINDOWS_SCHEMA
 
     base = (
         events_df.select("tail_id", "flight_id", "timestamp_utc", "date_utc")
@@ -123,148 +106,37 @@ def build_adaptive_windows_stream_parity(
     )
 
     def _emit_windows(pdf: "pd.DataFrame") -> "pd.DataFrame":
-        import pandas as pd
-
         if pdf.empty:
-            return pd.DataFrame(
-                columns=[
-                    "tail_id",
-                    "flight_id",
-                    "win_id",
-                    "t_start",
-                    "t_end",
-                    "duration_ms",
-                    "event_count",
-                    "close_reason",
-                    "zoh_version",
-                    "date_utc",
-                ]
-            )
-
-        ordered = pdf.sort_values(by=["timestamp_utc"], kind="mergesort")
-        rows: list[dict[str, object]] = []
-
-        first = ordered.iloc[0]
-        tail_id = str(first["tail_id"])
-        flight_id = str(first["flight_id"])
-
-        window_start = None
-        window_end = None
-        event_count_current = 0
-        win_id = 1
-        timeout_ms = max(int(inactivity_timeout_ms), 0)
-
-        for _, row in ordered.iterrows():
-            ts = row["timestamp_utc"]
-            if pd.isna(ts):
-                continue
-
-            if window_start is None:
-                window_start = ts
-                window_end = ts
-                event_count_current = 0
-            elif timeout_ms > 0:
-                inactivity_gap_ms = int((ts - window_end).total_seconds() * 1000.0)
-                if inactivity_gap_ms >= timeout_ms and event_count_current > 0:
-                    duration_ms = int((window_end - window_start).total_seconds() * 1000.0)
-                    duration_ms_effective = max(duration_ms, int(min_ms))
-                    rows.append(
-                        {
-                            "tail_id": tail_id,
-                            "flight_id": flight_id,
-                            "win_id": int(win_id),
-                            "t_start": window_start,
-                            "t_end": window_end,
-                            "duration_ms": int(duration_ms_effective),
-                            "event_count": int(event_count_current),
-                            "close_reason": "inactivity_timeout",
-                            "zoh_version": 1,
-                            "date_utc": _window_date_from_start(window_start),
-                        }
-                    )
-                    win_id += 1
-                    window_start = ts
-                    window_end = ts
-                    event_count_current = 0
-
-            if window_start is not None and event_count_current > 0:
-                window_cap = window_start + pd.Timedelta(milliseconds=int(max_ms))
-                if ts >= window_cap:
-                    duration_ms_effective = max(int(max_ms), int(min_ms))
-                    rows.append(
-                        {
-                            "tail_id": tail_id,
-                            "flight_id": flight_id,
-                            "win_id": int(win_id),
-                            "t_start": window_start,
-                            "t_end": window_cap,
-                            "duration_ms": int(duration_ms_effective),
-                            "event_count": int(event_count_current),
-                            "close_reason": "max_ms",
-                            "zoh_version": 1,
-                            "date_utc": _window_date_from_start(window_start),
-                        }
-                    )
-                    win_id += 1
-                    window_start = ts
-                    window_end = ts
-                    event_count_current = 0
-
-            window_end = ts
-            event_count_current += 1
-            duration_ms = int((window_end - window_start).total_seconds() * 1000.0)
-
-            if should_close_window(
-                duration_ms=duration_ms,
-                event_count=event_count_current,
-                max_ms=int(max_ms),
-                event_threshold=int(event_threshold),
-            ):
-                duration_ms_effective = max(duration_ms, int(min_ms))
-                close_reason = close_reason_for_thresholds(
-                    duration_ms=duration_ms,
-                    event_count=event_count_current,
-                    max_ms=int(max_ms),
-                    event_threshold=int(event_threshold),
-                )
-                rows.append(
-                    {
-                        "tail_id": tail_id,
-                        "flight_id": flight_id,
-                        "win_id": int(win_id),
-                        "t_start": window_start,
-                        "t_end": window_end,
-                        "duration_ms": int(duration_ms_effective),
-                        "event_count": int(event_count_current),
-                        "close_reason": close_reason,
-                        "zoh_version": 1,
-                        "date_utc": _window_date_from_start(window_start),
-                    }
-                )
-                win_id += 1
-                window_start = None
-                window_end = None
-                event_count_current = 0
-
-        if window_start is not None and window_end is not None and event_count_current > 0:
-            duration_ms = int((window_end - window_start).total_seconds() * 1000.0)
-            duration_ms_effective = max(duration_ms, int(min_ms))
-            rows.append(
-                {
-                    "tail_id": tail_id,
-                    "flight_id": flight_id,
-                    "win_id": int(win_id),
-                    "t_start": window_start,
-                    "t_end": window_end,
-                    "duration_ms": int(duration_ms_effective),
-                    "event_count": int(event_count_current),
-                    "close_reason": "end_of_stream",
-                    "zoh_version": 1,
-                    "date_utc": _window_date_from_start(window_start),
-                }
-            )
-
-        return pd.DataFrame(rows)
+            return pd.DataFrame(columns=WINDOWS_COLUMNS)
+        first = pdf.iloc[0]
+        events = [
+            {
+                "tail_id": str(row["tail_id"]),
+                "flight_id": str(row["flight_id"]),
+                "timestamp_utc": row["timestamp_utc"],
+                "event_type_detected": "window_event",
+                "parameter_name": "",
+                "payload": {},
+            }
+            for row in pdf.sort_values(by=["timestamp_utc"], kind="mergesort").to_dict(orient="records")
+            if not pd.isna(row.get("timestamp_utc"))
+        ]
+        config = StreamWindowConfig(
+            max_ms=int(max_ms),
+            min_ms=int(min_ms),
+            event_threshold=int(event_threshold),
+            inactivity_timeout_ms=int(inactivity_timeout_ms),
+            include_window_events=False,
+        )
+        stream = WindowStream(config=config)
+        rows = list(stream.iter_windows(events))
+        for row in rows:
+            row.pop("sensor_count", None)
+            row.pop("event_type_counts", None)
+            row.pop("zoh_snapshot", None)
+        if not rows:
+            return pd.DataFrame(columns=WINDOWS_COLUMNS)
+        return pd.DataFrame(rows, columns=WINDOWS_COLUMNS)
 
     return base.groupBy("tail_id", "flight_id").applyInPandas(_emit_windows, schema=schema)
 

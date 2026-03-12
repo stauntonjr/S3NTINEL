@@ -43,8 +43,8 @@ Deprecated/internal fallback only:
 
 ### parameter value
 
-The observed telemetry value passed downstream to profilers, detectors, `window_x`,
-backbone fitting, phase fitting, and scoring.
+The observed telemetry value passed downstream to profilers, detectors, window
+features, backbone fitting, phase fitting, and scoring.
 
 Canonical field:
 - `parameter_value`
@@ -220,20 +220,26 @@ Planned canonical fields:
 
 ## 6. Representations
 
-### window_x
+### WindowFeatures
 
-The provisional continuous representation used for backbone fitting and related
-continuous-structure computations.
+The one-window semantic feature representation used for backbone fitting, graph
+fitting, phase fitting, and related structural computations.
+
+Typical contents:
+- robust-scaled continuous end-of-window snapshot
+- categorical end state
+- event counts
+- drift-oriented summaries
+
+### WindowFeaturesDataFrame
+
+The many-window dataframe artifact built from `WindowFeatures`.
 
 Math shorthand:
 - `x_w`
 
 Comment alias:
 - provisional window vector
-
-Typical contents:
-- robust-scaled continuous end-of-window snapshot
-- continuous-only
 
 ### window_s
 

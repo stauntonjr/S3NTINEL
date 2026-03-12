@@ -25,10 +25,6 @@ class EventType:
     ILLEGAL_TRANSITION = "illegal_transition"
     DWELL_GUARD = "dwell_guard"
 
-    # Flight/subsystem aggregate events
-    COOCCUR = "cooccur"
-
-
 class TruthAnomalyType:
     NONE = "none"
     BURST_NUMERIC_SHIFT = "burst_numeric_shift"

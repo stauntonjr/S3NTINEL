@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 
 from libs.io.delta import get_spark
-from libs.testing.sample_data import seed_sample_dataset
+from libs.testing.seed import seed_sample_dataset
 
 
 def parse_args() -> argparse.Namespace:

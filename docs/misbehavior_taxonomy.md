@@ -251,7 +251,7 @@ The current pipeline already contains partial support for several misbehavior fa
 
 Current path:
 
-- `window_x`
+- window features
 - backbone fit
 - reconstruction residuals
 - `reconstruction_score`

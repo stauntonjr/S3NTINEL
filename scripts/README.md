@@ -1,6 +1,17 @@
-# Scripts — Active Workflows and Handoff
+# Scripts — Canonical Entry Points and Utilities
 
-This directory now contains only active V2 workflow scripts and repository handoff helpers.
+## Purpose
+
+This directory contains the repo's operational command-line surface:
+- canonical entrypoints
+- developer utilities
+- handoff helpers
+
+It does not own the core domain logic. That lives in `libs/`.
+
+## How To Use
+
+The canonical operational script surface is intentionally small. Prefer the grouped pipeline or simulation runner entrypoints over ad hoc utility scripts.
 
 ## Handoff
 
@@ -14,7 +25,24 @@ Incremental patches:
 - local: `bash scripts/export_patches.sh origin/main patches`
 - target clone: `bash scripts/apply_patches.sh patches`
 
-## Sample data and smoke
+## Canonical Simulation
+
+- Run the canonical simulation pipeline into one persisted run bundle:
+  - `python -m scripts.run_sim_pipeline --flight-name power_chain --base-dir data/sim_runs --mode full --format parquet`
+  - this emits canonical raw telemetry plus simulation truth metadata, then runs the real persisted fitting and inference stages into one run directory containing:
+    - input raw telemetry
+    - fitted/profiled tables
+    - structural graph artifacts
+    - phase/scoring/attribution outputs
+    - local stage summaries and manifests under `reports/`
+    - a run manifest at `reports/run_manifest.json`
+    - a consolidated console log at `logs/run.log`
+
+## Developer Utilities
+
+These are useful for local development and regression checks, but they are not the canonical production/simulation entrypoint.
+
+### Sample data and smoke
 
 - Generate deterministic sample data:
   - `python -m scripts.generate_sample_data --base-dir data --mode overwrite`
@@ -44,7 +72,7 @@ Incremental patches:
   - writes:
     - `graph_hierarchy_sweep_summary.json`
 
-## Active V2 pipelines
+## Persisted Pipelines
 
 Fitting:
 
@@ -66,7 +94,7 @@ Inference:
   - `70_window_scores_calibrate.py`
   - `80_anomaly_attribution.py`
 
-## Partition-manifest runner
+## Partition-Manifest Jobs
 
 Run built-in per-flight pipeline stages from a partition manifest:
 
@@ -80,36 +108,11 @@ Optional row controls:
 
 - `--tail-id ... --flight-id ... --limit 1 --continue-on-error --dry-run`
 
-## Simulation evaluation
-
-- Run the simulation/event-detection evaluation harness:
-  - `python -m scripts.run_sim_detection_eval --output-json reports/eda/sim_detection_eval_report.json`
-- Run a native subsystem slice directly into the fitting-stage profiling artifacts:
-  - `python -m scripts.profile_native_subsystem_slice --slice-name power_chain`
-  - this simulates a native slice, normalizes it to canonical `raw_telemetry`, and builds:
-    - `parameter_datatype_profile`
-    - `continuous_scaling_profile`
-    - `parameter_behavior_profile`
-- Run a native subsystem slice directly through canonical event extraction:
-  - `python -m scripts.detect_events_on_native_subsystem_slice --slice-name power_chain`
-  - this simulates a native slice, normalizes it to canonical `raw_telemetry`, and emits canonical event rows through the same builder used by `20_events_extract.py`
-- Run a native subsystem slice through canonical windows and `window_x`:
-  - `python -m scripts.build_window_x_on_native_subsystem_slice --slice-name power_chain`
-  - this simulates a native slice, normalizes it to canonical `raw_telemetry`, emits canonical windows through the same builder used by `30_windows_adaptive.py`, and then builds canonical `window_x`
-- Run a native subsystem slice through backbone and graph artifact fitting:
-  - `python -m scripts.fit_structural_artifacts_on_native_subsystem_slice --slice-name power_chain`
-  - this simulates a native slice, normalizes it to canonical `raw_telemetry`, builds canonical events/windows/`window_x`, then fits:
-    - `backbone`
-    - `backbone_sensor_energy`
-    - `precision_graph`
-    - `event_graph`
-    - `lag_graph`
-    - `transition_graph`
-    - `fused_graph`
-    - `hierarchy_sensor_map`
-
 ## Notes
 
 - Script entrypoints are intended to be run as modules from the repo root.
 - Active Spark baseline is `sentinel-spark35`.
 - Prefer `S3NTINEL_TABLE_FORMAT=parquet` for local smoke unless Delta JVM jars are available.
+- `scripts.run_sim_pipeline` is the canonical simulation entrypoint.
+- `scripts.smoke_test_pipeline` and `scripts.sweep_smoke_graph_hierarchy` are developer utilities, not the primary operational path.
+- `scripts.window_diagnostics` is a support utility for windowing diagnostics, not a shared library surface.

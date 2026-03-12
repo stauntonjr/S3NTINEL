@@ -1,208 +1,97 @@
 # Fitting Workflow
 
-This note defines the intended one-off fitting workflow for S3NTINEL V2.
+This note defines the current fitting workflow at a conceptual level.
 
-The purpose is to pin down:
+For current ownership and implementation details, see:
+- [pipelines/README.md](/home/jrs/code/S3NTINEL/sentinel/pipelines/README.md)
+- [libs/profiling/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/profiling/README.md)
+- [libs/windows/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/windows/README.md)
+- [libs/backbone/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/backbone/README.md)
+- [libs/graph/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/graph/README.md)
+- [libs/phase/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/phase/README.md)
 
-- what gets profiled once up front
-- what gets persisted as reusable artifacts
-- what downstream stages should consume during inference
+## 1. Signal Semantics
 
-This is the canonical workflow reference for datatype profiling, robust scaling,
-behavior profiling, and backbone fitting.
-
-For the active pipeline path, see [v2_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/v2_architecture.md).
-For the mathematical interpretation of robust scaling and `window_x`, see [theory_foundations.md](/home/jrs/code/S3NTINEL/sentinel/docs/theory_foundations.md).
-
-## 1. Signal semantics
-
-Two value fields matter in the simulator path:
+Two simulator-side value fields matter:
 
 - `parameter_value_clean`
-  - nominal clean value before observation noise and measurement effects
-  - used for simulator-side labels, debug, and truth-oriented validation
-
+  - clean simulated value for truth/debugging
 - `parameter_value`
-  - observed downstream signal
-  - used by profilers, detectors, `window_x`, backbone fitting, phase fitting, and
-    runtime scoring
+  - observed value used by profiling, events, windows, structure fitting, scoring, and attribution
 
-The fitting workflow always operates on `parameter_value`, not
-`parameter_value_clean`, unless a document explicitly says otherwise.
+The fitting workflow operates on `parameter_value`, not `parameter_value_clean`, unless a validator explicitly compares against truth.
 
-## 2. Design rule
+## 2. Design Rule
 
-Behavior family, datatype, and scaling statistics are primarily **parameter
-metadata artifacts**, not per-window anomaly outputs.
+Datatype, scaling, and behavior identity are primarily **parameter metadata artifacts**, not per-window anomaly outputs.
 
 The intended sequence is:
 
-1. fit parameter metadata artifacts once from observed telemetry
-2. persist them
-3. use them during backbone/graph/phase fitting and inference
-4. add streaming monitors later only where adaptation or drift detection is needed
+1. fit reusable parameter metadata
+2. persist it
+3. reuse it during structural fitting and inference
 
-This keeps nominal parameter semantics stable and prevents the inference path from
-reclassifying every parameter from scratch on every run.
+## 3. Sequential Fitting Stages
 
-## 3. Sequential fitting stages
+### 3.1 Datatype and sampling profile
 
-## 3.1 Datatype and rate profiling
-
-Active stage:
-
+Stage:
 - `pipelines/05_parameter_profiles_fit.py`
 
-Input:
-
-- raw telemetry on `parameter_value`
-
-Output artifact:
-
+Artifact:
 - `parameter_datatype_profile`
 
-Minimum contents:
+Purpose:
+- classify parameters
+- estimate observed cadence
+- gate later continuous-only structure paths
 
-- `parameter_name`
-- `parameter_datatype_profiled`
-- `sampling_rate_profiled_hz`
-- `median_interval_ms`
-- missingness and cardinality statistics
+### 3.2 Continuous scaling profile
 
-This artifact should establish:
-
-- whether a parameter is numeric, binary, categorical, constant, or high-cardinality
-- the observed sampling cadence
-
-Downstream uses:
-
-- gating continuous-only scaling and `window_x`
-- routing behavior profiling
-- detector configuration
-
-## 3.2 Continuous robust scaling profile
-
-Input:
-
-- raw telemetry on `parameter_value`
-- `parameter_datatype_profile`
-
-Output artifact:
-
+Artifact:
 - `continuous_scaling_profile`
 
-Minimum contents:
+Purpose:
+- define robust centering/scaling for continuous parameters
+- provide the coordinate system used by window feature extraction and structural fitting
 
-- `parameter_name`
-- `scaling_center_median`
-- `scaling_iqr`
-- optional guard statistics such as low/high quantiles
+### 3.3 Behavior profile
 
-This artifact should be fit only for parameters whose profiled datatype is
-continuous/numeric-like.
-
-Downstream uses:
-
-- `window_x`
-- drift magnitude
-- backbone energy and `G/H`
-- residual scoring
-
-## 3.3 Behavior profiling
-
-Input:
-
-- raw telemetry on `parameter_value`
-- `parameter_datatype_profile`
-- optionally `continuous_scaling_profile`
-
-Output artifact:
-
+Artifact:
 - `parameter_behavior_profile`
 
-Minimum contents:
+Purpose:
+- infer nominal behavior-family semantics
+- support validation, routing, and future richer downstream behavior-aware logic
 
-- `parameter_name`
-- `behavior_family_profiled`
-- `behavior_profile_confidence`
-- per-family score columns
+### 3.4 Window feature extraction and backbone fitting
 
-The profile should classify each parameter into a small nominal behavior taxonomy,
-for example:
-
-- `regulated`
-- `inertial`
-- `accumulative`
-- `discrete_state`
-- `derived_response`
-- `mixed_unknown`
-
-Downstream uses:
-
-- simulation/profile validation
-- detector configuration
-- future behavior-aware feature selection
-- future misbehavior classification
-
-## 3.4 Window representation and backbone fitting
-
-Input:
-
-- raw telemetry on `parameter_value`
-- windows
-- `continuous_scaling_profile`
-
-Output artifacts:
-
-- `window_x` optional persisted intermediate
+Artifacts:
+- `WindowFeaturesDataFrame` as the conceptual many-window feature artifact
 - `backbone`
 - `backbone_sensor_energy`
 
-This stage should not require recomputing datatype or behavior identity. It should
-consume the persisted profiles.
+The old `window_x` terminology has been replaced conceptually by the `WindowFeaturesDataFrame` and `WindowFeatures` model.
 
-## 3.5 Graph, phase, and scoring stages
+### 3.5 Graph, phase, and scoring stages
 
-These stages consume upstream profile artifacts and structural artifacts rather than
-reprofiling parameters on the fly.
+These consume upstream artifacts rather than recomputing parameter semantics:
 
-In particular:
+- graph fitting consumes window features, events, and backbone artifacts
+- phase fitting consumes window features and backbone context
+- scoring consumes phase outputs and hierarchy structure
 
-- graph fitting consumes `window_x`, `events`, and `backbone`
-- phase fitting consumes `window_x`
-- scoring consumes `phase_windows`, `phase_baselines`, and `hierarchy_sensor_map`
+## 4. Inference-Time Use
 
-## 4. Inference-time use
-
-Inference should normally consume the fitted artifacts:
+Inference should normally reuse:
 
 - `parameter_datatype_profile`
 - `continuous_scaling_profile`
 - `parameter_behavior_profile`
 
-and should not depend on online re-fitting of those parameter semantics.
+and should not continuously re-fit those semantics unless a separate adaptation path is intentionally added.
 
-## 5. Optional streaming monitors
+## 5. Notes
 
-Streaming monitors are still useful, but they are secondary:
-
-- datatype/profile drift checks
-- behavior confidence collapse
-- new/unseen parameter bootstrap
-
-These should be treated as monitors or adaptation aids, not as the primary source of
-nominal parameter semantics.
-
-## 6. Artifact naming summary
-
-Recommended fitting-time artifacts:
-
-- `parameter_datatype_profile`
-- `continuous_scaling_profile`
-- `parameter_behavior_profile`
-- `window_x`
-- `backbone`
-- `backbone_sensor_energy`
-
-This is the intended sequence for the active V2 path and for the richer simulation
-work that follows.
+- For the mathematical interpretation of robust scaling, backbone fitting, graph weights, and phase fitting, see [theory_foundations.md](/home/jrs/code/S3NTINEL/sentinel/docs/theory_foundations.md).
+- For current stage ownership and artifact flow, prefer the package READMEs over historical stage-level implementation notes.

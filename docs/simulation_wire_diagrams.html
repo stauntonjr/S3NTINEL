@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>S3NTINEL Simulation Wire Diagrams</title>
+  <title>S3NTINEL Simulation Diagrams</title>
   <style>
     :root {
       --bg: #f6f4ef;
@@ -20,7 +20,7 @@
       color: var(--ink);
     }
     main {
-      max-width: 1400px;
+      max-width: 980px;
       margin: 0 auto;
       padding: 32px 28px 64px;
     }
@@ -33,252 +33,49 @@
       line-height: 1.5;
       color: var(--muted);
     }
-    .note {
+    .panel {
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 14px;
       padding: 16px 18px;
       margin: 0 0 24px;
     }
-    .diagram {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 18px;
-      padding: 20px;
-      margin: 0 0 24px;
-      overflow: auto;
-      box-shadow: 0 10px 30px rgba(31, 36, 33, 0.06);
-    }
     code {
       color: var(--accent);
       font-size: 0.95em;
+    }
+    a {
+      color: var(--accent);
     }
   </style>
 </head>
 <body>
   <main>
-    <h1>Simulation Wire Diagrams</h1>
-    <div class="note">
+    <h1>Simulation Diagrams</h1>
+    <div class="panel">
       <p>
-        This standalone HTML view renders the current simulation diagrams outside markdown flow.
-        It uses Mermaid in the browser. If you are offline, the page will not render until Mermaid
-        is vendored or otherwise made available locally.
+        The old standalone HTML wire diagrams referenced deleted assembly-era modules and are no longer the source of truth.
       </p>
       <p>
-        Markdown sources:
-        <code>docs/simulation_codepath_wire_diagram.md</code>,
-        <code>docs/simulation_coupling_wire_diagram.md</code>
+        Use the current Markdown docs and area READMEs instead:
       </p>
+      <ul>
+        <li><a href="simulation_codepath_wire_diagram.md"><code>docs/simulation_codepath_wire_diagram.md</code></a></li>
+        <li><a href="simulation_coupling_wire_diagram.md"><code>docs/simulation_coupling_wire_diagram.md</code></a></li>
+        <li><a href="simulation_architecture.md"><code>docs/simulation_architecture.md</code></a></li>
+        <li><a href="../libs/simulation/README.md"><code>libs/simulation/README.md</code></a></li>
+      </ul>
     </div>
 
-    <section class="diagram">
-      <h2>Monolithic Simulation Codepath</h2>
-      <pre class="mermaid">
-flowchart TB
-    subgraph A["Authoring And Compilation"]
-        A1["Native authoring\nlibs/simulation/assembly.py\nHierarchyAssemblyBuilder\nbuild_hierarchy_assembly_spec(...)"]
-        A2["Transitional legacy bridge\nlibs/simulation/compiler.py\nassembly_spec_from_hierarchy_spec(...)"]
-        A3["Validation\nlibs/simulation/compiler.py\nvalidate_assembly_spec(...)"]
-        A4["HierarchyAssemblySpec\nmodule_specs\ninter_module_couplings"]
-        A1 --> A3
-        A2 --> A3
-        A3 --> A4
-    end
-
-    subgraph B["Behavior Resolution"]
-        B1["Behavior registry\nlibs/behavior/registry.py\nbuild_default_behavior_registry()"]
-        B2["Assembly binding\nlibs/simulation/binding.py\nbind_assembly_behaviors(...)"]
-        B3["ModuleBehaviorBinding\nParameterBehaviorBinding"]
-        B1 --> B2
-        A4 --> B2
-        B2 --> B3
-    end
-
-    subgraph C["Runtime Construction"]
-        C1["ModuleRuntime\nlibs/simulation/runtime.py\nModuleRuntime.from_spec(...)"]
-        C2["module_runtimes_from_specs(...)"]
-        C3["Module runtime map\nmodule_id -> ModuleRuntime"]
-        A4 --> C2
-        C2 --> C3
-        C1 --> C2
-    end
-
-    subgraph D["Per-Parameter Local Step Inputs"]
-        D1["One BehaviorStepInput per parameter per tick\nlatent_state\ncontext\ndt_seconds"]
-        D1A["resolve_step_inputs_for_module(...)\ndefault tick input when missing"]
-        D2["Input port hydration\nlibs/simulation/module_step.py\ninject_input_ports_into_step_inputs(...)"]
-        D3["Latent update hooks\nupdate_module_latent_state(...)"]
-        D4["Runtime latent injection\ninject_runtime_latent_state_into_step_inputs(...)"]
-        D1 --> D1A
-        D1A --> D2
-        D2 --> D3
-        D3 --> D4
-    end
-
-    subgraph E["Module-Local Generation"]
-        E1["ModuleStepRequest\nlibs/simulation/module_step.py"]
-        E2["iter_module_samples(...)"]
-        E3["Behavior generator\nparameter_behavior_binding.behavior.generator.generate_stream(...)"]
-        E4["Optional violator\nbehavior.violator.violate_stream(...)"]
-        E5["BehaviorSample stream\nparameter_value_clean\nparameter_value\nstate\nmetadata"]
-        D4 --> E1
-        B3 --> E1
-        E1 --> E2
-        E2 --> E3
-        E3 --> E4
-        E4 --> E5
-    end
-
-    subgraph F["Local Runtime Update"]
-        F1["apply_module_sample_to_runtime(...)"]
-        F2["ParameterRuntime.update_observation(...)"]
-        F3["apply_module_sample_to_output_ports(...)"]
-        F4["Output PortRuntime.current_value"]
-        E5 --> F1
-        F1 --> F2
-        F1 --> F3
-        F3 --> F4
-    end
-
-    subgraph G["Inter-Module Transfer"]
-        G1["Outgoing InterModuleCouplingSpec\nsource_module_id/source_port_name\ntarget_module_id/target_port_name"]
-        G2["propagate_inter_module_couplings(...)"]
-        G3["apply_inter_module_coupling(...)"]
-        G4["Drain due delayed transfers\nindependent of current gate"]
-        G5["Phase gate / scoped mode gate check\nfor newly enqueued transfer"]
-        G6["relation_type semantics\n drive / enable / inhibit"]
-        G7["Target input PortRuntime.current_value"]
-        F4 --> G2
-        A4 --> G1
-        G1 --> G2
-        G2 --> G3
-        G3 --> G4
-        G4 --> G5
-        G5 --> G6
-        G6 --> G7
-    end
-
-    subgraph H["Assembly-Level Execution"]
-        H1["AssemblyModuleStepRequest\nlibs/simulation/assembly_step.py"]
-        H2["step_module_and_propagate(...)"]
-        H3["AssemblyTickRequest\nlibs/simulation/orchestrator.py"]
-        H4["step_assembly_once(...)"]
-        H5["Caller-provided module_order"]
-        D2 --> H1
-        B3 --> H1
-        C3 --> H1
-        A4 --> H1
-        H1 --> H2
-        H3 --> H4
-        H5 --> H4
-        C3 --> H3
-        B3 --> H3
-        A4 --> H3
-        D1 --> H3
-        H4 --> H2
-        H2 --> E5
-        H2 --> G2
-    end
-
-    subgraph I["Telemetry Output Boundary"]
-        I1["Emitted parameter samples\nclean value + observed value"]
-        I2["Telemetry rows for downstream use"]
-        I3["Downstream one-off fitting sequence\n05_parameter_profiles_fit.py\n10_backbone_fit.py\n11_graph_fit.py"]
-        I4["Inference consumers\nprofiler / detector / windows / scoring"]
-        E5 --> I1
-        I1 --> I2
-        I2 --> I3
-        I2 --> I4
-    end
-      </pre>
-    </section>
-
-    <section class="diagram">
-      <h2>Coupling And Latent Propagation</h2>
-      <pre class="mermaid">
-flowchart LR
-    subgraph M1["Source Module"]
-        M1I["Input ports\nModuleRuntime.input_ports"]
-        M1L["LatentUpdateSpec\nupdate_module_latent_state(...)"]
-        M1LS["latent_state_by_name"]
-        M1S["BehaviorStepInput\ncontext + latent_state"]
-        M1G["Behavior generator\nRegulatedBehavior / InertialBehavior"]
-        M1V["Optional violator"]
-        M1P["BehaviorSample\nparameter_value_clean\nparameter_value"]
-        M1O["Output port update\napply_module_sample_to_output_ports(...)"]
-        M1OP["Output ports\nModuleRuntime.output_ports"]
-
-        M1I --> M1L
-        M1L --> M1LS
-        M1LS --> M1S
-        M1S --> M1G
-        M1G --> M1V
-        M1V --> M1P
-        M1P --> M1O
-        M1O --> M1OP
-    end
-
-    subgraph B["Behavior-local Target Resolution"]
-        B1["context['latent_target_name'] ?"]
-        B2["Use latent_state[named_target]\nmetadata.target_source = latent_state"]
-        B3["Else use context['target_value']\nmetadata.target_source = context"]
-        B1 --> B2
-        B1 --> B3
-    end
-
-    subgraph X["Inter-Module Coupling"]
-        X1["InterModuleCouplingSpec\nsource_module_id\nsource_port_name\ntarget_module_id\ntarget_port_name\nrelation_type\ngain / sign\nphase_gate / mode_gate"]
-        X2["apply_inter_module_coupling(...)"]
-        X3["Drain due delayed transfers\nindependent of current gate"]
-        X4["Gate check\nphase_gate\nsource_mode_gate / target_mode_gate"]
-        X5["relation_type\n drive / enable / inhibit"]
-        X6["Transferred target input value"]
-        X1 --> X2
-        X2 --> X3
-        X3 --> X4
-        X4 --> X5
-        X5 --> X6
-    end
-
-    subgraph M2["Target Module"]
-        M2IP["Input ports\nModuleRuntime.input_ports"]
-        M2H["inject_input_ports_into_step_inputs(...)"]
-        M2S["Next BehaviorStepInput.context"]
-        M2L["Next update_module_latent_state(...)"]
-
-        M2IP --> M2H
-        M2H --> M2S
-        M2S --> M2L
-    end
-
-    M1S -.latent target lookup.-> B1
-    M1OP --> X2
-    X6 --> M2IP
-      </pre>
-    </section>
+    <div class="panel">
+      <h2>Current Model</h2>
+      <p>
+        The active simulation codepath is organized around <code>AircraftSpec</code>,
+        <code>FlightSpec</code>, <code>Aircraft</code>, and <code>Flight</code>, with
+        canonical telemetry-shaped row emission feeding the same persisted fitting and
+        inference pipeline used for real telemetry.
+      </p>
+    </div>
   </main>
-
-  <script type="module">
-    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
-    mermaid.initialize({
-      startOnLoad: true,
-      theme: 'base',
-      themeVariables: {
-        primaryColor: '#efe4c8',
-        primaryTextColor: '#1f2421',
-        primaryBorderColor: '#7a6b46',
-        lineColor: '#6d5f48',
-        secondaryColor: '#f6f0df',
-        tertiaryColor: '#fffdf7',
-        fontFamily: 'Georgia, Iowan Old Style, Palatino Linotype, serif'
-      },
-      flowchart: {
-        curve: 'basis',
-        padding: 14,
-        nodeSpacing: 30,
-        rankSpacing: 42
-      }
-    });
-  </script>
 </body>
 </html>

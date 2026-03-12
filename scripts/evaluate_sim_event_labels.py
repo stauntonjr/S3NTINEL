@@ -12,7 +12,7 @@ import pandas as pd
 from libs.common import SensorDataType, normalize_sensor_datatype
 from libs.events.categorical import CategoricalSample, detect_categorical_events_stream
 from libs.events.extrema import ContinuousDetectorConfig, ContinuousSample, detect_continuous_events_stream
-from libs.testing.stream_eval import evaluate_event_detection
+from libs.testing.evaluation import evaluate_event_detection
 
 
 def parse_args() -> argparse.Namespace:

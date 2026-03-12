@@ -1,0 +1,134 @@
+def _types():
+    from pyspark.sql import types as T
+    return T
+
+
+PRECISION_GRAPH_COLUMNS = [
+    "parameter_name_u",
+    "parameter_name_v",
+    "partial_corr",
+    "precision_weight",
+    "edge_family",
+]
+
+EVENT_GRAPH_COLUMNS = [
+    "parameter_name_u",
+    "parameter_name_v",
+    "cooccur_count",
+    "event_weight",
+    "edge_family",
+]
+
+LAG_GRAPH_COLUMNS = [
+    "parameter_name_u",
+    "parameter_name_v",
+    "lag_count",
+    "lag_weight",
+    "mean_lag_seconds",
+    "edge_family",
+]
+
+TRANSITION_GRAPH_COLUMNS = [
+    "parameter_name_u",
+    "parameter_name_v",
+    "precedence_count",
+    "precedence_weight",
+    "edge_family",
+]
+
+FUSED_GRAPH_COLUMNS = [
+    "parameter_name_u",
+    "parameter_name_v",
+    "precision_weight",
+    "event_weight",
+    "lag_weight",
+    "fused_weight",
+    "edge_family",
+]
+
+HIERARCHY_SENSOR_MAP_COLUMNS = [
+    "parameter_name",
+    "system_id",
+    "subsystem_id",
+    "module_id",
+    "hierarchy_source",
+    "hierarchy_profile_id",
+]
+
+
+def PRECISION_GRAPH_SCHEMA():
+    T = _types()
+    return T.StructType(
+        [
+            T.StructField("parameter_name_u", T.StringType(), False),
+            T.StructField("parameter_name_v", T.StringType(), False),
+            T.StructField("partial_corr", T.DoubleType(), False),
+            T.StructField("precision_weight", T.DoubleType(), False),
+            T.StructField("edge_family", T.StringType(), False),
+        ]
+    )
+
+
+def EVENT_GRAPH_SCHEMA():
+    T = _types()
+    return T.StructType(
+        [
+            T.StructField("parameter_name_u", T.StringType(), False),
+            T.StructField("parameter_name_v", T.StringType(), False),
+            T.StructField("cooccur_count", T.IntegerType(), False),
+            T.StructField("event_weight", T.DoubleType(), False),
+            T.StructField("edge_family", T.StringType(), False),
+        ]
+    )
+
+
+def LAG_GRAPH_SCHEMA():
+    T = _types()
+    return T.StructType(
+        [
+            T.StructField("parameter_name_u", T.StringType(), False),
+            T.StructField("parameter_name_v", T.StringType(), False),
+            T.StructField("lag_count", T.IntegerType(), False),
+            T.StructField("lag_weight", T.DoubleType(), False),
+            T.StructField("mean_lag_seconds", T.DoubleType(), False),
+            T.StructField("edge_family", T.StringType(), False),
+        ]
+    )
+
+
+def TRANSITION_GRAPH_SCHEMA():
+    T = _types()
+    return T.StructType(
+        [
+            T.StructField("parameter_name_u", T.StringType(), False),
+            T.StructField("parameter_name_v", T.StringType(), False),
+            T.StructField("precedence_count", T.IntegerType(), False),
+            T.StructField("precedence_weight", T.DoubleType(), False),
+            T.StructField("edge_family", T.StringType(), False),
+        ]
+    )
+
+
+def FUSED_GRAPH_SCHEMA():
+    T = _types()
+    return T.StructType(
+        [
+            T.StructField("parameter_name_u", T.StringType(), False),
+            T.StructField("parameter_name_v", T.StringType(), False),
+            T.StructField("precision_weight", T.DoubleType(), False),
+            T.StructField("event_weight", T.DoubleType(), False),
+            T.StructField("lag_weight", T.DoubleType(), False),
+            T.StructField("fused_weight", T.DoubleType(), False),
+            T.StructField("edge_family", T.StringType(), False),
+        ]
+    )
+
+
+HIERARCHY_SENSOR_MAP_SCHEMA = """
+parameter_name string,
+system_id string,
+subsystem_id string,
+module_id string,
+hierarchy_source string,
+hierarchy_profile_id string
+"""

@@ -7,8 +7,8 @@ from libs.io.delta import get_spark, read_table, write_table
 from libs.phase import (
     build_phase_baselines_spark_table,
     build_phase_windows_spark_table,
-    build_window_x_spark_table,
-    fit_phase_window_x_config_from_spark,
+    build_window_features_spark_dataframe,
+    fit_phase_feature_config_from_spark,
 )
 from libs.perf import (
     build_artifact_manifest,
@@ -65,7 +65,7 @@ def run() -> None:
     events_df = read_table(spark, events_path, fmt=table_format)
     windows_df = read_table(spark, windows_path, fmt=table_format)
     raw_df, events_df, windows_df = _select_phase_fit_input_columns(raw_df, events_df, windows_df)
-    window_x_df = build_window_x_spark_table(raw_df, events_df, windows_df)
+    window_features_df = build_window_features_spark_dataframe(raw_df, events_df, windows_df)
     phase_count = int(os.getenv("S3NTINEL_PHASE_COUNT", str(context.config.get("simulation", {}).get("phase_count", 4))))
     backbone_sensor_count = int(os.getenv("S3NTINEL_BACKBONE_SENSOR_COUNT", "8"))
     backbone_ridge_lambda = float(os.getenv("S3NTINEL_BACKBONE_RIDGE_LAMBDA", "1.0"))
@@ -78,8 +78,8 @@ def run() -> None:
     phase_transition_penalty = float(os.getenv("S3NTINEL_PHASE_TRANSITION_PENALTY", "1.5"))
     phase_min_dwell_windows = int(os.getenv("S3NTINEL_PHASE_MIN_DWELL_WINDOWS", "8"))
 
-    phase_config = fit_phase_window_x_config_from_spark(
-        window_x_df,
+    phase_config = fit_phase_feature_config_from_spark(
+        window_features_df,
         backbone_sensor_count=backbone_sensor_count,
         backbone_ridge_lambda=backbone_ridge_lambda,
         phase_detect_sensor_count=phase_detect_sensor_count,
@@ -88,7 +88,7 @@ def run() -> None:
         phase_detect_window_cooccurrence_count=phase_detect_window_cooccurrence_count,
     )
     phase_windows_df = build_phase_windows_spark_table(
-        window_x_df,
+        window_features_df,
         phase_config=phase_config,
         phase_count=phase_count,
         phase_stable_drift_quantile=phase_stable_drift_quantile,
@@ -159,13 +159,13 @@ def run() -> None:
             "raw_telemetry": build_artifact_manifest(path=raw_path, dataframe=raw_df),
             "events": build_artifact_manifest(path=events_path, dataframe=events_df),
             "windows": build_artifact_manifest(path=windows_path, dataframe=windows_df),
-            "window_x": build_artifact_manifest(path="window_x::ephemeral", dataframe=window_x_df),
+            "window_features": build_artifact_manifest(path="window_features::ephemeral", dataframe=window_features_df),
         },
         output_artifacts={
             "phase_windows": build_artifact_manifest(path=phase_windows_path, dataframe=phase_windows_df, row_count=phase_windows_count),
             "phase_baselines": build_artifact_manifest(path=phase_baselines_path, dataframe=phase_baselines_df, row_count=phase_baselines_count),
         },
-        replayable_from=["window_x"],
+        replayable_from=["window_features"],
         cache_artifacts={"phase_fit_cache": {"config_keys": sorted(list(phase_config.keys()))}},
     )
     log_stage_manifest_if_active(stage_manifest, "reports/stages/50_phase_fit_manifest.json")

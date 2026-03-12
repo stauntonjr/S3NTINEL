@@ -14,8 +14,8 @@ from typing import TYPE_CHECKING
 from libs.io.delta import get_spark, read_table
 from libs.io.schemas import ACTIVE_V2_TABLES
 from libs.phase import evaluate_detected_phases
-from libs.testing.sample_data import seed_sample_dataset
-from libs.testing.window_diagnostics import close_reason_tv_distance, compute_numeric_deltas, compute_window_diagnostics
+from libs.testing.seed import seed_sample_dataset
+from scripts.window_diagnostics import close_reason_tv_distance, compute_numeric_deltas, compute_window_diagnostics
 
 if TYPE_CHECKING:
     from pyspark.sql import SparkSession

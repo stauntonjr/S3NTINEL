@@ -29,7 +29,7 @@ class InertialContract(BehaviorContract):
     behavior_family: str = "inertial"
     expected_traits: tuple[str, ...] = ("persistent", "smooth", "lagged_response")
     supported_datatypes: tuple[str, ...] = ("numeric",)
-    allowed_fault_families: tuple[str, ...] = ("timing_lag", "drift", "noise_increase", "coupling_break")
+    allowed_fault_families: tuple[str, ...] = ("timing_lag", "increased_time_constant", "stuck_value", "ramp_distortion")
 
 
 class InertialFeatureExtractor(BehaviorFeatureExtractor):
@@ -140,6 +140,15 @@ class InertialProfiler(BehaviorProfiler):
 
 
 class InertialViolator(BehaviorViolator):
+    @staticmethod
+    def _coerce_float(value: object | None) -> float | None:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except Exception:
+            return None
+
     def violate_stream(
         self,
         *,
@@ -147,19 +156,42 @@ class InertialViolator(BehaviorViolator):
         generated_stream: Iterable[BehaviorSample],
         context: Mapping[str, Any],
     ) -> Iterator[BehaviorSample]:
+        violation_type = str(context.get("violation_type") or "timing_lag")
         lag_steps = max(int(context.get("lag_steps", 1)), 1)
         anomaly_rate = clip01(float(context.get("anomaly_rate", 0.0)))
         observed_buffer: list[float | str | None] = []
+        slowed_value: float | None = None
+        stuck_value = self._coerce_float(context.get("stuck_value"))
+        previous_observed: float | None = None
+        distorted_value: float | None = None
         for sample in generated_stream:
             observed_buffer.append(sample.parameter_value)
-            apply_lag = anomaly_rate >= 1.0 or (anomaly_rate > 0.0 and len(observed_buffer) % max(int(round(1.0 / anomaly_rate)), 1) == 0)
-            if apply_lag and len(observed_buffer) > lag_steps:
+            apply_violation = anomaly_rate >= 1.0 or (anomaly_rate > 0.0 and len(observed_buffer) % max(int(round(1.0 / anomaly_rate)), 1) == 0)
+            observed = self._coerce_float(sample.parameter_value)
+            if apply_violation and violation_type == "timing_lag" and len(observed_buffer) > lag_steps:
                 perturbed = observed_buffer[-(lag_steps + 1)]
+            elif apply_violation and violation_type == "increased_time_constant" and observed is not None:
+                slowdown = max(float(context.get("slowdown_factor", 3.0)), 1.0)
+                alpha = 1.0 / slowdown
+                slowed_value = observed if slowed_value is None else (slowed_value + alpha * (observed - slowed_value))
+                perturbed = slowed_value
+            elif apply_violation and violation_type == "stuck_value":
+                if stuck_value is None:
+                    stuck_value = observed
+                perturbed = stuck_value if stuck_value is not None else sample.parameter_value
+            elif apply_violation and violation_type == "ramp_distortion" and observed is not None:
+                slope_scale = float(context.get("slope_scale", 0.5))
+                if previous_observed is None or distorted_value is None:
+                    distorted_value = observed
+                else:
+                    distorted_value = distorted_value + ((observed - previous_observed) * slope_scale)
+                perturbed = distorted_value
             else:
                 perturbed = sample.parameter_value
+            previous_observed = observed
             metadata = dict(sample.metadata)
-            metadata["misbehavior_applied"] = apply_lag
-            metadata["misbehavior_family_label"] = "timing_lag" if apply_lag else None
+            metadata["misbehavior_applied"] = apply_violation
+            metadata["misbehavior_family_label"] = violation_type if apply_violation else None
             yield BehaviorSample(
                 parameter_name=parameter_name,
                 parameter_value_clean=sample.parameter_value_clean,

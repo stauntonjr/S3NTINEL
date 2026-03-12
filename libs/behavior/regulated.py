@@ -30,7 +30,7 @@ class RegulatedContract(BehaviorContract):
     behavior_family: str = "regulated"
     expected_traits: tuple[str, ...] = ("bounded", "central_band_occupancy", "mean_reverting")
     supported_datatypes: tuple[str, ...] = ("numeric",)
-    allowed_fault_families: tuple[str, ...] = ("offset", "noise_increase", "stuck", "dropout")
+    allowed_fault_families: tuple[str, ...] = ("offset", "saturation", "tracking_degradation", "oscillation")
 
 
 class RegulatedFeatureExtractor(BehaviorFeatureExtractor):
@@ -128,6 +128,15 @@ class RegulatedProfiler(BehaviorProfiler):
 
 
 class RegulatedViolator(BehaviorViolator):
+    @staticmethod
+    def _coerce_float(value: object | None) -> float | None:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except Exception:
+            return None
+
     def violate_stream(
         self,
         *,
@@ -135,19 +144,40 @@ class RegulatedViolator(BehaviorViolator):
         generated_stream: Iterable[BehaviorSample],
         context: Mapping[str, Any],
     ) -> Iterator[BehaviorSample]:
-        bias = float(context.get("bias", 0.0))
+        violation_type = str(context.get("violation_type") or ("offset" if "bias" in context else "offset"))
+        bias = float(context.get("bias", context.get("offset_value", 0.0)))
         anomaly_rate = clip01(float(context.get("anomaly_rate", 0.0)))
         rng = np.random.default_rng(int(context.get("rng_seed", 0)))
-        for sample in generated_stream:
+        for step_index, sample in enumerate(generated_stream):
             apply_bias = bool(rng.random() < anomaly_rate)
-            try:
-                observed = float(sample.parameter_value) if sample.parameter_value is not None else None
-            except Exception:
-                observed = None
-            perturbed = observed + bias if apply_bias and observed is not None else sample.parameter_value
+            observed = self._coerce_float(sample.parameter_value)
+            clean_value = self._coerce_float(sample.parameter_value_clean)
+            perturbed: object | None = sample.parameter_value
+            if apply_bias and observed is not None:
+                if violation_type == "offset":
+                    perturbed = observed + bias
+                elif violation_type == "saturation":
+                    lower = context.get("saturation_min", context.get("clamp_min"))
+                    upper = context.get("saturation_max", context.get("clamp_max"))
+                    bounded = observed
+                    if lower is not None:
+                        bounded = max(bounded, float(lower))
+                    if upper is not None:
+                        bounded = min(bounded, float(upper))
+                    perturbed = bounded
+                elif violation_type == "tracking_degradation":
+                    scale = float(context.get("tracking_scale", 0.6))
+                    reference = clean_value if clean_value is not None else observed
+                    perturbed = (reference * scale) + float(context.get("tracking_offset", 0.0))
+                elif violation_type == "oscillation":
+                    amplitude = float(context.get("oscillation_amplitude", 1.0))
+                    period_steps = max(int(context.get("oscillation_period_steps", 4)), 1)
+                    perturbed = observed + amplitude * float(np.sin((2.0 * np.pi * step_index) / period_steps))
+                else:
+                    perturbed = observed + bias
             metadata = dict(sample.metadata)
             metadata["misbehavior_applied"] = apply_bias
-            metadata["misbehavior_family_label"] = "offset" if apply_bias else None
+            metadata["misbehavior_family_label"] = violation_type if apply_bias else None
             yield BehaviorSample(
                 parameter_name=parameter_name,
                 parameter_value_clean=sample.parameter_value_clean,

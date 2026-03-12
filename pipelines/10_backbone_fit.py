@@ -9,6 +9,7 @@ from libs.backbone import (
     select_backbone_sensors_by_energy,
     solve_backbone_weights,
 )
+from libs.io.schemas import BACKBONE_SCHEMA, BACKBONE_SENSOR_ENERGY_SCHEMA
 from libs.io.delta import get_spark, read_table, write_table
 from libs.perf import (
     build_artifact_manifest,
@@ -20,7 +21,7 @@ from libs.perf import (
     log_wall_time,
     track_mlflow_run,
 )
-from libs.windows import build_window_x_spark_table
+from libs.windows import build_window_features_spark_dataframe
 from pipelines.common import build_context
 
 
@@ -62,7 +63,7 @@ def run() -> None:
         [],
         schema="tail_id string, flight_id string, parameter_name string, timestamp_utc timestamp, event_type_detected string, payload map<string,string>",
     )
-    window_x_df = build_window_x_spark_table(raw_df, empty_events_df, windows_df)
+    window_x_df = build_window_features_spark_dataframe(raw_df, empty_events_df, windows_df)
     window_x_count = _bounded_count(window_x_df, limit=max_bridge_rows)
     if window_x_count > max_bridge_rows:
         raise RuntimeError(
@@ -111,12 +112,12 @@ def run() -> None:
     backbone_df = (
         spark.createDataFrame(backbone_pdf)
         if not backbone_pdf.empty
-        else spark.createDataFrame([], schema="backbone_version int, selected_sensors_c array<string>, all_sensors array<string>, weights_b array<array<double>>, lambda_ridge double, training_window_count int")
+        else spark.createDataFrame([], schema=BACKBONE_SCHEMA)
     )
     energy_df = (
         spark.createDataFrame(energy_pdf)
         if not energy_pdf.empty
-        else spark.createDataFrame([], schema="parameter_name string, energy double, support_count int, selected_backbone boolean, backbone_version int")
+        else spark.createDataFrame([], schema=BACKBONE_SENSOR_ENERGY_SCHEMA)
     )
 
     write_table(backbone_df, path=backbone_path, mode=write_mode, fmt=table_format)

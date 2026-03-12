@@ -1,15 +1,15 @@
-"""Backbone artifact builders for Spark pipeline stages."""
+"""Backbone artifact table adapters for Spark pipeline stages."""
 
 from __future__ import annotations
 
-from collections import Counter
 from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
-from libs.backbone.fit import aggregate_backbone_gh, compute_backbone_gh_by_flight, select_backbone_sensors_by_energy, solve_backbone_weights
+from libs.backbone.fit import aggregate_backbone_gh, compute_backbone_gh_by_flight
+from libs.backbone.model import BackboneModel, BackboneSpec
 from libs.io.pandas_spark import pandas_records_for_spark
-from libs.windows import build_window_x_table
+from libs.windows import build_window_features_dataframe
 
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame
@@ -59,49 +59,14 @@ def build_backbone_artifacts_from_window_x_table(
     window_x_rows = window_x_df.to_dict(orient="records")
     if not window_x_rows:
         return pd.DataFrame(), pd.DataFrame()
-
-    energy_by_sensor: Counter[str] = Counter()
-    support_by_sensor: Counter[str] = Counter()
-    for row in window_x_rows:
-        for parameter_name, value in row.get("continuous_vector_t_end_scaled", {}).items():
-            energy_by_sensor[str(parameter_name)] += float(value) * float(value)
-            support_by_sensor[str(parameter_name)] += 1
-
-    sensor_energy_rows = [
-        {
-            "parameter_name": parameter_name,
-            "energy": float(energy_by_sensor[parameter_name]),
-            "support_count": int(support_by_sensor[parameter_name]),
-        }
-        for parameter_name in sorted(energy_by_sensor.keys(), key=lambda item: (-energy_by_sensor[item], item))
-    ]
-    selected_sensors_c = select_backbone_sensors_by_energy(sensor_energy_rows, k=max(int(backbone_sensor_count), 1))
-    gh_rows, all_sensors = compute_backbone_gh_by_flight(window_x_rows, selected_sensors=selected_sensors_c)
-    g, h, total_window_count = aggregate_backbone_gh(gh_rows)
-    weights_b = solve_backbone_weights(g, h, ridge_lambda=float(backbone_ridge_lambda))
-
-    backbone_rows = [
-        {
-            "backbone_version": 2,
-            "selected_sensors_c": list(selected_sensors_c),
-            "all_sensors": list(all_sensors),
-            "weights_b": [[float(value) for value in row] for row in weights_b],
-            "lambda_ridge": float(backbone_ridge_lambda),
-            "training_window_count": int(total_window_count),
-        }
-    ]
-    energy_rows = []
-    for item in sensor_energy_rows:
-        energy_rows.append(
-            {
-                "parameter_name": str(item["parameter_name"]),
-                "energy": float(item["energy"]),
-                "support_count": int(item["support_count"]),
-                "selected_backbone": str(item["parameter_name"]) in set(selected_sensors_c),
-                "backbone_version": 2,
-            }
-        )
-    return pd.DataFrame(backbone_rows), pd.DataFrame(energy_rows)
+    backbone_model, sensor_energies = BackboneModel.from_window_x_rows(
+        window_x_rows,
+        spec=BackboneSpec(
+            sensor_count=backbone_sensor_count,
+            ridge_lambda=backbone_ridge_lambda,
+        ),
+    )
+    return pd.DataFrame([backbone_model.to_row()]), pd.DataFrame([item.to_row() for item in sensor_energies])
 
 
 def build_backbone_sensor_energy_spark_table(window_x_df: DataFrame) -> DataFrame:
@@ -185,7 +150,7 @@ def build_backbone_artifact_tables(
     backbone_ridge_lambda: float = 1.0,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     empty_events_df = pd.DataFrame(columns=["tail_id", "flight_id", "parameter_name", "timestamp_utc", "event_type_detected", "payload"])
-    window_x_df = build_window_x_table(raw_df, empty_events_df, windows_df)
+    window_x_df = build_window_features_dataframe(raw_df, empty_events_df, windows_df)
     return build_backbone_artifacts_from_window_x_table(
         window_x_df,
         backbone_sensor_count=backbone_sensor_count,

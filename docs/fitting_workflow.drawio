@@ -1,0 +1,69 @@
+<mxfile host="65bd71144e">
+    <diagram id="fitting_workflow" name="Fitting Workflow">
+        <mxGraphModel dx="1038" dy="945" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="2" value="Raw telemetry on parameter_value" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="40" width="200" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="3" value="05_parameter_profiles_fit.py" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="120" width="200" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="4" value="&lt;p style=&quot;margin: 0 0 0 40px; border: none; padding: 0px;&quot;&gt;parameter_datatype_profile&lt;br&gt;- parameter_name&lt;br&gt;- parameter_datatype_profiled&lt;br&gt;- sampling_rate_profiled_hz&lt;br&gt;- median_interval_ms&lt;br&gt;- missingness/cardinality stats&lt;/p&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;shadow=1;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="10" y="210" width="260" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="5" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;html=1;" parent="1" source="2" target="3" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="6" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;html=1;" parent="1" source="3" target="4" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="7" value="Continuous robust scaling profile" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="340" width="200" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="8" value="&lt;p style=&quot;margin: 0 0 0 40px; border: none; padding: 0px;&quot;&gt;continuous_scaling_profile&lt;br&gt;- parameter_name&lt;br&gt;- scaling_center_median&lt;br&gt;- scaling_iqr&lt;br&gt;- guard stats (optional)&lt;/p&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="10" y="440" width="260" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="9" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;html=1;" parent="1" source="4" target="7" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="10" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;html=1;" parent="1" source="8" target="11" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="12" value="&lt;p style=&quot;margin: 0 0 0 40px; border: none; padding: 0px;&quot;&gt;parameter_behavior_profile&lt;br&gt;- parameter_name&lt;br&gt;- behavior_family_profiled&lt;br&gt;- behavior_profile_confidence&lt;br&gt;- per-family score columns&lt;/p&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="10" y="650" width="260" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="13" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;html=1;" parent="1" source="4" target="11" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="310" y="260"/>
+                            <mxPoint x="310" y="590"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="14" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" parent="1" source="7" target="8" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="15" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;html=1;" parent="1" source="11" target="12" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="11" value="Behavior profiling" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="560" width="200" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="16" value="Window representation &amp; backbone fitting" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="780" width="200" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="17" value="&lt;p style=&quot;margin: 0 0 0 40px; border: none; padding: 0px;&quot;&gt;window_x&lt;br&gt;backbone&lt;br&gt;backbone_sensor_energy&lt;/p&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;align=left;" parent="1" vertex="1">
+                    <mxGeometry x="10" y="870" width="260" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="18" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;html=1;" parent="1" source="12" target="16" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="19" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;html=1;" parent="1" source="16" target="17" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

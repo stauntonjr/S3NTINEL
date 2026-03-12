@@ -10,6 +10,7 @@ from libs.graph import (
     build_precision_graph_from_window_x_spark_table,
     build_transition_graph_spark_table,
 )
+from libs.io.schemas import HIERARCHY_SENSOR_MAP_SCHEMA, PRECISION_GRAPH_SCHEMA
 from libs.io.delta import get_spark, read_table, write_table
 from libs.perf import (
     build_artifact_manifest,
@@ -21,7 +22,7 @@ from libs.perf import (
     log_wall_time,
     track_mlflow_run,
 )
-from libs.windows import build_window_x_spark_table
+from libs.windows import build_window_features_spark_dataframe
 
 
 LOGGER = get_logger(__name__)
@@ -97,7 +98,7 @@ def run() -> None:
         [],
         schema="tail_id string, flight_id string, parameter_name string, timestamp_utc timestamp, event_type_detected string, payload map<string,string>",
     )
-    window_x_df = build_window_x_spark_table(raw_df, empty_events_df, windows_df)
+    window_x_df = build_window_features_spark_dataframe(raw_df, empty_events_df, windows_df)
     window_x_count = _bounded_count(window_x_df, limit=max_bridge_rows)
     if window_x_count > max_bridge_rows:
         raise RuntimeError(
@@ -137,10 +138,7 @@ def run() -> None:
     precision_df = (
         spark.createDataFrame(precision_pdf)
         if not precision_pdf.empty
-        else spark.createDataFrame(
-            [],
-            schema="sensor_u string, sensor_v string, partial_corr double, precision_weight double, edge_family string",
-        )
+        else spark.createDataFrame([], schema=PRECISION_GRAPH_SCHEMA())
     )
     fused_df = build_fused_graph_spark_table(
         precision_df,
@@ -159,14 +157,14 @@ def run() -> None:
         if isinstance(all_sensors, list):
             parameter_name_union.update(str(item) for item in all_sensors if str(item))
     event_parameters = (
-        event_sdf.select(F.col("sensor_u").alias("parameter_name"))
-        .unionByName(event_sdf.select(F.col("sensor_v").alias("parameter_name")))
+        event_sdf.select(F.col("parameter_name_u").alias("parameter_name"))
+        .unionByName(event_sdf.select(F.col("parameter_name_v").alias("parameter_name")))
         .distinct()
         .collect()
     )
     lag_parameters = (
-        lag_sdf.select(F.col("sensor_u").alias("parameter_name"))
-        .unionByName(lag_sdf.select(F.col("sensor_v").alias("parameter_name")))
+        lag_sdf.select(F.col("parameter_name_u").alias("parameter_name"))
+        .unionByName(lag_sdf.select(F.col("parameter_name_v").alias("parameter_name")))
         .distinct()
         .collect()
     )
@@ -183,10 +181,7 @@ def run() -> None:
     hierarchy_df = (
         spark.createDataFrame(hierarchy_pdf)
         if not hierarchy_pdf.empty
-        else spark.createDataFrame(
-            [],
-            schema="parameter_name string, system_id string, subsystem_id string, module_id string, hierarchy_source string, hierarchy_profile_id string",
-        )
+        else spark.createDataFrame([], schema=HIERARCHY_SENSOR_MAP_SCHEMA)
     )
 
     write_table(precision_df, path=precision_graph_path, mode=write_mode, fmt=table_format)

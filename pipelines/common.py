@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +20,7 @@ class PipelineContext:
     date_utc: str | None = None
 
 
+@lru_cache(maxsize=1)
 def load_defaults() -> dict[str, Any]:
     config_path = Path(__file__).resolve().parent.parent / "conf" / "defaults.yaml"
     with config_path.open("r", encoding="utf-8") as file_obj:
@@ -30,7 +33,7 @@ def build_context(
     date_utc: str | None = None,
 ) -> PipelineContext:
     return PipelineContext(
-        config=load_defaults(),
+        config=deepcopy(load_defaults()),
         tail_id=tail_id,
         flight_id=flight_id,
         date_utc=date_utc,

@@ -79,7 +79,7 @@ observed telemetry and reused during backbone, graph, phase, and inference work.
 
 ### canonical outputs
 
-- `window_x` optional persisted intermediate
+- window features optional persisted intermediate
 - `backbone`
 - `backbone_sensor_energy`
 
@@ -92,7 +92,7 @@ observed telemetry and reused during backbone, graph, phase, and inference work.
   - window counts
 
 This cache is what makes backbone-size or ridge sweeps cheap without rebuilding
-`window_x`.
+window features.
 
 ## 3.2 `11_graph_fit`
 
@@ -216,7 +216,7 @@ Suggested schema:
     }
   },
   "replayable_from": [
-    "window_x",
+    "window_features",
     "event_graph",
     "lag_graph",
     "backbone"
@@ -319,7 +319,7 @@ For example:
 
 ### graph component cache invalidates if
 
-- `window_x` definition changes
+- window feature definition changes
 - event graph normalization changes
 - lag graph normalization changes
 - backbone changes
@@ -327,7 +327,7 @@ For example:
 
 ### backbone `G_f/H_f` cache invalidates if
 
-- `window_x` changes
+- window feature definition changes
 - selected sensors `C` changes
 - scaling changes
 

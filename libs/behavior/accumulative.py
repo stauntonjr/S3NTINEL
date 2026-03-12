@@ -30,7 +30,7 @@ class AccumulativeContract(BehaviorContract):
     behavior_family: str = "accumulative"
     expected_traits: tuple[str, ...] = ("persistent", "monotone", "integrative")
     supported_datatypes: tuple[str, ...] = ("numeric",)
-    allowed_fault_families: tuple[str, ...] = ("reset_drop", "drift", "leakage", "noise_increase")
+    allowed_fault_families: tuple[str, ...] = ("reset_drop", "leak_rate", "drift", "bias")
 
 
 class AccumulativeFeatureExtractor(BehaviorFeatureExtractor):
@@ -138,6 +138,15 @@ class AccumulativeProfiler(BehaviorProfiler):
 
 
 class AccumulativeViolator(BehaviorViolator):
+    @staticmethod
+    def _coerce_float(value: object | None) -> float | None:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except Exception:
+            return None
+
     def violate_stream(
         self,
         *,
@@ -145,19 +154,34 @@ class AccumulativeViolator(BehaviorViolator):
         generated_stream: Iterable[BehaviorSample],
         context: Mapping[str, Any],
     ) -> Iterator[BehaviorSample]:
+        violation_type = str(context.get("violation_type") or ("reset_drop" if "drop_value" in context else "bias"))
         drop_value = float(context.get("drop_value", 0.0))
         anomaly_rate = clip01(float(context.get("anomaly_rate", 0.0)))
         rng = np.random.default_rng(int(context.get("rng_seed", 0)))
-        for sample in generated_stream:
+        persistent_offset = 0.0
+        for step_index, sample in enumerate(generated_stream):
             apply_drop = bool(rng.random() < anomaly_rate)
-            try:
-                observed = float(sample.parameter_value) if sample.parameter_value is not None else None
-            except Exception:
-                observed = None
-            perturbed = observed - drop_value if apply_drop and observed is not None else sample.parameter_value
+            observed = self._coerce_float(sample.parameter_value)
+            perturbed: object | None = sample.parameter_value
+            if apply_drop and observed is not None:
+                if violation_type == "reset_drop":
+                    if step_index == 0 or bool(context.get("persistent_drop", True)):
+                        persistent_offset -= drop_value
+                    perturbed = observed + persistent_offset
+                elif violation_type == "leak_rate":
+                    leak_rate = float(context.get("leak_rate", 0.05))
+                    persistent_offset -= leak_rate
+                    perturbed = observed + persistent_offset
+                elif violation_type == "drift":
+                    drift_rate = float(context.get("drift_rate", 0.05))
+                    perturbed = observed + (drift_rate * step_index)
+                elif violation_type == "bias":
+                    perturbed = observed + float(context.get("bias", 0.0))
+                else:
+                    perturbed = observed - drop_value
             metadata = dict(sample.metadata)
             metadata["misbehavior_applied"] = apply_drop
-            metadata["misbehavior_family_label"] = "reset_drop" if apply_drop else None
+            metadata["misbehavior_family_label"] = violation_type if apply_drop else None
             yield BehaviorSample(
                 parameter_name=parameter_name,
                 parameter_value_clean=sample.parameter_value_clean,

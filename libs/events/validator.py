@@ -8,7 +8,7 @@ from typing import Generator, Iterable
 
 import pandas as pd
 
-from libs.common import DetectedEventRow, EventLabelRow, EventValidatorSnapshot, TelemetryRow
+from libs.io.contracts import DetectedEventRow, EventLabelRow, EventValidatorSnapshot, TelemetryRow
 
 def _event_key(event: EventLabelRow | DetectedEventRow) -> tuple[str, str, str]:
     return (

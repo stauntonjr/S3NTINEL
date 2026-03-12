@@ -331,7 +331,7 @@ Tests should use the registry to:
 
 Suggested test file:
 
-- `tests/test_behavior_contracts.py`
+- `tests/unit/simulation/test_behavior_family_contracts.py`
 
 ## 10. Naming recommendations
 
