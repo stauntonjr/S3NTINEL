@@ -75,7 +75,7 @@ stages.
 These are the parameter-level artifacts that should normally be fit once from
 observed telemetry and reused during backbone, graph, phase, and inference work.
 
-## 3.1 `10_backbone_fit`
+## 3.1 `40_backbone_fit`
 
 ### canonical outputs
 
@@ -94,30 +94,34 @@ observed telemetry and reused during backbone, graph, phase, and inference work.
 This cache is what makes backbone-size or ridge sweeps cheap without rebuilding
 window features.
 
-## 3.2 `11_build_graph`
+## 3.2 `50_build_graph`
 
 ### canonical outputs
 
 - `precision_graph`
 - `event_graph`
+- `lag_profile`
 - `lag_graph`
 - `transition_graph`
 - `fused_graph`
-- `hierarchy_sensor_map`
+- `graph_parameter_universe`
 
 In the active implementation:
 
-- `precision_graph`, `event_graph`, `lag_graph`, `transition_graph`, and
-  `fused_graph` are built in Spark
-- `hierarchy_sensor_map` is derived from the already-pruned fused edge set on the
-  driver
+- `precision_graph`, `event_graph`, `lag_profile`, `lag_graph`,
+  `transition_graph`, and `fused_graph` are built in Spark
+- `lag_profile` is the first-class per-band lag artifact
+- `lag_graph` is the collapsed compatibility view derived from `lag_profile`
+- `graph_parameter_universe` is persisted as the bounded parameter universe used
+  by hierarchy fit
 
 ### optional replay cache
 
 - `graph_component_cache`
   - `precision_graph` before downstream threshold changes
   - `event_graph` before top-k pruning changes
-  - `lag_graph` before top-k pruning changes
+  - `lag_profile` before downstream band-combine or collapse changes
+  - `lag_graph` collapsed compatibility view
   - `transition_graph`
   - `backbone`
   - `hierarchy_labels` when available in simulation/evaluation mode
@@ -127,10 +131,24 @@ This is the cache needed for cheap hierarchy-only sweeps.
 The practical replay seam is now:
 
 1. reuse component graph tables directly
-2. rebuild `fused_graph` cheaply in Spark if fusion weights change
-3. rerun only the small hierarchy-assignment step on the pruned fused edge set
+2. reuse `lag_profile` directly when only lag-collapse weights or lag filters change
+3. rebuild `fused_graph` cheaply in Spark if fusion weights change
+4. reuse `graph_parameter_universe`
+5. rerun only the small hierarchy-assignment step on the pruned fused edge set
 
-## 3.3 `50_phase_fit`
+## 3.3 `60_fit_hierarchy`
+
+### canonical outputs
+
+- `hierarchy_sensor_map`
+
+### optional replay cache
+
+- usually unnecessary once `fused_graph` and `graph_parameter_universe` are persisted
+
+This stage should replay directly from canonical graph outputs.
+
+## 3.4 `70_phase_fit`
 
 ### canonical outputs
 
@@ -149,7 +167,7 @@ The practical replay seam is now:
 This cache allows segmentation and clustering sweeps without redoing feature
 selection.
 
-## 3.4 `60_window_scores_raw`
+## 3.5 `80_window_scores_raw`
 
 ### canonical outputs
 
@@ -162,7 +180,7 @@ selection.
 
 This stage should normally replay directly from canonical upstream artifacts.
 
-## 3.5 `70_window_scores_calibrate`
+## 3.6 `85_window_scores_calibrate`
 
 ### canonical outputs
 
@@ -172,7 +190,7 @@ This stage should normally replay directly from canonical upstream artifacts.
 
 - optional calibration buffer snapshots if online calibration is revisited later
 
-## 3.6 `80_anomaly_attribution`
+## 3.7 `90_anomaly_attribution`
 
 ### canonical outputs
 
@@ -194,7 +212,7 @@ Suggested schema:
 
 ```json
 {
-  "stage_name": "11_build_graph",
+  "stage_name": "50_build_graph",
   "stage_version": "v2",
   "run_id": "uuid-or-mlflow-run-id",
   "created_at_utc": "2026-03-07T12:34:56Z",
@@ -218,6 +236,7 @@ Suggested schema:
   "replayable_from": [
     "window_features",
     "event_graph",
+    "lag_profile",
     "lag_graph",
     "backbone"
   ],
@@ -321,7 +340,8 @@ For example:
 
 - window feature definition changes
 - event graph normalization changes
-- lag graph normalization changes
+- lag profile normalization or banding changes
+- lag graph collapse weighting changes
 - backbone changes
 - precision graph formula changes
 
@@ -377,10 +397,10 @@ The next implementation steps should be:
 
 1. add a reusable manifest writer/helper
 2. add per-stage manifest emission for:
-   - `10_backbone_fit`
-   - `11_build_graph`
-   - `50_phase_fit`
-   - `60_window_scores_raw`
+   - `40_backbone_fit`
+   - `50_build_graph`
+   - `70_phase_fit`
+   - `80_window_scores_raw`
 3. promote current graph cache JSON into a formal replay cache artifact with manifest
 4. add explicit replay scripts for:
    - graph

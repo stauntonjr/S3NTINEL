@@ -197,24 +197,42 @@ def build_profile_validation_summary(
     behavior_match_mask = behavior_mask & behavior_profiled_mask & (
         merged["behavior_family_label"].astype(str) == merged["behavior_family_profiled"].fillna("").astype(str)
     )
+    datatype_labeled_parameter_count = int(datatype_mask.sum())
+    datatype_profiled_parameter_count = int(datatype_profiled_mask.sum())
+    datatype_exact_match_count = int(datatype_match_mask.sum())
+    behavior_labeled_parameter_count = int(behavior_mask.sum())
+    behavior_profiled_parameter_count = int(behavior_profiled_mask.sum())
+    behavior_exact_match_count = int(behavior_match_mask.sum())
 
     return {
         "status": "ok",
         "parameter_count": int(len(merged)),
-        "datatype_labeled_parameter_count": int(datatype_mask.sum()),
-        "datatype_profiled_parameter_count": int(datatype_profiled_mask.sum()),
-        "datatype_exact_match_count": int(datatype_match_mask.sum()),
+        "datatype_labeled_parameter_count": datatype_labeled_parameter_count,
+        "datatype_profiled_parameter_count": datatype_profiled_parameter_count,
+        "datatype_exact_match_count": datatype_exact_match_count,
+        "datatype_error_count": max(datatype_labeled_parameter_count - datatype_exact_match_count, 0),
         "datatype_accuracy": (
-            float(datatype_match_mask.sum() / datatype_mask.sum())
-            if int(datatype_mask.sum()) > 0
+            float(datatype_exact_match_count / datatype_labeled_parameter_count)
+            if datatype_labeled_parameter_count > 0
             else None
         ),
-        "behavior_labeled_parameter_count": int(behavior_mask.sum()),
-        "behavior_profiled_parameter_count": int(behavior_profiled_mask.sum()),
-        "behavior_exact_match_count": int(behavior_match_mask.sum()),
+        "datatype_profile_coverage": (
+            float(datatype_profiled_parameter_count / datatype_labeled_parameter_count)
+            if datatype_labeled_parameter_count > 0
+            else None
+        ),
+        "behavior_labeled_parameter_count": behavior_labeled_parameter_count,
+        "behavior_profiled_parameter_count": behavior_profiled_parameter_count,
+        "behavior_exact_match_count": behavior_exact_match_count,
+        "behavior_error_count": max(behavior_labeled_parameter_count - behavior_exact_match_count, 0),
         "behavior_accuracy": (
-            float(behavior_match_mask.sum() / behavior_mask.sum())
-            if int(behavior_mask.sum()) > 0
+            float(behavior_exact_match_count / behavior_labeled_parameter_count)
+            if behavior_labeled_parameter_count > 0
+            else None
+        ),
+        "behavior_profile_coverage": (
+            float(behavior_profiled_parameter_count / behavior_labeled_parameter_count)
+            if behavior_labeled_parameter_count > 0
             else None
         ),
     }

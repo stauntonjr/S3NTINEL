@@ -2,10 +2,10 @@
 
 ## Purpose
 
-`conf/` contains default and example configuration assets used by the persisted pipeline and local demonstrations.
+`conf/` contains checked-in baseline configuration assets used by the pipeline config layer and local demonstrations.
 
 It owns:
-- baseline pipeline defaults
+- checked-in baseline defaults
 - example maps and stream profiles
 
 It does not own:
@@ -16,13 +16,13 @@ It does not own:
 ## How To Use
 
 - `conf/defaults.yaml`
-  - default stage and library settings used by `pipelines/common.py`
+  - baseline defaults loaded by the typed pipeline config layer
 - `conf/criticality_map.example.json`
   - example criticality mapping for telemetry or routing workflows
 - `conf/demo_stream_profile.json`
   - example stream profile for demos or local experimentation
 
-Environment variables override many `defaults.yaml` settings at runtime.
+Environment variables override `defaults.yaml` through the typed loaders in `libs/config/`.
 
 ## Contents
 
@@ -38,15 +38,20 @@ Environment variables override many `defaults.yaml` settings at runtime.
 `defaults.yaml` supplies base values for:
 - pipeline stage controls
 - graph/backbone/phase/scoring parameters
-- output-path defaults where the pipeline context supports them
+- algorithm tuning defaults
+
+Artifact paths, write modes, and table formats are resolved by the runtime config layer:
+- `libs/config/pipeline.py`
+- `pipelines/common.py`
 
 The repo favors:
 - checked-in defaults here
-- runtime overrides through env vars
+- typed config access in pipeline stages
+- runtime overrides through env vars at the boundary
 
 ## Subject Matter View
 
-This directory is the repo’s baseline operating configuration, not a substitute for per-environment deployment management.
+This directory is the repo’s baseline default configuration, not the full runtime configuration surface and not a substitute for per-environment deployment management.
 
 ## Notes / Constraints
 

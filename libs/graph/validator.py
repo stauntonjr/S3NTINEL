@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from math import exp
+from math import lgamma
+from math import log
 from math import comb
 from typing import Any
 
@@ -48,6 +51,165 @@ def _pairwise_partition_metrics(joined: pd.DataFrame, *, detected_col: str, trut
     }
 
 
+def _entropy(series: pd.Series) -> float:
+    counts = series.astype(str).value_counts(dropna=False)
+    total = float(counts.sum())
+    if total <= 0.0:
+        return 0.0
+    entropy = 0.0
+    for count in counts.tolist():
+        probability = float(count) / total
+        if probability > 0.0:
+            entropy -= probability * log(probability)
+    return float(entropy)
+
+
+def _mutual_information(joined: pd.DataFrame, *, detected_col: str, truth_col: str) -> float:
+    if joined.empty:
+        return 0.0
+    total = float(len(joined))
+    if total <= 0.0:
+        return 0.0
+
+    detected_counts = joined[detected_col].astype(str).value_counts(dropna=False).to_dict()
+    truth_counts = joined[truth_col].astype(str).value_counts(dropna=False).to_dict()
+    joint_counts = (
+        joined.groupby([detected_col, truth_col], dropna=False).size().to_dict()
+    )
+
+    mutual_information = 0.0
+    for (detected_value, truth_value), joint_count in joint_counts.items():
+        p_xy = float(joint_count) / total
+        if p_xy <= 0.0:
+            continue
+        p_x = float(detected_counts[str(detected_value)]) / total
+        p_y = float(truth_counts[str(truth_value)]) / total
+        if p_x <= 0.0 or p_y <= 0.0:
+            continue
+        mutual_information += p_xy * log(p_xy / (p_x * p_y))
+    return float(mutual_information)
+
+
+def _contingency_counts(joined: pd.DataFrame, *, detected_col: str, truth_col: str) -> tuple[list[int], list[int], list[int], int]:
+    if joined.empty:
+        return [], [], [], 0
+
+    detected_counts = joined[detected_col].astype(str).value_counts(dropna=False)
+    truth_counts = joined[truth_col].astype(str).value_counts(dropna=False)
+    joint_counts = joined.groupby([detected_col, truth_col], dropna=False).size()
+    return (
+        [int(value) for value in detected_counts.tolist()],
+        [int(value) for value in truth_counts.tolist()],
+        [int(value) for value in joint_counts.tolist()],
+        int(len(joined)),
+    )
+
+
+def _adjusted_rand_index(joined: pd.DataFrame, *, detected_col: str, truth_col: str) -> float | None:
+    detected_marginals, truth_marginals, joint_counts, sample_count = _contingency_counts(
+        joined,
+        detected_col=detected_col,
+        truth_col=truth_col,
+    )
+    if sample_count <= 1:
+        return 1.0 if sample_count == 1 else None
+
+    index = float(sum(comb(count, 2) for count in joint_counts if count >= 2))
+    detected_pairs = float(sum(comb(count, 2) for count in detected_marginals if count >= 2))
+    truth_pairs = float(sum(comb(count, 2) for count in truth_marginals if count >= 2))
+    total_pairs = float(comb(sample_count, 2))
+    if total_pairs <= 0.0:
+        return None
+
+    expected_index = (detected_pairs * truth_pairs) / total_pairs
+    max_index = 0.5 * (detected_pairs + truth_pairs)
+    denominator = max_index - expected_index
+    if abs(denominator) <= 1e-12:
+        return 1.0
+    return float((index - expected_index) / denominator)
+
+
+def _log_comb(n: int, k: int) -> float:
+    if k < 0 or k > n:
+        return float("-inf")
+    return float(lgamma(n + 1) - lgamma(k + 1) - lgamma(n - k + 1))
+
+
+def _expected_mutual_information(joined: pd.DataFrame, *, detected_col: str, truth_col: str) -> float:
+    detected_marginals, truth_marginals, _, sample_count = _contingency_counts(
+        joined,
+        detected_col=detected_col,
+        truth_col=truth_col,
+    )
+    if sample_count <= 0:
+        return 0.0
+
+    expected_mutual_information = 0.0
+    for detected_count in detected_marginals:
+        for truth_count in truth_marginals:
+            lower = max(1, detected_count + truth_count - sample_count)
+            upper = min(detected_count, truth_count)
+            for joint_count in range(lower, upper + 1):
+                p_xy = float(joint_count) / float(sample_count)
+                if p_xy <= 0.0:
+                    continue
+                log_probability = (
+                    _log_comb(detected_count, joint_count)
+                    + _log_comb(sample_count - detected_count, truth_count - joint_count)
+                    - _log_comb(sample_count, truth_count)
+                )
+                probability = exp(log_probability)
+                if probability <= 0.0:
+                    continue
+                expected_mutual_information += probability * p_xy * log(
+                    (float(sample_count) * float(joint_count)) / (float(detected_count) * float(truth_count))
+                )
+    return float(expected_mutual_information)
+
+
+def _normalized_mutual_information(joined: pd.DataFrame, *, detected_col: str, truth_col: str) -> float | None:
+    if joined.empty:
+        return None
+    detected_entropy = _entropy(joined[detected_col])
+    truth_entropy = _entropy(joined[truth_col])
+    denominator = detected_entropy + truth_entropy
+    if denominator <= 0.0:
+        return 1.0
+    return float((2.0 * _mutual_information(joined, detected_col=detected_col, truth_col=truth_col)) / denominator)
+
+
+def _adjusted_mutual_information(joined: pd.DataFrame, *, detected_col: str, truth_col: str) -> float | None:
+    if joined.empty:
+        return None
+    mutual_information = _mutual_information(joined, detected_col=detected_col, truth_col=truth_col)
+    expected_mutual_information = _expected_mutual_information(joined, detected_col=detected_col, truth_col=truth_col)
+    denominator = (0.5 * (_entropy(joined[detected_col]) + _entropy(joined[truth_col]))) - expected_mutual_information
+    if abs(denominator) <= 1e-12:
+        return 1.0
+    return float((mutual_information - expected_mutual_information) / denominator)
+
+
+def _cluster_agreement_metrics(joined: pd.DataFrame, *, detected_col: str, truth_col: str) -> dict[str, Any]:
+    return {
+        **_pairwise_partition_metrics(joined, detected_col=detected_col, truth_col=truth_col),
+        "normalized_mutual_information": _normalized_mutual_information(
+            joined,
+            detected_col=detected_col,
+            truth_col=truth_col,
+        ),
+        "adjusted_mutual_information": _adjusted_mutual_information(
+            joined,
+            detected_col=detected_col,
+            truth_col=truth_col,
+        ),
+        "adjusted_rand_index": _adjusted_rand_index(
+            joined,
+            detected_col=detected_col,
+            truth_col=truth_col,
+        ),
+    }
+
+
 def validate_hierarchy_recovery(
     *,
     hierarchy_sensor_map_df: pd.DataFrame,
@@ -77,17 +239,17 @@ def validate_hierarchy_recovery(
         "system_exact_match": float((joined["system_id_detected"] == joined["system_id_truth"]).mean()),
         "subsystem_exact_match": float((joined["subsystem_id_detected"] == joined["subsystem_id_truth"]).mean()),
         "module_exact_match": float((joined["module_id_detected"] == joined["module_id_truth"]).mean()),
-        "system_partition": _pairwise_partition_metrics(
+        "system_partition": _cluster_agreement_metrics(
             joined,
             detected_col="system_id_detected",
             truth_col="system_id_truth",
         ),
-        "subsystem_partition": _pairwise_partition_metrics(
+        "subsystem_partition": _cluster_agreement_metrics(
             joined,
             detected_col="subsystem_id_detected",
             truth_col="subsystem_id_truth",
         ),
-        "module_partition": _pairwise_partition_metrics(
+        "module_partition": _cluster_agreement_metrics(
             joined,
             detected_col="module_id_detected",
             truth_col="module_id_truth",

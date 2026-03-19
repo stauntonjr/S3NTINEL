@@ -8,14 +8,14 @@ from pipelines._pipeline_runner import run_stage_group
 
 FITTING_STAGE_SCRIPTS = [
     "00_ingest_raw.py",
-    "05_parameter_profiles_fit.py",
-    "10_backbone_fit.py",
-    "11_build_graph.py",
-    "12_fit_hierarchy.py",
+    "10_parameter_profiles_fit.py",
+    "40_backbone_fit.py",
+    "50_build_graph.py",
+    "60_fit_hierarchy.py",
 ]
 
 
-@log_memory_usage(label="91_run_fitting_pipeline")
+@log_memory_usage(label="97_run_fitting_pipeline")
 def run() -> None:
     os.environ.setdefault("S3NTINEL_WRITE_MODE", "overwrite")
     os.environ.setdefault("S3NTINEL_FIT_WRITE_MODE", "overwrite")

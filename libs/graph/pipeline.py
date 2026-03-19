@@ -3,6 +3,7 @@
 Edge-weight semantics:
 - precision_graph: absolute partial correlation
 - event_graph: positive normalized PMI over same-window co-occurrence
+- lag_profile: per-band nearest-prior lag tendency
 - lag_graph: row-normalized lagged conditional probability, discounted by mean lag
 - transition_graph: row-normalized immediate transition probability
 """
@@ -29,7 +30,9 @@ from libs.graph.data import (
 from libs.graph.event import EventGraph, EventGraphSpec
 from libs.graph.fused import FusedGraph, FusedGraphSpec
 from libs.graph.hierarchy_artifacts import GraphHierarchy, HierarchySpec
+from libs.graph.lag import LagBandSpec, LagProfileGraph
 from libs.graph.precision import PrecisionGraph, PrecisionGraphSpec
+from libs.graph.transition import TransitionGraph, TransitionGraphSpec
 from libs.io.schemas import (
     EVENT_GRAPH_SCHEMA,
     FUSED_GRAPH_SCHEMA,
@@ -74,40 +77,12 @@ def _spark_functions():
 
     return F
 
-
-def _canonical_graph_events(events_df: "DataFrame") -> "DataFrame":
-    F = _spark_functions()
-
-    required_columns = {"tail_id", "flight_id", "event_seq_id", "timestamp_utc", "parameter_name"}
-    missing_columns = required_columns.difference(events_df.columns)
-    if missing_columns:
-        missing_list = ", ".join(sorted(missing_columns))
-        raise ValueError(
-            "graph builders expect canonical events with event_seq_id; "
-            f"missing columns: {missing_list}"
-        )
-    return events_df.select(
-        F.col("tail_id").cast("string").alias("tail_id"),
-        F.col("flight_id").cast("string").alias("flight_id"),
-        F.col("event_seq_id").cast("long").alias("event_seq_id"),
-        F.col("timestamp_utc").cast("timestamp").alias("timestamp_utc"),
-        F.col("parameter_name").cast("string").alias("parameter_name"),
-    ).where(
-        F.col("tail_id").isNotNull()
-        & F.col("flight_id").isNotNull()
-        & F.col("event_seq_id").isNotNull()
-        & F.col("timestamp_utc").isNotNull()
-        & F.col("parameter_name").isNotNull()
-    )
-
-
 def _event_graph_schema():
     return EVENT_GRAPH_SCHEMA()
 
 
 def _lag_graph_schema():
     return LAG_GRAPH_SCHEMA()
-
 
 def _transition_graph_schema():
     return TRANSITION_GRAPH_SCHEMA()
@@ -164,7 +139,7 @@ def retain_event_graph_top_k(event_df: pd.DataFrame, *, top_k_per_parameter_name
     """Retain the top-k undirected event edges per sensor from a precomputed event graph."""
     if event_df.empty:
         return event_df.copy()
-    rows = _retain_top_k_undirected(
+    rows = retain_top_k_undirected(
         event_df.to_dict(orient="records"),
         weight_key="event_weight",
         top_k_per_parameter_name=int(top_k_per_parameter_name),
@@ -178,7 +153,7 @@ def retain_lag_graph_top_k(lag_df: pd.DataFrame, *, top_k_outgoing: int) -> pd.D
     """Retain the top-k directed lag edges per source from a precomputed lag graph."""
     if lag_df.empty:
         return lag_df.copy()
-    rows = _retain_top_k_directed(
+    rows = retain_top_k_directed(
         lag_df.to_dict(orient="records"),
         weight_key="lag_weight",
         top_k_outgoing=int(top_k_outgoing),
@@ -250,111 +225,58 @@ def build_event_graph_spark_table(
     min_npmi: float,
     top_k_per_parameter_name: int,
 ) -> DataFrame:
-    """Build same-window cooccurrence edges in Spark using positive normalized PMI."""
-    F = _spark_functions()
-    canonical_events_df = _canonical_graph_events(events_df)
-    event_columns = ["tail_id", "flight_id", "timestamp_utc", "parameter_name"]
-    window_columns = ["tail_id", "flight_id", "win_id", "t_start", "t_end"]
-    window_parameter_rows = (
-        canonical_events_df.select(*event_columns)
-        .join(
-            windows_df.select(*window_columns),
-            on=["tail_id", "flight_id"],
-            how="inner",
-        )
-        .where((F.col("timestamp_utc") >= F.col("t_start")) & (F.col("timestamp_utc") <= F.col("t_end")))
-        .select("tail_id", "flight_id", "win_id", "parameter_name")
-        .dropDuplicates(["tail_id", "flight_id", "win_id", "parameter_name"])
+    return EventGraph.from_events_and_windows_spark(
+        events_df,
+        windows_df,
+        spec=EventGraphSpec(
+            min_count=min_count,
+            min_npmi=min_npmi,
+            top_k_per_parameter_name=top_k_per_parameter_name,
+        ),
     )
-    grouped = window_parameter_rows.groupBy("tail_id", "flight_id", "win_id").agg(
-        F.sort_array(F.collect_list("parameter_name")).alias("parameter_names")
-    )
-    total_windows_df = grouped.agg(F.count(F.lit(1)).cast("double").alias("total_windows"))
-    pair_rows = grouped.select(
-        F.posexplode("parameter_names").alias("left_idx", "parameter_name_u"),
-        F.col("parameter_names"),
-    ).select(
-        "parameter_name_u",
-        F.expr("slice(parameter_names, left_idx + 2, size(parameter_names))").alias("right_candidates"),
-    ).select("parameter_name_u", F.explode_outer("right_candidates").alias("parameter_name_v")).where(F.col("parameter_name_v").isNotNull())
-    pair_counts = pair_rows.groupBy("parameter_name_u", "parameter_name_v").agg(
-        F.count(F.lit(1)).cast("int").alias("cooccur_count")
-    )
-    parameter_name_window_counts = window_parameter_rows.groupBy("parameter_name").agg(
-        F.count(F.lit(1)).cast("int").alias("parameter_name_window_count")
-    )
-    with_counts = (
-        pair_counts.join(
-            parameter_name_window_counts.withColumnRenamed("parameter_name", "parameter_name_u"),
-            on="parameter_name_u",
-        )
-        .withColumnRenamed("parameter_name_window_count", "left_window_count")
-        .join(
-            parameter_name_window_counts.withColumnRenamed("parameter_name", "parameter_name_v"),
-            on="parameter_name_v",
-        )
-        .withColumnRenamed("parameter_name_window_count", "right_window_count")
-        .crossJoin(total_windows_df)
-        .withColumn("p_xy", F.col("cooccur_count") / F.col("total_windows"))
-        .withColumn("p_x", F.col("left_window_count") / F.col("total_windows"))
-        .withColumn("p_y", F.col("right_window_count") / F.col("total_windows"))
-        .withColumn(
-            "event_weight_raw",
-            F.log(F.col("p_xy") / (F.col("p_x") * F.col("p_y"))) / (-F.log(F.col("p_xy"))),
-        )
-        .withColumn("event_weight", F.greatest(F.col("event_weight_raw"), F.lit(0.0)))
-        .where(
-            (F.col("cooccur_count") >= F.lit(max(int(min_count), 1)))
-            & (F.col("event_weight") >= F.lit(float(min_npmi)))
-        )
-    )
-    if int(top_k_per_parameter_name) > 0:
-        from pyspark.sql import Window
 
-        undirected = with_counts.select(
-            F.col("parameter_name_u"),
-            F.col("parameter_name_v"),
-            F.col("cooccur_count"),
-            F.col("event_weight"),
-            F.least("parameter_name_u", "parameter_name_v").alias("parameter_name_min"),
-            F.greatest("parameter_name_u", "parameter_name_v").alias("parameter_name_max"),
-        )
-        exploded = undirected.select(
-            F.col("parameter_name_u").alias("parameter_name"),
-            F.col("parameter_name_min"),
-            F.col("parameter_name_max"),
-            F.col("event_weight"),
-        ).unionByName(
-            undirected.select(
-                F.col("parameter_name_v").alias("parameter_name"),
-                F.col("parameter_name_min"),
-                F.col("parameter_name_max"),
-                F.col("event_weight"),
-            )
-        )
-        rank_window = Window.partitionBy("parameter_name").orderBy(
-            F.col("event_weight").desc(), F.col("parameter_name_min"), F.col("parameter_name_max")
-        )
-        keep = (
-            exploded.withColumn("rank", F.row_number().over(rank_window))
-            .where(F.col("rank") <= int(top_k_per_parameter_name))
-            .select("parameter_name_min", "parameter_name_max")
-            .distinct()
-        )
-        with_counts = with_counts.join(
-            keep,
-            on=[
-                with_counts.parameter_name_u == keep.parameter_name_min,
-                with_counts.parameter_name_v == keep.parameter_name_max,
-            ],
-            how="inner",
-        ).select(with_counts["*"])
-    return with_counts.select(
-        "parameter_name_u",
-        "parameter_name_v",
-        "cooccur_count",
-        "event_weight",
-        F.lit("event").alias("edge_family"),
+
+@hot_path
+def build_lag_candidate_pairs_spark_table(event_df: DataFrame, transition_df: DataFrame) -> DataFrame:
+    """Build directed lag candidate pairs from undirected event edges and directed transition edges."""
+    return LagProfileGraph.candidate_pairs_from_graphs_spark(event_df, transition_df)
+
+
+@hot_path
+def build_lag_profile_spark_table(
+    events_df: DataFrame,
+    *,
+    tau_max_seconds: float,
+    bands: tuple[LagBandSpec, ...] | None = None,
+    candidate_pairs_df: DataFrame | None = None,
+) -> DataFrame:
+    """Build directed multi-band lag profile rows from nearest-prior matches."""
+    return LagProfileGraph.from_events_spark(
+        events_df,
+        bands=bands,
+        tau_max_seconds=tau_max_seconds,
+        candidate_pairs_df=candidate_pairs_df,
+    )
+
+
+@hot_path
+def collapse_lag_profile_spark_table(
+    lag_profile_df: DataFrame,
+    *,
+    tau_max_seconds: float,
+    bands: tuple[LagBandSpec, ...] | None,
+    min_count: int,
+    max_mean_lag_seconds: float | None,
+    top_k_outgoing: int,
+) -> DataFrame:
+    """Collapse a lag profile table into the legacy lag_graph contract."""
+    return LagProfileGraph.collapse_to_lag_graph_spark(
+        lag_profile_df,
+        bands=bands,
+        tau_max_seconds=tau_max_seconds,
+        min_count=min_count,
+        max_mean_lag_seconds=max_mean_lag_seconds,
+        top_k_outgoing=top_k_outgoing,
     )
 
 
@@ -366,122 +288,31 @@ def build_lag_graph_spark_table(
     min_count: int,
     max_mean_lag_seconds: float | None,
     top_k_outgoing: int,
+    bands: tuple[LagBandSpec, ...] | None = None,
+    candidate_pairs_df: DataFrame | None = None,
 ) -> DataFrame:
-    """Build directed lag edges as conditional probabilities discounted by mean lag."""
-    F = _spark_functions()
-    from pyspark.sql import Window
-
-    tau_ms = max(int(round(float(tau_max_seconds) * 1000.0)), 1)
-    canonical_events_df = _canonical_graph_events(events_df)
-    base = canonical_events_df.select(
-        "tail_id",
-        "flight_id",
-        F.col("event_seq_id").alias("event_id"),
-        "timestamp_utc",
-        "parameter_name",
-        F.unix_millis("timestamp_utc").cast("long").alias("timestamp_ms"),
-        F.floor(F.unix_millis("timestamp_utc") / F.lit(float(tau_ms))).cast("long").alias("time_bucket"),
+    """Build the legacy collapsed lag graph from a multi-band lag profile."""
+    lag_profile_df = build_lag_profile_spark_table(
+        events_df,
+        tau_max_seconds=tau_max_seconds,
+        bands=bands,
+        candidate_pairs_df=candidate_pairs_df,
     )
-    joined = (
-        base.alias("prev")
-        .join(
-            base.alias("curr"),
-            on=[
-                F.col("prev.tail_id") == F.col("curr.tail_id"),
-                F.col("prev.flight_id") == F.col("curr.flight_id"),
-                F.col("prev.time_bucket") >= F.col("curr.time_bucket") - F.lit(1),
-                F.col("prev.time_bucket") <= F.col("curr.time_bucket"),
-                F.col("prev.event_id") < F.col("curr.event_id"),
-                F.col("prev.parameter_name") != F.col("curr.parameter_name"),
-            ],
-            how="inner",
-        )
-        .where(F.col("prev.timestamp_ms") >= F.col("curr.timestamp_ms") - F.lit(tau_ms))
-        .select(
-            F.col("curr.tail_id").alias("tail_id"),
-            F.col("curr.flight_id").alias("flight_id"),
-            F.col("curr.event_id").alias("curr_event_id"),
-            F.col("curr.timestamp_ms").alias("curr_timestamp_ms"),
-            F.col("prev.parameter_name").alias("parameter_name_u"),
-            F.col("curr.parameter_name").alias("parameter_name_v"),
-            F.col("prev.timestamp_ms").alias("prev_timestamp_ms"),
-        )
+    return collapse_lag_profile_spark_table(
+        lag_profile_df,
+        tau_max_seconds=tau_max_seconds,
+        bands=bands,
+        min_count=min_count,
+        max_mean_lag_seconds=max_mean_lag_seconds,
+        top_k_outgoing=top_k_outgoing,
     )
-    deduped = joined.groupBy(
-        "tail_id",
-        "flight_id",
-        "curr_event_id",
-        "curr_timestamp_ms",
-        "parameter_name_u",
-        "parameter_name_v",
-    ).agg(F.max("prev_timestamp_ms").alias("nearest_prev_timestamp_ms"))
-    aggregated = deduped.groupBy("parameter_name_u", "parameter_name_v").agg(
-        F.count(F.lit(1)).cast("int").alias("lag_count"),
-        (
-            F.avg(
-                (F.col("curr_timestamp_ms") - F.col("nearest_prev_timestamp_ms")).cast("double")
-            )
-            / F.lit(1000.0)
-        ).alias("mean_lag_seconds"),
-    )
-    aggregated = aggregated.where(F.col("lag_count") >= F.lit(max(int(min_count), 1)))
-    if max_mean_lag_seconds is not None:
-        aggregated = aggregated.where(F.col("mean_lag_seconds") <= F.lit(float(max_mean_lag_seconds)))
-    source_totals = aggregated.groupBy("parameter_name_u").agg(F.sum("lag_count").cast("double").alias("source_total"))
-    tau = max(float(tau_max_seconds), 1e-6)
-    out = (
-        aggregated.join(source_totals, on="parameter_name_u", how="inner")
-        .withColumn("conditional_probability", F.col("lag_count") / F.col("source_total"))
-        .withColumn("shortness", F.greatest(F.lit(0.0), F.lit(1.0) - (F.col("mean_lag_seconds") / F.lit(tau))))
-        .withColumn("lag_weight", F.col("conditional_probability") * F.col("shortness"))
-        .withColumn("edge_family", F.lit("lag_directed"))
-        .select("parameter_name_u", "parameter_name_v", "edge_family", "lag_count", "lag_weight", "mean_lag_seconds")
-    )
-    if int(top_k_outgoing) > 0:
-        rank_window = Window.partitionBy("parameter_name_u").orderBy(F.col("lag_weight").desc(), F.col("parameter_name_v").asc())
-        out = out.withColumn("rank", F.row_number().over(rank_window)).where(F.col("rank") <= F.lit(int(top_k_outgoing))).drop("rank")
-    return out
 
 
 @hot_path
 def build_transition_graph_spark_table(events_df: DataFrame, *, min_count: int) -> DataFrame:
-    """Build immediate transition edges as row-normalized transition probabilities."""
-    F = _spark_functions()
-    from pyspark.sql import Window
-
-    canonical_events_df = _canonical_graph_events(events_df)
-    ordered_window = Window.partitionBy("tail_id", "flight_id").orderBy("event_seq_id")
-    transitions = (
-        canonical_events_df.select("tail_id", "flight_id", "event_seq_id", "parameter_name")
-        .withColumn("parameter_name_v", F.lead("parameter_name").over(ordered_window))
-        .where(F.col("parameter_name_v").isNotNull() & (F.col("parameter_name") != F.col("parameter_name_v")))
-        .select(
-            F.col("parameter_name").alias("parameter_name_u"),
-            "parameter_name_v",
-        )
-    )
-    count_df = transitions.groupBy("parameter_name_u", "parameter_name_v").agg(
-        F.count(F.lit(1)).cast("int").alias("precedence_count")
-    )
-    count_df = count_df.where(F.col("precedence_count") >= F.lit(max(int(min_count), 1)))
-    source_totals = count_df.groupBy("parameter_name_u").agg(F.sum("precedence_count").cast("double").alias("source_total"))
-    return (
-        count_df.join(source_totals, on="parameter_name_u", how="inner")
-        .withColumn(
-            "precedence_weight",
-            F.col("precedence_count") / F.col("source_total"),
-        )
-        .withColumn(
-            "edge_family",
-            F.lit("transition"),
-        )
-        .select(
-            "parameter_name_u",
-            "parameter_name_v",
-            "precedence_count",
-            "precedence_weight",
-            "edge_family",
-        )
+    return TransitionGraph.from_events_spark(
+        events_df,
+        spec=TransitionGraphSpec(min_count=min_count),
     )
 
 
@@ -631,6 +462,7 @@ def build_graph_components_with_diagnostics_spark_table(
     min_lag_count: int = 1,
     max_mean_lag_seconds: float | None = None,
     lag_top_k_outgoing: int = 8,
+    lag_bands: tuple[LagBandSpec, ...] | None = None,
     min_transition_count: int = 1,
     alpha: float = 1.0,
     beta: float = 1.0,
@@ -638,7 +470,6 @@ def build_graph_components_with_diagnostics_spark_table(
     max_graph_sensor_universe: int = 50000,
 ) -> tuple[DataFrame, DataFrame, DataFrame, DataFrame, DataFrame, DataFrame, GraphBuildDiagnostics]:
     spark = events_df.sparkSession
-    F = _spark_functions()
     started = time.perf_counter()
     diagnostics: list[GraphBuildStepDiagnostics] = []
 
@@ -680,17 +511,6 @@ def build_graph_components_with_diagnostics_spark_table(
         ),
         diagnostics=diagnostics,
     )
-    lag_sdf = _record_spark_step(
-        name="lag_graph_build",
-        build_frame=lambda: build_lag_graph_spark_table(
-            events_df,
-            tau_max_seconds=lag_tau_max_seconds,
-            min_count=min_lag_count,
-            max_mean_lag_seconds=max_mean_lag_seconds,
-            top_k_outgoing=lag_top_k_outgoing,
-        ),
-        diagnostics=diagnostics,
-    )
     transition_sdf = _record_spark_step(
         name="transition_graph_build",
         build_frame=lambda: build_transition_graph_spark_table(
@@ -699,6 +519,30 @@ def build_graph_components_with_diagnostics_spark_table(
         ),
         diagnostics=diagnostics,
     )
+    lag_candidate_sdf = build_lag_candidate_pairs_spark_table(event_sdf, transition_sdf)
+    lag_profile_sdf = _record_spark_step(
+        name="lag_profile_build",
+        build_frame=lambda: build_lag_profile_spark_table(
+            events_df,
+            tau_max_seconds=lag_tau_max_seconds,
+            bands=lag_bands,
+            candidate_pairs_df=lag_candidate_sdf,
+        ),
+        diagnostics=diagnostics,
+    )
+    lag_sdf = _record_spark_step(
+        name="lag_graph_build",
+        build_frame=lambda: collapse_lag_profile_spark_table(
+            lag_profile_sdf,
+            tau_max_seconds=lag_tau_max_seconds,
+            bands=lag_bands,
+            min_count=min_lag_count,
+            max_mean_lag_seconds=max_mean_lag_seconds,
+            top_k_outgoing=lag_top_k_outgoing,
+        ),
+        diagnostics=diagnostics,
+    )
+    lag_profile_sdf.unpersist()
     fused_sdf = _record_spark_step(
         name="fused_graph_build",
         build_frame=lambda: build_fused_graph_spark_table(

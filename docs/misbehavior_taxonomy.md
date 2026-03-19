@@ -285,6 +285,7 @@ Most naturally supports:
 Current path:
 
 - `event_graph`
+- `lag_profile`
 - `lag_graph`
 - `transition_graph`
 - `fused_graph`

@@ -6,7 +6,7 @@
 
 It owns:
 - stage ordering
-- environment/config loading through `pipelines/common.py`
+- environment/config loading through `pipelines/common.py` and `libs/config/`
 - persisted artifact writes
 - stage manifests, MLflow logging, and wall-time logging
 
@@ -19,35 +19,36 @@ Those belong in `libs/*`.
 ## How To Use
 
 Canonical grouped entrypoints:
-- `python -m pipelines.90_run_full_pipeline`
-- `python -m pipelines.91_run_fitting_pipeline`
-- `python -m pipelines.92_run_inference_pipeline`
+- `python -m pipelines.99_run_full_pipeline`
+- `python -m pipelines.97_run_fitting_pipeline`
+- `python -m pipelines.98_run_inference_pipeline`
 
 Canonical stage order:
 1. `00_ingest_raw.py`
-2. `05_parameter_profiles_fit.py`
-3. `10_backbone_fit.py`
-4. `11_build_graph.py`
-5. `12_fit_hierarchy.py`
-6. `20_events_extract.py`
-7. `30_windows_adaptive.py`
-8. `50_phase_fit.py`
-9. `60_window_scores_raw.py`
-10. `70_window_scores_calibrate.py`
-11. `80_anomaly_attribution.py`
+2. `10_parameter_profiles_fit.py`
+3. `20_events_extract.py`
+4. `30_windows_adaptive.py`
+5. `40_backbone_fit.py`
+6. `50_build_graph.py`
+7. `60_fit_hierarchy.py`
+8. `70_phase_fit.py`
+9. `80_window_scores_raw.py`
+10. `85_window_scores_calibrate.py`
+11. `90_anomaly_attribution.py`
+12. `95_emit_explorer_bundle.py`
 
 Grouped execution is coordinated by `pipelines/_pipeline_runner.py`.
 
 ## Contents
 
-- `00`, `05`, `10`, `11`
-  - fitting stages
-- `20`, `30`, `50`, `60`, `70`, `80`
-  - inference stages
-- `90`, `91`, `92`
+- `00`, `10`, `20`, `30`, `40`, `50`, `60`, `70`, `80`, `85`, `90`
+  - persisted stage entrypoints
+- `97`, `98`, `99`
   - grouped pipeline entrypoints
 - `common.py`
-  - shared context/config setup
+  - shared pipeline context assembly
+- `libs/config/`
+  - typed runtime/artifact/tuning config loaders consumed by the pipeline context
 - `_pipeline_runner.py`
   - grouped execution, summaries, and run orchestration
 
@@ -62,6 +63,9 @@ The stage model is:
 - attribute anomalies
 
 Stages are intentionally thin wrappers around `libs/*` code.
+
+`50_build_graph.py` now emits both a first-class `lag_profile` artifact and the
+collapsed legacy `lag_graph` compatibility view.
 
 ## Data / Artifacts
 
@@ -102,5 +106,5 @@ These pipelines turn telemetry into:
 ## Notes / Constraints
 
 - Stage logging is expected to be consistent: MLflow plus wall-time decorators.
-- Config defaults are loaded from `conf/defaults.yaml` and overridden by environment variables.
+- Checked-in defaults come from `conf/defaults.yaml`, but the runtime config surface is resolved through `libs/config/pipeline.py`.
 - Keep stage files thin; push algorithmic growth into `libs/*`.

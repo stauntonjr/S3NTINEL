@@ -1,4 +1,4 @@
-# File: pipelines/90_run_full_pipeline.py
+# File: pipelines/99_run_full_pipeline.py
 """Run grouped fitting + inference pipelines under one parent MLflow run."""
 
 from libs.perf import log_memory_usage
@@ -6,12 +6,12 @@ from pipelines._pipeline_runner import run_stage_group
 
 
 GROUPED_STAGE_SCRIPTS = [
-    "91_run_fitting_pipeline.py",
-    "92_run_inference_pipeline.py",
+    "97_run_fitting_pipeline.py",
+    "98_run_inference_pipeline.py",
 ]
 
 
-@log_memory_usage(label="90_run_full_pipeline")
+@log_memory_usage(label="99_run_full_pipeline")
 def run() -> None:
     run_stage_group(
         run_name="s3ntinel.full_pipeline",

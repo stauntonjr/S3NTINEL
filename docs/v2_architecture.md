@@ -40,18 +40,21 @@ robust scaling; behavior profiling is the next planned metadata artifact.
 Then the active structural stages are:
 
 1. `pipelines/00_ingest_raw.py`
-2. `pipelines/05_parameter_profiles_fit.py`
-3. `pipelines/10_backbone_fit.py`
-4. `pipelines/11_build_graph.py`
+2. `pipelines/10_parameter_profiles_fit.py`
+3. `pipelines/20_events_extract.py`
+4. `pipelines/30_windows_adaptive.py`
+5. `pipelines/40_backbone_fit.py`
+6. `pipelines/50_build_graph.py`
+7. `pipelines/60_fit_hierarchy.py`
 
 ### Inference
 
 1. `pipelines/20_events_extract.py`
 2. `pipelines/30_windows_adaptive.py`
-3. `pipelines/50_phase_fit.py`
-4. `pipelines/60_window_scores_raw.py`
-5. `pipelines/70_window_scores_calibrate.py`
-6. `pipelines/80_anomaly_attribution.py`
+3. `pipelines/70_phase_fit.py`
+4. `pipelines/80_window_scores_raw.py`
+5. `pipelines/85_window_scores_calibrate.py`
+6. `pipelines/90_anomaly_attribution.py`
 
 ## Core representations
 
@@ -110,9 +113,14 @@ Then the active structural stages are:
   - same-window sensor cooccurrence graph
   - weight semantics: positive normalized PMI
 
+- `lag_profile`
+  - directed per-band nearest-prior lag profile over parameters
+  - weight semantics: per-band row-normalized lagged conditional probability with short-lag discount
+  - includes `lag_band` and `support_flight_count`
+
 - `lag_graph`
-  - directed lagged transition graph
-  - weight semantics: row-normalized lagged conditional probability times short-lag discount
+  - directed collapsed lag compatibility graph derived from `lag_profile`
+  - weight semantics: weighted sum of band-level lag-profile weights plus count-weighted mean lag
 
 - `transition_graph`
   - directed adjacent-event transition graph
@@ -120,6 +128,9 @@ Then the active structural stages are:
 
 - `fused_graph`
   - first-pass fusion of precision, event, and lag structure
+
+- `graph_parameter_universe`
+  - bounded canonical parameter universe persisted between graph build and hierarchy fit
 
 - `hierarchy_sensor_map`
   - first-pass module/subsystem/system assignment from fused graph
@@ -140,15 +151,15 @@ Then the active structural stages are:
 ## Current Spark boundary
 
 - `20_events_extract.py` uses the segmented Spark sequence kernel over `(tail_id, flight_id, parameter_name)` streams.
-- `10_backbone_fit.py` keeps fact-table work in Spark and collects only bounded
+- `40_backbone_fit.py` keeps fact-table work in Spark and collects only bounded
   sensor-energy and per-flight `G_f/H_f` aggregates for the final solve.
-- `11_build_graph.py` keeps component-graph construction in Spark and collects only
+- `50_build_graph.py` keeps component-graph construction in Spark and collects only
   small backbone metadata and the already-pruned fused edge set for final hierarchy
-  assignment. Precision, event, lag, transition, and fused graph construction are
-  all Spark-native.
-- `50_phase_fit.py` consumes persisted `window_features` and emits per-flight phase artifacts
+  assignment. Precision, event, lag-profile, lag-collapse, transition, and fused
+  graph construction are all Spark-native.
+- `70_phase_fit.py` consumes persisted `window_features` and emits per-flight phase artifacts
   with segmented Spark assignment; the remaining driver-side work is bounded global configuration.
-- `60_window_scores_raw.py` keeps the main fact table distributed, but still collects bounded reference artifacts.
+- `80_window_scores_raw.py` keeps the main fact table distributed, but still collects bounded reference artifacts.
 
 Bridge rule:
 - do not use `toPandas()` on growing fact tables in active Spark stages

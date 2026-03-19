@@ -22,7 +22,7 @@ def _patch_common(monkeypatch, module):
 
 
 def test_emit_anomalies_uses_upsert_when_write_mode_merge(monkeypatch):
-    module = importlib.import_module("pipelines.80_anomaly_attribution")
+    module = importlib.import_module("pipelines.90_anomaly_attribution")
     _patch_common(monkeypatch, module)
 
     calls = {"upsert": 0, "write": 0}
@@ -39,13 +39,13 @@ def test_emit_anomalies_uses_upsert_when_write_mode_merge(monkeypatch):
     assert calls["write"] == 0
     assert len(artifact_calls) == 1
     payload, artifact_file = artifact_calls[0]
-    assert artifact_file == "reports/stages/80_anomaly_attribution_summary.json"
+    assert artifact_file == "reports/stages/90_anomaly_attribution_summary.json"
     assert payload["write_mode"] == "merge"
     assert payload["merge_key"] == ["tail_id", "flight_id", "win_id"]
 
 
 def test_emit_anomalies_uses_write_when_non_merge_mode(monkeypatch):
-    module = importlib.import_module("pipelines.80_anomaly_attribution")
+    module = importlib.import_module("pipelines.90_anomaly_attribution")
     _patch_common(monkeypatch, module)
 
     calls = {"upsert": 0, "write": 0}
@@ -62,5 +62,5 @@ def test_emit_anomalies_uses_write_when_non_merge_mode(monkeypatch):
     assert calls["write"] == 3
     assert len(artifact_calls) == 1
     payload, artifact_file = artifact_calls[0]
-    assert artifact_file == "reports/stages/80_anomaly_attribution_summary.json"
+    assert artifact_file == "reports/stages/90_anomaly_attribution_summary.json"
     assert payload["write_mode"] == "append"

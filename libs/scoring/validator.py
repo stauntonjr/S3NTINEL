@@ -185,13 +185,46 @@ def validate_scores_against_misbehavior_windows(
             }
         )
 
+    detection_latencies = [
+        float(row["detection_latency_seconds"])
+        for row in per_window
+        if row.get("detection_latency_seconds") is not None
+    ]
+    emit_ready_latencies = [
+        float(row["emit_ready_latency_seconds"])
+        for row in per_window
+        if row.get("emit_ready_latency_seconds") is not None
+    ]
+    misbehavior_window_count = int(len(truth_df))
+    detected_misbehavior_window_count = int(sum(1 for row in per_window if row["detected_window_count"] > 0))
+    emit_ready_misbehavior_window_count = int(sum(1 for row in per_window if row["emit_ready_window_count"] > 0))
     return {
         "status": "ok",
-        "misbehavior_window_count": int(len(truth_df)),
-        "detected_misbehavior_window_count": int(sum(1 for row in per_window if row["detected_window_count"] > 0)),
-        "emit_ready_misbehavior_window_count": int(sum(1 for row in per_window if row["emit_ready_window_count"] > 0)),
+        "misbehavior_window_count": misbehavior_window_count,
+        "detected_misbehavior_window_count": detected_misbehavior_window_count,
+        "emit_ready_misbehavior_window_count": emit_ready_misbehavior_window_count,
+        "detected_misbehavior_window_rate": (
+            float(detected_misbehavior_window_count / misbehavior_window_count)
+            if misbehavior_window_count > 0
+            else None
+        ),
+        "emit_ready_misbehavior_window_rate": (
+            float(emit_ready_misbehavior_window_count / misbehavior_window_count)
+            if misbehavior_window_count > 0
+            else None
+        ),
         "median_misbehavior_window_score": (
             float(pd.DataFrame(per_window)["median_global_score"].median()) if per_window else None
+        ),
+        "median_detection_latency_seconds": (
+            float(pd.Series(detection_latencies, dtype="float64").median())
+            if detection_latencies
+            else None
+        ),
+        "median_emit_ready_latency_seconds": (
+            float(pd.Series(emit_ready_latencies, dtype="float64").median())
+            if emit_ready_latencies
+            else None
         ),
         "misbehavior_windows": per_window,
     }
@@ -237,7 +270,11 @@ def validate_scores_against_fault_windows(
         "fault_window_count": int(summary.get("misbehavior_window_count", 0)),
         "detected_fault_window_count": int(summary.get("detected_misbehavior_window_count", 0)),
         "emit_ready_fault_window_count": int(summary.get("emit_ready_misbehavior_window_count", 0)),
+        "detected_fault_window_rate": summary.get("detected_misbehavior_window_rate"),
+        "emit_ready_fault_window_rate": summary.get("emit_ready_misbehavior_window_rate"),
         "median_fault_window_score": summary.get("median_misbehavior_window_score"),
+        "median_detection_latency_seconds": summary.get("median_detection_latency_seconds"),
+        "median_emit_ready_latency_seconds": summary.get("median_emit_ready_latency_seconds"),
         "fault_windows": [
             {
                 **row,

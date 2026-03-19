@@ -203,12 +203,30 @@ def evaluate_detected_phases(assignments: list[dict[str, Any]]) -> dict[str, Any
 
     by_phase_label: list[dict[str, Any]] = []
     labels = sorted(set(label_counts_global.keys()) | set(pred_counts_global.keys()))
+    precision_values: list[float] = []
+    recall_values: list[float] = []
+    f1_values: list[float] = []
+    weighted_precision_total = 0.0
+    weighted_recall_total = 0.0
+    weighted_f1_total = 0.0
+    weighted_count_total = 0
     for label in labels:
         tp = int(tp_counts_global.get(label, 0))
         label_count = int(label_counts_global.get(label, 0))
         pred_count = int(pred_counts_global.get(label, 0))
         precision = float(tp) / float(max(pred_count, 1))
         recall = float(tp) / float(max(label_count, 1))
+        if (precision + recall) <= 0.0:
+            f1 = 0.0
+        else:
+            f1 = float((2.0 * precision * recall) / (precision + recall))
+        precision_values.append(precision)
+        recall_values.append(recall)
+        f1_values.append(f1)
+        weighted_precision_total += precision * label_count
+        weighted_recall_total += recall * label_count
+        weighted_f1_total += f1 * label_count
+        weighted_count_total += label_count
         by_phase_label.append(
             {
                 "phase_label": label,
@@ -217,11 +235,30 @@ def evaluate_detected_phases(assignments: list[dict[str, Any]]) -> dict[str, Any
                 "tp": tp,
                 "precision": precision,
                 "recall": recall,
+                "f1": f1,
             }
         )
 
     return {
         "overall_accuracy": float(total_correct) / float(max(total_count, 1)),
+        "macro_precision": (float(sum(precision_values) / len(precision_values)) if precision_values else None),
+        "macro_recall": (float(sum(recall_values) / len(recall_values)) if recall_values else None),
+        "macro_f1": (float(sum(f1_values) / len(f1_values)) if f1_values else None),
+        "weighted_precision": (
+            float(weighted_precision_total / weighted_count_total)
+            if weighted_count_total > 0
+            else None
+        ),
+        "weighted_recall": (
+            float(weighted_recall_total / weighted_count_total)
+            if weighted_count_total > 0
+            else None
+        ),
+        "weighted_f1": (
+            float(weighted_f1_total / weighted_count_total)
+            if weighted_count_total > 0
+            else None
+        ),
         "by_tail": by_tail_rows,
         "by_tail_flight": by_tail_flight_rows,
         "by_phase_label": by_phase_label,

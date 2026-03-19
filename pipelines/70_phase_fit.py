@@ -1,7 +1,5 @@
-# File: pipelines/50_phase_fit.py
+# File: pipelines/70_phase_fit.py
 """Fit phase baselines and assign detected phases to windows."""
-
-import os
 
 from libs.io.delta import get_spark, read_table, write_table
 from libs.phase import (
@@ -20,7 +18,7 @@ from libs.perf import (
     log_wall_time,
     track_mlflow_run,
 )
-from pipelines.common import build_context, require_artifact_path
+from pipelines.common import build_context, context_artifacts, context_execution, context_settings, require_artifact_path
 
 
 LOGGER = get_logger(__name__)
@@ -48,22 +46,25 @@ def _select_phase_fit_input_columns(
     return raw_df.select(*raw_cols), events_df.select(*event_cols), windows_df.select(*window_cols)
 
 
-@track_mlflow_run(stage_name="50_phase_fit", logger=LOGGER)
-@log_memory_usage(logger=LOGGER, label="50_phase_fit")
+@track_mlflow_run(stage_name="70_phase_fit", logger=LOGGER)
+@log_memory_usage(logger=LOGGER, label="70_phase_fit")
 @log_wall_time(logger=LOGGER)
 def run() -> None:
     from pyspark import StorageLevel
 
     context = build_context()
-    raw_path = os.getenv("S3NTINEL_RAW_TABLE_PATH", "data/delta/raw_telemetry")
-    events_path = os.getenv("S3NTINEL_EVENTS_TABLE_PATH", "data/delta/events")
-    windows_path = os.getenv("S3NTINEL_WINDOWS_TABLE_PATH", "data/delta/windows")
-    window_features_path = os.getenv("S3NTINEL_WINDOW_FEATURES_TABLE_PATH", "")
-    backbone_path = os.getenv("S3NTINEL_BACKBONE_TABLE_PATH", "data/delta/backbone")
-    phase_baselines_path = os.getenv("S3NTINEL_PHASE_BASELINES_TABLE_PATH", "data/delta/phase_baselines")
-    phase_windows_path = os.getenv("S3NTINEL_PHASE_WINDOWS_TABLE_PATH", "data/delta/phase_windows")
-    table_format = os.getenv("S3NTINEL_TABLE_FORMAT", "delta")
-    write_mode = os.getenv("S3NTINEL_WRITE_MODE", "append")
+    artifacts = context_artifacts(context)
+    execution = context_execution(context)
+    settings = context_settings(context)
+    raw_path = artifacts.raw_table
+    events_path = artifacts.events
+    windows_path = artifacts.windows
+    window_features_path = artifacts.window_features
+    backbone_path = artifacts.backbone
+    phase_baselines_path = artifacts.phase_baselines
+    phase_windows_path = artifacts.phase_windows
+    table_format = execution.table_format
+    write_mode = execution.write_mode
 
     spark = get_spark("s3ntinel.phase_fit")
     raw_df = read_table(spark, raw_path, fmt=table_format)
@@ -79,14 +80,14 @@ def run() -> None:
     window_features_df = read_table(spark, str(resolved_window_features_path), fmt=table_format).persist(
         StorageLevel.MEMORY_AND_DISK
     )
-    phase_count = int(os.getenv("S3NTINEL_PHASE_COUNT", str(context.config.get("simulation", {}).get("phase_count", 4))))
-    phase_detect_sensor_count = int(os.getenv("S3NTINEL_PHASE_DETECT_SENSOR_COUNT", "8"))
-    phase_detect_event_type_count = int(os.getenv("S3NTINEL_PHASE_DETECT_EVENT_TYPE_COUNT", "6"))
-    phase_detect_categorical_state_count = int(os.getenv("S3NTINEL_PHASE_DETECT_CATEGORICAL_STATE_COUNT", "6"))
-    phase_stable_drift_quantile = float(os.getenv("S3NTINEL_PHASE_STABLE_DRIFT_QUANTILE", "0.35"))
-    phase_smoothing_radius = int(os.getenv("S3NTINEL_PHASE_SMOOTHING_RADIUS", "2"))
-    phase_transition_penalty = float(os.getenv("S3NTINEL_PHASE_TRANSITION_PENALTY", "1.5"))
-    phase_min_dwell_windows = int(os.getenv("S3NTINEL_PHASE_MIN_DWELL_WINDOWS", "8"))
+    phase_count = settings.phase.phase_count
+    phase_detect_sensor_count = settings.phase.detect_sensor_count
+    phase_detect_event_type_count = settings.phase.detect_event_type_count
+    phase_detect_categorical_state_count = settings.phase.detect_categorical_state_count
+    phase_stable_drift_quantile = settings.phase.stable_drift_quantile
+    phase_smoothing_radius = settings.phase.smoothing_radius
+    phase_transition_penalty = settings.phase.transition_penalty
+    phase_min_dwell_windows = settings.phase.min_dwell_windows
 
     try:
         phase_config = fit_phase_feature_config_from_spark(
@@ -141,7 +142,7 @@ def run() -> None:
     )
     log_dict_artifact_if_active(
         {
-            "stage": "50_phase_fit",
+            "stage": "70_phase_fit",
             "raw_path": raw_path,
             "events_path": events_path,
             "windows_path": windows_path,
@@ -154,10 +155,10 @@ def run() -> None:
             "phase_partition_by": ["tail_id"],
             "phase_windows_partition_by": list(context.config["output"]["partition_by"]),
         },
-        "reports/stages/50_phase_fit_summary.json",
+        "reports/stages/70_phase_fit_summary.json",
     )
     stage_manifest = build_stage_manifest(
-        stage_name="50_phase_fit",
+        stage_name="70_phase_fit",
         config={
             "table_format": table_format,
             "write_mode": write_mode,
@@ -187,7 +188,7 @@ def run() -> None:
         replayable_from=["window_features", "backbone"],
         cache_artifacts={"phase_fit_cache": {"config_keys": sorted(list(phase_config.keys()))}},
     )
-    log_stage_manifest_if_active(stage_manifest, "reports/stages/50_phase_fit_manifest.json")
+    log_stage_manifest_if_active(stage_manifest, "reports/stages/70_phase_fit_manifest.json")
     LOGGER.info(
         "pipeline=phase_fit format=%s write_mode=%s phase_windows=%s phase_baselines=%s",
         table_format,

@@ -63,16 +63,17 @@ def test_sim_runner_uses_grouped_full_stage_scripts(monkeypatch, tmp_path):
     assert captured["pipeline_mode"] == "sim_full:v2"
     assert captured["stage_scripts"] == [
         "00_ingest_raw.py",
-        "05_parameter_profiles_fit.py",
+        "10_parameter_profiles_fit.py",
         "20_events_extract.py",
         "30_windows_adaptive.py",
-        "10_backbone_fit.py",
-        "11_build_graph.py",
-        "12_fit_hierarchy.py",
-        "50_phase_fit.py",
-        "60_window_scores_raw.py",
-        "70_window_scores_calibrate.py",
-        "80_anomaly_attribution.py",
+        "40_backbone_fit.py",
+        "50_build_graph.py",
+        "60_fit_hierarchy.py",
+        "70_phase_fit.py",
+        "80_window_scores_raw.py",
+        "85_window_scores_calibrate.py",
+        "90_anomaly_attribution.py",
+        "95_emit_explorer_bundle.py",
     ]
     assert captured["summary_artifact_path"] == "reports/pipeline_run_summary.json"
     assert result.status == "success"
@@ -169,15 +170,21 @@ def test_sim_runner_full_smoke_emits_bundle(monkeypatch, tmp_path):
     run_dir = result.paths.run_dir
 
     manifest = json.loads((run_dir / "reports" / "run_manifest.json").read_text(encoding="utf-8"))
+    full_run_report = json.loads((run_dir / "reports" / "full_run_report.json").read_text(encoding="utf-8"))
     assert manifest["status"] == "success"
+    assert full_run_report["status"] == "success"
+    assert "modeling_performance" in full_run_report
+    assert "engineering_performance" in full_run_report
     assert (run_dir / "logs" / "run.log").exists()
     assert (run_dir / "reports" / "pipeline_run_summary.json").exists()
-    assert (run_dir / "reports" / "stages" / "05_parameter_profiles_fit_manifest.json").exists()
-    assert (run_dir / "reports" / "stages" / "10_backbone_fit_manifest.json").exists()
-    assert (run_dir / "reports" / "stages" / "11_build_graph_manifest.json").exists()
-    assert (run_dir / "reports" / "stages" / "12_fit_hierarchy_manifest.json").exists()
-    assert (run_dir / "reports" / "stages" / "50_phase_fit_manifest.json").exists()
-    assert (run_dir / "reports" / "stages" / "60_window_scores_raw_manifest.json").exists()
+    assert (run_dir / "reports" / "full_run_report.md").exists()
+    assert (run_dir / "reports" / "stages" / "10_parameter_profiles_fit_manifest.json").exists()
+    assert (run_dir / "reports" / "stages" / "40_backbone_fit_manifest.json").exists()
+    assert (run_dir / "reports" / "stages" / "50_build_graph_manifest.json").exists()
+    assert (run_dir / "reports" / "stages" / "60_fit_hierarchy_manifest.json").exists()
+    assert (run_dir / "reports" / "stages" / "70_phase_fit_manifest.json").exists()
+    assert (run_dir / "reports" / "stages" / "80_window_scores_raw_manifest.json").exists()
+    assert (run_dir / "reports" / "stages" / "95_emit_explorer_bundle_manifest.json").exists()
     assert (run_dir / "reports" / "phase_validation_summary.json").exists()
     assert (run_dir / "reports" / "hierarchy_validation_summary.json").exists()
     assert (run_dir / "reports" / "coupling_validation_summary.json").exists()
@@ -198,11 +205,14 @@ def test_sim_runner_full_smoke_emits_bundle(monkeypatch, tmp_path):
     assert window_features_df["event_type_counts"].apply(lambda value: bool(value)).any()
     assert len(pd.read_parquet(run_dir / "delta" / "backbone")) > 0
     assert len(pd.read_parquet(run_dir / "delta" / "precision_graph")) > 0
+    assert len(pd.read_parquet(run_dir / "delta" / "lag_profile")) > 0
     assert len(pd.read_parquet(run_dir / "delta" / "graph_parameter_universe")) > 0
     assert len(pd.read_parquet(run_dir / "delta" / "hierarchy_sensor_map")) > 0
     assert len(pd.read_parquet(run_dir / "delta" / "phase_windows")) > 0
     assert len(pd.read_parquet(run_dir / "delta" / "window_scores_calibrated")) > 0
     assert len(pd.read_parquet(run_dir / "delta" / "anomaly_window_attribution")) > 0
+    assert (run_dir / "delta" / "explorer_bundle" / "bundle_manifest.json").exists()
+    assert len(pd.read_parquet(run_dir / "delta" / "explorer_bundle" / "parameter_catalog")) > 0
 
 
 def test_sim_runner_uses_library_validation_reports(monkeypatch, tmp_path):
@@ -232,3 +242,44 @@ def test_sim_runner_uses_library_validation_reports(monkeypatch, tmp_path):
 
     assert result.status == "success"
     assert called["table_format"] == config.table_format
+
+
+def test_runner_fault_wrappers_preserve_extended_validation_metrics():
+    misbehavior_score_summary = {
+        "status": "ok",
+        "misbehavior_window_count": 2,
+        "detected_misbehavior_window_count": 1,
+        "emit_ready_misbehavior_window_count": 1,
+        "detected_misbehavior_window_rate": 0.5,
+        "emit_ready_misbehavior_window_rate": 0.5,
+        "median_misbehavior_window_score": 3.2,
+        "median_detection_latency_seconds": 1.5,
+        "median_emit_ready_latency_seconds": 2.5,
+        "misbehavior_windows": [],
+    }
+    misbehavior_attribution_summary = {
+        "status": "ok",
+        "misbehavior_window_count": 2,
+        "dominant_subsystem_match_count": 1,
+        "dominant_subsystem_mappable_count": 2,
+        "dominant_subsystem_match_rate": 0.5,
+        "dominant_subsystem_mappable_rate": 1.0,
+        "telemetry_parameter_match_count": 2,
+        "event_parameter_match_count": 1,
+        "telemetry_parameter_match_rate": 1.0,
+        "event_parameter_match_rate": 0.5,
+        "telemetry_truth_subsystem_present_rate": 1.0,
+        "event_truth_subsystem_present_rate": 0.5,
+        "misbehavior_windows": [],
+    }
+
+    fault_score_summary = runner._build_fault_score_summary_from_misbehavior(misbehavior_score_summary)
+    fault_attribution_summary = runner._build_fault_attribution_summary_from_misbehavior(misbehavior_attribution_summary)
+
+    assert fault_score_summary["detected_fault_window_rate"] == 0.5
+    assert fault_score_summary["emit_ready_fault_window_rate"] == 0.5
+    assert fault_score_summary["median_detection_latency_seconds"] == 1.5
+    assert fault_score_summary["median_emit_ready_latency_seconds"] == 2.5
+    assert fault_attribution_summary["dominant_subsystem_match_count"] == 1
+    assert fault_attribution_summary["telemetry_parameter_match_count"] == 2
+    assert fault_attribution_summary["event_parameter_match_count"] == 1

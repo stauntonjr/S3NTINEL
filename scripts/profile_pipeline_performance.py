@@ -1,4 +1,10 @@
-"""Benchmark semantics-preserving pipeline tuning variants on canonical simulation runs."""
+"""Benchmark semantics-preserving pipeline tuning variants on canonical simulation runs.
+
+TODO:
+- add an explicit dataset-size scale sweep mode; the current script compares tuning variants
+  on fixed workloads and does not measure how wall time, memory, disk, and stage timings
+  scale with dataset size.
+"""
 
 from __future__ import annotations
 
@@ -24,8 +30,8 @@ SUMMARY_NAME_BY_MODE = {
 TIMED_STAGE_SCRIPTS = (
     "20_events_extract.py",
     "30_windows_adaptive.py",
-    "11_build_graph.py",
-    "50_phase_fit.py",
+    "50_build_graph.py",
+    "70_phase_fit.py",
 )
 
 
@@ -333,8 +339,8 @@ def _build_markdown_summary(*, args: argparse.Namespace, results: list[Benchmark
                     (f"{total_seconds:.1f}" if total_seconds is not None else "n/a"),
                     f"{stage_seconds['20_events_extract.py']:.1f}" if stage_seconds["20_events_extract.py"] else "n/a",
                     f"{stage_seconds['30_windows_adaptive.py']:.1f}" if stage_seconds["30_windows_adaptive.py"] else "n/a",
-                    f"{stage_seconds['11_build_graph.py']:.1f}" if stage_seconds["11_build_graph.py"] else "n/a",
-                    f"{stage_seconds['50_phase_fit.py']:.1f}" if stage_seconds["50_phase_fit.py"] else "n/a",
+                    f"{stage_seconds['50_build_graph.py']:.1f}" if stage_seconds["50_build_graph.py"] else "n/a",
+                    f"{stage_seconds['70_phase_fit.py']:.1f}" if stage_seconds["70_phase_fit.py"] else "n/a",
                     (result.run_dir or "n/a"),
                 )
             )

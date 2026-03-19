@@ -3,8 +3,15 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from math import log
+from typing import TYPE_CHECKING
 
 import pandas as pd
+
+
+def _spark_functions():
+    from pyspark.sql import functions as F
+
+    return F
 
 
 @dataclass(frozen=True)
@@ -18,6 +25,122 @@ class EventGraphSpec:
 class EventGraph:
     spec: EventGraphSpec
     edges: pd.DataFrame
+
+    @classmethod
+    def from_events_and_windows_spark(
+        cls,
+        events_df: "DataFrame",
+        windows_df: "DataFrame",
+        *,
+        spec: EventGraphSpec,
+    ) -> "DataFrame":
+        """Build same-window cooccurrence edges in Spark using positive normalized PMI."""
+        F = _spark_functions()
+
+        canonical_events_df = cls.normalize_events_spark(events_df)
+        window_rows = cls.normalize_windows_spark(windows_df)
+        window_parameter_rows = (
+            canonical_events_df.select("tail_id", "flight_id", "timestamp_utc", "parameter_name")
+            .join(window_rows.select("tail_id", "flight_id", "win_id", "t_start", "t_end"), on=["tail_id", "flight_id"], how="inner")
+            .where((F.col("timestamp_utc") >= F.col("t_start")) & (F.col("timestamp_utc") <= F.col("t_end")))
+            .select("tail_id", "flight_id", "win_id", "parameter_name")
+            .dropDuplicates(["tail_id", "flight_id", "win_id", "parameter_name"])
+        )
+        grouped = window_parameter_rows.groupBy("tail_id", "flight_id", "win_id").agg(
+            F.sort_array(F.collect_list("parameter_name")).alias("parameter_names")
+        )
+        total_windows_df = grouped.agg(F.count(F.lit(1)).cast("double").alias("total_windows"))
+        pair_rows = (
+            grouped.select(
+                F.posexplode("parameter_names").alias("left_idx", "parameter_name_u"),
+                F.col("parameter_names"),
+            )
+            .select(
+                "parameter_name_u",
+                F.expr("slice(parameter_names, left_idx + 2, size(parameter_names))").alias("right_candidates"),
+            )
+            .select("parameter_name_u", F.explode_outer("right_candidates").alias("parameter_name_v"))
+            .where(F.col("parameter_name_v").isNotNull())
+        )
+        pair_counts = pair_rows.groupBy("parameter_name_u", "parameter_name_v").agg(
+            F.count(F.lit(1)).cast("int").alias("cooccur_count")
+        )
+        parameter_name_window_counts = window_parameter_rows.groupBy("parameter_name").agg(
+            F.count(F.lit(1)).cast("int").alias("parameter_name_window_count")
+        )
+        with_counts = (
+            pair_counts.join(
+                parameter_name_window_counts.withColumnRenamed("parameter_name", "parameter_name_u"),
+                on="parameter_name_u",
+            )
+            .withColumnRenamed("parameter_name_window_count", "left_window_count")
+            .join(
+                parameter_name_window_counts.withColumnRenamed("parameter_name", "parameter_name_v"),
+                on="parameter_name_v",
+            )
+            .withColumnRenamed("parameter_name_window_count", "right_window_count")
+            .crossJoin(total_windows_df)
+            .withColumn("p_xy", F.col("cooccur_count") / F.col("total_windows"))
+            .withColumn("p_x", F.col("left_window_count") / F.col("total_windows"))
+            .withColumn("p_y", F.col("right_window_count") / F.col("total_windows"))
+            .withColumn(
+                "event_weight_raw",
+                F.log(F.col("p_xy") / (F.col("p_x") * F.col("p_y"))) / (-F.log(F.col("p_xy"))),
+            )
+            .withColumn("event_weight", F.greatest(F.col("event_weight_raw"), F.lit(0.0)))
+            .where(
+                (F.col("cooccur_count") >= F.lit(max(int(spec.min_count), 1)))
+                & (F.col("event_weight") >= F.lit(float(spec.min_npmi)))
+            )
+        )
+        if int(spec.top_k_per_parameter_name) > 0:
+            from pyspark.sql import Window
+
+            undirected = with_counts.select(
+                F.col("parameter_name_u"),
+                F.col("parameter_name_v"),
+                F.col("cooccur_count"),
+                F.col("event_weight"),
+                F.least("parameter_name_u", "parameter_name_v").alias("parameter_name_min"),
+                F.greatest("parameter_name_u", "parameter_name_v").alias("parameter_name_max"),
+            )
+            exploded = undirected.select(
+                F.col("parameter_name_u").alias("parameter_name"),
+                F.col("parameter_name_min"),
+                F.col("parameter_name_max"),
+                F.col("event_weight"),
+            ).unionByName(
+                undirected.select(
+                    F.col("parameter_name_v").alias("parameter_name"),
+                    F.col("parameter_name_min"),
+                    F.col("parameter_name_max"),
+                    F.col("event_weight"),
+                )
+            )
+            rank_window = Window.partitionBy("parameter_name").orderBy(
+                F.col("event_weight").desc(), F.col("parameter_name_min"), F.col("parameter_name_max")
+            )
+            keep = (
+                exploded.withColumn("rank", F.row_number().over(rank_window))
+                .where(F.col("rank") <= int(spec.top_k_per_parameter_name))
+                .select("parameter_name_min", "parameter_name_max")
+                .distinct()
+            )
+            with_counts = with_counts.join(
+                keep,
+                on=[
+                    with_counts.parameter_name_u == keep.parameter_name_min,
+                    with_counts.parameter_name_v == keep.parameter_name_max,
+                ],
+                how="inner",
+            ).select(with_counts["*"])
+        return with_counts.select(
+            "parameter_name_u",
+            "parameter_name_v",
+            "cooccur_count",
+            "event_weight",
+            F.lit("event").alias("edge_family"),
+        )
 
     @classmethod
     def from_events_and_windows(
@@ -137,6 +260,32 @@ class EventGraph:
         return rows.sort_values(["tail_id", "flight_id", "event_seq_id"], kind="mergesort").reset_index(drop=True)
 
     @staticmethod
+    def normalize_events_spark(events_df: "DataFrame") -> "DataFrame":
+        F = _spark_functions()
+
+        required_columns = {"tail_id", "flight_id", "event_seq_id", "timestamp_utc", "parameter_name"}
+        missing_columns = required_columns.difference(events_df.columns)
+        if missing_columns:
+            missing_list = ", ".join(sorted(missing_columns))
+            raise ValueError(
+                "graph builders expect canonical events with event_seq_id; "
+                f"missing columns: {missing_list}"
+            )
+        return events_df.select(
+            F.col("tail_id").cast("string").alias("tail_id"),
+            F.col("flight_id").cast("string").alias("flight_id"),
+            F.col("event_seq_id").cast("long").alias("event_seq_id"),
+            F.col("timestamp_utc").cast("timestamp").alias("timestamp_utc"),
+            F.col("parameter_name").cast("string").alias("parameter_name"),
+        ).where(
+            F.col("tail_id").isNotNull()
+            & F.col("flight_id").isNotNull()
+            & F.col("event_seq_id").isNotNull()
+            & F.col("timestamp_utc").isNotNull()
+            & F.col("parameter_name").isNotNull()
+        )
+
+    @staticmethod
     def normalize_windows(windows_df: pd.DataFrame) -> pd.DataFrame:
         rows = windows_df.copy()
         default_text = pd.Series("", index=rows.index, dtype="object")
@@ -151,5 +300,27 @@ class EventGraph:
         return rows.sort_values(["tail_id", "flight_id", "t_start", "win_id"], kind="mergesort").reset_index(drop=True)
 
     @staticmethod
+    def normalize_windows_spark(windows_df: "DataFrame") -> "DataFrame":
+        F = _spark_functions()
+
+        return windows_df.select(
+            F.col("tail_id").cast("string").alias("tail_id"),
+            F.col("flight_id").cast("string").alias("flight_id"),
+            F.col("win_id").cast("int").alias("win_id"),
+            F.col("t_start").cast("timestamp").alias("t_start"),
+            F.col("t_end").cast("timestamp").alias("t_end"),
+        ).where(
+            F.col("tail_id").isNotNull()
+            & F.col("flight_id").isNotNull()
+            & F.col("win_id").isNotNull()
+            & F.col("t_start").isNotNull()
+            & F.col("t_end").isNotNull()
+        )
+
+    @staticmethod
     def empty_edges() -> pd.DataFrame:
         return pd.DataFrame(columns=["parameter_name_u", "parameter_name_v", "cooccur_count", "event_weight", "edge_family"])
+
+
+if TYPE_CHECKING:
+    from pyspark.sql import DataFrame

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
 from libs.io.delta import get_spark, read_table, write_table
 from libs.perf import (
     build_artifact_manifest,
@@ -21,23 +19,25 @@ from libs.profiling import (
     build_parameter_behavior_profile_table,
     build_parameter_datatype_profile_table,
 )
-from pipelines.common import build_context
+from pipelines.common import build_context, context_artifacts, context_execution
 
 
 LOGGER = get_logger(__name__)
 
 
-@track_mlflow_run(stage_name="05_parameter_profiles_fit", logger=LOGGER)
-@log_memory_usage(logger=LOGGER, label="05_parameter_profiles_fit")
+@track_mlflow_run(stage_name="10_parameter_profiles_fit", logger=LOGGER)
+@log_memory_usage(logger=LOGGER, label="10_parameter_profiles_fit")
 @log_wall_time(logger=LOGGER)
 def run() -> None:
     context = build_context()
-    raw_path = os.getenv("S3NTINEL_RAW_TABLE_PATH", "data/delta/raw_telemetry")
-    datatype_profile_path = os.getenv("S3NTINEL_PARAMETER_DATATYPE_PROFILE_TABLE_PATH", "data/delta/parameter_datatype_profile")
-    scaling_profile_path = os.getenv("S3NTINEL_CONTINUOUS_SCALING_PROFILE_TABLE_PATH", "data/delta/continuous_scaling_profile")
-    behavior_profile_path = os.getenv("S3NTINEL_PARAMETER_BEHAVIOR_PROFILE_TABLE_PATH", "data/delta/parameter_behavior_profile")
-    table_format = os.getenv("S3NTINEL_TABLE_FORMAT", "delta")
-    write_mode = os.getenv("S3NTINEL_FIT_WRITE_MODE", "overwrite")
+    artifacts = context_artifacts(context)
+    execution = context_execution(context)
+    raw_path = artifacts.raw_table
+    datatype_profile_path = artifacts.parameter_datatype_profile
+    scaling_profile_path = artifacts.continuous_scaling_profile
+    behavior_profile_path = artifacts.parameter_behavior_profile
+    table_format = execution.table_format
+    write_mode = execution.fit_write_mode
 
     spark = get_spark("s3ntinel.parameter_profiles_fit")
     raw_df = read_table(spark, raw_path, fmt=table_format)
@@ -63,7 +63,7 @@ def run() -> None:
     )
     log_dict_artifact_if_active(
         {
-            "stage": "05_parameter_profiles_fit",
+            "stage": "10_parameter_profiles_fit",
             "raw_path": raw_path,
             "parameter_datatype_profile_path": datatype_profile_path,
             "continuous_scaling_profile_path": scaling_profile_path,
@@ -75,10 +75,10 @@ def run() -> None:
             "scaling_profile_count": scaling_count,
             "behavior_profile_count": behavior_count,
         },
-        "reports/stages/05_parameter_profiles_fit_summary.json",
+        "reports/stages/10_parameter_profiles_fit_summary.json",
     )
     stage_manifest = build_stage_manifest(
-        stage_name="05_parameter_profiles_fit",
+        stage_name="10_parameter_profiles_fit",
         config={
             "table_format": table_format,
             "write_mode": write_mode,
@@ -108,7 +108,7 @@ def run() -> None:
         },
         replayable_from=["raw_telemetry"],
     )
-    log_stage_manifest_if_active(stage_manifest, "reports/stages/05_parameter_profiles_fit_manifest.json")
+    log_stage_manifest_if_active(stage_manifest, "reports/stages/10_parameter_profiles_fit_manifest.json")
     LOGGER.info(
         "pipeline=parameter_profiles_fit format=%s write_mode=%s raw=%s datatype_profile=%s scaling_profile=%s behavior_profile=%s",
         table_format,

@@ -1,7 +1,5 @@
 """Fit backbone artifacts from adaptive windows and raw telemetry."""
 
-import os
-
 import numpy as np
 
 from libs.backbone import (
@@ -26,31 +24,34 @@ from libs.perf import (
     track_mlflow_run,
 )
 from libs.windows import build_window_features_spark_table
-from pipelines.common import build_context
+from pipelines.common import build_context, context_artifacts, context_execution, context_settings
 
 
 LOGGER = get_logger(__name__)
 
-@track_mlflow_run(stage_name="10_backbone_fit", logger=LOGGER)
-@log_memory_usage(logger=LOGGER, label="10_backbone_fit")
+@track_mlflow_run(stage_name="40_backbone_fit", logger=LOGGER)
+@log_memory_usage(logger=LOGGER, label="40_backbone_fit")
 @log_wall_time(logger=LOGGER)
 def run() -> None:
     from pyspark.sql import functions as F
     from pyspark import StorageLevel
 
     context = build_context()
-    raw_path = os.getenv("S3NTINEL_RAW_TABLE_PATH", "data/delta/raw_telemetry")
-    events_path = os.getenv("S3NTINEL_EVENTS_TABLE_PATH", "data/delta/events")
-    windows_path = os.getenv("S3NTINEL_WINDOWS_TABLE_PATH", "data/delta/windows")
-    window_features_path = os.getenv("S3NTINEL_WINDOW_FEATURES_TABLE_PATH", "")
-    backbone_path = os.getenv("S3NTINEL_BACKBONE_TABLE_PATH", "data/delta/backbone")
-    backbone_energy_path = os.getenv("S3NTINEL_BACKBONE_SENSOR_ENERGY_TABLE_PATH", "data/delta/backbone_sensor_energy")
-    table_format = os.getenv("S3NTINEL_TABLE_FORMAT", "delta")
-    write_mode = os.getenv("S3NTINEL_FIT_WRITE_MODE", "overwrite")
-    max_backbone_sensor_universe = int(os.getenv("S3NTINEL_MAX_BACKBONE_SENSOR_UNIVERSE", "50000"))
+    artifacts = context_artifacts(context)
+    execution = context_execution(context)
+    settings = context_settings(context)
+    raw_path = artifacts.raw_table
+    events_path = artifacts.events
+    windows_path = artifacts.windows
+    window_features_path = artifacts.window_features
+    backbone_path = artifacts.backbone
+    backbone_energy_path = artifacts.backbone_sensor_energy
+    table_format = execution.table_format
+    write_mode = execution.fit_write_mode
+    max_backbone_sensor_universe = settings.backbone.max_sensor_universe
 
-    backbone_sensor_count = int(os.getenv("S3NTINEL_BACKBONE_SENSOR_COUNT", "8"))
-    backbone_ridge_lambda = float(os.getenv("S3NTINEL_BACKBONE_RIDGE_LAMBDA", "1.0"))
+    backbone_sensor_count = settings.backbone.sensor_count
+    backbone_ridge_lambda = settings.backbone.ridge_lambda
 
     spark = get_spark("s3ntinel.backbone_fit")
     raw_df = read_table(spark, raw_path, fmt=table_format)
@@ -93,7 +94,7 @@ def run() -> None:
                 selected_sensor_frame_df.unpersist()
             if len(sensor_rows) > max_backbone_sensor_universe:
                 raise RuntimeError(
-                    "10_backbone_fit performs a bounded local ridge solve over the sensor universe; "
+                    "40_backbone_fit performs a bounded local ridge solve over the sensor universe; "
                     f"sensor count {len(sensor_rows)} exceeds S3NTINEL_MAX_BACKBONE_SENSOR_UNIVERSE={max_backbone_sensor_universe}."
                 )
 
@@ -171,7 +172,7 @@ def run() -> None:
     )
     log_dict_artifact_if_active(
         {
-            "stage": "10_backbone_fit",
+            "stage": "40_backbone_fit",
             "raw_path": raw_path,
             "events_path": events_path,
             "windows_path": windows_path,
@@ -190,7 +191,7 @@ def run() -> None:
             "training_window_count": training_window_count,
             "backbone_ridge_lambda": backbone_ridge_lambda,
         },
-        "reports/stages/10_backbone_fit_summary.json",
+        "reports/stages/40_backbone_fit_summary.json",
     )
     output_artifacts = {
         "backbone": build_artifact_manifest(
@@ -214,7 +215,7 @@ def run() -> None:
         )
 
     stage_manifest = build_stage_manifest(
-        stage_name="10_backbone_fit",
+        stage_name="40_backbone_fit",
         config={
             "table_format": table_format,
             "write_mode": write_mode,
@@ -235,7 +236,7 @@ def run() -> None:
         output_artifacts=output_artifacts,
         replayable_from=["window_features", "backbone_sensor_energy"],
     )
-    log_stage_manifest_if_active(stage_manifest, "reports/stages/10_backbone_fit_manifest.json")
+    log_stage_manifest_if_active(stage_manifest, "reports/stages/40_backbone_fit_manifest.json")
     LOGGER.info(
         "pipeline=backbone_fit format=%s write_mode=%s selected_sensor_count=%s training_window_count=%s raw=%s windows=%s backbone=%s backbone_energy=%s",
         table_format,

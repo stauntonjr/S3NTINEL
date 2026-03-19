@@ -199,15 +199,27 @@ def build_event_validation_summary(
     fn = int(last.get("fn", 0))
     precision = float(tp / (tp + fp)) if (tp + fp) > 0 else None
     recall = float(tp / (tp + fn)) if (tp + fn) > 0 else None
+    if precision is None or recall is None or (precision + recall) <= 0.0:
+        f1 = None
+    else:
+        f1 = float((2.0 * precision * recall) / (precision + recall))
+    label_event_count = int(len(label_events))
+    detected_event_count = int(len(detected_list))
     return {
         "status": "ok",
-        "label_event_count": int(len(label_events)),
-        "detected_event_count": int(len(detected_list)),
+        "label_event_count": label_event_count,
+        "detected_event_count": detected_event_count,
         "tp": tp,
         "fp": fp,
         "fn": fn,
         "tn": int(last.get("tn", 0)),
         "precision": precision,
         "recall": recall,
+        "f1": f1,
+        "detected_per_label_ratio": (
+            float(detected_event_count / label_event_count)
+            if label_event_count > 0
+            else None
+        ),
         "tolerance_seconds": float(abs(tolerance_seconds)),
     }

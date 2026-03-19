@@ -51,6 +51,8 @@ def test_validate_detected_phases_from_tables_uses_library_phase_evaluator():
     assert summary["status"] == "ok"
     assert summary["assignment_count"] == 1
     assert summary["overall_accuracy"] == 1.0
+    assert summary["macro_f1"] == 1.0
+    assert summary["weighted_f1"] == 1.0
 
 
 def test_validate_detected_phases_from_tables_prefers_windows_timestamps_when_provided():
@@ -97,6 +99,7 @@ def test_validate_detected_phases_from_tables_prefers_windows_timestamps_when_pr
     assert summary["status"] == "ok"
     assert summary["assignment_count"] == 1
     assert summary["overall_accuracy"] == 1.0
+    assert summary["macro_f1"] == 1.0
 
 
 def test_build_graph_validation_summary_reports_hierarchy_and_expected_lag_edges():
@@ -123,6 +126,15 @@ def test_build_graph_validation_summary_reports_hierarchy_and_expected_lag_edges
     assert summary["graph_signatures"]["lag_expected_edge_hit_rate"] == 1.0
     assert summary["hierarchy"]["subsystem_partition"]["same_cluster_pair_precision"] == 1.0
     assert summary["hierarchy"]["subsystem_partition"]["same_cluster_pair_recall"] == 1.0
+    assert summary["hierarchy"]["system_partition"]["normalized_mutual_information"] == 1.0
+    assert summary["hierarchy"]["system_partition"]["adjusted_mutual_information"] == 1.0
+    assert summary["hierarchy"]["system_partition"]["adjusted_rand_index"] == 1.0
+    assert summary["hierarchy"]["subsystem_partition"]["normalized_mutual_information"] == 1.0
+    assert summary["hierarchy"]["subsystem_partition"]["adjusted_mutual_information"] == 1.0
+    assert summary["hierarchy"]["subsystem_partition"]["adjusted_rand_index"] == 1.0
+    assert summary["hierarchy"]["module_partition"]["normalized_mutual_information"] == 1.0
+    assert summary["hierarchy"]["module_partition"]["adjusted_mutual_information"] == 1.0
+    assert summary["hierarchy"]["module_partition"]["adjusted_rand_index"] == 1.0
 
 
 def test_build_coupling_validation_summary_reports_expected_signatures():
@@ -250,8 +262,12 @@ def test_score_and_fault_window_validators_summarize_fault_overlap():
     assert score_summary["status"] == "ok"
     assert score_summary["detected_fault_window_count"] == 1
     assert score_summary["emit_ready_fault_window_count"] == 1
+    assert score_summary["detected_fault_window_rate"] == 1.0
+    assert score_summary["emit_ready_fault_window_rate"] == 1.0
     assert misbehavior_score_summary["detected_misbehavior_window_count"] == 1
     assert misbehavior_score_summary["emit_ready_misbehavior_window_count"] == 1
+    assert misbehavior_score_summary["detected_misbehavior_window_rate"] == 1.0
+    assert misbehavior_score_summary["emit_ready_misbehavior_window_rate"] == 1.0
     assert fault_summary["fault_window_count"] == 1
     assert fault_summary["fault_windows"][0]["fault_window_id"] == "FW1"
     assert misbehavior_summary["misbehavior_window_count"] == 1
@@ -319,6 +335,8 @@ def test_anomaly_validator_compares_attribution_to_fault_truth():
     assert summary["status"] == "ok"
     assert summary["dominant_subsystem_match_rate"] == 1.0
     assert summary["dominant_subsystem_mappable_rate"] == 1.0
+    assert summary["telemetry_parameter_match_count"] == 1
+    assert summary["event_parameter_match_count"] == 1
     assert summary["telemetry_parameter_match_rate"] == 1.0
     assert summary["event_parameter_match_rate"] == 1.0
     assert misbehavior_summary["misbehavior_window_count"] == 1

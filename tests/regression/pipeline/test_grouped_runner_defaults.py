@@ -2,7 +2,7 @@ import importlib
 
 
 def test_fitting_runner_sets_overwrite_defaults(monkeypatch):
-    module = importlib.import_module("pipelines.91_run_fitting_pipeline")
+    module = importlib.import_module("pipelines.97_run_fitting_pipeline")
 
     captured = {}
 
@@ -21,7 +21,7 @@ def test_fitting_runner_sets_overwrite_defaults(monkeypatch):
 
 
 def test_inference_runner_sets_overwrite_default(monkeypatch):
-    module = importlib.import_module("pipelines.92_run_inference_pipeline")
+    module = importlib.import_module("pipelines.98_run_inference_pipeline")
 
     captured = {}
 

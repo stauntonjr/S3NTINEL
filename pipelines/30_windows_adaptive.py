@@ -1,8 +1,6 @@
 # File: pipelines/30_windows_adaptive.py
 """Build adaptive windows from event thresholds and max duration."""
 
-import os
-
 from libs.io.delta import get_spark, read_table, write_table
 from libs.perf import (
     build_artifact_manifest,
@@ -17,7 +15,7 @@ from libs.perf import (
 )
 from libs.windows import WindowPolicy, build_windows_table
 from libs.windows.window import DEFAULT_MIN_SAMPLING_RATE_HZ
-from pipelines.common import build_context
+from pipelines.common import build_context, context_artifacts, context_execution, context_settings
 
 
 LOGGER = get_logger(__name__)
@@ -28,23 +26,22 @@ LOGGER = get_logger(__name__)
 @log_wall_time(logger=LOGGER)
 def run() -> None:
     context = build_context()
-    input_path = os.getenv("S3NTINEL_EVENTS_TABLE_PATH", "data/delta/events")
-    output_path = os.getenv("S3NTINEL_WINDOWS_TABLE_PATH", "data/delta/windows")
-    table_format = os.getenv("S3NTINEL_TABLE_FORMAT", "delta")
-    write_mode = os.getenv("S3NTINEL_WRITE_MODE", "append")
+    artifacts = context_artifacts(context)
+    execution = context_execution(context)
+    settings = context_settings(context)
+    input_path = artifacts.events
+    output_path = artifacts.windows
+    table_format = execution.table_format
+    write_mode = execution.write_mode
 
-    min_sampling_rate_hz = float(
-        context.config.get("windowing", {}).get("min_sampling_rate_hz", DEFAULT_MIN_SAMPLING_RATE_HZ)
-    )
+    min_sampling_rate_hz = float(settings.windowing.min_sampling_rate_hz or DEFAULT_MIN_SAMPLING_RATE_HZ)
     derived_max_ms = WindowPolicy.max_ms_from_min_sampling_rate(min_sampling_rate_hz)
-    configured_max_ms = int(context.config.get("windowing", {}).get("max_ms", derived_max_ms))
-    max_ms = int(os.getenv("S3NTINEL_WINDOW_MAX_MS", str(configured_max_ms if configured_max_ms > 0 else derived_max_ms)))
-    min_ms = int(os.getenv("S3NTINEL_WINDOW_MIN_MS", str(context.config["windowing"]["min_ms"])))
-    event_threshold = int(os.getenv("S3NTINEL_WINDOW_EVENT_THRESHOLD", str(context.config["windowing"]["event_threshold"])))
-    default_inactivity_timeout_ms = int(context.config.get("windowing", {}).get("inactivity_timeout_ms", 0))
-    inactivity_timeout_ms = int(os.getenv("S3NTINEL_WINDOW_INACTIVITY_TIMEOUT_MS", str(default_inactivity_timeout_ms)))
-    default_strategy = str(context.config.get("windowing", {}).get("strategy", "segmented"))
-    window_strategy = str(os.getenv("S3NTINEL_WINDOW_STRATEGY", default_strategy)).strip().lower()
+    configured_max_ms = int(settings.windowing.max_ms)
+    max_ms = int(configured_max_ms if configured_max_ms > 0 else derived_max_ms)
+    min_ms = settings.windowing.min_ms
+    event_threshold = settings.windowing.event_threshold
+    inactivity_timeout_ms = settings.windowing.inactivity_timeout_ms
+    window_strategy = settings.windowing.strategy
 
     spark = get_spark("s3ntinel.windows_adaptive")
     events_df = read_table(spark, input_path, fmt=table_format)

@@ -13,18 +13,21 @@ HOT_PATH_FILES = [
     "libs/windows/pipeline.py",
     "libs/windows/features.py",
     "libs/scoring/pipeline.py",
-    "pipelines/05_parameter_profiles_fit.py",
+    "pipelines/10_parameter_profiles_fit.py",
     "pipelines/20_events_extract.py",
     "pipelines/30_windows_adaptive.py",
-    "pipelines/60_window_scores_raw.py",
+    "pipelines/80_window_scores_raw.py",
 ]
 
 WAVE2_FILES = [
     "libs/backbone/pipeline.py",
-    "pipelines/10_backbone_fit.py",
+    "libs/graph/event.py",
+    "libs/graph/lag.py",
+    "pipelines/40_backbone_fit.py",
     "libs/graph/pipeline.py",
+    "libs/graph/transition.py",
     "libs/graph/hierarchy_artifacts.py",
-    "pipelines/11_build_graph.py",
+    "pipelines/50_build_graph.py",
 ]
 
 WAVE3_FILES = [

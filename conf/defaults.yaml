@@ -15,6 +15,16 @@ windowing:
   event_threshold: 20
   inactivity_timeout_ms: 0
 
+events:
+  delta_threshold: 0.0
+  slope_source: ema
+  ema_alpha: 0.2
+
+backbone:
+  sensor_count: 8
+  ridge_lambda: 1.0
+  max_sensor_universe: 50000
+
 cur:
   pivots_k: 300
   row_samples_k: 300
@@ -32,20 +42,63 @@ cur:
 graph:
   min_overlap: 30
   min_abs_corr: 0.15
-  min_abs_partial_corr: 0.10
-  precision_ridge_lambda: 1.0e-6
+  min_abs_partial_corr: 0.05
+  precision_ridge_lambda: 1.0
   min_cooccur_count: 3
-  subsystem_min_edge_weight: 0.20
-  hierarchy_k_system: 8
-  hierarchy_k_subsystem: 24
-  hierarchy_k_module: 64
+  max_sensor_universe: 50000
   cur_weight_alpha: 0.7
+  event:
+    min_count: 1
+    min_npmi: 0.0
+    top_k_per_parameter_name: 8
+  lag:
+    tau_max_seconds: 120.0
+    min_count: 1
+    max_mean_lag_seconds: null
+    top_k_outgoing: 4
+    bands:
+      - name: quick
+        lower_seconds: 0.0
+        upper_seconds: 2.0
+        combine_weight: 1.0
+      - name: medium
+        lower_seconds: 2.0
+        upper_seconds: 10.0
+        combine_weight: 0.8
+      - name: slow
+        lower_seconds: 10.0
+        upper_seconds: 30.0
+        combine_weight: 0.5
+      - name: very_slow
+        lower_seconds: 30.0
+        upper_seconds: 120.0
+        combine_weight: 0.25
+  transition:
+    min_count: 1
+  fusion:
+    alpha: 1.0
+    beta: 1.0
+    gamma: 1.0
+    min_fused_edge_weight: 0.05
   normalization:
     mode: zscore
     clip_sigma: 6.0
     min_sensor_points: 30
 
+hierarchy:
+  top_k_per_parameter_name: 3
+  subsystem_min_edge_weight: 0.8
+  system_min_edge_weight: 0.6
+
 phase:
+  phase_count: 4
+  detect_sensor_count: 8
+  detect_event_type_count: 6
+  detect_categorical_state_count: 6
+  stable_drift_quantile: 0.35
+  smoothing_radius: 2
+  transition_penalty: 1.5
+  min_dwell_windows: 8
   persistence_reversal_cosine: -0.2
   tau_near_quantile: 0.25
   tau_far_quantile: 0.90
@@ -64,6 +117,10 @@ scoring:
     - emd
   combine_pvalues: cauchy
   block_weight_init: uniform
+  max_bridge_reference_rows: 10000
+
+anomaly:
+  subsystem_top_sensors_k: 5
 
 output:
   anomalies_merge_key:

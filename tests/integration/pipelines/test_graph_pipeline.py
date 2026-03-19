@@ -9,9 +9,13 @@ from libs.graph import (
     build_fused_graph_spark_table,
     build_graph_components_with_diagnostics_spark_table,
     build_hierarchy_from_fused_spark_table,
+    build_lag_candidate_pairs_spark_table,
     build_lag_graph_spark_table,
+    build_lag_profile_spark_table,
     build_precision_graph_from_window_features_spark_table,
     build_transition_graph_spark_table,
+    collapse_lag_profile_spark_table,
+    LagBandSpec,
 )
 from libs.testing.data import create_sample_events_df, create_sample_raw_table_df, create_sample_windows_df
 from libs.windows import build_window_features_spark_table
@@ -126,6 +130,7 @@ def test_build_graph_components_with_diagnostics_spark_table_reports_component_d
     assert parameter_universe_sdf.count() > 0
     assert diagnostics.total_timing_ms >= 0.0
     assert diagnostics.steps
+    assert any(step.step_name == "lag_profile_build" for step in diagnostics.steps)
     assert any(step.step_name == "lag_graph_build" for step in diagnostics.steps)
 
 
@@ -335,6 +340,134 @@ date_utc date
         top_k_outgoing=0,
     ).toPandas()
     assert all(float(value) <= 1.5 for value in max_mean_pdf["mean_lag_seconds"].tolist())
+
+
+def test_lag_profile_spark_table_assigns_one_band_and_collapses_to_legacy_graph(spark):
+    base = datetime(2026, 3, 1, 0, 0, 0, tzinfo=timezone.utc)
+    event_schema = """
+tail_id string,
+flight_id string,
+event_seq_id long,
+win_id int,
+timestamp_utc timestamp,
+parameter_name string,
+event_type_detected string,
+anomaly_type_detected string,
+anomaly_score_detected double,
+payload map<string,string>,
+date_utc date
+"""
+    rows = [
+        {"tail_id": "T001", "flight_id": "F001", "event_seq_id": 1, "win_id": 1, "timestamp_utc": base, "parameter_name": "A", "event_type_detected": "e", "anomaly_type_detected": "", "anomaly_score_detected": 0.0, "payload": {}, "date_utc": base.date()},
+        {"tail_id": "T001", "flight_id": "F001", "event_seq_id": 2, "win_id": 1, "timestamp_utc": base + timedelta(seconds=1), "parameter_name": "B", "event_type_detected": "e", "anomaly_type_detected": "", "anomaly_score_detected": 0.0, "payload": {}, "date_utc": base.date()},
+        {"tail_id": "T001", "flight_id": "F001", "event_seq_id": 3, "win_id": 1, "timestamp_utc": base + timedelta(seconds=5), "parameter_name": "A", "event_type_detected": "e", "anomaly_type_detected": "", "anomaly_score_detected": 0.0, "payload": {}, "date_utc": base.date()},
+        {"tail_id": "T001", "flight_id": "F001", "event_seq_id": 4, "win_id": 1, "timestamp_utc": base + timedelta(seconds=11), "parameter_name": "B", "event_type_detected": "e", "anomaly_type_detected": "", "anomaly_score_detected": 0.0, "payload": {}, "date_utc": base.date()},
+        {"tail_id": "T001", "flight_id": "F001", "event_seq_id": 5, "win_id": 1, "timestamp_utc": base + timedelta(seconds=20), "parameter_name": "A", "event_type_detected": "e", "anomaly_type_detected": "", "anomaly_score_detected": 0.0, "payload": {}, "date_utc": base.date()},
+        {"tail_id": "T001", "flight_id": "F001", "event_seq_id": 6, "win_id": 1, "timestamp_utc": base + timedelta(seconds=33), "parameter_name": "B", "event_type_detected": "e", "anomaly_type_detected": "", "anomaly_score_detected": 0.0, "payload": {}, "date_utc": base.date()},
+        {"tail_id": "T002", "flight_id": "F002", "event_seq_id": 1, "win_id": 1, "timestamp_utc": base, "parameter_name": "A", "event_type_detected": "e", "anomaly_type_detected": "", "anomaly_score_detected": 0.0, "payload": {}, "date_utc": base.date()},
+        {"tail_id": "T002", "flight_id": "F002", "event_seq_id": 2, "win_id": 1, "timestamp_utc": base + timedelta(seconds=1), "parameter_name": "B", "event_type_detected": "e", "anomaly_type_detected": "", "anomaly_score_detected": 0.0, "payload": {}, "date_utc": base.date()},
+    ]
+    events_sdf = spark.createDataFrame(rows, schema=event_schema)
+    band_specs = (
+        LagBandSpec(name="quick", lower_seconds=0.0, upper_seconds=2.0, combine_weight=1.0),
+        LagBandSpec(name="medium", lower_seconds=2.0, upper_seconds=10.0, combine_weight=0.8),
+        LagBandSpec(name="slow", lower_seconds=10.0, upper_seconds=30.0, combine_weight=0.5),
+    )
+
+    profile_pdf = build_lag_profile_spark_table(
+        events_sdf,
+        tau_max_seconds=30.0,
+        bands=band_specs,
+    ).toPandas()
+    collapsed_pdf = collapse_lag_profile_spark_table(
+        spark.createDataFrame(profile_pdf),
+        tau_max_seconds=30.0,
+        bands=band_specs,
+        min_count=1,
+        max_mean_lag_seconds=None,
+        top_k_outgoing=0,
+    ).toPandas()
+
+    pair_profile_pdf = profile_pdf[
+        (profile_pdf["parameter_name_u"] == "A") & (profile_pdf["parameter_name_v"] == "B")
+    ]
+    profile_rows = pair_profile_pdf.sort_values(["lag_band"], kind="stable").to_dict(orient="records")
+    assert [(row["lag_band"], int(row["lag_count"])) for row in profile_rows] == [
+        ("medium", 1),
+        ("quick", 2),
+        ("slow", 1),
+    ]
+    support_by_band = {row["lag_band"]: int(row["support_flight_count"]) for row in profile_rows}
+    assert support_by_band == {"quick": 2, "medium": 1, "slow": 1}
+
+    collapsed_row = collapsed_pdf[
+        (collapsed_pdf["parameter_name_u"] == "A") & (collapsed_pdf["parameter_name_v"] == "B")
+    ].to_dict(orient="records")
+    assert len(collapsed_row) == 1
+    collapsed = collapsed_row[0]
+    assert collapsed["parameter_name_u"] == "A"
+    assert collapsed["parameter_name_v"] == "B"
+    assert int(collapsed["lag_count"]) == 4
+    assert _round_nested(collapsed["mean_lag_seconds"]) == _round_nested((1.0 + 6.0 + 13.0 + 1.0) / 4.0)
+    expected_weight = (
+        pair_profile_pdf.loc[pair_profile_pdf["lag_band"] == "quick", "lag_weight"].sum() * 1.0
+        + pair_profile_pdf.loc[pair_profile_pdf["lag_band"] == "medium", "lag_weight"].sum() * 0.8
+        + pair_profile_pdf.loc[pair_profile_pdf["lag_band"] == "slow", "lag_weight"].sum() * 0.5
+    )
+    assert _round_nested(float(collapsed["lag_weight"])) == _round_nested(float(expected_weight))
+
+
+def test_lag_profile_spark_table_candidate_pruning_keeps_supported_edges(spark):
+    base = datetime(2026, 3, 1, 0, 0, 0, tzinfo=timezone.utc)
+    event_schema = """
+tail_id string,
+flight_id string,
+event_seq_id long,
+win_id int,
+timestamp_utc timestamp,
+parameter_name string,
+event_type_detected string,
+anomaly_type_detected string,
+anomaly_score_detected double,
+payload map<string,string>,
+date_utc date
+"""
+    window_schema = """
+tail_id string,
+flight_id string,
+win_id int,
+t_start timestamp,
+t_end timestamp,
+date_utc date
+"""
+    events_rows = [
+        {"tail_id": "T001", "flight_id": "F001", "event_seq_id": 1, "win_id": 1, "timestamp_utc": base, "parameter_name": "A", "event_type_detected": "e", "anomaly_type_detected": "", "anomaly_score_detected": 0.0, "payload": {}, "date_utc": base.date()},
+        {"tail_id": "T001", "flight_id": "F001", "event_seq_id": 2, "win_id": 1, "timestamp_utc": base + timedelta(seconds=1), "parameter_name": "C", "event_type_detected": "e", "anomaly_type_detected": "", "anomaly_score_detected": 0.0, "payload": {}, "date_utc": base.date()},
+        {"tail_id": "T001", "flight_id": "F001", "event_seq_id": 3, "win_id": 1, "timestamp_utc": base + timedelta(seconds=2), "parameter_name": "B", "event_type_detected": "e", "anomaly_type_detected": "", "anomaly_score_detected": 0.0, "payload": {}, "date_utc": base.date()},
+        {"tail_id": "T001", "flight_id": "F001", "event_seq_id": 4, "win_id": 2, "timestamp_utc": base + timedelta(seconds=10), "parameter_name": "D", "event_type_detected": "e", "anomaly_type_detected": "", "anomaly_score_detected": 0.0, "payload": {}, "date_utc": base.date()},
+        {"tail_id": "T001", "flight_id": "F001", "event_seq_id": 5, "win_id": 2, "timestamp_utc": base + timedelta(seconds=11), "parameter_name": "E", "event_type_detected": "e", "anomaly_type_detected": "", "anomaly_score_detected": 0.0, "payload": {}, "date_utc": base.date()},
+        {"tail_id": "T001", "flight_id": "F001", "event_seq_id": 6, "win_id": 3, "timestamp_utc": base + timedelta(seconds=13), "parameter_name": "F", "event_type_detected": "e", "anomaly_type_detected": "", "anomaly_score_detected": 0.0, "payload": {}, "date_utc": base.date()},
+    ]
+    window_rows = [
+        {"tail_id": "T001", "flight_id": "F001", "win_id": 1, "t_start": base, "t_end": base + timedelta(seconds=2), "date_utc": base.date()},
+        {"tail_id": "T001", "flight_id": "F001", "win_id": 2, "t_start": base + timedelta(seconds=10), "t_end": base + timedelta(seconds=11), "date_utc": base.date()},
+        {"tail_id": "T001", "flight_id": "F001", "win_id": 3, "t_start": base + timedelta(seconds=13), "t_end": base + timedelta(seconds=13), "date_utc": base.date()},
+    ]
+    events_sdf = spark.createDataFrame(events_rows, schema=event_schema)
+    windows_sdf = spark.createDataFrame(window_rows, schema=window_schema)
+
+    event_sdf = build_event_graph_spark_table(events_sdf, windows_sdf, min_count=1, min_npmi=0.0, top_k_per_parameter_name=8)
+    transition_sdf = build_transition_graph_spark_table(events_sdf, min_count=1)
+    candidate_pairs_sdf = build_lag_candidate_pairs_spark_table(event_sdf, transition_sdf)
+    lag_profile_pdf = build_lag_profile_spark_table(
+        events_sdf,
+        tau_max_seconds=10.0,
+        candidate_pairs_df=candidate_pairs_sdf,
+    ).toPandas()
+
+    actual_pairs = set(zip(lag_profile_pdf["parameter_name_u"], lag_profile_pdf["parameter_name_v"]))
+    assert ("A", "B") in actual_pairs
+    assert ("D", "F") not in actual_pairs
 
 
 def test_transition_graph_spark_table_follows_event_seq_id_order_and_row_normalizes(spark):

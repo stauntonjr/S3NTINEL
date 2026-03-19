@@ -28,6 +28,6 @@ def test_grouped_pipeline_mode_runs_both_grouped_scripts(monkeypatch, tmp_path):
     jobs._run_grouped_pipeline_for_row(row, args)
 
     assert called == [
-        ("91_run_fitting_pipeline.py", "__main__"),
-        ("92_run_inference_pipeline.py", "__main__"),
+        ("97_run_fitting_pipeline.py", "__main__"),
+        ("98_run_inference_pipeline.py", "__main__"),
     ]

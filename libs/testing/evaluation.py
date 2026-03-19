@@ -1,5 +1,4 @@
-# File: libs/testing/stream_eval.py
-"""Utilities for tolerance-based stream event precision/recall evaluation."""
+"""Low-level utilities for tolerance-based event-detection evaluation."""
 
 from __future__ import annotations
 
@@ -97,6 +96,10 @@ def evaluate_event_detection(
 
     precision = (tp / (tp + fp)) if (tp + fp) > 0 else 0.0
     recall = (tp / (tp + fn)) if (tp + fn) > 0 else 0.0
+    if (precision + recall) <= 0.0:
+        f1 = 0.0
+    else:
+        f1 = float((2.0 * precision * recall) / (precision + recall))
 
     per_type_metrics: dict[str, Any] = {}
     for event_type, counts in sorted(per_type.items()):
@@ -105,12 +108,17 @@ def evaluate_event_detection(
         fn_t = int(counts["fn"])
         precision_t = (tp_t / (tp_t + fp_t)) if (tp_t + fp_t) > 0 else 0.0
         recall_t = (tp_t / (tp_t + fn_t)) if (tp_t + fn_t) > 0 else 0.0
+        if (precision_t + recall_t) <= 0.0:
+            f1_t = 0.0
+        else:
+            f1_t = float((2.0 * precision_t * recall_t) / (precision_t + recall_t))
         per_type_metrics[event_type] = {
             "tp": tp_t,
             "fp": fp_t,
             "fn": fn_t,
             "precision": precision_t,
             "recall": recall_t,
+            "f1": f1_t,
         }
 
     return {
@@ -122,6 +130,7 @@ def evaluate_event_detection(
             "fn": fn,
             "precision": precision,
             "recall": recall,
+            "f1": f1,
         },
         "per_type": per_type_metrics,
         "tolerance_seconds": tolerance,

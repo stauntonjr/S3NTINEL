@@ -27,8 +27,8 @@ The plan below is grounded in the current repo shape:
   current object model, but still has room for readability and realism
   improvements
 - pandas and Spark boundaries are still duplicated across:
-  - `pipelines/10_backbone_fit.py`
-  - `pipelines/11_build_graph.py`
+  - `pipelines/40_backbone_fit.py`
+  - `pipelines/50_build_graph.py`
   - `libs/phase/pipeline.py`
   - `libs/scoring/pipeline.py`
 - phase and anomaly logic now have cleaner ownership, but further realism and
@@ -239,8 +239,8 @@ separate and enforce bounded behavior at their interfaces.
 
 ### Concrete reduction targets
 
-- `pipelines/10_backbone_fit.py`
-- `pipelines/11_build_graph.py`
+- `pipelines/40_backbone_fit.py`
+- `pipelines/50_build_graph.py`
 - `libs/phase/pipeline.py`
 - `libs/scoring/pipeline.py`
 

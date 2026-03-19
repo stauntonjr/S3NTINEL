@@ -1,8 +1,6 @@
 # File: pipelines/00_ingest_raw.py
 """Ingest raw parquet telemetry into normalized Delta bronze/silver tables."""
 
-import os
-
 from libs.perf import (
     build_artifact_manifest,
     build_stage_manifest,
@@ -17,14 +15,14 @@ from libs.perf import (
 )
 from libs.io.delta import get_spark, read_parquet, write_table
 from libs.io.transforms import normalize_raw_telemetry
-from pipelines.common import build_context
+from pipelines.common import build_context, context_artifacts, context_execution
 
 
 LOGGER = get_logger(__name__)
 
 
 def resolve_output_format() -> str:
-    return os.getenv("S3NTINEL_RAW_OUTPUT_FORMAT", os.getenv("S3NTINEL_TABLE_FORMAT", "delta"))
+    return context_execution(build_context()).raw_output_format
 
 
 @track_mlflow_run(stage_name="00_ingest_raw", logger=LOGGER)
@@ -32,10 +30,12 @@ def resolve_output_format() -> str:
 @log_wall_time(logger=LOGGER)
 def run() -> None:
     context = build_context()
-    input_path = os.getenv("S3NTINEL_RAW_INPUT_PATH", "data/input/raw_telemetry")
-    output_path = os.getenv("S3NTINEL_RAW_TABLE_PATH", "data/delta/raw_telemetry")
-    output_format = resolve_output_format()
-    write_mode = os.getenv("S3NTINEL_WRITE_MODE", "append")
+    artifacts = context_artifacts(context)
+    execution = context_execution(context)
+    input_path = artifacts.raw_input
+    output_path = artifacts.raw_table
+    output_format = execution.raw_output_format
+    write_mode = execution.write_mode
 
     spark = get_spark("s3ntinel.ingest_raw")
     raw_df = read_parquet(spark, input_path)

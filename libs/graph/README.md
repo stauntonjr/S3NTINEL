@@ -24,10 +24,14 @@ It does not own:
 - `precision.py`
 - `event.py`
 - `fused.py`
+- `lag.py`
+  - lag-band specs, multi-band lag profile construction, and collapse to legacy lag graph
 - `hierarchy_artifacts.py`
   - first-class graph objects and hierarchy logic
 - `data.py`
   - graph data preparation helpers
+- `transition.py`
+  - immediate-precedence transition graph
 - `validator.py`
   - graph and hierarchy validation
 - `pipeline.py`
@@ -38,7 +42,8 @@ It does not own:
 The graph layer separates graph types by meaning:
 - precision for continuous conditional structure
 - event for repeated event co-presence
-- lag for delayed temporal relation
+- lag profile for per-band delayed temporal relation
+- lag graph for collapsed lag compatibility weights
 - transition for state-sequence structure
 - fused for combined graph evidence
 - hierarchy for discovered structure over the fused graph
@@ -52,7 +57,8 @@ Persisted graph artifacts are defined in `libs/io/schemas/graph.py`.
 Graph construction mixes:
 - correlation / partial-correlation structure
 - event-pair counting
-- lagged relation counting in Spark
+- nearest-prior lag profiling in Spark with optional candidate pruning
+- collapsed lag-graph compatibility weighting
 - transition counts in Spark
 - weighted fusion and clustering
 
@@ -63,8 +69,13 @@ This package turns local telemetry relationships into structural models that sup
 ## Testing / Validation
 
 - unit tests cover remaining graph objects and hierarchy behavior
-- integration tests cover Spark graph semantics, stage 11, and hierarchy validation
+- integration tests cover Spark graph semantics, stage 50, and hierarchy validation
+- hierarchy validation reports include:
+  - exact match by system/subsystem/module
+  - pairwise same-cluster precision/recall/F1
+  - clustering agreement metrics: NMI, AMI, and ARI
 
 ## Notes
 
-- `pipeline.py` is the canonical implementation surface for lag and transition graph construction.
+- `pipeline.py` is the canonical implementation surface for stage-50 graph orchestration.
+- `lag.py` owns the first-class multi-band lag profile builder; `transition.py` owns immediate transition semantics.

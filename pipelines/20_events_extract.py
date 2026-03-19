@@ -1,8 +1,6 @@
 # File: pipelines/20_events_extract.py
 """Extract event stream from mixed-rate sensor channels."""
 
-import os
-
 from libs.events import build_events_table
 from libs.io.delta import get_spark, read_table, write_table
 from libs.perf import (
@@ -16,7 +14,7 @@ from libs.perf import (
     log_wall_time,
     track_mlflow_run,
 )
-from pipelines.common import build_context
+from pipelines.common import build_context, context_artifacts, context_execution, context_settings
 
 
 LOGGER = get_logger(__name__)
@@ -27,14 +25,17 @@ LOGGER = get_logger(__name__)
 @log_wall_time(logger=LOGGER)
 def run() -> None:
     context = build_context()
-    input_path = os.getenv("S3NTINEL_RAW_TABLE_PATH", "data/delta/raw_telemetry")
-    datatype_profile_path = os.getenv("S3NTINEL_PARAMETER_DATATYPE_PROFILE_TABLE_PATH", "data/delta/parameter_datatype_profile")
-    output_path = os.getenv("S3NTINEL_EVENTS_TABLE_PATH", "data/delta/events")
-    table_format = os.getenv("S3NTINEL_TABLE_FORMAT", "delta")
-    write_mode = os.getenv("S3NTINEL_WRITE_MODE", "append")
-    delta_threshold = float(os.getenv("S3NTINEL_EVENT_DELTA_THRESHOLD", "0.0"))
-    slope_source = str(os.getenv("S3NTINEL_EVENT_SLOPE_SOURCE", "ema"))
-    ema_alpha = float(os.getenv("S3NTINEL_EVENT_EMA_ALPHA", "0.2"))
+    artifacts = context_artifacts(context)
+    execution = context_execution(context)
+    settings = context_settings(context)
+    input_path = artifacts.raw_table
+    datatype_profile_path = artifacts.parameter_datatype_profile
+    output_path = artifacts.events
+    table_format = execution.table_format
+    write_mode = execution.write_mode
+    delta_threshold = settings.events.delta_threshold
+    slope_source = settings.events.slope_source
+    ema_alpha = settings.events.ema_alpha
 
     spark = get_spark("s3ntinel.events_extract")
     raw_df = read_table(spark, input_path, fmt=table_format)

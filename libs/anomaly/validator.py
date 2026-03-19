@@ -240,11 +240,20 @@ def validate_attribution_against_misbehavior_truth(
 
     per_truth_df = pd.DataFrame.from_records([match.payload for match in matches])
     mappable = per_truth_df[per_truth_df["dominant_subsystem_mappable"].fillna(False).astype(bool)] if not per_truth_df.empty else pd.DataFrame()
+    misbehavior_window_count = int(len(per_truth_df))
+    dominant_subsystem_match_count = int(per_truth_df["dominant_subsystem_match"].sum()) if not per_truth_df.empty else 0
+    dominant_subsystem_mappable_count = int(per_truth_df["dominant_subsystem_mappable"].sum()) if not per_truth_df.empty else 0
+    telemetry_parameter_match_count = int(per_truth_df["telemetry_parameter_match"].sum()) if not per_truth_df.empty else 0
+    event_parameter_match_count = int(per_truth_df["event_parameter_match"].sum()) if not per_truth_df.empty else 0
     return {
         "status": "ok",
-        "misbehavior_window_count": int(len(per_truth_df)),
+        "misbehavior_window_count": misbehavior_window_count,
+        "dominant_subsystem_match_count": dominant_subsystem_match_count,
+        "dominant_subsystem_mappable_count": dominant_subsystem_mappable_count,
         "dominant_subsystem_match_rate": float(mappable["dominant_subsystem_match"].mean()) if not mappable.empty else None,
         "dominant_subsystem_mappable_rate": float(per_truth_df["dominant_subsystem_mappable"].mean()) if not per_truth_df.empty else None,
+        "telemetry_parameter_match_count": telemetry_parameter_match_count,
+        "event_parameter_match_count": event_parameter_match_count,
         "telemetry_parameter_match_rate": float(per_truth_df["telemetry_parameter_match"].mean()) if not per_truth_df.empty else None,
         "event_parameter_match_rate": float(per_truth_df["event_parameter_match"].mean()) if not per_truth_df.empty else None,
         "telemetry_truth_subsystem_present_rate": float(per_truth_df["telemetry_truth_subsystem_present"].mean()) if not per_truth_df.empty else None,
@@ -277,8 +286,12 @@ def validate_attribution_against_fault_truth(
     return {
         "status": "ok",
         "fault_window_count": int(summary.get("misbehavior_window_count", 0)),
+        "dominant_subsystem_match_count": int(summary.get("dominant_subsystem_match_count", 0)),
+        "dominant_subsystem_mappable_count": int(summary.get("dominant_subsystem_mappable_count", 0)),
         "dominant_subsystem_match_rate": summary.get("dominant_subsystem_match_rate"),
         "dominant_subsystem_mappable_rate": summary.get("dominant_subsystem_mappable_rate"),
+        "telemetry_parameter_match_count": int(summary.get("telemetry_parameter_match_count", 0)),
+        "event_parameter_match_count": int(summary.get("event_parameter_match_count", 0)),
         "telemetry_parameter_match_rate": summary.get("telemetry_parameter_match_rate"),
         "event_parameter_match_rate": summary.get("event_parameter_match_rate"),
         "telemetry_truth_subsystem_present_rate": summary.get("telemetry_truth_subsystem_present_rate"),

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-from collections import Counter
 import contextlib
 import json
 import os
@@ -11,19 +10,29 @@ import sys
 import time
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
-from math import comb
 from pathlib import Path
 from statistics import median
 from typing import Any
 
 import pandas as pd
 
+from libs.anomaly.validator import (
+    validate_attribution_against_fault_truth,
+    validate_attribution_against_misbehavior_truth,
+)
+from libs.events.validator import build_event_validation_summary
+from libs.graph import build_coupling_validation_summary, build_graph_validation_summary
 from libs.io.delta import describe_spark_runtime_config, get_spark, read_table, write_table
 from libs.io.pandas_spark import pandas_records_for_spark
 from libs.io.schemas import SIMULATION_RAW_INPUT_SCHEMA
 from libs.perf import get_logger
-from libs.graph import build_coupling_validation_summary
-from libs.phase import evaluate_detected_phases
+from libs.phase import validate_detected_phases_from_tables
+from libs.profiling.validator import build_profile_validation_summary
+from libs.scoring.validator import (
+    summarize_misbehavior_window_detection,
+    validate_scores_against_fault_windows,
+    validate_scores_against_misbehavior_windows,
+)
 from libs.simulation import Flight, FlightSpec
 from libs.testing.assertions import (
     REQUIRED_DETECTED_COLUMNS,
@@ -60,6 +69,7 @@ ARTIFACT_ENV_BY_NAME = {
     "backbone_sensor_energy": "S3NTINEL_BACKBONE_SENSOR_ENERGY_TABLE_PATH",
     "precision_graph": "S3NTINEL_PRECISION_GRAPH_TABLE_PATH",
     "event_graph": "S3NTINEL_EVENT_GRAPH_TABLE_PATH",
+    "lag_profile": "S3NTINEL_LAG_PROFILE_TABLE_PATH",
     "lag_graph": "S3NTINEL_LAG_GRAPH_TABLE_PATH",
     "transition_graph": "S3NTINEL_TRANSITION_GRAPH_TABLE_PATH",
     "fused_graph": "S3NTINEL_FUSED_GRAPH_TABLE_PATH",
@@ -73,6 +83,7 @@ ARTIFACT_ENV_BY_NAME = {
     "anomaly_window_attribution": "S3NTINEL_ANOMALY_WINDOW_ATTRIBUTION_TABLE_PATH",
     "anomaly_telemetry_attribution": "S3NTINEL_ANOMALY_TELEMETRY_ATTRIBUTION_TABLE_PATH",
     "anomaly_event_attribution": "S3NTINEL_ANOMALY_EVENT_ATTRIBUTION_TABLE_PATH",
+    "explorer_bundle": "S3NTINEL_EXPLORER_BUNDLE_PATH",
 }
 
 ARTIFACT_RELATIVE_PATHS = {
@@ -90,6 +101,7 @@ ARTIFACT_RELATIVE_PATHS = {
     "backbone_sensor_energy": Path("delta") / "backbone_sensor_energy",
     "precision_graph": Path("delta") / "precision_graph",
     "event_graph": Path("delta") / "event_graph",
+    "lag_profile": Path("delta") / "lag_profile",
     "lag_graph": Path("delta") / "lag_graph",
     "transition_graph": Path("delta") / "transition_graph",
     "fused_graph": Path("delta") / "fused_graph",
@@ -103,6 +115,7 @@ ARTIFACT_RELATIVE_PATHS = {
     "anomaly_window_attribution": Path("delta") / "anomaly_window_attribution",
     "anomaly_telemetry_attribution": Path("delta") / "anomaly_telemetry_attribution",
     "anomaly_event_attribution": Path("delta") / "anomaly_event_attribution",
+    "explorer_bundle": Path("delta") / "explorer_bundle",
 }
 
 RUN_SETTING_ENVS = (
@@ -130,7 +143,7 @@ MODE_PLAN_BY_NAME = {
         "pipeline_mode": "sim_profile:v2",
         "stage_scripts": [
             "00_ingest_raw.py",
-            "05_parameter_profiles_fit.py",
+            "10_parameter_profiles_fit.py",
         ],
         "summary_artifact_path": "reports/profile_pipeline_run_summary.json",
     },
@@ -139,12 +152,12 @@ MODE_PLAN_BY_NAME = {
         "pipeline_mode": "sim_structural:v2",
         "stage_scripts": [
             "00_ingest_raw.py",
-            "05_parameter_profiles_fit.py",
+            "10_parameter_profiles_fit.py",
             "20_events_extract.py",
             "30_windows_adaptive.py",
-            "10_backbone_fit.py",
-            "11_build_graph.py",
-            "12_fit_hierarchy.py",
+            "40_backbone_fit.py",
+            "50_build_graph.py",
+            "60_fit_hierarchy.py",
         ],
         "summary_artifact_path": "reports/structural_pipeline_run_summary.json",
     },
@@ -153,16 +166,17 @@ MODE_PLAN_BY_NAME = {
         "pipeline_mode": "sim_full:v2",
         "stage_scripts": [
             "00_ingest_raw.py",
-            "05_parameter_profiles_fit.py",
+            "10_parameter_profiles_fit.py",
             "20_events_extract.py",
             "30_windows_adaptive.py",
-            "10_backbone_fit.py",
-            "11_build_graph.py",
-            "12_fit_hierarchy.py",
-            "50_phase_fit.py",
-            "60_window_scores_raw.py",
-            "70_window_scores_calibrate.py",
-            "80_anomaly_attribution.py",
+            "40_backbone_fit.py",
+            "50_build_graph.py",
+            "60_fit_hierarchy.py",
+            "70_phase_fit.py",
+            "80_window_scores_raw.py",
+            "85_window_scores_calibrate.py",
+            "90_anomaly_attribution.py",
+            "95_emit_explorer_bundle.py",
         ],
         "summary_artifact_path": "reports/pipeline_run_summary.json",
     },
@@ -675,6 +689,42 @@ def _collect_records(df: Any | None, *, order_by: tuple[str, ...] | list[str] = 
     return [row.asDict(recursive=True) for row in df.collect()]
 
 
+def _collect_dataframe(
+    df: Any | None,
+    *,
+    columns: tuple[str, ...] | list[str] | None = None,
+    order_by: tuple[str, ...] | list[str] = (),
+) -> pd.DataFrame:
+    if df is None:
+        return pd.DataFrame(columns=list(columns or ()))
+    if columns:
+        selected = [str(column) for column in columns if str(column) in df.columns]
+        if selected:
+            df = df.select(*selected)
+    records = _collect_records(df, order_by=order_by)
+    if records:
+        return pd.DataFrame.from_records(records)
+    return pd.DataFrame(columns=list(columns or ()))
+
+
+def _load_json_if_exists(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _path_size_bytes(path: Path) -> int:
+    if not path.exists():
+        return 0
+    if path.is_file():
+        return int(path.stat().st_size)
+    total = 0
+    for child in path.rglob("*"):
+        if child.is_file():
+            total += int(child.stat().st_size)
+    return total
+
+
 def _text_expr(df: Any, primary: str, fallback: str | None = None) -> Any:
     from pyspark.sql import functions as F
 
@@ -759,109 +809,20 @@ def _build_profile_validation_summary_spark(
     parameter_datatype_profile_sdf: Any | None,
     parameter_behavior_profile_sdf: Any | None,
 ) -> dict[str, Any]:
-    from pyspark.sql import functions as F
-
-    if raw_telemetry_sdf is None or "parameter_name" not in raw_telemetry_sdf.columns:
-        return {
-            "status": "ok",
-            "parameter_count": 0,
-            "datatype_labeled_parameter_count": 0,
-            "datatype_profiled_parameter_count": 0,
-            "behavior_labeled_parameter_count": 0,
-            "behavior_profiled_parameter_count": 0,
-        }
-
-    raw_labels = raw_telemetry_sdf.select(
-        F.trim(F.coalesce(F.col("parameter_name").cast("string"), F.lit(""))).alias("parameter_name"),
-        _text_expr(raw_telemetry_sdf, "parameter_datatype_label").alias("parameter_datatype_label"),
-        _text_expr(raw_telemetry_sdf, "behavior_family_label").alias("behavior_family_label"),
+    return build_profile_validation_summary(
+        raw_telemetry_df=_collect_dataframe(
+            raw_telemetry_sdf,
+            columns=("parameter_name", "parameter_datatype_label", "behavior_family_label"),
+        ),
+        parameter_datatype_profile_df=_collect_dataframe(
+            parameter_datatype_profile_sdf,
+            columns=("parameter_name", "parameter_datatype_profiled"),
+        ),
+        parameter_behavior_profile_df=_collect_dataframe(
+            parameter_behavior_profile_sdf,
+            columns=("parameter_name", "behavior_family_profiled"),
+        ),
     )
-    label_df = raw_labels.groupBy("parameter_name").agg(
-        _first_non_empty_agg("parameter_datatype_label", "parameter_datatype_label"),
-        _first_non_empty_agg("behavior_family_label", "behavior_family_label"),
-    )
-
-    merged = label_df
-    if parameter_datatype_profile_sdf is not None and {
-        "parameter_name",
-        "parameter_datatype_profiled",
-    }.issubset(set(parameter_datatype_profile_sdf.columns)):
-        datatype_profile_df = parameter_datatype_profile_sdf.select(
-            F.trim(F.coalesce(F.col("parameter_name").cast("string"), F.lit(""))).alias("parameter_name"),
-            _text_expr(parameter_datatype_profile_sdf, "parameter_datatype_profiled").alias("parameter_datatype_profiled"),
-        ).dropDuplicates(["parameter_name"])
-        merged = merged.join(datatype_profile_df, on="parameter_name", how="left")
-    else:
-        merged = merged.withColumn("parameter_datatype_profiled", F.lit(""))
-
-    if parameter_behavior_profile_sdf is not None and {
-        "parameter_name",
-        "behavior_family_profiled",
-    }.issubset(set(parameter_behavior_profile_sdf.columns)):
-        behavior_profile_df = parameter_behavior_profile_sdf.select(
-            F.trim(F.coalesce(F.col("parameter_name").cast("string"), F.lit(""))).alias("parameter_name"),
-            _text_expr(parameter_behavior_profile_sdf, "behavior_family_profiled").alias("behavior_family_profiled"),
-        ).dropDuplicates(["parameter_name"])
-        merged = merged.join(behavior_profile_df, on="parameter_name", how="left")
-    else:
-        merged = merged.withColumn("behavior_family_profiled", F.lit(""))
-
-    summary_row = merged.agg(
-        F.count(F.lit(1)).alias("parameter_count"),
-        F.sum(F.when(F.col("parameter_datatype_label") != "", F.lit(1)).otherwise(F.lit(0))).alias(
-            "datatype_labeled_parameter_count"
-        ),
-        F.sum(F.when(F.col("parameter_datatype_profiled") != "", F.lit(1)).otherwise(F.lit(0))).alias(
-            "datatype_profiled_parameter_count"
-        ),
-        F.sum(
-            F.when(
-                (F.col("parameter_datatype_label") != "")
-                & (F.col("parameter_datatype_profiled") != "")
-                & (F.col("parameter_datatype_label") == F.col("parameter_datatype_profiled")),
-                F.lit(1),
-            ).otherwise(F.lit(0))
-        ).alias("datatype_exact_match_count"),
-        F.sum(F.when(F.col("behavior_family_label") != "", F.lit(1)).otherwise(F.lit(0))).alias(
-            "behavior_labeled_parameter_count"
-        ),
-        F.sum(F.when(F.col("behavior_family_profiled") != "", F.lit(1)).otherwise(F.lit(0))).alias(
-            "behavior_profiled_parameter_count"
-        ),
-        F.sum(
-            F.when(
-                (F.col("behavior_family_label") != "")
-                & (F.col("behavior_family_profiled") != "")
-                & (F.col("behavior_family_label") == F.col("behavior_family_profiled")),
-                F.lit(1),
-            ).otherwise(F.lit(0))
-        ).alias("behavior_exact_match_count"),
-    ).first()
-
-    datatype_labeled_parameter_count = int(summary_row["datatype_labeled_parameter_count"] or 0)
-    behavior_labeled_parameter_count = int(summary_row["behavior_labeled_parameter_count"] or 0)
-    datatype_exact_match_count = int(summary_row["datatype_exact_match_count"] or 0)
-    behavior_exact_match_count = int(summary_row["behavior_exact_match_count"] or 0)
-    return {
-        "status": "ok",
-        "parameter_count": int(summary_row["parameter_count"] or 0),
-        "datatype_labeled_parameter_count": datatype_labeled_parameter_count,
-        "datatype_profiled_parameter_count": int(summary_row["datatype_profiled_parameter_count"] or 0),
-        "datatype_exact_match_count": datatype_exact_match_count,
-        "datatype_accuracy": (
-            float(datatype_exact_match_count / datatype_labeled_parameter_count)
-            if datatype_labeled_parameter_count > 0
-            else None
-        ),
-        "behavior_labeled_parameter_count": behavior_labeled_parameter_count,
-        "behavior_profiled_parameter_count": int(summary_row["behavior_profiled_parameter_count"] or 0),
-        "behavior_exact_match_count": behavior_exact_match_count,
-        "behavior_accuracy": (
-            float(behavior_exact_match_count / behavior_labeled_parameter_count)
-            if behavior_labeled_parameter_count > 0
-            else None
-        ),
-    }
 
 
 def _build_event_validation_summary_spark(
@@ -870,123 +831,23 @@ def _build_event_validation_summary_spark(
     events_sdf: Any | None,
     tolerance_seconds: float = 0.5,
 ) -> dict[str, Any]:
-    from pyspark.sql import functions as F
-
-    if raw_telemetry_sdf is None:
-        return {
-            "status": "ok",
-            "label_event_count": 0,
-            "detected_event_count": 0,
-            "tp": 0,
-            "fp": 0,
-            "fn": 0,
-            "tn": 0,
-            "precision": None,
-            "recall": None,
-            "tolerance_seconds": float(abs(tolerance_seconds)),
-        }
-
-    raw_base = raw_telemetry_sdf.select(
-        F.trim(F.coalesce(F.col("tail_id").cast("string"), F.lit(""))).alias("tail_id"),
-        F.trim(F.coalesce(F.col("flight_id").cast("string"), F.lit(""))).alias("flight_id"),
-        F.trim(F.coalesce(F.col("parameter_name").cast("string"), F.lit(""))).alias("parameter_name"),
-        F.col("timestamp_utc"),
-        _text_expr(raw_telemetry_sdf, "event_type_label").alias("event_type_label"),
+    return build_event_validation_summary(
+        simulator_rows=_collect_records(
+            raw_telemetry_sdf.select("tail_id", "flight_id", "parameter_name", "timestamp_utc", "event_type_label")
+            if raw_telemetry_sdf is not None
+            and {"tail_id", "flight_id", "parameter_name", "timestamp_utc", "event_type_label"}.issubset(set(raw_telemetry_sdf.columns))
+            else raw_telemetry_sdf,
+            order_by=("tail_id", "flight_id", "parameter_name", "timestamp_utc"),
+        ),
+        detected_events=_collect_records(
+            events_sdf.select("tail_id", "flight_id", "parameter_name", "timestamp_utc", "event_type_detected")
+            if events_sdf is not None
+            and {"tail_id", "flight_id", "parameter_name", "timestamp_utc", "event_type_detected"}.issubset(set(events_sdf.columns))
+            else events_sdf,
+            order_by=("tail_id", "flight_id", "parameter_name", "timestamp_utc"),
+        ),
+        tolerance_seconds=tolerance_seconds,
     )
-    raw_counts = raw_base.agg(
-        F.count(F.lit(1)).alias("raw_row_count"),
-        F.sum(F.when(F.col("event_type_label") != "", F.lit(1)).otherwise(F.lit(0))).alias("label_event_count"),
-    ).first()
-
-    labels = raw_base.filter(F.col("event_type_label") != "").groupBy(
-        "tail_id",
-        "flight_id",
-        "parameter_name",
-        "timestamp_utc",
-        "event_type_label",
-    ).agg(F.count(F.lit(1)).alias("label_count"))
-
-    if events_sdf is not None and {
-        "tail_id",
-        "flight_id",
-        "parameter_name",
-        "timestamp_utc",
-        "event_type_detected",
-    }.issubset(set(events_sdf.columns)):
-        detected = events_sdf.select(
-            F.trim(F.coalesce(F.col("tail_id").cast("string"), F.lit(""))).alias("tail_id"),
-            F.trim(F.coalesce(F.col("flight_id").cast("string"), F.lit(""))).alias("flight_id"),
-            F.trim(F.coalesce(F.col("parameter_name").cast("string"), F.lit(""))).alias("parameter_name"),
-            F.col("timestamp_utc"),
-            _text_expr(events_sdf, "event_type_detected").alias("event_type_detected"),
-        ).filter(F.col("event_type_detected") != "")
-        detected_grouped = detected.groupBy(
-            "tail_id",
-            "flight_id",
-            "parameter_name",
-            "timestamp_utc",
-            "event_type_detected",
-        ).agg(F.count(F.lit(1)).alias("detected_count"))
-        detected_event_count_row = detected_grouped.agg(F.sum(F.col("detected_count")).alias("detected_event_count")).first()
-    else:
-        detected_grouped = None
-        detected_event_count_row = {"detected_event_count": 0}
-
-    if detected_grouped is None:
-        tp = 0
-        fp = 0
-        fn = int(raw_counts["label_event_count"] or 0)
-    else:
-        matched = labels.alias("labels").join(
-            detected_grouped.alias("detected"),
-            on=[
-                F.col("labels.tail_id") == F.col("detected.tail_id"),
-                F.col("labels.flight_id") == F.col("detected.flight_id"),
-                F.col("labels.parameter_name") == F.col("detected.parameter_name"),
-                F.col("labels.timestamp_utc") == F.col("detected.timestamp_utc"),
-                F.col("labels.event_type_label") == F.col("detected.event_type_detected"),
-            ],
-            how="full_outer",
-        )
-        counts_row = matched.agg(
-            F.sum(F.least(F.coalesce(F.col("label_count"), F.lit(0)), F.coalesce(F.col("detected_count"), F.lit(0)))).alias(
-                "tp"
-            ),
-            F.sum(
-                F.greatest(
-                    F.coalesce(F.col("detected_count"), F.lit(0)) - F.coalesce(F.col("label_count"), F.lit(0)),
-                    F.lit(0),
-                )
-            ).alias("fp"),
-            F.sum(
-                F.greatest(
-                    F.coalesce(F.col("label_count"), F.lit(0)) - F.coalesce(F.col("detected_count"), F.lit(0)),
-                    F.lit(0),
-                )
-            ).alias("fn"),
-        ).first()
-        tp = int(counts_row["tp"] or 0)
-        fp = int(counts_row["fp"] or 0)
-        fn = int(counts_row["fn"] or 0)
-
-    label_event_count = int(raw_counts["label_event_count"] or 0)
-    detected_event_count = int(detected_event_count_row["detected_event_count"] or 0)
-    raw_row_count = int(raw_counts["raw_row_count"] or 0)
-    tn = max(raw_row_count - label_event_count, 0)
-    precision = float(tp / (tp + fp)) if (tp + fp) > 0 else None
-    recall = float(tp / (tp + fn)) if (tp + fn) > 0 else None
-    return {
-        "status": "ok",
-        "label_event_count": label_event_count,
-        "detected_event_count": detected_event_count,
-        "tp": tp,
-        "fp": fp,
-        "fn": fn,
-        "tn": tn,
-        "precision": precision,
-        "recall": recall,
-        "tolerance_seconds": float(abs(tolerance_seconds)),
-    }
 
 
 def _build_phase_validation_summary_spark(
@@ -995,275 +856,33 @@ def _build_phase_validation_summary_spark(
     phase_labels_sdf: Any | None,
     windows_sdf: Any | None = None,
 ) -> dict[str, Any]:
-    from pyspark.sql import Window
-    from pyspark.sql import functions as F
-
-    if phase_windows_sdf is None or phase_labels_sdf is None:
-        return {
-            "status": "skipped",
-            "reason": "no overlapping phase windows and phase labels",
-            "assignment_count": 0,
-        }
-
-    windows = phase_windows_sdf
-    if windows_sdf is not None and {"tail_id", "flight_id", "win_id", "t_start", "t_end"}.issubset(set(windows_sdf.columns)):
-        window_times = windows_sdf.select("tail_id", "flight_id", "win_id", "t_start", "t_end")
-        windows = windows.drop("t_start", "t_end").join(
-            window_times,
-            on=["tail_id", "flight_id", "win_id"],
-            how="left",
-        )
-
-    label_rows = phase_labels_sdf.select(
-        F.trim(F.coalesce(F.col("tail_id").cast("string"), F.lit(""))).alias("tail_id"),
-        F.trim(F.coalesce(F.col("flight_id").cast("string"), F.lit(""))).alias("flight_id"),
-        F.col("timestamp_utc"),
-        _text_expr(phase_labels_sdf, "phase_label").alias("phase_label"),
-    ).filter(F.col("phase_label") != "")
-
-    joined = windows.alias("w").join(
-        label_rows.alias("l"),
-        on=(
-            (F.col("w.tail_id") == F.col("l.tail_id"))
-            & (F.col("w.flight_id") == F.col("l.flight_id"))
-            & (F.col("l.timestamp_utc") >= F.col("w.t_start"))
-            & (F.col("l.timestamp_utc") <= F.col("w.t_end"))
+    return validate_detected_phases_from_tables(
+        phase_windows_df=_collect_dataframe(
+            phase_windows_sdf,
+            columns=(
+                "tail_id",
+                "flight_id",
+                "win_id",
+                "t_start",
+                "t_end",
+                "phase_id_detected",
+                "phase_state_detected",
+                "phase_confidence_detected",
+                "distance_to_centroid_detected",
+            ),
+            order_by=("tail_id", "flight_id", "win_id"),
         ),
-        how="inner",
+        phase_labels_df=_collect_dataframe(
+            phase_labels_sdf,
+            columns=("tail_id", "flight_id", "timestamp_utc", "phase_label"),
+            order_by=("tail_id", "flight_id", "timestamp_utc"),
+        ),
+        windows_df=_collect_dataframe(
+            windows_sdf,
+            columns=("tail_id", "flight_id", "win_id", "t_start", "t_end"),
+            order_by=("tail_id", "flight_id", "win_id"),
+        ),
     )
-    counts = joined.groupBy(
-        F.col("w.tail_id").alias("tail_id"),
-        F.col("w.flight_id").alias("flight_id"),
-        F.col("w.win_id").alias("win_id"),
-        F.col("w.phase_id_detected").alias("phase_id_detected"),
-        F.col("w.phase_state_detected").alias("phase_state_detected"),
-        F.col("w.phase_confidence_detected").alias("phase_confidence_detected"),
-        F.col("w.distance_to_centroid_detected").alias("distance_to_centroid_detected"),
-        F.col("l.phase_label").alias("phase_label"),
-    ).agg(F.count(F.lit(1)).alias("label_count"))
-
-    ranking = Window.partitionBy("tail_id", "flight_id", "win_id").orderBy(
-        F.desc("label_count"),
-        F.asc("phase_label"),
-    )
-    assignments = _collect_records(
-        counts.withColumn("rank", F.row_number().over(ranking))
-        .filter(F.col("rank") == 1)
-        .drop("rank", "label_count"),
-        order_by=("tail_id", "flight_id", "win_id"),
-    )
-    if not assignments:
-        return {
-            "status": "skipped",
-            "reason": "no overlapping phase windows and phase labels",
-            "assignment_count": 0,
-        }
-    summary = evaluate_detected_phases(assignments)
-    summary["status"] = "ok"
-    summary["assignment_count"] = len(assignments)
-    return summary
-
-
-def _pairwise_partition_metrics_records(
-    records: list[dict[str, Any]],
-    *,
-    detected_key: str,
-    truth_key: str,
-) -> dict[str, Any]:
-    if not records:
-        return {
-            "same_cluster_pair_precision": None,
-            "same_cluster_pair_recall": None,
-            "same_cluster_pair_f1": None,
-            "true_positive_pair_count": 0,
-            "same_detected_pair_count": 0,
-            "same_truth_pair_count": 0,
-        }
-
-    detected_counts = Counter(str(row.get(detected_key, "")) for row in records)
-    truth_counts = Counter(str(row.get(truth_key, "")) for row in records)
-    pair_counts = Counter((str(row.get(detected_key, "")), str(row.get(truth_key, ""))) for row in records)
-    same_detected = int(sum(comb(count, 2) for count in detected_counts.values() if count >= 2))
-    same_truth = int(sum(comb(count, 2) for count in truth_counts.values() if count >= 2))
-    tp = int(sum(comb(count, 2) for count in pair_counts.values() if count >= 2))
-    precision = float(tp / same_detected) if same_detected else None
-    recall = float(tp / same_truth) if same_truth else None
-    if precision is None or recall is None or (precision + recall) <= 0.0:
-        f1 = None
-    else:
-        f1 = float((2.0 * precision * recall) / (precision + recall))
-    return {
-        "same_cluster_pair_precision": precision,
-        "same_cluster_pair_recall": recall,
-        "same_cluster_pair_f1": f1,
-        "true_positive_pair_count": tp,
-        "same_detected_pair_count": same_detected,
-        "same_truth_pair_count": same_truth,
-    }
-
-
-def _validate_hierarchy_recovery_records(
-    *,
-    hierarchy_sensor_map_rows: list[dict[str, Any]],
-    hierarchy_label_rows: list[dict[str, Any]],
-) -> dict[str, Any]:
-    if not hierarchy_sensor_map_rows or not hierarchy_label_rows:
-        return {
-            "status": "skipped",
-            "reason": "missing hierarchy_sensor_map or hierarchy_label rows",
-            "sensor_count": 0,
-        }
-
-    label_by_parameter = {
-        str(row.get("parameter_name", "")): row
-        for row in hierarchy_label_rows
-        if str(row.get("parameter_name", ""))
-    }
-    joined: list[dict[str, Any]] = []
-    for detected in hierarchy_sensor_map_rows:
-        parameter_name = str(detected.get("parameter_name", ""))
-        truth = label_by_parameter.get(parameter_name)
-        if truth is None:
-            continue
-        joined.append(
-            {
-                "parameter_name": parameter_name,
-                "system_id_detected": str(detected.get("system_id", "")),
-                "subsystem_id_detected": str(detected.get("subsystem_id", "")),
-                "module_id_detected": str(detected.get("module_id", "")),
-                "system_id_truth": str(truth.get("system_id", "")),
-                "subsystem_id_truth": str(truth.get("subsystem_id", "")),
-                "module_id_truth": str(truth.get("module_id", "")),
-            }
-        )
-
-    sensor_count = len(joined)
-    if sensor_count == 0:
-        return {
-            "status": "skipped",
-            "reason": "no overlapping parameter_name rows between detected hierarchy and labels",
-            "sensor_count": 0,
-        }
-
-    detected_systems = {row["system_id_detected"] for row in joined}
-    detected_subsystems = {row["subsystem_id_detected"] for row in joined}
-    detected_modules = {row["module_id_detected"] for row in joined}
-    truth_systems = {str(row.get("system_id", "")) for row in hierarchy_label_rows}
-    truth_subsystems = {str(row.get("subsystem_id", "")) for row in hierarchy_label_rows}
-    truth_modules = {str(row.get("module_id", "")) for row in hierarchy_label_rows}
-    return {
-        "status": "ok",
-        "sensor_count": sensor_count,
-        "system_exact_match": float(
-            sum(1 for row in joined if row["system_id_detected"] == row["system_id_truth"]) / sensor_count
-        ),
-        "subsystem_exact_match": float(
-            sum(1 for row in joined if row["subsystem_id_detected"] == row["subsystem_id_truth"]) / sensor_count
-        ),
-        "module_exact_match": float(
-            sum(1 for row in joined if row["module_id_detected"] == row["module_id_truth"]) / sensor_count
-        ),
-        "system_partition": _pairwise_partition_metrics_records(
-            joined,
-            detected_key="system_id_detected",
-            truth_key="system_id_truth",
-        ),
-        "subsystem_partition": _pairwise_partition_metrics_records(
-            joined,
-            detected_key="subsystem_id_detected",
-            truth_key="subsystem_id_truth",
-        ),
-        "module_partition": _pairwise_partition_metrics_records(
-            joined,
-            detected_key="module_id_detected",
-            truth_key="module_id_truth",
-        ),
-        "truth_system_count": len(truth_systems),
-        "truth_subsystem_count": len(truth_subsystems),
-        "truth_module_count": len(truth_modules),
-        "detected_system_count": len(detected_systems),
-        "detected_subsystem_count": len(detected_subsystems),
-        "detected_module_count": len(detected_modules),
-        "detected_nontrivial_system_partition": len(detected_systems) > 1,
-        "detected_nontrivial_subsystem_partition": len(detected_subsystems) > 1,
-        "detected_nontrivial_module_partition": len(detected_modules) > 1,
-    }
-
-
-def _validate_expected_graph_signatures_records(
-    *,
-    lag_rows: list[dict[str, Any]],
-    fused_rows: list[dict[str, Any]],
-    expected_lag_edges: tuple[dict[str, str], ...] = (),
-    expected_fused_edges: tuple[dict[str, str], ...] = (),
-) -> dict[str, Any]:
-    lag_index = {
-        (str(row.get("parameter_name_u", "")), str(row.get("parameter_name_v", ""))): float(row.get("lag_weight") or 0.0)
-        for row in lag_rows
-    }
-    fused_index = {
-        tuple(sorted((str(row.get("parameter_name_u", "")), str(row.get("parameter_name_v", ""))))): float(
-            row.get("fused_weight") or 0.0
-        )
-        for row in fused_rows
-    }
-
-    lag_edge_rows: list[dict[str, Any]] = []
-    for edge in expected_lag_edges:
-        key = (str(edge["parameter_name_u"]), str(edge["parameter_name_v"]))
-        reverse_key = (key[1], key[0])
-        lag_edge_rows.append(
-            {
-                "parameter_name_u": key[0],
-                "parameter_name_v": key[1],
-                "present_forward": key in lag_index,
-                "present_reverse": reverse_key in lag_index,
-                "present_any_direction": (key in lag_index) or (reverse_key in lag_index),
-                "lag_weight": lag_index.get(key),
-                "reverse_lag_weight": lag_index.get(reverse_key),
-            }
-        )
-
-    fused_edge_rows: list[dict[str, Any]] = []
-    for edge in expected_fused_edges:
-        key = tuple(sorted((str(edge["parameter_name_u"]), str(edge["parameter_name_v"]))))
-        fused_edge_rows.append(
-            {
-                "parameter_name_u": key[0],
-                "parameter_name_v": key[1],
-                "present": key in fused_index,
-                "fused_weight": fused_index.get(key),
-            }
-        )
-
-    return {
-        "status": "ok",
-        "lag_expected_edge_count": len(lag_edge_rows),
-        "lag_expected_edge_hit_rate": (
-            float(sum(1 for row in lag_edge_rows if row["present_any_direction"]) / len(lag_edge_rows))
-            if lag_edge_rows
-            else None
-        ),
-        "lag_expected_edge_hit_rate_forward": (
-            float(sum(1 for row in lag_edge_rows if row["present_forward"]) / len(lag_edge_rows))
-            if lag_edge_rows
-            else None
-        ),
-        "lag_expected_edge_hit_rate_any_direction": (
-            float(sum(1 for row in lag_edge_rows if row["present_any_direction"]) / len(lag_edge_rows))
-            if lag_edge_rows
-            else None
-        ),
-        "lag_edges": lag_edge_rows,
-        "fused_expected_edge_count": len(fused_edge_rows),
-        "fused_expected_edge_hit_rate": (
-            float(sum(1 for row in fused_edge_rows if row["present"]) / len(fused_edge_rows))
-            if fused_edge_rows
-            else None
-        ),
-        "fused_edges": fused_edge_rows,
-    }
-
 
 def _build_graph_validation_summary_spark(
     *,
@@ -1274,73 +893,30 @@ def _build_graph_validation_summary_spark(
     expected_lag_edges: tuple[dict[str, str], ...] = (),
     expected_fused_edges: tuple[dict[str, str], ...] = (),
 ) -> dict[str, Any]:
-    from pyspark.sql import functions as F
-
-    hierarchy_sensor_map_rows = _collect_records(
-        hierarchy_sensor_map_sdf.select("parameter_name", "system_id", "subsystem_id", "module_id").dropDuplicates()
-        if hierarchy_sensor_map_sdf is not None and {"parameter_name", "system_id", "subsystem_id", "module_id"}.issubset(set(hierarchy_sensor_map_sdf.columns))
-        else None,
-        order_by=("parameter_name",),
-    )
-    hierarchy_label_rows = _collect_records(
-        hierarchy_label_sdf.select("parameter_name", "system_id", "subsystem_id", "module_id").dropDuplicates()
-        if hierarchy_label_sdf is not None and {"parameter_name", "system_id", "subsystem_id", "module_id"}.issubset(set(hierarchy_label_sdf.columns))
-        else None,
-        order_by=("parameter_name",),
-    )
-
-    lag_rows: list[dict[str, Any]] = []
-    if expected_lag_edges and lag_graph_sdf is not None and {"parameter_name_u", "parameter_name_v", "lag_weight"}.issubset(set(lag_graph_sdf.columns)):
-        relevant_parameters = sorted(
-            {
-                str(edge["parameter_name_u"])
-                for edge in expected_lag_edges
-            }
-            | {
-                str(edge["parameter_name_v"])
-                for edge in expected_lag_edges
-            }
-        )
-        lag_rows = _collect_records(
-            lag_graph_sdf.filter(
-                F.col("parameter_name_u").isin(relevant_parameters)
-                & F.col("parameter_name_v").isin(relevant_parameters)
-            ).select("parameter_name_u", "parameter_name_v", "lag_weight"),
-            order_by=("parameter_name_u", "parameter_name_v"),
-        )
-
-    fused_rows: list[dict[str, Any]] = []
-    if expected_fused_edges and fused_graph_sdf is not None and {"parameter_name_u", "parameter_name_v", "fused_weight"}.issubset(set(fused_graph_sdf.columns)):
-        relevant_parameters = sorted(
-            {
-                str(edge["parameter_name_u"])
-                for edge in expected_fused_edges
-            }
-            | {
-                str(edge["parameter_name_v"])
-                for edge in expected_fused_edges
-            }
-        )
-        fused_rows = _collect_records(
-            fused_graph_sdf.filter(
-                F.col("parameter_name_u").isin(relevant_parameters)
-                & F.col("parameter_name_v").isin(relevant_parameters)
-            ).select("parameter_name_u", "parameter_name_v", "fused_weight"),
-            order_by=("parameter_name_u", "parameter_name_v"),
-        )
-
-    return {
-        "hierarchy": _validate_hierarchy_recovery_records(
-            hierarchy_sensor_map_rows=hierarchy_sensor_map_rows,
-            hierarchy_label_rows=hierarchy_label_rows,
+    return build_graph_validation_summary(
+        hierarchy_sensor_map_df=_collect_dataframe(
+            hierarchy_sensor_map_sdf,
+            columns=("parameter_name", "system_id", "subsystem_id", "module_id"),
+            order_by=("parameter_name",),
         ),
-        "graph_signatures": _validate_expected_graph_signatures_records(
-            lag_rows=lag_rows,
-            fused_rows=fused_rows,
-            expected_lag_edges=expected_lag_edges,
-            expected_fused_edges=expected_fused_edges,
+        hierarchy_label_df=_collect_dataframe(
+            hierarchy_label_sdf,
+            columns=("parameter_name", "system_id", "subsystem_id", "module_id"),
+            order_by=("parameter_name",),
         ),
-    }
+        lag_graph_df=_collect_dataframe(
+            lag_graph_sdf,
+            columns=("parameter_name_u", "parameter_name_v", "lag_weight"),
+            order_by=("parameter_name_u", "parameter_name_v"),
+        ),
+        fused_graph_df=_collect_dataframe(
+            fused_graph_sdf,
+            columns=("parameter_name_u", "parameter_name_v", "fused_weight"),
+            order_by=("parameter_name_u", "parameter_name_v"),
+        ),
+        expected_lag_edges=expected_lag_edges,
+        expected_fused_edges=expected_fused_edges,
+    )
 
 
 def _build_coupling_validation_summary_spark(
@@ -1390,182 +966,25 @@ def _build_coupling_validation_summary_spark(
     )
 
 
-def _build_truth_windows_spark(raw_telemetry_sdf: Any | None) -> Any | None:
-    from pyspark.sql import functions as F
-
-    if raw_telemetry_sdf is None:
-        return None
-    normalized = raw_telemetry_sdf.select(
-        F.trim(F.coalesce(F.col("tail_id").cast("string"), F.lit(""))).alias("tail_id"),
-        F.trim(F.coalesce(F.col("flight_id").cast("string"), F.lit(""))).alias("flight_id"),
-        F.col("timestamp_utc"),
-        F.trim(F.coalesce(F.col("system_id").cast("string"), F.lit(""))).alias("system_id"),
-        F.trim(F.coalesce(F.col("subsystem_id").cast("string"), F.lit(""))).alias("subsystem_id"),
-        F.trim(F.coalesce(F.col("module_id").cast("string"), F.lit(""))).alias("module_id"),
-        F.trim(F.coalesce(F.col("parameter_name").cast("string"), F.lit(""))).alias("parameter_name"),
-        _bool_expr(raw_telemetry_sdf, "misbehavior_active", "fault_active").alias("misbehavior_active"),
-        _text_expr(raw_telemetry_sdf, "misbehavior_window_id", "fault_window_id").alias("misbehavior_window_id"),
-        _text_expr(raw_telemetry_sdf, "misbehavior_family_label").alias("misbehavior_family_label"),
-        _text_expr(raw_telemetry_sdf, "misbehavior_detail_label", "fault_type").alias("misbehavior_detail_label"),
-        _text_expr(raw_telemetry_sdf, "fault_window_id", "misbehavior_window_id").alias("fault_window_id"),
-        _text_expr(raw_telemetry_sdf, "fault_family_label", "behavior_family_label").alias("fault_family_label"),
-        _text_expr(raw_telemetry_sdf, "fault_type", "misbehavior_detail_label").alias("fault_type"),
-    ).filter(F.col("misbehavior_active") & (F.col("misbehavior_window_id") != ""))
-
-    return normalized.groupBy("tail_id", "flight_id", "misbehavior_window_id").agg(
-        F.min("timestamp_utc").alias("misbehavior_start_timestamp_utc"),
-        F.max("timestamp_utc").alias("misbehavior_end_timestamp_utc"),
-        _first_non_empty_agg("misbehavior_family_label", "misbehavior_family_label"),
-        _first_non_empty_agg("misbehavior_detail_label", "misbehavior_detail_label"),
-        _first_non_empty_agg("fault_window_id", "fault_window_id"),
-        _first_non_empty_agg("fault_family_label", "fault_family_label"),
-        _first_non_empty_agg("fault_type", "fault_type"),
-        _first_non_empty_agg("system_id", "system_id"),
-        _first_non_empty_agg("subsystem_id", "subsystem_id"),
-        _first_non_empty_agg("module_id", "module_id"),
-        _first_non_empty_agg("parameter_name", "parameter_name"),
-    )
-
-
 def _build_misbehavior_score_summary_spark(
     *,
     raw_telemetry_sdf: Any | None,
     windows_sdf: Any | None,
     calibrated_scores_sdf: Any | None,
 ) -> dict[str, Any]:
-    from pyspark.sql import functions as F
-
-    truth_windows_sdf = _build_truth_windows_spark(raw_telemetry_sdf)
-    truth_rows = _collect_records(truth_windows_sdf, order_by=("tail_id", "flight_id", "misbehavior_window_id"))
-    if not truth_rows:
-        return {
-            "status": "ok",
-            "misbehavior_window_count": 0,
-            "detected_misbehavior_window_count": 0,
-            "emit_ready_misbehavior_window_count": 0,
-        }
-
-    if windows_sdf is None or not {"tail_id", "flight_id", "win_id", "t_start", "t_end", "date_utc"}.issubset(set(windows_sdf.columns)):
-        return {
-            "status": "ok",
-            "misbehavior_window_count": len(truth_rows),
-            "detected_misbehavior_window_count": 0,
-            "emit_ready_misbehavior_window_count": 0,
-            "reason": "misbehavior windows did not overlap any calibrated windows",
-        }
-
-    merged_windows = windows_sdf.select("tail_id", "flight_id", "win_id", "t_start", "t_end", "date_utc")
-    if calibrated_scores_sdf is not None and {"tail_id", "flight_id", "win_id", "date_utc", "global_score", "severity", "emit_ready"}.issubset(set(calibrated_scores_sdf.columns)):
-        merged_windows = merged_windows.join(
-            calibrated_scores_sdf.select(
-                "tail_id",
-                "flight_id",
-                "win_id",
-                "date_utc",
-                "global_score",
-                "severity",
-                "emit_ready",
-            ),
-            on=["tail_id", "flight_id", "win_id", "date_utc"],
-            how="left",
-        )
-    else:
-        merged_windows = (
-            merged_windows.withColumn("global_score", F.lit(None).cast("double"))
-            .withColumn("severity", F.lit(None).cast("string"))
-            .withColumn("emit_ready", F.lit(None).cast("boolean"))
-        )
-
-    overlaps = truth_windows_sdf.alias("truth").join(
-        merged_windows.alias("windows"),
-        on=(
-            (F.col("truth.tail_id") == F.col("windows.tail_id"))
-            & (F.col("truth.flight_id") == F.col("windows.flight_id"))
-            & (F.col("windows.t_end") >= F.col("truth.misbehavior_start_timestamp_utc"))
-            & (F.col("windows.t_start") <= F.col("truth.misbehavior_end_timestamp_utc"))
+    return validate_scores_against_misbehavior_windows(
+        raw_telemetry_df=_collect_dataframe(raw_telemetry_sdf, order_by=("tail_id", "flight_id", "timestamp_utc")),
+        windows_df=_collect_dataframe(
+            windows_sdf,
+            columns=("tail_id", "flight_id", "win_id", "t_start", "t_end", "date_utc"),
+            order_by=("tail_id", "flight_id", "win_id"),
         ),
-        how="inner",
+        calibrated_scores_df=_collect_dataframe(
+            calibrated_scores_sdf,
+            columns=("tail_id", "flight_id", "win_id", "date_utc", "global_score", "severity", "emit_ready"),
+            order_by=("tail_id", "flight_id", "win_id"),
+        ),
     )
-    if not overlaps.take(1):
-        return {
-            "status": "ok",
-            "misbehavior_window_count": len(truth_rows),
-            "detected_misbehavior_window_count": 0,
-            "emit_ready_misbehavior_window_count": 0,
-            "reason": "misbehavior windows did not overlap any calibrated windows",
-        }
-
-    severity_text = F.coalesce(F.col("windows.severity").cast("string"), F.lit("normal"))
-    emit_ready_flag = F.coalesce(F.col("windows.emit_ready").cast("boolean"), F.lit(False))
-    score_value = F.coalesce(F.col("windows.global_score").cast("double"), F.lit(0.0))
-    aggregated = overlaps.groupBy(
-        F.col("truth.tail_id").alias("tail_id"),
-        F.col("truth.flight_id").alias("flight_id"),
-        F.col("truth.misbehavior_window_id").alias("misbehavior_window_id"),
-        F.col("truth.misbehavior_family_label").alias("misbehavior_family_label"),
-        F.col("truth.misbehavior_detail_label").alias("misbehavior_detail_label"),
-        F.col("truth.fault_window_id").alias("fault_window_id"),
-        F.col("truth.fault_family_label").alias("fault_family_label"),
-        F.col("truth.fault_type").alias("fault_type"),
-        F.col("truth.subsystem_id").alias("subsystem_id"),
-        F.col("truth.parameter_name").alias("parameter_name"),
-        F.col("truth.misbehavior_start_timestamp_utc").alias("misbehavior_start_timestamp_utc"),
-    ).agg(
-        F.count(F.lit(1)).alias("overlapping_window_count"),
-        F.sum(F.when(severity_text != "normal", F.lit(1)).otherwise(F.lit(0))).alias("detected_window_count"),
-        F.sum(F.when(emit_ready_flag, F.lit(1)).otherwise(F.lit(0))).alias("emit_ready_window_count"),
-        F.max(score_value).alias("max_global_score"),
-        F.percentile_approx(score_value, 0.5, 100).alias("median_global_score"),
-        F.min(F.when(severity_text != "normal", F.col("windows.t_start"))).alias("first_detected_start"),
-        F.min(F.when(emit_ready_flag, F.col("windows.t_start"))).alias("first_emit_ready_start"),
-    )
-
-    per_window: list[dict[str, Any]] = []
-    for row in _collect_records(aggregated, order_by=("tail_id", "flight_id", "misbehavior_window_id")):
-        misbehavior_start = row.get("misbehavior_start_timestamp_utc")
-        first_detected = row.get("first_detected_start")
-        first_emit_ready = row.get("first_emit_ready_start")
-        per_window.append(
-            {
-                "tail_id": str(row.get("tail_id", "")),
-                "flight_id": str(row.get("flight_id", "")),
-                "misbehavior_window_id": str(row.get("misbehavior_window_id", "")),
-                "misbehavior_family_label": str(row.get("misbehavior_family_label", "")),
-                "misbehavior_detail_label": str(row.get("misbehavior_detail_label", "")),
-                "fault_window_id": str(row.get("fault_window_id", "")),
-                "fault_family_label": str(row.get("fault_family_label", "")),
-                "fault_type": str(row.get("fault_type", "")),
-                "subsystem_id": str(row.get("subsystem_id", "")),
-                "parameter_name": str(row.get("parameter_name", "")),
-                "overlapping_window_count": int(row.get("overlapping_window_count", 0) or 0),
-                "detected_window_count": int(row.get("detected_window_count", 0) or 0),
-                "emit_ready_window_count": int(row.get("emit_ready_window_count", 0) or 0),
-                "max_global_score": float(row.get("max_global_score", 0.0) or 0.0),
-                "median_global_score": float(row.get("median_global_score", 0.0) or 0.0),
-                "detection_latency_seconds": (
-                    None
-                    if misbehavior_start is None or first_detected is None
-                    else float((first_detected - misbehavior_start).total_seconds())
-                ),
-                "emit_ready_latency_seconds": (
-                    None
-                    if misbehavior_start is None or first_emit_ready is None
-                    else float((first_emit_ready - misbehavior_start).total_seconds())
-                ),
-            }
-        )
-
-    detected_misbehavior_window_count = int(sum(1 for row in per_window if row["detected_window_count"] > 0))
-    emit_ready_misbehavior_window_count = int(sum(1 for row in per_window if row["emit_ready_window_count"] > 0))
-    median_scores = [float(row["median_global_score"]) for row in per_window]
-    return {
-        "status": "ok",
-        "misbehavior_window_count": len(truth_rows),
-        "detected_misbehavior_window_count": detected_misbehavior_window_count,
-        "emit_ready_misbehavior_window_count": emit_ready_misbehavior_window_count,
-        "median_misbehavior_window_score": float(median(median_scores)) if median_scores else None,
-        "misbehavior_windows": per_window,
-    }
 
 
 def _build_misbehavior_window_summary_from_score_summary(summary: dict[str, Any]) -> dict[str, Any]:
@@ -1588,7 +1007,11 @@ def _build_fault_score_summary_from_misbehavior(summary: dict[str, Any]) -> dict
         "fault_window_count": int(summary.get("misbehavior_window_count", 0)),
         "detected_fault_window_count": int(summary.get("detected_misbehavior_window_count", 0)),
         "emit_ready_fault_window_count": int(summary.get("emit_ready_misbehavior_window_count", 0)),
+        "detected_fault_window_rate": summary.get("detected_misbehavior_window_rate"),
+        "emit_ready_fault_window_rate": summary.get("emit_ready_misbehavior_window_rate"),
         "median_fault_window_score": summary.get("median_misbehavior_window_score"),
+        "median_detection_latency_seconds": summary.get("median_detection_latency_seconds"),
+        "median_emit_ready_latency_seconds": summary.get("median_emit_ready_latency_seconds"),
         "fault_windows": [
             {
                 **row,
@@ -1676,249 +1099,39 @@ def _build_misbehavior_attribution_summary_spark(
     hierarchy_sensor_map_sdf: Any | None = None,
     hierarchy_label_sdf: Any | None = None,
 ) -> dict[str, Any]:
-    from pyspark.sql import Window
-    from pyspark.sql import functions as F
-
-    truth_windows_sdf = _build_truth_windows_spark(raw_telemetry_sdf)
-    truth_rows = _collect_records(truth_windows_sdf, order_by=("tail_id", "flight_id", "misbehavior_window_id"))
-    if not truth_rows:
-        return {
-            "status": "ok",
-            "misbehavior_window_count": 0,
-            "dominant_subsystem_match_rate": None,
-            "telemetry_parameter_match_rate": None,
-            "event_parameter_match_rate": None,
-        }
-
-    hierarchy_sensor_map_rows = _collect_records(
-        hierarchy_sensor_map_sdf.select("parameter_name", "subsystem_id").dropDuplicates()
-        if hierarchy_sensor_map_sdf is not None and {"parameter_name", "subsystem_id"}.issubset(set(hierarchy_sensor_map_sdf.columns))
-        else None
+    return validate_attribution_against_misbehavior_truth(
+        raw_telemetry_df=_collect_dataframe(raw_telemetry_sdf, order_by=("tail_id", "flight_id", "timestamp_utc")),
+        windows_df=_collect_dataframe(
+            windows_sdf,
+            columns=("tail_id", "flight_id", "win_id", "t_start", "t_end"),
+            order_by=("tail_id", "flight_id", "win_id"),
+        ),
+        anomaly_window_attribution_df=_collect_dataframe(
+            anomaly_window_sdf,
+            columns=("tail_id", "flight_id", "win_id", "dominant_subsystem_id"),
+            order_by=("tail_id", "flight_id", "win_id"),
+        ),
+        anomaly_telemetry_attribution_df=_collect_dataframe(
+            anomaly_telemetry_sdf,
+            columns=("tail_id", "flight_id", "win_id", "parameter_name"),
+            order_by=("tail_id", "flight_id", "win_id"),
+        ),
+        anomaly_event_attribution_df=_collect_dataframe(
+            anomaly_event_sdf,
+            columns=("tail_id", "flight_id", "win_id", "parameter_name"),
+            order_by=("tail_id", "flight_id", "win_id"),
+        ),
+        hierarchy_sensor_map_df=_collect_dataframe(
+            hierarchy_sensor_map_sdf,
+            columns=("parameter_name", "subsystem_id"),
+            order_by=("parameter_name",),
+        ),
+        hierarchy_label_df=_collect_dataframe(
+            hierarchy_label_sdf,
+            columns=("parameter_name", "subsystem_id"),
+            order_by=("parameter_name",),
+        ),
     )
-    hierarchy_label_rows = _collect_records(
-        hierarchy_label_sdf.select("parameter_name", "subsystem_id").dropDuplicates()
-        if hierarchy_label_sdf is not None and {"parameter_name", "subsystem_id"}.issubset(set(hierarchy_label_sdf.columns))
-        else None
-    )
-    truth_parameter_to_subsystem = {
-        str(row.get("parameter_name", "")): str(row.get("subsystem_id", ""))
-        for row in hierarchy_label_rows
-        if str(row.get("parameter_name", ""))
-    }
-    detected_to_truth_subsystem, ambiguous_detected_subsystems = _build_detected_subsystem_truth_map(
-        hierarchy_sensor_map_rows=hierarchy_sensor_map_rows,
-        hierarchy_label_rows=hierarchy_label_rows,
-    )
-
-    overlap_map: dict[tuple[str, str, str], dict[str, Any]] = {}
-    overlap_hits = None
-    if windows_sdf is not None and {"tail_id", "flight_id", "win_id", "t_start", "t_end"}.issubset(set(windows_sdf.columns)):
-        overlap_hits = truth_windows_sdf.alias("truth").join(
-            windows_sdf.select("tail_id", "flight_id", "win_id", "t_start", "t_end").alias("windows"),
-            on=(
-                (F.col("truth.tail_id") == F.col("windows.tail_id"))
-                & (F.col("truth.flight_id") == F.col("windows.flight_id"))
-                & (F.col("windows.t_end") >= F.col("truth.misbehavior_start_timestamp_utc"))
-                & (F.col("windows.t_start") <= F.col("truth.misbehavior_end_timestamp_utc"))
-            ),
-            how="left",
-        ).select(
-            F.col("truth.tail_id").alias("tail_id"),
-            F.col("truth.flight_id").alias("flight_id"),
-            F.col("truth.misbehavior_window_id").alias("misbehavior_window_id"),
-            F.col("windows.win_id").alias("win_id"),
-        )
-        overlap_rows = _collect_records(
-            overlap_hits.groupBy("tail_id", "flight_id", "misbehavior_window_id").agg(
-                F.countDistinct(F.when(F.col("win_id").isNotNull(), F.col("win_id"))).alias("overlapping_window_count"),
-                F.collect_set(F.when(F.col("win_id").isNotNull(), F.col("win_id"))).alias("overlapping_win_ids"),
-            ),
-            order_by=("tail_id", "flight_id", "misbehavior_window_id"),
-        )
-        overlap_map = {
-            (str(row["tail_id"]), str(row["flight_id"]), str(row["misbehavior_window_id"])): row
-            for row in overlap_rows
-        }
-
-    dominant_subsystem_by_truth: dict[tuple[str, str, str], str] = {}
-    if overlap_hits is not None and anomaly_window_sdf is not None and {"tail_id", "flight_id", "win_id", "dominant_subsystem_id"}.issubset(set(anomaly_window_sdf.columns)):
-        dominant_hits = overlap_hits.filter(F.col("win_id").isNotNull()).alias("overlap").join(
-            anomaly_window_sdf.select("tail_id", "flight_id", "win_id", "dominant_subsystem_id").alias("window_attr"),
-            on=(
-                (F.col("overlap.tail_id") == F.col("window_attr.tail_id"))
-                & (F.col("overlap.flight_id") == F.col("window_attr.flight_id"))
-                & (F.col("overlap.win_id") == F.col("window_attr.win_id"))
-            ),
-            how="inner",
-        ).select(
-            F.col("overlap.tail_id").alias("tail_id"),
-            F.col("overlap.flight_id").alias("flight_id"),
-            F.col("overlap.misbehavior_window_id").alias("misbehavior_window_id"),
-            F.trim(F.coalesce(F.col("window_attr.dominant_subsystem_id").cast("string"), F.lit(""))).alias(
-                "dominant_subsystem_id"
-            ),
-        )
-        dominance_counts = dominant_hits.filter(F.col("dominant_subsystem_id") != "").groupBy(
-            "tail_id",
-            "flight_id",
-            "misbehavior_window_id",
-            "dominant_subsystem_id",
-        ).agg(F.count(F.lit(1)).alias("hit_count"))
-        dominance_ranking = Window.partitionBy("tail_id", "flight_id", "misbehavior_window_id").orderBy(
-            F.desc("hit_count"),
-            F.asc("dominant_subsystem_id"),
-        )
-        dominant_subsystem_by_truth = {
-            (str(row["tail_id"]), str(row["flight_id"]), str(row["misbehavior_window_id"])): str(
-                row["dominant_subsystem_id"]
-            )
-            for row in _collect_records(
-                dominance_counts.withColumn("rank", F.row_number().over(dominance_ranking))
-                .filter(F.col("rank") == 1)
-                .drop("rank", "hit_count")
-            )
-        }
-
-    telemetry_parameters_by_truth: dict[tuple[str, str, str], set[str]] = {}
-    if overlap_hits is not None and anomaly_telemetry_sdf is not None and {"tail_id", "flight_id", "win_id", "parameter_name"}.issubset(set(anomaly_telemetry_sdf.columns)):
-        telemetry_rows = _collect_records(
-            overlap_hits.filter(F.col("win_id").isNotNull()).alias("overlap").join(
-                anomaly_telemetry_sdf.select("tail_id", "flight_id", "win_id", "parameter_name").alias("telemetry_attr"),
-                on=(
-                    (F.col("overlap.tail_id") == F.col("telemetry_attr.tail_id"))
-                    & (F.col("overlap.flight_id") == F.col("telemetry_attr.flight_id"))
-                    & (F.col("overlap.win_id") == F.col("telemetry_attr.win_id"))
-                ),
-                how="inner",
-            ).groupBy(
-                F.col("overlap.tail_id").alias("tail_id"),
-                F.col("overlap.flight_id").alias("flight_id"),
-                F.col("overlap.misbehavior_window_id").alias("misbehavior_window_id"),
-            ).agg(F.collect_set(F.col("telemetry_attr.parameter_name")).alias("parameter_names"))
-        )
-        telemetry_parameters_by_truth = {
-            (str(row["tail_id"]), str(row["flight_id"]), str(row["misbehavior_window_id"])): {
-                str(parameter_name)
-                for parameter_name in (row.get("parameter_names") or [])
-                if str(parameter_name)
-            }
-            for row in telemetry_rows
-        }
-
-    event_parameters_by_truth: dict[tuple[str, str, str], set[str]] = {}
-    if overlap_hits is not None and anomaly_event_sdf is not None and {"tail_id", "flight_id", "win_id", "parameter_name"}.issubset(set(anomaly_event_sdf.columns)):
-        event_rows = _collect_records(
-            overlap_hits.filter(F.col("win_id").isNotNull()).alias("overlap").join(
-                anomaly_event_sdf.select("tail_id", "flight_id", "win_id", "parameter_name").alias("event_attr"),
-                on=(
-                    (F.col("overlap.tail_id") == F.col("event_attr.tail_id"))
-                    & (F.col("overlap.flight_id") == F.col("event_attr.flight_id"))
-                    & (F.col("overlap.win_id") == F.col("event_attr.win_id"))
-                ),
-                how="inner",
-            ).groupBy(
-                F.col("overlap.tail_id").alias("tail_id"),
-                F.col("overlap.flight_id").alias("flight_id"),
-                F.col("overlap.misbehavior_window_id").alias("misbehavior_window_id"),
-            ).agg(F.collect_set(F.col("event_attr.parameter_name")).alias("parameter_names"))
-        )
-        event_parameters_by_truth = {
-            (str(row["tail_id"]), str(row["flight_id"]), str(row["misbehavior_window_id"])): {
-                str(parameter_name)
-                for parameter_name in (row.get("parameter_names") or [])
-                if str(parameter_name)
-            }
-            for row in event_rows
-        }
-
-    per_truth_rows: list[dict[str, Any]] = []
-    for truth in truth_rows:
-        key = (
-            str(truth.get("tail_id", "")),
-            str(truth.get("flight_id", "")),
-            str(truth.get("misbehavior_window_id", "")),
-        )
-        truth_subsystem = str(truth.get("subsystem_id", ""))
-        truth_parameter = str(truth.get("parameter_name", ""))
-        overlap_info = overlap_map.get(key, {"overlapping_window_count": 0, "overlapping_win_ids": []})
-        telemetry_parameters = telemetry_parameters_by_truth.get(key, set())
-        event_parameters = event_parameters_by_truth.get(key, set())
-        telemetry_truth_subsystems = {
-            truth_parameter_to_subsystem.get(parameter_name)
-            for parameter_name in telemetry_parameters
-            if truth_parameter_to_subsystem.get(parameter_name)
-        }
-        event_truth_subsystems = {
-            truth_parameter_to_subsystem.get(parameter_name)
-            for parameter_name in event_parameters
-            if truth_parameter_to_subsystem.get(parameter_name)
-        }
-        dominant_detected_subsystem = dominant_subsystem_by_truth.get(key, "")
-        dominant_subsystem_truth, dominant_subsystem_mappable = _resolve_detected_subsystem(
-            dominant_detected_subsystem,
-            detected_to_truth=detected_to_truth_subsystem,
-            ambiguous_detected_subsystems=ambiguous_detected_subsystems,
-        )
-        payload = {
-            "tail_id": key[0],
-            "flight_id": key[1],
-            "misbehavior_window_id": key[2],
-            "subsystem_id": truth_subsystem,
-            "parameter_name": truth_parameter,
-            "overlapping_window_count": int(overlap_info.get("overlapping_window_count", 0) or 0),
-            "dominant_subsystem_match": bool(
-                dominant_subsystem_mappable and dominant_subsystem_truth == truth_subsystem
-            ),
-            "dominant_subsystem_mappable": bool(dominant_subsystem_mappable),
-            "dominant_subsystem_truth": dominant_subsystem_truth,
-            "telemetry_parameter_match": truth_parameter in telemetry_parameters,
-            "event_parameter_match": truth_parameter in event_parameters,
-            "telemetry_truth_subsystem_present": truth_subsystem in telemetry_truth_subsystems,
-            "event_truth_subsystem_present": truth_subsystem in event_truth_subsystems,
-            "misbehavior_family_label": str(truth.get("misbehavior_family_label", "")),
-            "misbehavior_detail_label": str(truth.get("misbehavior_detail_label", "")),
-            "fault_window_id": str(truth.get("fault_window_id", "")),
-            "fault_family_label": str(truth.get("fault_family_label", "")),
-            "fault_type": str(truth.get("fault_type", "")),
-        }
-        per_truth_rows.append(payload)
-
-    mappable_rows = [row for row in per_truth_rows if row["dominant_subsystem_mappable"]]
-    return {
-        "status": "ok",
-        "misbehavior_window_count": len(per_truth_rows),
-        "dominant_subsystem_match_rate": (
-            float(sum(1 for row in mappable_rows if row["dominant_subsystem_match"]) / len(mappable_rows))
-            if mappable_rows
-            else None
-        ),
-        "dominant_subsystem_mappable_rate": (
-            float(sum(1 for row in per_truth_rows if row["dominant_subsystem_mappable"]) / len(per_truth_rows))
-            if per_truth_rows
-            else None
-        ),
-        "telemetry_parameter_match_rate": (
-            float(sum(1 for row in per_truth_rows if row["telemetry_parameter_match"]) / len(per_truth_rows))
-            if per_truth_rows
-            else None
-        ),
-        "event_parameter_match_rate": (
-            float(sum(1 for row in per_truth_rows if row["event_parameter_match"]) / len(per_truth_rows))
-            if per_truth_rows
-            else None
-        ),
-        "telemetry_truth_subsystem_present_rate": (
-            float(sum(1 for row in per_truth_rows if row["telemetry_truth_subsystem_present"]) / len(per_truth_rows))
-            if per_truth_rows
-            else None
-        ),
-        "event_truth_subsystem_present_rate": (
-            float(sum(1 for row in per_truth_rows if row["event_truth_subsystem_present"]) / len(per_truth_rows))
-            if per_truth_rows
-            else None
-        ),
-        "misbehavior_windows": per_truth_rows,
-    }
 
 
 def _build_fault_attribution_summary_from_misbehavior(summary: dict[str, Any]) -> dict[str, Any]:
@@ -1927,8 +1140,12 @@ def _build_fault_attribution_summary_from_misbehavior(summary: dict[str, Any]) -
     return {
         "status": "ok",
         "fault_window_count": int(summary.get("misbehavior_window_count", 0)),
+        "dominant_subsystem_match_count": int(summary.get("dominant_subsystem_match_count", 0)),
+        "dominant_subsystem_mappable_count": int(summary.get("dominant_subsystem_mappable_count", 0)),
         "dominant_subsystem_match_rate": summary.get("dominant_subsystem_match_rate"),
         "dominant_subsystem_mappable_rate": summary.get("dominant_subsystem_mappable_rate"),
+        "telemetry_parameter_match_count": int(summary.get("telemetry_parameter_match_count", 0)),
+        "event_parameter_match_count": int(summary.get("event_parameter_match_count", 0)),
         "telemetry_parameter_match_rate": summary.get("telemetry_parameter_match_rate"),
         "event_parameter_match_rate": summary.get("event_parameter_match_rate"),
         "telemetry_truth_subsystem_present_rate": summary.get("telemetry_truth_subsystem_present_rate"),
@@ -2179,6 +1396,273 @@ def _write_validation_reports(
     return payloads
 
 
+def _modeling_sections_by_stage(validation_payloads: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+    payloads = validation_payloads or {}
+    return {
+        "10_parameter_profiles_fit.py": {
+            "profile_validation": payloads.get("profile_validation_summary.json"),
+        },
+        "20_events_extract.py": {
+            "event_validation": payloads.get("event_validation_summary.json"),
+            "label_contract": payloads.get("label_contract_summary.json"),
+        },
+        "60_fit_hierarchy.py": {
+            "hierarchy_validation": payloads.get("hierarchy_validation_summary.json"),
+            "coupling_validation": payloads.get("coupling_validation_summary.json"),
+        },
+        "70_phase_fit.py": {
+            "phase_validation": payloads.get("phase_validation_summary.json"),
+        },
+        "85_window_scores_calibrate.py": {
+            "score_validation": payloads.get("score_validation_summary.json"),
+            "misbehavior_score_validation": payloads.get("misbehavior_score_validation_summary.json"),
+            "fault_window_validation": payloads.get("fault_window_validation_summary.json"),
+            "misbehavior_window_validation": payloads.get("misbehavior_window_validation_summary.json"),
+        },
+        "90_anomaly_attribution.py": {
+            "attribution_validation": payloads.get("attribution_validation_summary.json"),
+            "misbehavior_attribution_validation": payloads.get("misbehavior_attribution_validation_summary.json"),
+        },
+    }
+
+
+def _build_modeling_performance_summary(validation_payloads: dict[str, Any] | None) -> dict[str, Any]:
+    payloads = validation_payloads or {}
+    hierarchy = (payloads.get("hierarchy_validation_summary.json") or {}).get("hierarchy", {})
+    graph_signatures = (payloads.get("hierarchy_validation_summary.json") or {}).get("graph_signatures", {})
+    return {
+        "profile_validation": payloads.get("profile_validation_summary.json"),
+        "event_validation": payloads.get("event_validation_summary.json"),
+        "label_contract": payloads.get("label_contract_summary.json"),
+        "phase_validation": payloads.get("phase_validation_summary.json"),
+        "hierarchy_validation": hierarchy,
+        "graph_signatures": graph_signatures,
+        "coupling_validation": payloads.get("coupling_validation_summary.json"),
+        "score_validation": payloads.get("score_validation_summary.json"),
+        "misbehavior_score_validation": payloads.get("misbehavior_score_validation_summary.json"),
+        "fault_window_validation": payloads.get("fault_window_validation_summary.json"),
+        "misbehavior_window_validation": payloads.get("misbehavior_window_validation_summary.json"),
+        "attribution_validation": payloads.get("attribution_validation_summary.json"),
+        "misbehavior_attribution_validation": payloads.get("misbehavior_attribution_validation_summary.json"),
+    }
+
+
+def _build_stage_engineering_sections(
+    *,
+    paths: RunPaths,
+    summary_artifact_path: str | None,
+    validation_payloads: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    pipeline_summary = (
+        _load_json_if_exists(paths.run_dir / summary_artifact_path)
+        if summary_artifact_path is not None
+        else None
+    ) or {}
+    total_elapsed_ms = float(pipeline_summary.get("total_elapsed_ms") or 0.0)
+    modeling_by_stage = _modeling_sections_by_stage(validation_payloads)
+    stage_sections: list[dict[str, Any]] = []
+    for stage in pipeline_summary.get("stages", []) or []:
+        stage_script = str(stage.get("stage_script", ""))
+        stage_id = stage_script.removesuffix(".py")
+        stage_summary_path = paths.run_dir / "reports" / "stages" / f"{stage_id}_summary.json"
+        stage_manifest_path = paths.run_dir / "reports" / "stages" / f"{stage_id}_manifest.json"
+        stage_summary = _load_json_if_exists(stage_summary_path) or {}
+        output_paths = {
+            str(value)
+            for key, value in stage_summary.items()
+            if key.endswith("_path") and isinstance(value, str)
+        }
+        output_artifact_size_bytes = sum(_path_size_bytes(Path(path)) for path in output_paths)
+        elapsed_ms = float(stage.get("elapsed_ms") or 0.0)
+        stage_sections.append(
+            {
+                "stage_script": stage_script,
+                "status": stage.get("status"),
+                "engineering_performance": {
+                    "elapsed_ms": elapsed_ms,
+                    "elapsed_seconds": (elapsed_ms / 1000.0),
+                    "share_of_total_elapsed": (
+                        float(elapsed_ms / total_elapsed_ms)
+                        if total_elapsed_ms > 0.0
+                        else None
+                    ),
+                    "summary_path": str(stage_summary_path),
+                    "manifest_path": str(stage_manifest_path),
+                    "stage_summary": stage_summary,
+                    "output_artifact_size_bytes": output_artifact_size_bytes,
+                },
+                "modeling_performance": modeling_by_stage.get(stage_script, {}),
+            }
+        )
+    return stage_sections
+
+
+def _build_scale_signature(
+    *,
+    manifest: dict[str, Any],
+    validation_payloads: dict[str, Any] | None,
+    stage_sections: list[dict[str, Any]],
+) -> dict[str, Any]:
+    payloads = validation_payloads or {}
+    stage_by_script = {section["stage_script"]: section for section in stage_sections}
+    graph_stage = stage_by_script.get("50_build_graph.py", {})
+    graph_stage_summary = ((graph_stage.get("engineering_performance") or {}).get("stage_summary") or {})
+    phase_summary = payloads.get("phase_validation_summary.json") or {}
+    score_summary = payloads.get("score_validation_summary.json") or {}
+    event_summary = payloads.get("event_validation_summary.json") or {}
+    profile_summary = payloads.get("profile_validation_summary.json") or {}
+    return {
+        "seed_counts": dict(manifest.get("seed_counts", {}) or {}),
+        "validation_counts": {
+            "labeled_event_count": event_summary.get("label_event_count"),
+            "detected_event_count": event_summary.get("detected_event_count"),
+            "parameter_count": profile_summary.get("parameter_count"),
+            "phase_assignment_count": phase_summary.get("assignment_count"),
+            "fault_window_count": score_summary.get("fault_window_count"),
+        },
+        "graph_counts": {
+            "lag_edge_count": graph_stage_summary.get("lag_edge_count"),
+            "event_edge_count": graph_stage_summary.get("event_edge_count"),
+            "transition_edge_count": graph_stage_summary.get("transition_edge_count"),
+            "fused_edge_count": graph_stage_summary.get("fused_edge_count"),
+            "graph_parameter_universe_count": graph_stage_summary.get("graph_parameter_universe_count"),
+        },
+        "current_scale_visibility": {
+            "size_proxies_present_in_run": True,
+            "variant_benchmarking_script": "scripts/profile_pipeline_performance.py",
+            "dataset_size_sweep_available": False,
+            "recommendation": "set up an explicit scale-sweep experiment; current tooling compares tuning variants on a fixed workload and only exposes size proxies within single runs",
+        },
+    }
+
+
+def _build_engineering_performance_summary(
+    *,
+    paths: RunPaths,
+    manifest: dict[str, Any],
+    summary_artifact_path: str | None,
+    validation_payloads: dict[str, Any] | None,
+) -> dict[str, Any]:
+    pipeline_summary = (
+        _load_json_if_exists(paths.run_dir / summary_artifact_path)
+        if summary_artifact_path is not None
+        else None
+    ) or {}
+    stage_sections = _build_stage_engineering_sections(
+        paths=paths,
+        summary_artifact_path=summary_artifact_path,
+        validation_payloads=validation_payloads,
+    )
+    artifact_sizes = {
+        name: _path_size_bytes(Path(payload.get("path", "")))
+        for name, payload in (manifest.get("artifacts", {}) or {}).items()
+        if isinstance(payload, dict) and payload.get("exists")
+    }
+    return {
+        "overall": {
+            "pipeline_summary": pipeline_summary,
+            "manifest_timing": manifest.get("timing"),
+            "environment": manifest.get("environment"),
+            "memory_snapshot_end": pipeline_summary.get("memory_snapshot_end"),
+            "artifact_disk_bytes_total": int(sum(artifact_sizes.values())),
+            "artifact_disk_bytes_by_name": artifact_sizes,
+        },
+        "stages": stage_sections,
+        "scale_signature": _build_scale_signature(
+            manifest=manifest,
+            validation_payloads=validation_payloads,
+            stage_sections=stage_sections,
+        ),
+    }
+
+
+def _render_full_run_report_markdown(report: dict[str, Any]) -> str:
+    engineering = report.get("engineering_performance", {})
+    overall = engineering.get("overall", {})
+    pipeline_summary = overall.get("pipeline_summary", {})
+    lines = [
+        "# Full Run Report",
+        "",
+        "## Modeling Performance",
+    ]
+    modeling = report.get("modeling_performance", {})
+    for key in (
+        "profile_validation",
+        "event_validation",
+        "phase_validation",
+        "hierarchy_validation",
+        "coupling_validation",
+        "score_validation",
+        "attribution_validation",
+    ):
+        payload = modeling.get(key)
+        if payload is None:
+            continue
+        lines.append(f"### {key}")
+        lines.append("```json")
+        lines.append(json.dumps(payload, indent=2, sort_keys=True, default=str))
+        lines.append("```")
+    lines.extend(
+        [
+            "",
+            "## Engineering Performance",
+            "",
+            "### Overall",
+            "```json",
+            json.dumps(
+                {
+                    "status": report.get("status"),
+                    "total_elapsed_ms": pipeline_summary.get("total_elapsed_ms"),
+                    "stage_count": pipeline_summary.get("stage_count"),
+                    "artifact_disk_bytes_total": overall.get("artifact_disk_bytes_total"),
+                    "memory_snapshot_end": overall.get("memory_snapshot_end"),
+                    "scale_signature": engineering.get("scale_signature"),
+                },
+                indent=2,
+                sort_keys=True,
+                default=str,
+            ),
+            "```",
+            "",
+            "### Stages",
+        ]
+    )
+    for stage in engineering.get("stages", []) or []:
+        lines.append(f"#### {stage.get('stage_script')}")
+        lines.append("```json")
+        lines.append(json.dumps(stage, indent=2, sort_keys=True, default=str))
+        lines.append("```")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _write_full_run_report(
+    *,
+    paths: RunPaths,
+    manifest: dict[str, Any],
+    summary_artifact_path: str | None,
+    validation_payloads: dict[str, Any] | None,
+) -> dict[str, Any]:
+    report = {
+        "report_version": "v1",
+        "status": manifest.get("status"),
+        "run_dir": str(paths.run_dir),
+        "modeling_performance": _build_modeling_performance_summary(validation_payloads),
+        "engineering_performance": _build_engineering_performance_summary(
+            paths=paths,
+            manifest=manifest,
+            summary_artifact_path=summary_artifact_path,
+            validation_payloads=validation_payloads,
+        ),
+    }
+    _write_manifest(paths.run_dir / "reports" / "full_run_report.json", report)
+    (paths.run_dir / "reports" / "full_run_report.md").write_text(
+        _render_full_run_report_markdown(report),
+        encoding="utf-8",
+    )
+    return report
+
+
 def run_pipeline(config: PipelineRunConfig) -> PipelineRunResult:
     flight = resolve_flight(config.flight_name)
     config = config.with_flight_defaults(flight=flight)
@@ -2192,6 +1676,8 @@ def run_pipeline(config: PipelineRunConfig) -> PipelineRunResult:
     status = "success"
     error_message: str | None = None
     seed_counts: dict[str, int] = {}
+    summary_artifact_path: str | None = None
+    validation_payloads: dict[str, Any] | None = None
 
     try:
         with _tee_console(paths.log_path):
@@ -2213,7 +1699,7 @@ def run_pipeline(config: PipelineRunConfig) -> PipelineRunResult:
                 summary_artifact_path=summary_artifact_path,
                 logger_name=LOGGER_NAME,
             )
-            _write_validation_reports(
+            validation_payloads = _write_validation_reports(
                 spark=spark,
                 paths=paths,
                 flight=flight,
@@ -2240,6 +1726,12 @@ def run_pipeline(config: PipelineRunConfig) -> PipelineRunResult:
             seed_counts=seed_counts,
         )
         _write_manifest(paths.manifest_path, manifest)
+        _write_full_run_report(
+            paths=paths,
+            manifest=manifest,
+            summary_artifact_path=summary_artifact_path,
+            validation_payloads=validation_payloads,
+        )
         _restore_env(previous_env)
     return PipelineRunResult(paths=paths, status=status, seed_counts=seed_counts)
 

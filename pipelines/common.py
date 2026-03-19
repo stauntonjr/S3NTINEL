@@ -10,11 +10,22 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from libs.config import (
+    PipelineArtifactPaths,
+    PipelineContextSettings,
+    PipelineExecutionSettings,
+    load_pipeline_artifact_paths,
+    load_pipeline_context_settings,
+    load_pipeline_execution_settings,
+)
 
 
 @dataclass(frozen=True)
 class PipelineContext:
     config: dict[str, Any]
+    execution: PipelineExecutionSettings
+    artifacts: PipelineArtifactPaths
+    settings: PipelineContextSettings
     tail_id: str | None = None
     flight_id: str | None = None
     date_utc: str | None = None
@@ -34,10 +45,26 @@ def build_context(
 ) -> PipelineContext:
     return PipelineContext(
         config=deepcopy(load_defaults()),
+        execution=load_pipeline_execution_settings(),
+        artifacts=load_pipeline_artifact_paths(),
+        settings=load_pipeline_context_settings(load_defaults()),
         tail_id=tail_id,
         flight_id=flight_id,
         date_utc=date_utc,
     )
+
+
+def context_execution(context: Any) -> PipelineExecutionSettings:
+    return getattr(context, "execution", load_pipeline_execution_settings())
+
+
+def context_artifacts(context: Any) -> PipelineArtifactPaths:
+    return getattr(context, "artifacts", load_pipeline_artifact_paths())
+
+
+def context_settings(context: Any) -> PipelineContextSettings:
+    config = getattr(context, "config", load_defaults())
+    return getattr(context, "settings", load_pipeline_context_settings(config))
 
 
 def require_artifact_path(path: str, *, env_name: str, artifact_name: str) -> Path:

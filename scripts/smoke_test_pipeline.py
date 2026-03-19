@@ -4,15 +4,17 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import runpy
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from libs.graph import validate_hierarchy_recovery
 from libs.io.delta import get_spark, read_table
 from libs.io.schemas import ACTIVE_V2_TABLES
-from libs.phase import evaluate_detected_phases
+from libs.phase import validate_detected_phases_from_tables
 from libs.testing.seed import seed_sample_dataset
 
 if TYPE_CHECKING:
@@ -53,6 +55,7 @@ def set_env_paths(base_dir: str, table_format: str, write_mode: str, min_warm: i
     os.environ["S3NTINEL_BACKBONE_SENSOR_ENERGY_TABLE_PATH"] = str(base / "delta" / "backbone_sensor_energy")
     os.environ["S3NTINEL_PRECISION_GRAPH_TABLE_PATH"] = str(base / "delta" / "precision_graph")
     os.environ["S3NTINEL_EVENT_GRAPH_TABLE_PATH"] = str(base / "delta" / "event_graph")
+    os.environ["S3NTINEL_LAG_PROFILE_TABLE_PATH"] = str(base / "delta" / "lag_profile")
     os.environ["S3NTINEL_LAG_GRAPH_TABLE_PATH"] = str(base / "delta" / "lag_graph")
     os.environ["S3NTINEL_TRANSITION_GRAPH_TABLE_PATH"] = str(base / "delta" / "transition_graph")
     os.environ["S3NTINEL_FUSED_GRAPH_TABLE_PATH"] = str(base / "delta" / "fused_graph")
@@ -74,19 +77,19 @@ def run_stages(stage_80_write_mode: str) -> None:
     pipeline_dir = Path(__file__).resolve().parent.parent / "pipelines"
     stage_scripts = [
         "00_ingest_raw.py",
-        "05_parameter_profiles_fit.py",
-        "10_backbone_fit.py",
-        "11_build_graph.py",
+        "10_parameter_profiles_fit.py",
+        "40_backbone_fit.py",
+        "50_build_graph.py",
         "20_events_extract.py",
         "30_windows_adaptive.py",
-        "50_phase_fit.py",
-        "60_window_scores_raw.py",
-        "70_window_scores_calibrate.py",
-        "80_anomaly_attribution.py",
+        "70_phase_fit.py",
+        "80_window_scores_raw.py",
+        "85_window_scores_calibrate.py",
+        "90_anomaly_attribution.py",
     ]
 
     for stage_script in stage_scripts:
-        if stage_script == "80_anomaly_attribution.py":
+        if stage_script == "90_anomaly_attribution.py":
             os.environ["S3NTINEL_WRITE_MODE"] = stage_80_write_mode
         stage_path = pipeline_dir / stage_script
         print(f"[smoke] running {stage_script}")
@@ -107,6 +110,7 @@ def print_row_counts(spark: "SparkSession", table_format: str) -> None:
         "backbone_sensor_energy": os.environ["S3NTINEL_BACKBONE_SENSOR_ENERGY_TABLE_PATH"],
         "precision_graph": os.environ["S3NTINEL_PRECISION_GRAPH_TABLE_PATH"],
         "event_graph": os.environ["S3NTINEL_EVENT_GRAPH_TABLE_PATH"],
+        "lag_profile": os.environ["S3NTINEL_LAG_PROFILE_TABLE_PATH"],
         "lag_graph": os.environ["S3NTINEL_LAG_GRAPH_TABLE_PATH"],
         "transition_graph": os.environ["S3NTINEL_TRANSITION_GRAPH_TABLE_PATH"],
         "fused_graph": os.environ["S3NTINEL_FUSED_GRAPH_TABLE_PATH"],
@@ -157,7 +161,7 @@ def assert_anomaly_payload_quality(spark: "SparkSession", table_format: str, wri
         raise SystemExit("[smoke] anomaly quality assertion failed: no subsystem top_sensors populated")
 
     if str(write_mode).lower() == "merge":
-        stage_80_path = Path(__file__).resolve().parent.parent / "pipelines" / "80_anomaly_attribution.py"
+        stage_80_path = Path(__file__).resolve().parent.parent / "pipelines" / "90_anomaly_attribution.py"
         os.environ["S3NTINEL_WRITE_MODE"] = "merge"
         runpy.run_path(str(stage_80_path), run_name="__main__")
         anomaly_window_attribution_df_post = read_table(spark, path=anomaly_window_attribution_path, fmt=table_format)
@@ -192,6 +196,7 @@ def assert_active_v2_table_contracts(spark: "SparkSession", table_format: str) -
         "backbone_sensor_energy": os.environ["S3NTINEL_BACKBONE_SENSOR_ENERGY_TABLE_PATH"],
         "precision_graph": os.environ["S3NTINEL_PRECISION_GRAPH_TABLE_PATH"],
         "event_graph": os.environ["S3NTINEL_EVENT_GRAPH_TABLE_PATH"],
+        "lag_profile": os.environ["S3NTINEL_LAG_PROFILE_TABLE_PATH"],
         "lag_graph": os.environ["S3NTINEL_LAG_GRAPH_TABLE_PATH"],
         "transition_graph": os.environ["S3NTINEL_TRANSITION_GRAPH_TABLE_PATH"],
         "fused_graph": os.environ["S3NTINEL_FUSED_GRAPH_TABLE_PATH"],
@@ -219,51 +224,43 @@ def write_quality_report(spark: "SparkSession", base_dir: str, table_format: str
 
     phase_labels_path = Path(os.environ["S3NTINEL_PHASE_LABELS_TABLE_PATH"])
     if phase_labels_path.exists():
-        phase_windows_df = read_table(spark, path=os.environ["S3NTINEL_PHASE_WINDOWS_TABLE_PATH"], fmt=table_format)
-        phase_labels_df = read_table(spark, path=os.environ["S3NTINEL_PHASE_LABELS_TABLE_PATH"], fmt=table_format)
-        assignments = (
-            phase_windows_df.alias("pw")
-            .join(phase_labels_df.alias("pl"), on=["tail_id", "flight_id", "win_id"], how="inner")
-            .select(
-                "pw.tail_id",
-                "pw.flight_id",
-                "pw.win_id",
-                "pw.phase_id_detected",
-                "pw.phase_state_detected",
-                "pw.phase_confidence_detected",
-                "pw.distance_to_centroid_detected",
-                "pl.phase_label",
-            )
-            .toPandas()
-            .to_dict(orient="records")
+        phase_windows_pdf = read_table(
+            spark,
+            path=os.environ["S3NTINEL_PHASE_WINDOWS_TABLE_PATH"],
+            fmt=table_format,
+        ).toPandas()
+        phase_labels_pdf = read_table(
+            spark,
+            path=os.environ["S3NTINEL_PHASE_LABELS_TABLE_PATH"],
+            fmt=table_format,
+        ).toPandas()
+        windows_pdf = read_table(
+            spark,
+            path=os.environ["S3NTINEL_WINDOWS_TABLE_PATH"],
+            fmt=table_format,
+        ).toPandas()
+        report["phase_detection"] = validate_detected_phases_from_tables(
+            phase_windows_df=phase_windows_pdf,
+            phase_labels_df=phase_labels_pdf,
+            windows_df=windows_pdf,
         )
-        report["phase_detection"] = evaluate_detected_phases(assignments)
 
     hierarchy_label_path = Path(os.environ["S3NTINEL_HIERARCHY_SENSOR_MAP_LABEL_TABLE_PATH"])
     if hierarchy_label_path.exists():
-        hierarchy_sensor_map_df = read_table(spark, path=os.environ["S3NTINEL_HIERARCHY_SENSOR_MAP_TABLE_PATH"], fmt=table_format)
-        hierarchy_label_df = read_table(spark, path=os.environ["S3NTINEL_HIERARCHY_SENSOR_MAP_LABEL_TABLE_PATH"], fmt=table_format)
-        joined = (
-            hierarchy_sensor_map_df.alias("det")
-            .join(hierarchy_label_df.alias("lab"), on="parameter_name", how="inner")
-            .select(
-                "parameter_name",
-                "det.system_id",
-                "det.subsystem_id",
-                "det.module_id",
-                "lab.system_id",
-                "lab.subsystem_id",
-                "lab.module_id",
-            )
-            .toPandas()
+        hierarchy_sensor_map_pdf = read_table(
+            spark,
+            path=os.environ["S3NTINEL_HIERARCHY_SENSOR_MAP_TABLE_PATH"],
+            fmt=table_format,
+        ).toPandas()
+        hierarchy_label_pdf = read_table(
+            spark,
+            path=os.environ["S3NTINEL_HIERARCHY_SENSOR_MAP_LABEL_TABLE_PATH"],
+            fmt=table_format,
+        ).toPandas()
+        report["hierarchy_recovery"] = validate_hierarchy_recovery(
+            hierarchy_sensor_map_df=hierarchy_sensor_map_pdf,
+            hierarchy_label_df=hierarchy_label_pdf,
         )
-        total = int(len(joined))
-        report["hierarchy_recovery"] = {
-            "sensor_count": total,
-            "system_exact_match": (float((joined.iloc[:, 1] == joined.iloc[:, 4]).sum()) / float(max(total, 1))) if total else None,
-            "subsystem_exact_match": (float((joined.iloc[:, 2] == joined.iloc[:, 5]).sum()) / float(max(total, 1))) if total else None,
-            "module_exact_match": (float((joined.iloc[:, 3] == joined.iloc[:, 6]).sum()) / float(max(total, 1))) if total else None,
-        }
 
     report_path = Path(base_dir) / "reports" / "smoke_quality_report.json"
     report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -277,6 +274,13 @@ def write_quality_report(spark: "SparkSession", base_dir: str, table_format: str
         print(f"- hierarchy_recovery.system_exact_match: {hierarchy_recovery.get('system_exact_match')}")
         print(f"- hierarchy_recovery.subsystem_exact_match: {hierarchy_recovery.get('subsystem_exact_match')}")
         print(f"- hierarchy_recovery.module_exact_match: {hierarchy_recovery.get('module_exact_match')}")
+        subsystem_partition = hierarchy_recovery.get("subsystem_partition")
+        if isinstance(subsystem_partition, dict):
+            print(f"- hierarchy_recovery.subsystem_partition.same_cluster_pair_f1: {subsystem_partition.get('same_cluster_pair_f1')}")
+            print(
+                f"- hierarchy_recovery.subsystem_partition.adjusted_rand_index: "
+                f"{subsystem_partition.get('adjusted_rand_index')}"
+            )
 
 
 def main() -> None:

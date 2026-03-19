@@ -36,7 +36,7 @@ The intended sequence is:
 ### 3.1 Datatype and sampling profile
 
 Stage:
-- `pipelines/05_parameter_profiles_fit.py`
+- `pipelines/10_parameter_profiles_fit.py`
 
 Artifact:
 - `parameter_datatype_profile`

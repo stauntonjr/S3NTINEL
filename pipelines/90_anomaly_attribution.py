@@ -1,7 +1,5 @@
-# File: pipelines/80_anomaly_attribution.py
+# File: pipelines/90_anomaly_attribution.py
 """Emit anomaly attribution tables for anomalous windows."""
-
-import os
 
 from libs.anomaly import (
     build_anomaly_event_attribution_table,
@@ -20,38 +18,32 @@ from libs.perf import (
     log_wall_time,
     track_mlflow_run,
 )
-from pipelines.common import build_context
+from pipelines.common import build_context, context_artifacts, context_execution, context_settings
 
 
 LOGGER = get_logger(__name__)
 
 
-@track_mlflow_run(stage_name="80_anomaly_attribution", logger=LOGGER)
-@log_memory_usage(logger=LOGGER, label="80_anomaly_attribution")
+@track_mlflow_run(stage_name="90_anomaly_attribution", logger=LOGGER)
+@log_memory_usage(logger=LOGGER, label="90_anomaly_attribution")
 @log_wall_time(logger=LOGGER)
 def run() -> None:
     context = build_context()
-    window_scores_calibrated_path = os.getenv("S3NTINEL_WINDOW_SCORES_CALIBRATED_TABLE_PATH", "data/delta/window_scores_calibrated")
-    phase_windows_path = os.getenv("S3NTINEL_PHASE_WINDOWS_TABLE_PATH", "data/delta/phase_windows")
-    windows_path = os.getenv("S3NTINEL_WINDOWS_TABLE_PATH", "data/delta/windows")
-    events_path = os.getenv("S3NTINEL_EVENTS_TABLE_PATH", "data/delta/events")
-    hierarchy_sensor_map_path = os.getenv("S3NTINEL_HIERARCHY_SENSOR_MAP_TABLE_PATH", "data/delta/hierarchy_sensor_map")
-    raw_path = os.getenv("S3NTINEL_RAW_TABLE_PATH", "data/delta/raw_telemetry")
-    anomaly_window_attribution_path = os.getenv(
-        "S3NTINEL_ANOMALY_WINDOW_ATTRIBUTION_TABLE_PATH",
-        "data/delta/anomaly_window_attribution",
-    )
-    anomaly_telemetry_attribution_path = os.getenv(
-        "S3NTINEL_ANOMALY_TELEMETRY_ATTRIBUTION_TABLE_PATH",
-        "data/delta/anomaly_telemetry_attribution",
-    )
-    anomaly_event_attribution_path = os.getenv(
-        "S3NTINEL_ANOMALY_EVENT_ATTRIBUTION_TABLE_PATH",
-        "data/delta/anomaly_event_attribution",
-    )
-    table_format = os.getenv("S3NTINEL_TABLE_FORMAT", "delta")
-    write_mode = os.getenv("S3NTINEL_WRITE_MODE", "merge")
-    top_k_per_subsystem = int(os.getenv("S3NTINEL_SUBSYSTEM_TOP_SENSORS_K", "5"))
+    artifacts = context_artifacts(context)
+    execution = context_execution(context)
+    settings = context_settings(context)
+    window_scores_calibrated_path = artifacts.window_scores_calibrated
+    phase_windows_path = artifacts.phase_windows
+    windows_path = artifacts.windows
+    events_path = artifacts.events
+    hierarchy_sensor_map_path = artifacts.hierarchy_sensor_map
+    raw_path = artifacts.raw_table
+    anomaly_window_attribution_path = artifacts.anomaly_window_attribution
+    anomaly_telemetry_attribution_path = artifacts.anomaly_telemetry_attribution
+    anomaly_event_attribution_path = artifacts.anomaly_event_attribution
+    table_format = execution.table_format
+    write_mode = execution.write_mode
+    top_k_per_subsystem = settings.anomaly.subsystem_top_sensors_k
 
     spark = get_spark("s3ntinel.anomaly_attribution")
     calibrated_df = read_table(spark, window_scores_calibrated_path, fmt=table_format)
@@ -148,7 +140,7 @@ def run() -> None:
     )
     log_dict_artifact_if_active(
         {
-            "stage": "80_anomaly_attribution",
+            "stage": "90_anomaly_attribution",
             "window_scores_calibrated_path": window_scores_calibrated_path,
             "phase_windows_path": phase_windows_path,
             "windows_path": windows_path,
@@ -172,10 +164,10 @@ def run() -> None:
                 raw_path,
             ],
         },
-        "reports/stages/80_anomaly_attribution_summary.json",
+        "reports/stages/90_anomaly_attribution_summary.json",
     )
     stage_manifest = build_stage_manifest(
-        stage_name="80_anomaly_attribution",
+        stage_name="90_anomaly_attribution",
         config={
             "table_format": table_format,
             "write_mode": write_mode,
@@ -228,7 +220,7 @@ def run() -> None:
             "raw_telemetry",
         ],
     )
-    log_stage_manifest_if_active(stage_manifest, "reports/stages/80_anomaly_attribution_manifest.json")
+    log_stage_manifest_if_active(stage_manifest, "reports/stages/90_anomaly_attribution_manifest.json")
     LOGGER.info(
         "pipeline=anomaly_attribution merge_key=%s write_mode=%s window_scores_calibrated=%s anomaly_window_attribution=%s anomaly_telemetry_attribution=%s anomaly_event_attribution=%s",
         context.config["output"]["anomalies_merge_key"],

@@ -8,9 +8,12 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 import pandas as pd
+import plotly.express as px
 import plotly.graph_objects as go
 import seaborn as sns
 from plotly.subplots import make_subplots
+
+from libs.plotting.explorer_bundle import load_explorer_bundle, load_explorer_filter_options, load_explorer_slice
 
 
 DEFAULT_VALIDATION_REPORTS = (
@@ -287,20 +290,347 @@ def plot_validation_status(bundle: SimulationRunBundle):
     return fig
 
 
+def plot_fleet_structure(telemetry_df: pd.DataFrame) -> go.Figure | None:
+    if telemetry_df.empty:
+        return None
+    required = {"tail_id", "flight_id", "timestamp_utc"}
+    if not required.issubset(telemetry_df.columns):
+        return None
+    df = _prepare_timestamp_df(telemetry_df)
+    flight_counts = (
+        df.groupby(["tail_id", "flight_id"], dropna=False)
+        .size()
+        .rename("row_count")
+        .reset_index()
+    )
+    tail_counts = (
+        flight_counts.groupby("tail_id", dropna=False)["row_count"]
+        .sum()
+        .rename("row_count")
+        .reset_index()
+    )
+    ids = ["fleet"]
+    labels = ["fleet"]
+    parents = [""]
+    values = [int(flight_counts["row_count"].sum())]
+    for row in tail_counts.itertuples(index=False):
+        tail_id = str(row.tail_id)
+        ids.append(f"tail::{tail_id}")
+        labels.append(tail_id)
+        parents.append("fleet")
+        values.append(int(row.row_count))
+    for row in flight_counts.itertuples(index=False):
+        tail_id = str(row.tail_id)
+        flight_id = str(row.flight_id)
+        ids.append(f"flight::{tail_id}/{flight_id}")
+        labels.append(flight_id)
+        parents.append(f"tail::{tail_id}")
+        values.append(int(row.row_count))
+    fig = go.Figure(
+        go.Sunburst(
+            ids=ids,
+            labels=labels,
+            parents=parents,
+            values=values,
+            branchvalues="total",
+            maxdepth=2,
+            hovertemplate="%{label}<br>row_count=%{value}<extra></extra>",
+        )
+    )
+    fig.update_layout(
+        title="Fleet / tail / flight row counts",
+        template="plotly_white",
+        margin={"t": 60, "l": 10, "r": 10, "b": 10},
+    )
+    return fig
+
+
+def plot_flight_timelines(telemetry_df: pd.DataFrame) -> go.Figure | None:
+    if telemetry_df.empty:
+        return None
+    required = {"tail_id", "flight_id", "timestamp_utc"}
+    if not required.issubset(telemetry_df.columns):
+        return None
+    df = _prepare_timestamp_df(telemetry_df)
+    summary_df = (
+        df.groupby(["tail_id", "flight_id"], dropna=False)
+        .agg(
+            timestamp_start=("timestamp_utc", "min"),
+            timestamp_end=("timestamp_utc", "max"),
+            row_count=("timestamp_utc", "size"),
+        )
+        .reset_index()
+    )
+    if summary_df.empty:
+        return None
+    summary_df["flight_label"] = summary_df["tail_id"].astype(str) + " / " + summary_df["flight_id"].astype(str)
+    summary_df["duration_seconds"] = (
+        (summary_df["timestamp_end"] - summary_df["timestamp_start"]).dt.total_seconds().fillna(0.0)
+    )
+    fig = px.timeline(
+        summary_df.sort_values(["tail_id", "timestamp_start", "flight_id"]),
+        x_start="timestamp_start",
+        x_end="timestamp_end",
+        y="flight_label",
+        color="tail_id",
+        hover_data={
+            "tail_id": True,
+            "flight_id": True,
+            "row_count": True,
+            "duration_seconds": ":.1f",
+            "timestamp_start": True,
+            "timestamp_end": True,
+            "flight_label": False,
+        },
+    )
+    fig.update_yaxes(autorange="reversed")
+    fig.update_layout(
+        title="Flight timelines and row counts",
+        template="plotly_white",
+        xaxis_title="timestamp_utc",
+        yaxis_title="tail / flight",
+        legend_title_text="tail_id",
+        margin={"t": 60, "l": 10, "r": 10, "b": 10},
+    )
+    return fig
+
+
 def plot_hierarchy_overview(hierarchy_df: pd.DataFrame):
     if hierarchy_df.empty:
         return None
     fig, axes = plt.subplots(1, 3, figsize=(18, 4))
-    sns.countplot(data=hierarchy_df, x="system_id", ax=axes[0], palette="Blues")
+    sns.countplot(
+        data=hierarchy_df,
+        x="system_id",
+        hue="system_id",
+        ax=axes[0],
+        palette="Blues",
+        legend=False,
+    )
     axes[0].tick_params(axis="x", rotation=30)
     axes[0].set_title("Parameters by system")
-    sns.countplot(data=hierarchy_df, x="subsystem_id", ax=axes[1], palette="Greens")
+    sns.countplot(
+        data=hierarchy_df,
+        x="subsystem_id",
+        hue="subsystem_id",
+        ax=axes[1],
+        palette="Greens",
+        legend=False,
+    )
     axes[1].tick_params(axis="x", rotation=45)
     axes[1].set_title("Parameters by subsystem")
     module_counts = hierarchy_df.groupby("module_id", as_index=False).size().sort_values("size", ascending=False).head(12)
-    sns.barplot(data=module_counts, x="size", y="module_id", ax=axes[2], palette="mako")
+    sns.barplot(
+        data=module_counts,
+        x="size",
+        y="module_id",
+        hue="module_id",
+        ax=axes[2],
+        palette="mako",
+        legend=False,
+    )
     axes[2].set_title("Top modules by parameter count")
     axes[2].set_xlabel("parameter_count")
+    return fig
+
+
+def plot_hierarchy_structure(hierarchy_df: pd.DataFrame) -> go.Figure | None:
+    if hierarchy_df.empty:
+        return None
+    required = {"system_id", "subsystem_id", "module_id", "parameter_name"}
+    if not required.issubset(hierarchy_df.columns):
+        return None
+    plot_df = hierarchy_df[list(required)].copy()
+    for col in ("system_id", "subsystem_id", "module_id", "parameter_name"):
+        plot_df[col] = plot_df[col].fillna("missing").astype(str)
+    module_sizes = (
+        plot_df.groupby(["system_id", "subsystem_id", "module_id"], dropna=False)
+        .size()
+        .rename("parameter_count")
+        .reset_index()
+    )
+    system_sizes = (
+        module_sizes.groupby("system_id", dropna=False)["parameter_count"].sum().rename("parameter_count").reset_index()
+    )
+    subsystem_sizes = (
+        module_sizes.groupby(["system_id", "subsystem_id"], dropna=False)["parameter_count"]
+        .sum()
+        .rename("parameter_count")
+        .reset_index()
+    )
+    ids = ["fleet"]
+    labels = ["fleet"]
+    parents = [""]
+    values = [int(module_sizes["parameter_count"].sum())]
+    for row in system_sizes.itertuples(index=False):
+        ids.append(f"system::{row.system_id}")
+        labels.append(row.system_id)
+        parents.append("fleet")
+        values.append(int(row.parameter_count))
+    for row in subsystem_sizes.itertuples(index=False):
+        ids.append(f"subsystem::{row.system_id}/{row.subsystem_id}")
+        labels.append(row.subsystem_id)
+        parents.append(f"system::{row.system_id}")
+        values.append(int(row.parameter_count))
+    for row in module_sizes.itertuples(index=False):
+        ids.append(f"module::{row.system_id}/{row.subsystem_id}/{row.module_id}")
+        labels.append(row.module_id)
+        parents.append(f"subsystem::{row.system_id}/{row.subsystem_id}")
+        values.append(int(row.parameter_count))
+    fig = go.Figure(
+        go.Sunburst(
+            ids=ids,
+            labels=labels,
+            parents=parents,
+            values=values,
+            branchvalues="total",
+            maxdepth=3,
+            hovertemplate="%{label}<br>parameter_count=%{value}<extra></extra>",
+        )
+    )
+    fig.update_layout(
+        title="Hierarchy structure",
+        template="plotly_white",
+        margin={"t": 60, "l": 10, "r": 10, "b": 10},
+    )
+    return fig
+
+
+def plot_hierarchy_behavior_map(
+    hierarchy_df: pd.DataFrame,
+    behavior_profile_df: pd.DataFrame,
+) -> go.Figure | None:
+    if hierarchy_df.empty or behavior_profile_df.empty:
+        return None
+    required_hierarchy = {"system_id", "subsystem_id", "module_id", "parameter_name"}
+    if not required_hierarchy.issubset(hierarchy_df.columns):
+        return None
+    if "parameter_name" not in behavior_profile_df.columns or "behavior_family_profiled" not in behavior_profile_df.columns:
+        return None
+    plot_df = hierarchy_df[
+        ["system_id", "subsystem_id", "module_id", "parameter_name"]
+    ].drop_duplicates(subset=["parameter_name"]).merge(
+        behavior_profile_df[
+            [
+                c
+                for c in [
+                    "parameter_name",
+                    "behavior_family_profiled",
+                    "behavior_profile_confidence",
+                    "parameter_datatype_profiled",
+                ]
+                if c in behavior_profile_df.columns
+            ]
+        ].drop_duplicates(subset=["parameter_name"]),
+        on="parameter_name",
+        how="left",
+    )
+    for col in ("system_id", "subsystem_id", "module_id", "parameter_name", "behavior_family_profiled"):
+        plot_df[col] = plot_df[col].fillna("unknown").astype(str)
+    if "behavior_profile_confidence" in plot_df.columns:
+        plot_df["behavior_profile_confidence"] = pd.to_numeric(plot_df["behavior_profile_confidence"], errors="coerce")
+    behavior_palette = {
+        "regulated": "#1f77b4",
+        "inertial": "#ff7f0e",
+        "accumulative": "#2ca02c",
+        "discrete_state": "#d62728",
+        "mixed_unknown": "#9467bd",
+        "unknown": "#9aa1a9",
+    }
+    fig = px.treemap(
+        plot_df,
+        path=["system_id", "subsystem_id", "module_id", "parameter_name"],
+        values=[1] * len(plot_df),
+        color="behavior_family_profiled",
+        color_discrete_map=behavior_palette,
+        hover_data={
+            "behavior_profile_confidence": True,
+            "parameter_datatype_profiled": True,
+            "behavior_family_profiled": True,
+        },
+    )
+    fig.update_traces(
+        root_color="#f3f4f6",
+        hovertemplate=(
+            "system=%{currentPath}<br>"
+            "node=%{label}<br>"
+            "behavior=%{color}<br>"
+            "count=%{value}<extra></extra>"
+        ),
+    )
+    fig.update_layout(
+        title="Hierarchy by parameter behavior",
+        template="plotly_white",
+        margin={"t": 60, "l": 10, "r": 10, "b": 10},
+    )
+    return fig
+
+
+def plot_hierarchy_datatype_map(
+    hierarchy_df: pd.DataFrame,
+    behavior_profile_df: pd.DataFrame,
+) -> go.Figure | None:
+    if hierarchy_df.empty or behavior_profile_df.empty:
+        return None
+    required_hierarchy = {"system_id", "subsystem_id", "module_id", "parameter_name"}
+    if not required_hierarchy.issubset(hierarchy_df.columns):
+        return None
+    if "parameter_name" not in behavior_profile_df.columns or "parameter_datatype_profiled" not in behavior_profile_df.columns:
+        return None
+    plot_df = hierarchy_df[
+        ["system_id", "subsystem_id", "module_id", "parameter_name"]
+    ].drop_duplicates(subset=["parameter_name"]).merge(
+        behavior_profile_df[
+            [
+                c
+                for c in [
+                    "parameter_name",
+                    "parameter_datatype_profiled",
+                    "behavior_family_profiled",
+                    "behavior_profile_confidence",
+                ]
+                if c in behavior_profile_df.columns
+            ]
+        ].drop_duplicates(subset=["parameter_name"]),
+        on="parameter_name",
+        how="left",
+    )
+    for col in ("system_id", "subsystem_id", "module_id", "parameter_name", "parameter_datatype_profiled"):
+        plot_df[col] = plot_df[col].fillna("unknown").astype(str)
+    datatype_palette = {
+        "continuous_numeric": "#1f77b4",
+        "categorical_state": "#2ca02c",
+        "binary_state": "#d62728",
+        "discrete_numeric": "#ff7f0e",
+        "text": "#8c564b",
+        "unknown": "#9aa1a9",
+    }
+    fig = px.treemap(
+        plot_df,
+        path=["system_id", "subsystem_id", "module_id", "parameter_name"],
+        values=[1] * len(plot_df),
+        color="parameter_datatype_profiled",
+        color_discrete_map=datatype_palette,
+        hover_data={
+            "parameter_datatype_profiled": True,
+            "behavior_family_profiled": True,
+            "behavior_profile_confidence": True,
+        },
+    )
+    fig.update_traces(
+        root_color="#f3f4f6",
+        hovertemplate=(
+            "system=%{currentPath}<br>"
+            "node=%{label}<br>"
+            "datatype=%{color}<br>"
+            "count=%{value}<extra></extra>"
+        ),
+    )
+    fig.update_layout(
+        title="Hierarchy by parameter datatype",
+        template="plotly_white",
+        margin={"t": 60, "l": 10, "r": 10, "b": 10},
+    )
     return fig
 
 
@@ -345,6 +675,86 @@ def plot_phase_overview(phase_df: pd.DataFrame):
     return fig
 
 
+def plot_phase_timelines(phase_df: pd.DataFrame) -> go.Figure | None:
+    if phase_df.empty:
+        return None
+    required = {"tail_id", "flight_id", "t_start", "t_end"}
+    if not required.issubset(phase_df.columns):
+        return None
+    df = _prepare_timestamp_df(phase_df).copy()
+    label_col = "phase_state_detected" if "phase_state_detected" in df.columns else (
+        "phase_id_detected" if "phase_id_detected" in df.columns else None
+    )
+    if label_col is None:
+        return None
+    df["phase_label"] = df[label_col].astype(str)
+    df["flight_label"] = df["tail_id"].astype(str) + " / " + df["flight_id"].astype(str)
+    fig = px.timeline(
+        df.sort_values(["tail_id", "flight_id", "t_start"]),
+        x_start="t_start",
+        x_end="t_end",
+        y="flight_label",
+        color="phase_label",
+        hover_data={
+            "tail_id": True,
+            "flight_id": True,
+            "phase_label": True,
+            "phase_id_detected": True if "phase_id_detected" in df.columns else False,
+            "phase_confidence_detected": True if "phase_confidence_detected" in df.columns else False,
+            "flight_label": False,
+        },
+    )
+    fig.update_yaxes(autorange="reversed")
+    fig.update_layout(
+        title="Detected phase timelines",
+        template="plotly_white",
+        xaxis_title="timestamp_utc",
+        yaxis_title="tail / flight",
+        legend_title_text="phase",
+        margin={"t": 60, "l": 10, "r": 10, "b": 10},
+    )
+    return fig
+
+
+def plot_phase_confidence(phase_df: pd.DataFrame) -> go.Figure | None:
+    if phase_df.empty or "phase_confidence_detected" not in phase_df.columns:
+        return None
+    df = _prepare_timestamp_df(phase_df).copy()
+    label_col = "phase_state_detected" if "phase_state_detected" in df.columns else (
+        "phase_id_detected" if "phase_id_detected" in df.columns else None
+    )
+    if label_col is None:
+        return None
+    df["phase_label"] = df[label_col].astype(str)
+    if "t_start" in df.columns:
+        df["phase_midpoint"] = df["t_start"] + ((df["t_end"] - df["t_start"]) / 2)
+    elif "timestamp_utc" in df.columns:
+        df["phase_midpoint"] = df["timestamp_utc"]
+    else:
+        return None
+    fig = px.scatter(
+        df.sort_values("phase_midpoint"),
+        x="phase_midpoint",
+        y="phase_confidence_detected",
+        color="phase_label",
+        hover_data={
+            "tail_id": True if "tail_id" in df.columns else False,
+            "flight_id": True if "flight_id" in df.columns else False,
+            "phase_label": True,
+            "phase_id_detected": True if "phase_id_detected" in df.columns else False,
+        },
+    )
+    fig.update_layout(
+        title="Phase confidence over time",
+        template="plotly_white",
+        xaxis_title="timestamp_utc",
+        yaxis_title="phase_confidence_detected",
+        legend_title_text="phase",
+        margin={"t": 60, "l": 10, "r": 10, "b": 10},
+    )
+    return fig
+
+
 def plot_score_distribution(scores_df: pd.DataFrame):
     if scores_df.empty:
         return None
@@ -375,46 +785,10 @@ def plot_anomaly_summary(anomaly_df: pd.DataFrame):
 
 
 def build_parameter_explorer_dataset(bundle: SimulationRunBundle) -> dict[str, pd.DataFrame]:
-    telemetry_df = load_artifact_table(bundle, "raw_telemetry")
-    hierarchy_df = load_artifact_table(bundle, "hierarchy_sensor_map") if "hierarchy_sensor_map" in bundle.artifact_inventory else pd.DataFrame()
-    events_df = load_artifact_table(bundle, "events") if "events" in bundle.artifact_inventory else pd.DataFrame()
-    anomaly_event_df = (
-        load_artifact_table(bundle, "anomaly_event_attribution")
-        if "anomaly_event_attribution" in bundle.artifact_inventory
-        else pd.DataFrame()
-    )
-    anomaly_telemetry_df = (
-        load_artifact_table(bundle, "anomaly_telemetry_attribution")
-        if "anomaly_telemetry_attribution" in bundle.artifact_inventory
-        else pd.DataFrame()
-    )
-    anomaly_window_df = (
-        load_artifact_table(bundle, "anomaly_window_attribution")
-        if "anomaly_window_attribution" in bundle.artifact_inventory
-        else pd.DataFrame()
-    )
-    phase_windows_df = (
-        load_artifact_table(bundle, "phase_windows")
-        if "phase_windows" in bundle.artifact_inventory
-        else pd.DataFrame()
-    )
-    phase_labels_df = (
-        load_artifact_table(bundle, "phase_labels")
-        if "phase_labels" in bundle.artifact_inventory
-        else pd.DataFrame()
-    )
-
-    prepared_telemetry_df = prepare_parameter_telemetry_dataframe(telemetry_df, hierarchy_df)
-    phase_intervals_df = build_phase_interval_table(phase_windows_df, phase_labels_df)
-    return {
-        "telemetry": prepared_telemetry_df,
-        "hierarchy": hierarchy_df,
-        "events": _prepare_timestamp_df(events_df),
-        "anomaly_event": _prepare_timestamp_df(anomaly_event_df),
-        "anomaly_telemetry": _prepare_timestamp_df(anomaly_telemetry_df),
-        "anomaly_window": _prepare_timestamp_df(anomaly_window_df),
-        "phase_intervals": _prepare_timestamp_df(phase_intervals_df),
-    }
+    explorer_bundle = load_explorer_bundle(bundle)
+    options = load_explorer_filter_options(explorer_bundle)
+    default_parameters = tuple(options["parameter_names"][: min(3, len(options["parameter_names"]))])
+    return load_explorer_slice(explorer_bundle, SensorExplorerState(parameter_names=default_parameters))
 
 
 def prepare_parameter_telemetry_dataframe(

@@ -2,7 +2,7 @@
 
 Use this directory for exploratory analysis and validation notebooks.
 
-- `simulation_exploration.ipynb` is the visualization-only notebook for inspecting completed simulation run bundles, reports, validations, and logs.
+- `simulation_exploration.ipynb` is the visualization-only notebook for inspecting completed simulation run bundles, reports, validations, logs, and the emitted `explorer_bundle`.
 
 ## Notebook workflow
 
@@ -39,7 +39,9 @@ The active architecture is V2. Notebook analysis should follow:
 
 - `window_x` for backbone fit inputs
 - `window_s` for phase/scoring structure
-- V2 fitting artifacts (`backbone`, `precision_graph`, `event_graph`, `lag_graph`, `transition_graph`, `fused_graph`, `hierarchy_sensor_map`)
+- V2 fitting artifacts (`backbone`, `precision_graph`, `event_graph`, `lag_profile`, `lag_graph`, `transition_graph`, `fused_graph`, `hierarchy_sensor_map`)
+  - `lag_profile` is the first-class per-band lag artifact
+  - `lag_graph` is the collapsed compatibility view consumed by downstream fusion
 - canonical label/detected naming only
 
 Legacy notebooks were removed. Recreate notebooks from the active V2 pipeline artifacts only.

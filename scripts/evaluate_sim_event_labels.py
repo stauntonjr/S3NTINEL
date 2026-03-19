@@ -1,4 +1,4 @@
-"""Evaluate detector performance against simulator event labels per parameter type and event type."""
+"""Evaluate detector performance against simulator event labels by parameter type and event type."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--telemetry-table", default="telemetry_long")
     parser.add_argument(
         "--output-json",
-        default="reports/eda/event_detection_by_sensor_type_event_type.json",
+        default="reports/eda/event_detection_by_parameter_type_event_type.json",
         help="Path to write JSON metrics report",
     )
     parser.add_argument("--tolerance-seconds", type=float, default=0.5)
@@ -30,7 +30,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--emit-extrema-events",
         action="store_true",
-        help="Enable extrema event emission for continuous sensors",
+        help="Enable extrema event emission for continuous parameters",
     )
     return parser.parse_args()
 
@@ -237,7 +237,7 @@ def main() -> None:
         f"- label: {totals['label']} detected: {totals['detected']} "
         f"tp: {totals['tp']} fp: {totals['fp']} fn: {totals['fn']}"
     )
-    print(f"- precision: {totals['precision']:.4f} recall: {totals['recall']:.4f}")
+    print(f"- precision: {totals['precision']:.4f} recall: {totals['recall']:.4f} f1: {totals['f1']:.4f}")
     print(f"- report: {output_path}")
 
 

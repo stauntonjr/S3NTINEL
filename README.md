@@ -12,6 +12,7 @@ Use [artifact_replay_design.md](/home/jrs/code/S3NTINEL/sentinel/docs/artifact_r
 Use [simulation_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/simulation_architecture.md) for the proposed next simulation architecture and extensibility model.
 Use [behavior_profiling_design.md](/home/jrs/code/S3NTINEL/sentinel/docs/behavior_profiling_design.md) for the behavior-profile artifact and the mirrored profiling design for simulation behavior semantics.
 Use [fitting_workflow.md](/home/jrs/code/S3NTINEL/sentinel/docs/fitting_workflow.md) for the intended one-off fitting sequence for datatype profiling, robust scaling, behavior profiling, and backbone fitting.
+Use [computational_complexity_report.md](/home/jrs/code/S3NTINEL/sentinel/docs/computational_complexity_report.md) for a stage-by-stage workload and scaling analysis grounded in the current code and a checked-in simulation bundle.
 Use [behavior_family_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/behavior_family_architecture.md) and [behavior_family_skeletons.md](/home/jrs/code/S3NTINEL/sentinel/docs/behavior_family_skeletons.md) for the per-family file/class layout.
 Use [misbehavior_taxonomy.md](/home/jrs/code/S3NTINEL/sentinel/docs/misbehavior_taxonomy.md) for the planned structured deviation/anomaly ontology.
 Use [anomaly_injection_and_backbone_validation.md](/home/jrs/code/S3NTINEL/sentinel/docs/anomaly_injection_and_backbone_validation.md) for anomaly-injection design and backbone-fit validation guidance.
@@ -19,26 +20,27 @@ Use [anomaly_injection_and_backbone_validation.md](/home/jrs/code/S3NTINEL/senti
 ### Active fitting path
 
 1. `pipelines/00_ingest_raw.py`
-2. `pipelines/05_parameter_profiles_fit.py`
-3. `pipelines/10_backbone_fit.py`
-4. `pipelines/11_graph_fit.py`
+2. `pipelines/10_parameter_profiles_fit.py`
+3. `pipelines/40_backbone_fit.py`
+4. `pipelines/50_build_graph.py`
+5. `pipelines/60_fit_hierarchy.py`
 
 Run with:
 
-- `python -m pipelines.91_run_fitting_pipeline`
+- `python -m pipelines.97_run_fitting_pipeline`
 
 ### Active inference path
 
 1. `pipelines/20_events_extract.py`
 2. `pipelines/30_windows_adaptive.py`
-3. `pipelines/50_phase_fit.py`
-4. `pipelines/60_window_scores_raw.py`
-5. `pipelines/70_window_scores_calibrate.py`
-6. `pipelines/80_anomaly_attribution.py`
+3. `pipelines/70_phase_fit.py`
+4. `pipelines/80_window_scores_raw.py`
+5. `pipelines/85_window_scores_calibrate.py`
+6. `pipelines/90_anomaly_attribution.py`
 
 Run with:
 
-- `python -m pipelines.92_run_inference_pipeline`
+- `python -m pipelines.98_run_inference_pipeline`
 
 ### V2 artifacts
 
@@ -50,6 +52,7 @@ Run with:
 - `window_scores_calibrated`
 - `precision_graph`
 - `event_graph`
+- `lag_profile`
 - `lag_graph`
 - `transition_graph`
 - `fused_graph`
@@ -59,8 +62,9 @@ Run with:
 
 ## Repo layout
 
-- `conf/defaults.yaml`: runtime defaults and threshold settings.
-- `pipelines/`: ordered job entrypoints (`00_...` through `80_...`).
+- `conf/defaults.yaml`: checked-in baseline defaults.
+- `libs/config/`: typed runtime, artifact-path, and tuning config loaders.
+- `pipelines/`: ordered job entrypoints (`00_...` through `99_...`).
 - `libs/`: reusable domain modules (`backbone`, `graph`, `events`, `windows`, `phase`, `scoring`, `conformal`, `io`, `anomaly`).
 - `notebooks/`: exploratory and validation notebooks.
   Notebook workflow and kernel registration guidance live in [notebooks/README.md](/home/jrs/code/S3NTINEL/sentinel/notebooks/README.md).
@@ -82,15 +86,16 @@ Run with:
 ## Pipeline order
 
 1. `pipelines/00_ingest_raw.py`
-2. `pipelines/05_parameter_profiles_fit.py`
-3. `pipelines/10_backbone_fit.py`
-4. `pipelines/11_graph_fit.py`
-5. `pipelines/20_events_extract.py`
-6. `pipelines/30_windows_adaptive.py`
-7. `pipelines/50_phase_fit.py`
-8. `pipelines/60_window_scores_raw.py`
-9. `pipelines/70_window_scores_calibrate.py`
-10. `pipelines/80_anomaly_attribution.py`
+2. `pipelines/10_parameter_profiles_fit.py`
+3. `pipelines/40_backbone_fit.py`
+4. `pipelines/50_build_graph.py`
+5. `pipelines/60_fit_hierarchy.py`
+6. `pipelines/20_events_extract.py`
+7. `pipelines/30_windows_adaptive.py`
+8. `pipelines/70_phase_fit.py`
+9. `pipelines/80_window_scores_raw.py`
+10. `pipelines/85_window_scores_calibrate.py`
+11. `pipelines/90_anomaly_attribution.py`
 
 ## Quick start
 
@@ -99,15 +104,16 @@ Run with:
 - Install Spark extras for Spark/Delta pipelines and Spark-backed tests: `pip install -e .[dev,spark]`
 - Recommended Spark env spec: `conda env create -f environment.spark35.yml`
 - Run any pipeline stage directly: `python -m pipelines.00_ingest_raw`
-- Run fitting stages together (00 + 10) under one parent MLflow run: `python -m pipelines.91_run_fitting_pipeline`
-- Run inference stages together (20 -> 80) under one parent MLflow run: `python -m pipelines.92_run_inference_pipeline`
-- Run fitting: `python -m pipelines.91_run_fitting_pipeline`
-- Run inference: `python -m pipelines.92_run_inference_pipeline`
+- Run fitting stages together (00 + 10) under one parent MLflow run: `python -m pipelines.97_run_fitting_pipeline`
+- Run inference stages together (20 -> 80) under one parent MLflow run: `python -m pipelines.98_run_inference_pipeline`
+- Run fitting: `python -m pipelines.97_run_fitting_pipeline`
+- Run inference: `python -m pipelines.98_run_inference_pipeline`
 - Run unit tests: `pytest`
-- Run parameter profile fitting stage directly: `python -m pipelines.05_parameter_profiles_fit`
-- Run V2 backbone fitting stage directly: `python -m pipelines.10_backbone_fit`
-- Run V2 graph fitting stage directly: `python -m pipelines.11_graph_fit`
-- Run full pipeline under one parent MLflow run: `python -m pipelines.90_run_full_pipeline`
+- Run parameter profile fitting stage directly: `python -m pipelines.10_parameter_profiles_fit`
+- Run V2 backbone fitting stage directly: `python -m pipelines.40_backbone_fit`
+- Run V2 graph fitting stage directly: `python -m pipelines.50_build_graph`
+- Run hierarchy fitting stage directly: `python -m pipelines.60_fit_hierarchy`
+- Run full pipeline under one parent MLflow run: `python -m pipelines.99_run_full_pipeline`
 - Pipeline module commands assume default table/input paths exist (for example `data/input/raw_telemetry`) or that `S3NTINEL_*` path environment variables are set.
 - First-run example (bash):
 	- `export S3NTINEL_RAW_INPUT_PATH=data/input/raw_telemetry`
@@ -138,7 +144,7 @@ Run with:
 	- `S3NTINEL_SPARK_SQL_ADAPTIVE_LOCAL_SHUFFLE_READER_ENABLED=true`
 	- `S3NTINEL_SPARK_SERIALIZER=org.apache.spark.serializer.KryoSerializer`
 - Generate deterministic sample test data: `python -m scripts.generate_sample_data --base-dir data --mode overwrite`
-- Run end-to-end smoke test (00->80, including `05_parameter_profiles_fit`): `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format parquet --min-warm 1`
+- Run end-to-end smoke test (00->80, including `10_parameter_profiles_fit`): `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format parquet --min-warm 1`
 - Smoke test now seeds a deterministic `sensor_subsystem_map` and asserts emitted anomaly quality gates: non-empty output, no duplicate `(tail_id, flight_id, win_id)`, at least one non-null `panel_context`, and at least one populated `subsystems[].top_sensors`.
 - For stage-80 merge idempotence validation in smoke: `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format delta --min-warm 1 --write-mode merge`
 - Merge smoke checks require a Spark runtime with Delta JVM classes available.
@@ -146,7 +152,7 @@ Run with:
 - Run grouped fitting+inference per partition row from any manifest: `python -m scripts.run_partition_manifest_jobs --partition-manifest-path data/smoke/_partition_manifest --manifest-format parquet --job grouped --jobs-base-dir data/fleet_jobs_grouped --table-format parquet --write-mode overwrite`
 - Run the simulation/event-detection evaluation harness: `python -m scripts.run_sim_detection_eval --output-json reports/eda/sim_detection_eval_report.json`
 - Use handoff helpers for AVD transfer: see `scripts/README.md`
-- Update defaults in `conf/defaults.yaml` and keep versioned changes in source control.
+- Update checked-in defaults in `conf/defaults.yaml`; use `libs/config/pipeline.py` and `pipelines/common.py` as the runtime config boundary.
 - CI workflow: `.github/workflows/ci.yml` runs tests on push/PR.
 
 ## Event taxonomy coverage
@@ -185,47 +191,49 @@ Run with:
 	- `S3NTINEL_EVENT_DELTA_THRESHOLD` controls `threshold` event emission.
 	- When `S3NTINEL_EVENT_DELTA_THRESHOLD <= 0`, `threshold` events are disabled and continuous deltas emit only `slope_pos|slope_neg` (plus first-sample null suppression).
 
-- `10_backbone_fit` reads normalized telemetry and adaptive windows and writes backbone artifacts:
+- `40_backbone_fit` reads normalized telemetry and adaptive windows and writes backbone artifacts:
 	- `S3NTINEL_BACKBONE_TABLE_PATH` (default `data/delta/backbone`)
 	- `S3NTINEL_BACKBONE_SENSOR_ENERGY_TABLE_PATH` (default `data/delta/backbone_sensor_energy`)
 	- key controls:
 		- `S3NTINEL_BACKBONE_SENSOR_COUNT`
 		- `S3NTINEL_BACKBONE_RIDGE_LAMBDA`
-	- `11_graph_fit` writes:
+- `50_build_graph` writes:
 		- `S3NTINEL_PRECISION_GRAPH_TABLE_PATH`
 		- `S3NTINEL_EVENT_GRAPH_TABLE_PATH`
+		- `S3NTINEL_LAG_PROFILE_TABLE_PATH`
 		- `S3NTINEL_LAG_GRAPH_TABLE_PATH`
 		- `S3NTINEL_TRANSITION_GRAPH_TABLE_PATH`
 		- `S3NTINEL_FUSED_GRAPH_TABLE_PATH`
-		- `S3NTINEL_HIERARCHY_SENSOR_MAP_TABLE_PATH`
-		- `S3NTINEL_CUR_GRAPH_MIN_ABS_CORR` (default `graph.min_abs_corr`)
-		- `S3NTINEL_CUR_NORMALIZATION_MODE` (default `graph.normalization.mode`, supports `none|zscore|robust`)
-		- `S3NTINEL_CUR_NORMALIZATION_CLIP_SIGMA` (default `graph.normalization.clip_sigma`)
-		- `S3NTINEL_CUR_NORMALIZATION_MIN_POINTS` (default `graph.normalization.min_sensor_points`)
-		- If no sensors meet `S3NTINEL_CUR_NORMALIZATION_MIN_POINTS`, stage 10 automatically falls back to `1` point and records this in `reports/fitting_graph_report.json`.
-		- `S3NTINEL_EVENT_GRAPH_MIN_COUNT` (default `graph.min_cooccur_count`)
-		- `S3NTINEL_PRECISION_GRAPH_MIN_ABS_PARTIAL_CORR` (default `graph.min_abs_partial_corr`)
-		- `S3NTINEL_PRECISION_GRAPH_RIDGE_LAMBDA` (default `graph.precision_ridge_lambda`)
-		- `S3NTINEL_SUBSYSTEM_MIN_EDGE_WEIGHT` (default `graph.subsystem_min_edge_weight`)
-		- Multi-level hierarchy cluster controls (Spark PIC):
-			- `S3NTINEL_HIERARCHY_K_SYSTEM` (default `graph.hierarchy_k_system`)
-			- `S3NTINEL_HIERARCHY_K_SUBSYSTEM` (default `graph.hierarchy_k_subsystem`)
-			- `S3NTINEL_HIERARCHY_K_MODULE` (default `graph.hierarchy_k_module`)
-		- `S3NTINEL_GRAPH_FUSE_ALPHA` (default `graph.cur_weight_alpha`)
-- `50_phase_fit` writes:
+		- `S3NTINEL_GRAPH_PARAMETER_UNIVERSE_TABLE_PATH`
+		- key graph defaults now come from the typed config layer backed by `conf/defaults.yaml`
+		- `lag_profile` is the persisted per-band nearest-prior lag artifact; `lag_graph` remains the collapsed compatibility view used by downstream fusion
+		- important override families:
+			- `S3NTINEL_V2_EVENT_GRAPH_*`
+			- `S3NTINEL_V2_LAG_GRAPH_*`
+			- `S3NTINEL_V2_TRANSITION_GRAPH_*`
+			- `S3NTINEL_V2_GRAPH_*`
+			- `S3NTINEL_PRECISION_GRAPH_RIDGE_LAMBDA`
+			- `S3NTINEL_V2_MIN_ABS_PARTIAL_CORR`
+- `60_fit_hierarchy` writes:
+	- `S3NTINEL_HIERARCHY_SENSOR_MAP_TABLE_PATH` (default `data/delta/hierarchy_sensor_map`)
+	- key hierarchy defaults now come from:
+		- `hierarchy.top_k_per_parameter_name`
+		- `hierarchy.subsystem_min_edge_weight`
+		- `hierarchy.system_min_edge_weight`
+- `70_phase_fit` writes:
 	- `S3NTINEL_PHASE_WINDOWS_TABLE_PATH` (default `data/delta/phase_windows`)
 	- `S3NTINEL_PHASE_BASELINES_TABLE_PATH` (default `data/delta/phase_baselines`)
-- `60_window_scores_raw` reads phase windows + phase baselines and writes:
+- `80_window_scores_raw` reads phase windows + phase baselines and writes:
 	- `S3NTINEL_WINDOW_SCORES_RAW_TABLE_PATH` (default `data/delta/window_scores_raw`)
 	- Stage 60 also emits `subsystem_scores` (map of subsystem evidence ratios), propagated through calibration and used by stage 80 to populate `anomaly_window_attribution.subsystems`.
 	- Severity thresholds are configurable for normalized score scale:
 		- `S3NTINEL_SEVERITY_LOW_THRESHOLD` (default `0.25`)
 		- `S3NTINEL_SEVERITY_MEDIUM_THRESHOLD` (default `0.75`)
 		- `S3NTINEL_SEVERITY_HIGH_THRESHOLD` (default `1.50`)
-- `70_window_scores_calibrate` reads raw window scores and writes:
+- `85_window_scores_calibrate` reads raw window scores and writes:
 	- `S3NTINEL_WINDOW_SCORES_CALIBRATED_TABLE_PATH` (default `data/delta/window_scores_calibrated`)
 	- `S3NTINEL_MIN_WARM` (optional override; defaults to config value)
-- `80_anomaly_attribution` reads calibrated window scores + phase windows + windows and writes:
+- `90_anomaly_attribution` reads calibrated window scores + phase windows + windows and writes:
 	- `S3NTINEL_ANOMALY_WINDOW_ATTRIBUTION_TABLE_PATH` (default `data/delta/anomaly_window_attribution`)
 	- `S3NTINEL_ANOMALY_TELEMETRY_ATTRIBUTION_TABLE_PATH` (default `data/delta/anomaly_telemetry_attribution`)
 	- `S3NTINEL_ANOMALY_EVENT_ATTRIBUTION_TABLE_PATH` (default `data/delta/anomaly_event_attribution`)
@@ -259,7 +267,7 @@ Run with:
 ## MLflow integration
 
 - Pipeline `run()` functions are decorated with `@track_mlflow_run(...)` for stage-level run tracking.
-- `pipelines/90_run_full_pipeline.py` creates a parent run; each stage appears as a nested child run.
+- `pipelines/99_run_full_pipeline.py` creates a parent run; each stage appears as a nested child run.
 - Wall-time metrics are logged to both logger output and active MLflow runs.
 - Parent run summary is logged as `reports/pipeline_run_summary.json` with per-stage status and elapsed time.
 - Use helpers in `libs.perf.mlflow` for additional tracking:

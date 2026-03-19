@@ -28,6 +28,17 @@ LAG_GRAPH_COLUMNS = [
     "edge_family",
 ]
 
+LAG_PROFILE_COLUMNS = [
+    "parameter_name_u",
+    "parameter_name_v",
+    "lag_band",
+    "lag_count",
+    "lag_weight",
+    "mean_lag_seconds",
+    "support_flight_count",
+    "edge_family",
+]
+
 TRANSITION_GRAPH_COLUMNS = [
     "parameter_name_u",
     "parameter_name_v",
@@ -95,6 +106,22 @@ def LAG_GRAPH_SCHEMA():
             T.StructField("lag_count", T.IntegerType(), False),
             T.StructField("lag_weight", T.DoubleType(), False),
             T.StructField("mean_lag_seconds", T.DoubleType(), False),
+            T.StructField("edge_family", T.StringType(), False),
+        ]
+    )
+
+
+def LAG_PROFILE_SCHEMA():
+    T = _types()
+    return T.StructType(
+        [
+            T.StructField("parameter_name_u", T.StringType(), False),
+            T.StructField("parameter_name_v", T.StringType(), False),
+            T.StructField("lag_band", T.StringType(), False),
+            T.StructField("lag_count", T.IntegerType(), False),
+            T.StructField("lag_weight", T.DoubleType(), False),
+            T.StructField("mean_lag_seconds", T.DoubleType(), False),
+            T.StructField("support_flight_count", T.IntegerType(), False),
             T.StructField("edge_family", T.StringType(), False),
         ]
     )

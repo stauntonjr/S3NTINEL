@@ -1,6 +1,4 @@
 """Fit hierarchy artifacts from fused graph and the persisted graph parameter universe."""
-
-import os
 import time
 
 from libs.graph import build_hierarchy_from_fused_spark_table
@@ -17,6 +15,7 @@ from libs.perf import (
     log_wall_time,
     track_mlflow_run,
 )
+from pipelines.common import build_context, context_artifacts, context_execution, context_settings
 
 
 LOGGER = get_logger(__name__)
@@ -26,33 +25,24 @@ def _elapsed_ms(start_time: float) -> float:
     return (time.perf_counter() - start_time) * 1000.0
 
 
-@track_mlflow_run(stage_name="12_fit_hierarchy", logger=LOGGER)
-@log_memory_usage(logger=LOGGER, label="12_fit_hierarchy")
+@track_mlflow_run(stage_name="60_fit_hierarchy", logger=LOGGER)
+@log_memory_usage(logger=LOGGER, label="60_fit_hierarchy")
 @log_wall_time(logger=LOGGER)
 def run() -> None:
+    context = build_context()
+    artifacts = context_artifacts(context)
+    execution = context_execution(context)
+    settings = context_settings(context)
     spark = get_spark("s3ntinel.fit_hierarchy")
-    fused_graph_path = os.getenv("S3NTINEL_FUSED_GRAPH_TABLE_PATH", "data/delta/fused_graph")
-    graph_parameter_universe_path = os.getenv(
-        "S3NTINEL_GRAPH_PARAMETER_UNIVERSE_TABLE_PATH",
-        "data/delta/graph_parameter_universe",
-    )
-    hierarchy_map_path = os.getenv("S3NTINEL_HIERARCHY_SENSOR_MAP_TABLE_PATH", "data/delta/hierarchy_sensor_map")
-    table_format = os.getenv("S3NTINEL_TABLE_FORMAT", "delta")
-    write_mode = os.getenv("S3NTINEL_FIT_WRITE_MODE", "overwrite")
-    min_fused_edge_weight = float(os.getenv("S3NTINEL_V2_GRAPH_MIN_FUSED_EDGE_WEIGHT", "0.05"))
-    hierarchy_top_k_per_sensor = int(os.getenv("S3NTINEL_V2_HIERARCHY_TOP_K_PER_SENSOR", "3"))
-    hierarchy_subsystem_min_edge_weight_raw = os.getenv("S3NTINEL_V2_HIERARCHY_SUBSYSTEM_MIN_EDGE_WEIGHT")
-    hierarchy_system_min_edge_weight_raw = os.getenv("S3NTINEL_V2_HIERARCHY_SYSTEM_MIN_EDGE_WEIGHT")
-    hierarchy_subsystem_min_edge_weight = (
-        float(hierarchy_subsystem_min_edge_weight_raw)
-        if hierarchy_subsystem_min_edge_weight_raw not in (None, "")
-        else None
-    )
-    hierarchy_system_min_edge_weight = (
-        float(hierarchy_system_min_edge_weight_raw)
-        if hierarchy_system_min_edge_weight_raw not in (None, "")
-        else None
-    )
+    fused_graph_path = artifacts.fused_graph
+    graph_parameter_universe_path = artifacts.graph_parameter_universe
+    hierarchy_map_path = artifacts.hierarchy_sensor_map
+    table_format = execution.table_format
+    write_mode = execution.fit_write_mode
+    min_fused_edge_weight = settings.graph.fusion.min_fused_edge_weight
+    hierarchy_top_k_per_sensor = settings.hierarchy.top_k_per_parameter_name
+    hierarchy_subsystem_min_edge_weight = settings.hierarchy.subsystem_min_edge_weight
+    hierarchy_system_min_edge_weight = settings.hierarchy.system_min_edge_weight
 
     fused_df = read_table(spark, fused_graph_path, fmt=table_format)
     parameter_universe_df = read_table(spark, graph_parameter_universe_path, fmt=table_format)
@@ -100,7 +90,7 @@ def run() -> None:
     )
     log_dict_artifact_if_active(
         {
-            "stage": "12_fit_hierarchy",
+            "stage": "60_fit_hierarchy",
             "fused_graph_path": fused_graph_path,
             "graph_parameter_universe_path": graph_parameter_universe_path,
             "hierarchy_map_path": hierarchy_map_path,
@@ -115,10 +105,10 @@ def run() -> None:
             "table_format": table_format,
             "write_mode": write_mode,
         },
-        "reports/stages/12_fit_hierarchy_summary.json",
+        "reports/stages/60_fit_hierarchy_summary.json",
     )
     stage_manifest = build_stage_manifest(
-        stage_name="12_fit_hierarchy",
+        stage_name="60_fit_hierarchy",
         config={
             "table_format": table_format,
             "write_mode": write_mode,
@@ -144,7 +134,7 @@ def run() -> None:
         },
         replayable_from=["fused_graph", "graph_parameter_universe"],
     )
-    log_stage_manifest_if_active(stage_manifest, "reports/stages/12_fit_hierarchy_manifest.json")
+    log_stage_manifest_if_active(stage_manifest, "reports/stages/60_fit_hierarchy_manifest.json")
     LOGGER.info(
         "pipeline=fit_hierarchy format=%s write_mode=%s fused_edges=%s parameter_universe=%s hierarchy_sensors=%s timing_ms=%s",
         table_format,

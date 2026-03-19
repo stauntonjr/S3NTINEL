@@ -326,6 +326,20 @@ Canonical table:
 Weight semantics:
 - positive normalized PMI
 
+### lag profile
+
+Band-aware lag relationship profile over parameters.
+
+Canonical table:
+- `lag_profile`
+
+Weight semantics:
+- per-band row-normalized lagged conditional probability with short-lag discount
+
+Important fields:
+- `lag_band`
+- `support_flight_count`
+
 ### lag graph
 
 Directed lagged event relationship graph over parameters.
@@ -334,7 +348,7 @@ Canonical table:
 - `lag_graph`
 
 Weight semantics:
-- row-normalized lagged conditional probability with short-lag discount
+- collapsed compatibility view derived from `lag_profile`
 
 ### transition graph
 

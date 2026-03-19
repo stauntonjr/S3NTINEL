@@ -16,15 +16,15 @@ PIPELINE_STAGE_SCRIPTS = [
     "00_ingest_raw.py",
     "20_events_extract.py",
     "30_windows_adaptive.py",
-    "50_phase_fit.py",
-    "60_window_scores_raw.py",
-    "70_window_scores_calibrate.py",
-    "80_anomaly_attribution.py",
+    "70_phase_fit.py",
+    "80_window_scores_raw.py",
+    "85_window_scores_calibrate.py",
+    "90_anomaly_attribution.py",
 ]
 
 GROUPED_PIPELINE_SCRIPTS = [
-    "91_run_fitting_pipeline.py",
-    "92_run_inference_pipeline.py",
+    "97_run_fitting_pipeline.py",
+    "98_run_inference_pipeline.py",
 ]
 
 

@@ -50,7 +50,7 @@ The intended sequence is:
 
 The active pipeline stage for this metadata is:
 
-- `pipelines/05_parameter_profiles_fit.py`
+- `pipelines/10_parameter_profiles_fit.py`
 
 That means:
 

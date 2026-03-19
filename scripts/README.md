@@ -33,7 +33,7 @@ Incremental patches:
     - input raw telemetry
     - fitted/profiled tables
     - persisted `window_features`
-    - structural graph artifacts
+    - structural graph artifacts, including `lag_profile` and the collapsed compatibility `lag_graph`
     - phase/scoring/attribution outputs
     - local stage summaries and manifests under `reports/`
     - a run manifest at `reports/run_manifest.json`
@@ -62,6 +62,7 @@ Incremental patches:
     - `reports/performance_profile_summary.md`
   - variant failures are recorded in the summary by default; the run only exits non-zero if every variant fails
   - pass `--fail-on-variant-error` if you want any failed variant to make the benchmark command fail
+  - TODO: this profiler still compares tuning variants on fixed workloads; dataset-size scale sweep is a planned follow-up
   - the built-in quick sweep compares:
     - baseline
     - moderately smaller event/window/phase segments
@@ -86,19 +87,20 @@ These are useful for local development and regression checks, but they are not t
   - `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format parquet --min-warm 1`
   - this runs the active V2 stage sequence:
     - `00_ingest_raw.py`
-    - `05_parameter_profiles_fit.py`
-    - `10_backbone_fit.py`
-    - `11_build_graph.py`
+    - `10_parameter_profiles_fit.py`
     - `20_events_extract.py`
     - `30_windows_adaptive.py`
-    - `50_phase_fit.py`
-    - `60_window_scores_raw.py`
-    - `70_window_scores_calibrate.py`
-    - `80_anomaly_attribution.py`
+    - `40_backbone_fit.py`
+    - `50_build_graph.py`
+    - `60_fit_hierarchy.py`
+    - `70_phase_fit.py`
+    - `80_window_scores_raw.py`
+    - `85_window_scores_calibrate.py`
+    - `90_anomaly_attribution.py`
   - emits:
     - `reports/smoke_quality_report.json`
     - includes phase-detection accuracy/confusion if `phase_labels` are present
-    - includes hierarchy exact-match diagnostics if `hierarchy_sensor_map_label` is present
+    - includes canonical hierarchy recovery metrics if `hierarchy_sensor_map_label` is present, including exact match, pairwise F1, and ARI
 - Smoke runs now use the canonical segmented window builder:
   - `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format parquet`
 - Sweep graph/hierarchy settings against the smoke pipeline:
@@ -112,23 +114,23 @@ These are useful for local development and regression checks, but they are not t
 
 Fitting:
 
-- `python -m pipelines.91_run_fitting_pipeline`
+- `python -m pipelines.97_run_fitting_pipeline`
 - stages:
   - `00_ingest_raw.py`
-  - `05_parameter_profiles_fit.py`
-  - `10_backbone_fit.py`
-  - `11_build_graph.py`
+  - `10_parameter_profiles_fit.py`
+  - `40_backbone_fit.py`
+  - `50_build_graph.py`
 
 Inference:
 
-- `python -m pipelines.92_run_inference_pipeline`
+- `python -m pipelines.98_run_inference_pipeline`
 - stages:
   - `20_events_extract.py`
   - `30_windows_adaptive.py`
-  - `50_phase_fit.py`
-  - `60_window_scores_raw.py`
-  - `70_window_scores_calibrate.py`
-  - `80_anomaly_attribution.py`
+  - `70_phase_fit.py`
+  - `80_window_scores_raw.py`
+  - `85_window_scores_calibrate.py`
+  - `90_anomaly_attribution.py`
 
 ## Partition-Manifest Jobs
 

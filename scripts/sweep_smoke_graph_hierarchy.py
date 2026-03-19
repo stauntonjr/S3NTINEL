@@ -157,6 +157,9 @@ def _run_one(
     report = json.loads(report_path.read_text())
     phase = report.get("phase_detection", {})
     hierarchy = report.get("hierarchy_recovery", {})
+    subsystem_partition = hierarchy.get("subsystem_partition", {})
+    system_partition = hierarchy.get("system_partition", {})
+    module_partition = hierarchy.get("module_partition", {})
     return {
         "name": name,
         "base_dir": str(run_dir),
@@ -164,6 +167,10 @@ def _run_one(
         "system_exact_match": hierarchy.get("system_exact_match"),
         "subsystem_exact_match": hierarchy.get("subsystem_exact_match"),
         "module_exact_match": hierarchy.get("module_exact_match"),
+        "system_ari": system_partition.get("adjusted_rand_index"),
+        "subsystem_ari": subsystem_partition.get("adjusted_rand_index"),
+        "module_ari": module_partition.get("adjusted_rand_index"),
+        "subsystem_pair_f1": subsystem_partition.get("same_cluster_pair_f1"),
         "env": dict(config["env"]),
     }
 
@@ -194,9 +201,11 @@ def main() -> None:
                 {
                     "name": result["name"],
                     "phase_accuracy": result["phase_accuracy"],
+                    "system_ari": result["system_ari"],
+                    "subsystem_ari": result["subsystem_ari"],
+                    "module_ari": result["module_ari"],
+                    "subsystem_pair_f1": result["subsystem_pair_f1"],
                     "system_exact_match": result["system_exact_match"],
-                    "subsystem_exact_match": result["subsystem_exact_match"],
-                    "module_exact_match": result["module_exact_match"],
                 }
             )
         )
@@ -204,9 +213,10 @@ def main() -> None:
     results = sorted(
         results,
         key=lambda item: (
-            -(float(item["subsystem_exact_match"]) if item["subsystem_exact_match"] is not None else -1.0),
-            -(float(item["system_exact_match"]) if item["system_exact_match"] is not None else -1.0),
-            -(float(item["module_exact_match"]) if item["module_exact_match"] is not None else -1.0),
+            -(float(item["subsystem_ari"]) if item["subsystem_ari"] is not None else -1.0),
+            -(float(item["system_ari"]) if item["system_ari"] is not None else -1.0),
+            -(float(item["module_ari"]) if item["module_ari"] is not None else -1.0),
+            -(float(item["subsystem_pair_f1"]) if item["subsystem_pair_f1"] is not None else -1.0),
             str(item["name"]),
         ),
     )

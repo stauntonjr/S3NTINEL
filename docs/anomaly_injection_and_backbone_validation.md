@@ -131,6 +131,7 @@ These are the right anomalies for a system that explicitly fits:
 
 - `precision_graph`
 - `event_graph`
+- `lag_profile`
 - `lag_graph`
 - `transition_graph`
 

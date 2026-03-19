@@ -8,14 +8,15 @@ from pipelines._pipeline_runner import run_stage_group
 INFERENCE_STAGE_SCRIPTS = [
     "20_events_extract.py",
     "30_windows_adaptive.py",
-    "50_phase_fit.py",
-    "60_window_scores_raw.py",
-    "70_window_scores_calibrate.py",
-    "80_anomaly_attribution.py",
+    "70_phase_fit.py",
+    "80_window_scores_raw.py",
+    "85_window_scores_calibrate.py",
+    "90_anomaly_attribution.py",
+    "95_emit_explorer_bundle.py",
 ]
 
 
-@log_memory_usage(label="92_run_inference_pipeline")
+@log_memory_usage(label="98_run_inference_pipeline")
 def run() -> None:
     os.environ.setdefault("S3NTINEL_WRITE_MODE", "overwrite")
     run_stage_group(

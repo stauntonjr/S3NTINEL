@@ -152,7 +152,7 @@ def test_run_backbone_stage_builds_backbone_tables_in_spark(spark, tmp_path, mon
     monkeypatch.setenv("S3NTINEL_FIT_WRITE_MODE", "overwrite")
     monkeypatch.setenv("S3NTINEL_BACKBONE_SENSOR_COUNT", "2")
 
-    runpy.run_module("pipelines.10_backbone_fit", run_name="__main__")
+    runpy.run_module("pipelines.40_backbone_fit", run_name="__main__")
 
     backbone_df = read_table(spark, str(base_dir / "delta" / "backbone"), fmt="parquet")
     energy_df = read_table(spark, str(base_dir / "delta" / "backbone_sensor_energy"), fmt="parquet")
@@ -181,7 +181,7 @@ def test_run_backbone_stage_persisted_window_features_keep_event_type_counts(spa
     monkeypatch.setenv("S3NTINEL_FIT_WRITE_MODE", "overwrite")
     monkeypatch.setenv("S3NTINEL_BACKBONE_SENSOR_COUNT", "2")
 
-    runpy.run_module("pipelines.10_backbone_fit", run_name="__main__")
+    runpy.run_module("pipelines.40_backbone_fit", run_name="__main__")
 
     window_features_df = read_table(spark, str(base_dir / "delta" / "window_features"), fmt="parquet")
     nonempty_event_type_windows = window_features_df.where(

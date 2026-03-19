@@ -1,15 +1,16 @@
 """Build graph component artifacts from backbone, events, and windows."""
-
-import os
 import time
 
 from libs.graph import (
     build_event_graph_spark_table,
     build_fused_graph_spark_table,
     build_graph_parameter_universe_spark_table,
-    build_lag_graph_spark_table,
+    build_lag_candidate_pairs_spark_table,
+    build_lag_profile_spark_table,
     build_precision_graph_from_window_features_spark_table,
     build_transition_graph_spark_table,
+    collapse_lag_profile_spark_table,
+    LagBandSpec,
 )
 from libs.io.schemas import GRAPH_PARAMETER_UNIVERSE_SCHEMA, PRECISION_GRAPH_SCHEMA
 from libs.io.delta import get_spark, read_table, write_table
@@ -24,7 +25,7 @@ from libs.perf import (
     log_wall_time,
     track_mlflow_run,
 )
-from pipelines.common import require_artifact_path
+from pipelines.common import build_context, context_artifacts, context_execution, context_settings, require_artifact_path
 
 
 LOGGER = get_logger(__name__)
@@ -71,46 +72,54 @@ def _prepare_graph_windows(windows_df: "DataFrame") -> "DataFrame":
     )
 
 
-@track_mlflow_run(stage_name="11_build_graph", logger=LOGGER)
-@log_memory_usage(logger=LOGGER, label="11_build_graph")
+@track_mlflow_run(stage_name="50_build_graph", logger=LOGGER)
+@log_memory_usage(logger=LOGGER, label="50_build_graph")
 @log_wall_time(logger=LOGGER)
 def run() -> None:
     from pyspark import StorageLevel
 
-    raw_path = os.getenv("S3NTINEL_RAW_TABLE_PATH", "data/delta/raw_telemetry")
-    events_path = os.getenv("S3NTINEL_EVENTS_TABLE_PATH", "data/delta/events")
-    windows_path = os.getenv("S3NTINEL_WINDOWS_TABLE_PATH", "data/delta/windows")
-    window_features_path = os.getenv("S3NTINEL_WINDOW_FEATURES_TABLE_PATH", "")
-    backbone_path = os.getenv("S3NTINEL_BACKBONE_TABLE_PATH", "data/delta/backbone")
-    precision_graph_path = os.getenv("S3NTINEL_PRECISION_GRAPH_TABLE_PATH", "data/delta/precision_graph")
-    event_graph_path = os.getenv("S3NTINEL_EVENT_GRAPH_TABLE_PATH", "data/delta/event_graph")
-    lag_graph_path = os.getenv("S3NTINEL_LAG_GRAPH_TABLE_PATH", "data/delta/lag_graph")
-    transition_graph_path = os.getenv("S3NTINEL_TRANSITION_GRAPH_TABLE_PATH", "data/delta/transition_graph")
-    fused_graph_path = os.getenv("S3NTINEL_FUSED_GRAPH_TABLE_PATH", "data/delta/fused_graph")
-    graph_parameter_universe_path = os.getenv(
-        "S3NTINEL_GRAPH_PARAMETER_UNIVERSE_TABLE_PATH",
-        "data/delta/graph_parameter_universe",
-    )
-    table_format = os.getenv("S3NTINEL_TABLE_FORMAT", "delta")
-    write_mode = os.getenv("S3NTINEL_FIT_WRITE_MODE", "overwrite")
+    context = build_context()
+    artifacts = context_artifacts(context)
+    execution = context_execution(context)
+    settings = context_settings(context)
+    raw_path = artifacts.raw_table
+    events_path = artifacts.events
+    windows_path = artifacts.windows
+    window_features_path = artifacts.window_features
+    backbone_path = artifacts.backbone
+    precision_graph_path = artifacts.precision_graph
+    event_graph_path = artifacts.event_graph
+    lag_profile_path = artifacts.lag_profile
+    lag_graph_path = artifacts.lag_graph
+    transition_graph_path = artifacts.transition_graph
+    fused_graph_path = artifacts.fused_graph
+    graph_parameter_universe_path = artifacts.graph_parameter_universe
+    table_format = execution.table_format
+    write_mode = execution.fit_write_mode
 
-    precision_ridge_lambda = float(os.getenv("S3NTINEL_PRECISION_GRAPH_RIDGE_LAMBDA", "1.0"))
-    min_abs_partial_corr = float(os.getenv("S3NTINEL_V2_MIN_ABS_PARTIAL_CORR", "0.05"))
-    min_event_count = int(os.getenv("S3NTINEL_V2_EVENT_GRAPH_MIN_COUNT", "1"))
-    min_event_npmi = float(
-        os.getenv(
-            "S3NTINEL_V2_EVENT_GRAPH_MIN_NPMI",
-            os.getenv("S3NTINEL_V2_EVENT_GRAPH_MIN_JACCARD", "0.0"),
+    precision_ridge_lambda = settings.graph.precision_ridge_lambda
+    min_abs_partial_corr = settings.graph.min_abs_partial_corr
+    min_event_count = settings.graph.event.min_count
+    min_event_npmi = settings.graph.event.min_npmi
+    lag_band_specs = tuple(
+        LagBandSpec(
+            name=item.name,
+            lower_seconds=item.lower_seconds,
+            upper_seconds=item.upper_seconds,
+            combine_weight=item.combine_weight,
         )
+        for item in settings.graph.lag.bands
     )
-    lag_tau_max_seconds = float(os.getenv("S3NTINEL_V2_LAG_TAU_MAX_SECONDS", "30.0"))
-    min_lag_count = int(os.getenv("S3NTINEL_V2_LAG_GRAPH_MIN_COUNT", "1"))
-    min_transition_count = int(os.getenv("S3NTINEL_V2_TRANSITION_GRAPH_MIN_COUNT", "1"))
-    alpha = float(os.getenv("S3NTINEL_V2_GRAPH_ALPHA", "1.0"))
-    beta = float(os.getenv("S3NTINEL_V2_GRAPH_BETA", "1.0"))
-    gamma = float(os.getenv("S3NTINEL_V2_GRAPH_GAMMA", "1.0"))
-    min_fused_edge_weight = float(os.getenv("S3NTINEL_V2_GRAPH_MIN_FUSED_EDGE_WEIGHT", "0.05"))
-    max_graph_sensor_universe = int(os.getenv("S3NTINEL_MAX_GRAPH_SENSOR_UNIVERSE", "50000"))
+    lag_tau_max_seconds = max(
+        [float(settings.graph.lag.tau_max_seconds)] + [float(item.upper_seconds) for item in lag_band_specs]
+    )
+    min_lag_count = settings.graph.lag.min_count
+    min_transition_count = settings.graph.transition.min_count
+    alpha = settings.graph.fusion.alpha
+    beta = settings.graph.fusion.beta
+    gamma = settings.graph.fusion.gamma
+    min_fused_edge_weight = settings.graph.fusion.min_fused_edge_weight
+    max_graph_sensor_universe = settings.graph.max_sensor_universe
 
     spark = get_spark("s3ntinel.build_graph")
     events_df = read_table(spark, events_path, fmt=table_format)
@@ -127,6 +136,12 @@ def run() -> None:
     window_features_df = read_table(spark, str(resolved_window_features_path), fmt=table_format).persist(
         StorageLevel.MEMORY_AND_DISK
     )
+    event_sdf = None
+    transition_sdf = None
+    lag_profile_sdf = None
+    lag_sdf = None
+    fused_df = None
+    parameter_universe_df = None
     try:
         started = time.perf_counter()
         window_features_count = int(window_features_df.count())
@@ -138,20 +153,10 @@ def run() -> None:
             graph_windows_df,
             min_count=min_event_count,
             min_npmi=min_event_npmi,
-            top_k_per_parameter_name=int(os.getenv("S3NTINEL_V2_EVENT_GRAPH_TOP_K_PER_SENSOR", "8")),
+            top_k_per_parameter_name=settings.graph.event.top_k_per_parameter_name,
         ).persist(StorageLevel.MEMORY_AND_DISK)
         _materialize_df(event_sdf)
         timing_ms["event_graph_build"] = _elapsed_ms(started)
-        started = time.perf_counter()
-        lag_sdf = build_lag_graph_spark_table(
-            graph_events_df,
-            tau_max_seconds=lag_tau_max_seconds,
-            min_count=min_lag_count,
-            max_mean_lag_seconds=float(os.getenv("S3NTINEL_V2_LAG_GRAPH_MAX_MEAN_LAG_SECONDS", "5.0")),
-            top_k_outgoing=int(os.getenv("S3NTINEL_V2_LAG_GRAPH_TOP_K_OUTGOING", "4")),
-        ).persist(StorageLevel.MEMORY_AND_DISK)
-        _materialize_df(lag_sdf)
-        timing_ms["lag_graph_build"] = _elapsed_ms(started)
         started = time.perf_counter()
         transition_sdf = build_transition_graph_spark_table(
             graph_events_df,
@@ -159,6 +164,27 @@ def run() -> None:
         ).persist(StorageLevel.MEMORY_AND_DISK)
         _materialize_df(transition_sdf)
         timing_ms["transition_graph_build"] = _elapsed_ms(started)
+        started = time.perf_counter()
+        lag_candidate_sdf = build_lag_candidate_pairs_spark_table(event_sdf, transition_sdf)
+        lag_profile_sdf = build_lag_profile_spark_table(
+            graph_events_df,
+            tau_max_seconds=lag_tau_max_seconds,
+            bands=lag_band_specs,
+            candidate_pairs_df=lag_candidate_sdf,
+        ).persist(StorageLevel.MEMORY_AND_DISK)
+        _materialize_df(lag_profile_sdf)
+        timing_ms["lag_profile_build"] = _elapsed_ms(started)
+        started = time.perf_counter()
+        lag_sdf = collapse_lag_profile_spark_table(
+            lag_profile_sdf,
+            tau_max_seconds=lag_tau_max_seconds,
+            bands=lag_band_specs,
+            min_count=min_lag_count,
+            max_mean_lag_seconds=settings.graph.lag.max_mean_lag_seconds,
+            top_k_outgoing=settings.graph.lag.top_k_outgoing,
+        ).persist(StorageLevel.MEMORY_AND_DISK)
+        _materialize_df(lag_sdf)
+        timing_ms["lag_graph_build"] = _elapsed_ms(started)
         try:
             backbone_row = backbone_df.first()
             backbone_row = backbone_row.asDict() if backbone_row is not None else {}
@@ -204,6 +230,7 @@ def run() -> None:
             try:
                 started = time.perf_counter()
                 event_count_out = int(event_sdf.count())
+                lag_profile_count_out = int(lag_profile_sdf.count())
                 lag_count_out = int(lag_sdf.count())
                 transition_count_out = int(transition_sdf.count())
                 fused_count_out = int(fused_df.count())
@@ -213,6 +240,7 @@ def run() -> None:
                 started = time.perf_counter()
                 write_table(precision_df, path=precision_graph_path, mode=write_mode, fmt=table_format)
                 write_table(event_sdf, path=event_graph_path, mode=write_mode, fmt=table_format)
+                write_table(lag_profile_sdf, path=lag_profile_path, mode=write_mode, fmt=table_format)
                 write_table(lag_sdf, path=lag_graph_path, mode=write_mode, fmt=table_format)
                 write_table(transition_sdf, path=transition_graph_path, mode=write_mode, fmt=table_format)
                 write_table(fused_df, path=fused_graph_path, mode=write_mode, fmt=table_format)
@@ -224,12 +252,19 @@ def run() -> None:
                 )
                 timing_ms["output_writes"] = _elapsed_ms(started)
             finally:
-                parameter_universe_df.unpersist()
-                fused_df.unpersist()
+                if parameter_universe_df is not None:
+                    parameter_universe_df.unpersist()
+                if fused_df is not None:
+                    fused_df.unpersist()
         finally:
-            event_sdf.unpersist()
-            lag_sdf.unpersist()
-            transition_sdf.unpersist()
+            if event_sdf is not None:
+                event_sdf.unpersist()
+            if lag_profile_sdf is not None:
+                lag_profile_sdf.unpersist()
+            if lag_sdf is not None:
+                lag_sdf.unpersist()
+            if transition_sdf is not None:
+                transition_sdf.unpersist()
     finally:
         window_features_df.unpersist()
         graph_events_df.unpersist()
@@ -241,6 +276,8 @@ def run() -> None:
             "min_event_count": min_event_count,
             "min_event_npmi": min_event_npmi,
             "lag_tau_max_seconds": lag_tau_max_seconds,
+            "lag_band_names": [item.name for item in lag_band_specs],
+            "lag_band_upper_seconds": [item.upper_seconds for item in lag_band_specs],
             "min_lag_count": min_lag_count,
             "min_transition_count": min_transition_count,
             "alpha": alpha,
@@ -251,7 +288,7 @@ def run() -> None:
     )
     log_dict_artifact_if_active(
         {
-            "stage": "11_build_graph",
+            "stage": "50_build_graph",
             "raw_path": raw_path,
             "events_path": events_path,
             "windows_path": windows_path,
@@ -259,12 +296,14 @@ def run() -> None:
             "backbone_path": backbone_path,
             "precision_graph_path": precision_graph_path,
             "event_graph_path": event_graph_path,
+            "lag_profile_path": lag_profile_path,
             "lag_graph_path": lag_graph_path,
             "transition_graph_path": transition_graph_path,
             "fused_graph_path": fused_graph_path,
             "graph_parameter_universe_path": graph_parameter_universe_path,
             "precision_edge_count": int(len(precision_pdf)),
             "event_edge_count": event_count_out,
+            "lag_profile_edge_count": lag_profile_count_out,
             "lag_edge_count": lag_count_out,
             "transition_edge_count": transition_count_out,
             "fused_edge_count": fused_count_out,
@@ -276,10 +315,10 @@ def run() -> None:
             "table_format": table_format,
             "write_mode": write_mode,
         },
-        "reports/stages/11_build_graph_summary.json",
+        "reports/stages/50_build_graph_summary.json",
     )
     stage_manifest = build_stage_manifest(
-        stage_name="11_build_graph",
+        stage_name="50_build_graph",
         config={
             "table_format": table_format,
             "write_mode": write_mode,
@@ -288,6 +327,15 @@ def run() -> None:
             "min_event_count": min_event_count,
             "min_event_npmi": min_event_npmi,
             "lag_tau_max_seconds": lag_tau_max_seconds,
+            "lag_bands": [
+                {
+                    "name": item.name,
+                    "lower_seconds": item.lower_seconds,
+                    "upper_seconds": item.upper_seconds,
+                    "combine_weight": item.combine_weight,
+                }
+                for item in lag_band_specs
+            ],
             "min_lag_count": min_lag_count,
             "min_transition_count": min_transition_count,
             "alpha": alpha,
@@ -309,6 +357,7 @@ def run() -> None:
         output_artifacts={
             "precision_graph": build_artifact_manifest(path=precision_graph_path, dataframe=precision_df, row_count=len(precision_pdf)),
             "event_graph": build_artifact_manifest(path=event_graph_path, dataframe=event_sdf, row_count=event_count_out),
+            "lag_profile": build_artifact_manifest(path=lag_profile_path, dataframe=lag_profile_sdf, row_count=lag_profile_count_out),
             "lag_graph": build_artifact_manifest(path=lag_graph_path, dataframe=lag_sdf, row_count=lag_count_out),
             "transition_graph": build_artifact_manifest(path=transition_graph_path, dataframe=transition_sdf, row_count=transition_count_out),
             "fused_graph": build_artifact_manifest(path=fused_graph_path, dataframe=fused_df, row_count=fused_count_out),
@@ -323,6 +372,7 @@ def run() -> None:
             "graph_component_cache": {
                 "precision_graph_path": precision_graph_path,
                 "event_graph_path": event_graph_path,
+                "lag_profile_path": lag_profile_path,
                 "lag_graph_path": lag_graph_path,
                 "transition_graph_path": transition_graph_path,
                 "fused_graph_path": fused_graph_path,
@@ -330,13 +380,14 @@ def run() -> None:
             }
         },
     )
-    log_stage_manifest_if_active(stage_manifest, "reports/stages/11_build_graph_manifest.json")
+    log_stage_manifest_if_active(stage_manifest, "reports/stages/50_build_graph_manifest.json")
     LOGGER.info(
-        "pipeline=build_graph format=%s write_mode=%s precision_edges=%s event_edges=%s lag_edges=%s transition_edges=%s fused_edges=%s parameter_universe=%s timing_ms=%s",
+        "pipeline=build_graph format=%s write_mode=%s precision_edges=%s event_edges=%s lag_profile_edges=%s lag_edges=%s transition_edges=%s fused_edges=%s parameter_universe=%s timing_ms=%s",
         table_format,
         write_mode,
         len(precision_pdf),
         event_count_out,
+        lag_profile_count_out,
         lag_count_out,
         transition_count_out,
         fused_count_out,
