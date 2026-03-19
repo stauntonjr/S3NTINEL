@@ -3,16 +3,17 @@
 
 import os
 
-from libs.anomaly.attribution import (
-    build_anomaly_event_attribution_df,
-    build_anomaly_telemetry_attribution_df,
-    build_anomaly_window_attribution_df,
+from libs.anomaly import (
+    build_anomaly_event_attribution_table,
+    build_anomaly_telemetry_attribution_table,
+    build_anomaly_window_attribution_table,
 )
 from libs.io.delta import get_spark, read_table, upsert_table, write_table
 from libs.perf import (
     build_artifact_manifest,
     build_stage_manifest,
     get_logger,
+    log_memory_usage,
     log_dict_artifact_if_active,
     log_params_if_active,
     log_stage_manifest_if_active,
@@ -26,6 +27,7 @@ LOGGER = get_logger(__name__)
 
 
 @track_mlflow_run(stage_name="80_anomaly_attribution", logger=LOGGER)
+@log_memory_usage(logger=LOGGER, label="80_anomaly_attribution")
 @log_wall_time(logger=LOGGER)
 def run() -> None:
     context = build_context()
@@ -59,7 +61,7 @@ def run() -> None:
     hierarchy_sensor_map_df = read_table(spark, hierarchy_sensor_map_path, fmt=table_format)
     raw_df = read_table(spark, raw_path, fmt=table_format)
 
-    anomaly_window_attribution_df = build_anomaly_window_attribution_df(
+    anomaly_window_attribution_df = build_anomaly_window_attribution_table(
         calibrated_df=calibrated_df,
         phase_windows_df=phase_windows_df,
         windows_df=windows_df,
@@ -68,13 +70,13 @@ def run() -> None:
         raw_df=raw_df,
         top_k_per_subsystem=top_k_per_subsystem,
     )
-    anomaly_telemetry_attribution_df = build_anomaly_telemetry_attribution_df(
+    anomaly_telemetry_attribution_df = build_anomaly_telemetry_attribution_table(
         calibrated_df=calibrated_df,
         windows_df=windows_df,
         raw_df=raw_df,
         hierarchy_sensor_map_df=hierarchy_sensor_map_df,
     )
-    anomaly_event_attribution_df = build_anomaly_event_attribution_df(
+    anomaly_event_attribution_df = build_anomaly_event_attribution_table(
         calibrated_df=calibrated_df,
         windows_df=windows_df,
         events_df=events_df,

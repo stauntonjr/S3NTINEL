@@ -94,7 +94,7 @@ observed telemetry and reused during backbone, graph, phase, and inference work.
 This cache is what makes backbone-size or ridge sweeps cheap without rebuilding
 window features.
 
-## 3.2 `11_graph_fit`
+## 3.2 `11_build_graph`
 
 ### canonical outputs
 
@@ -194,7 +194,7 @@ Suggested schema:
 
 ```json
 {
-  "stage_name": "11_graph_fit",
+  "stage_name": "11_build_graph",
   "stage_version": "v2",
   "run_id": "uuid-or-mlflow-run-id",
   "created_at_utc": "2026-03-07T12:34:56Z",
@@ -378,7 +378,7 @@ The next implementation steps should be:
 1. add a reusable manifest writer/helper
 2. add per-stage manifest emission for:
    - `10_backbone_fit`
-   - `11_graph_fit`
+   - `11_build_graph`
    - `50_phase_fit`
    - `60_window_scores_raw`
 3. promote current graph cache JSON into a formal replay cache artifact with manifest

@@ -101,11 +101,15 @@ class Aircraft:
         step_inputs_by_module: Mapping[str, Mapping[str, BehaviorStepInput]],
         initial_state_by_module: Mapping[str, Mapping[str, Any]] | None = None,
         fault_context_by_module: Mapping[str, Mapping[str, Mapping[str, Any]]] | None = None,
+        coupling_misbehavior_context_by_id: Mapping[str, Mapping[str, Any]] | None = None,
         apply_faults: bool = True,
         timestamp_utc: datetime | None = None,
         current_phase_label: str | None = None,
     ) -> dict[str, list[BehaviorSample]]:
         samples_by_module_id: dict[str, list[BehaviorSample]] = {}
+        for module in self._index.modules_by_id.values():
+            for port in module.input_ports.values():
+                port.metadata = {}
         for system in self.systems:
             samples_by_module_id.update(
                 system.step(
@@ -114,6 +118,7 @@ class Aircraft:
                     outgoing_couplings_by_source_module=self._outgoing_couplings_by_source_module,
                     initial_state_by_module=initial_state_by_module or {},
                     fault_context_by_module=fault_context_by_module or {},
+                    coupling_misbehavior_context_by_id=coupling_misbehavior_context_by_id or {},
                     apply_faults=apply_faults,
                     timestamp_utc=timestamp_utc,
                     current_phase_label=current_phase_label,

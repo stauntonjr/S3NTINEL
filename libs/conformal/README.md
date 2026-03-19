@@ -6,11 +6,11 @@
 
 ## How To Use
 
-- Use `build_calibrated_scores_df(...)` through the package surface or the scoring stage.
+- Use `build_calibrated_window_scores_table(...)` through the package surface or the scoring stage.
 
 ## Contents
 
-- `build.py`
+- `pipeline.py`
   - empirical score calibration over detected phase partitions
 
 ## Model / Concepts

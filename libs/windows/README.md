@@ -5,9 +5,9 @@
 `libs/windows` owns:
 - window lifecycle and closure semantics
 - per-window signal buffering
-- window streaming
+- the canonical segmented Spark window builder
 - window feature extraction
-- the `WindowFeaturesDataFrame` artifact
+- the `window_features` artifact
 
 It does not own:
 - raw event detection
@@ -16,9 +16,10 @@ It does not own:
 
 ## How To Use
 
-- Use `WindowPolicy`, `Window`, and `WindowStream` for the runtime model.
-- Use `WindowFeatures` for one-window feature semantics.
-- Use `build_window_features_dataframe(...)` or `build_window_features_spark_dataframe(...)` for dataframe materialization.
+- Use `WindowPolicy`, `Window`, and `AdaptiveWindowPlan` for the active runtime model.
+- Use `build_windows_table(...)` for canonical window materialization.
+- Use `build_window_features_spark_table(...)` for canonical dataframe materialization.
+- Use `build_window_features_with_diagnostics_spark_table(...)` during development when you need explicit per-step timings and row counts.
 
 ## Contents
 
@@ -27,32 +28,21 @@ It does not own:
   - `Window`
 - `buffer.py`
   - `WindowSensorBuffer`
-- `stream.py`
-  - `WindowStream`
-- `features.py`
-  - `WindowFeatures`
-  - `WindowScaler`
-  - `WindowFeatureSelection`
-- `context.py`
-  - window-context resolution
 - `coverage.py`
   - coverage sampling helpers
-- `adaptive.py`
-  - Spark/grouped adaptive window adapter
-- `window_features_dataframe.py`
-  - dataframe adapter over context and features
+- `features.py`
+  - canonical Spark `window_features` builder
 - `pipeline.py`
-  - thin strategy dispatch
+  - segmented Spark window orchestration
 
 ## Model / Concepts
 
 The windows model is:
 - `WindowPolicy` decides when a window closes
-- `Window` owns one window’s mutable state
+- `Window` owns one window's mutable state
 - `WindowSensorBuffer` owns last-seen sensor state within a window
-- `WindowStream` manages windows over ordered events
-- `WindowFeatures` represents the end-of-window feature semantics
-- `WindowFeaturesDataFrame` is the many-window artifact used by backbone, graph, and phase
+- `AdaptiveWindowPlan` is the canonical segmented Spark window builder
+- `window_features` is the many-window artifact used by backbone, graph, and phase
 
 ## Data / Artifacts
 
@@ -75,10 +65,10 @@ Windows convert a stream of events and telemetry updates into analysis segments 
 
 ## Testing / Validation
 
-- unit tests cover buffer, window, stream, and feature behavior
+- unit tests cover buffer, window, segmented window behavior, and feature behavior
 - integration tests cover adaptive windowing and feature dataframe construction
 
 ## Notes / Constraints
 
-- The canonical artifact name is `WindowFeaturesDataFrame`, replacing older `window_x` terminology.
-- Spark is the preferred hot-path execution model; pandas is tolerated only where there is a specific technical reason.
+- The canonical persisted artifact is `window_features`, replacing older `window_x` terminology.
+- Spark is the canonical hot-path execution model.

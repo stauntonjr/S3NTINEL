@@ -19,6 +19,7 @@ def build_drive_coupling_spec(
     source_mode_gate: tuple[str, ...] = (),
     target_mode_name: str | None = None,
     target_mode_gate: tuple[str, ...] = (),
+    allowed_misbehavior_families: tuple[str, ...] = (),
 ) -> CouplingSpec:
     return CouplingSpec(
         source_module_id=source_module_id,
@@ -34,6 +35,7 @@ def build_drive_coupling_spec(
         source_mode_gate=tuple(source_mode_gate),
         target_mode_name=target_mode_name,
         target_mode_gate=tuple(target_mode_gate),
+        allowed_misbehavior_families=tuple(str(name) for name in allowed_misbehavior_families),
     )
 
 
@@ -47,6 +49,7 @@ def build_enable_coupling_spec(
     sign: int = 1,
     lag_seconds: float = 0.0,
     phase_gate: tuple[str, ...] = (),
+    allowed_misbehavior_families: tuple[str, ...] = (),
 ) -> CouplingSpec:
     return CouplingSpec(
         source_module_id=source_module_id,
@@ -58,6 +61,7 @@ def build_enable_coupling_spec(
         sign=sign,
         lag_seconds=lag_seconds,
         phase_gate=tuple(phase_gate),
+        allowed_misbehavior_families=tuple(str(name) for name in allowed_misbehavior_families),
     )
 
 
@@ -71,6 +75,7 @@ def build_inhibit_coupling_spec(
     sign: int = 1,
     lag_seconds: float = 0.0,
     phase_gate: tuple[str, ...] = (),
+    allowed_misbehavior_families: tuple[str, ...] = (),
 ) -> CouplingSpec:
     return CouplingSpec(
         source_module_id=source_module_id,
@@ -82,4 +87,5 @@ def build_inhibit_coupling_spec(
         sign=sign,
         lag_seconds=lag_seconds,
         phase_gate=tuple(phase_gate),
+        allowed_misbehavior_families=tuple(str(name) for name in allowed_misbehavior_families),
     )

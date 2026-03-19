@@ -4,13 +4,17 @@ import pandas as pd
 
 from libs.simulation.aircraft.examples import (
     build_coupled_module_aircraft_spec,
+    build_power_pressurization_hierarchy_medium_aircraft_spec,
     build_power_pressurization_hierarchy_composite_aircraft_spec,
+    build_power_pressurization_hierarchy_smoke_aircraft_spec,
     build_power_chain_aircraft_spec,
     build_pressurization_aircraft_spec,
 )
 from libs.simulation.flight.examples import (
     build_coupled_module_flight_spec,
+    build_power_pressurization_hierarchy_medium_flight_spec,
     build_power_pressurization_hierarchy_composite_flight_spec,
+    build_power_pressurization_hierarchy_smoke_flight_spec,
     build_power_chain_flight_spec,
     build_pressurization_flight_spec,
 )
@@ -72,6 +76,8 @@ def test_build_flight_specs_construct_live_flights():
     for builder in (
         build_coupled_module_flight_spec,
         build_power_chain_flight_spec,
+        build_power_pressurization_hierarchy_smoke_flight_spec,
+        build_power_pressurization_hierarchy_medium_flight_spec,
         build_power_pressurization_hierarchy_composite_flight_spec,
         build_pressurization_flight_spec,
     ):
@@ -116,27 +122,72 @@ def test_pressurization_flight_emits_lagged_cabin_response():
 
 
 def test_composite_aircraft_spec_is_large_enough_for_hierarchy_discovery():
-    aircraft_spec = build_power_pressurization_hierarchy_composite_aircraft_spec()
-    systems = aircraft_spec.systems
-    subsystems = tuple(subsystem for system in systems for subsystem in system.subsystems)
-    modules = tuple(module for subsystem in subsystems for module in subsystem.modules)
-    parameters = tuple(parameter for module in modules for parameter in module.parameters)
+    expectations = {
+        "smoke": (build_power_pressurization_hierarchy_smoke_aircraft_spec, 6, 12, 24, 14),
+        "medium": (build_power_pressurization_hierarchy_medium_aircraft_spec, 12, 24, 48, 28),
+        "composite": (build_power_pressurization_hierarchy_composite_aircraft_spec, 24, 48, 96, 56),
+    }
 
-    assert tuple(system.system_id for system in systems) == ("SYS_POWER", "SYS_ECS", "SYS_AIRFRAME")
-    assert len(subsystems) == 6
-    assert len(modules) == 12
-    assert len(parameters) == 24
-    assert any(coupling.lag_seconds > 0.0 for coupling in aircraft_spec.couplings)
-    assert any(coupling.phase_gate for coupling in aircraft_spec.couplings)
-    assert any(coupling.source_mode_gate for coupling in aircraft_spec.couplings)
+    for _scale, (builder, subsystem_count, module_count, parameter_count, coupling_count) in expectations.items():
+        aircraft_spec = builder()
+        systems = aircraft_spec.systems
+        subsystems = tuple(subsystem for system in systems for subsystem in system.subsystems)
+        modules = tuple(module for subsystem in subsystems for module in subsystem.modules)
+        parameters = tuple(parameter for module in modules for parameter in module.parameters)
+
+        assert tuple(system.system_id for system in systems) == ("SYS_POWER", "SYS_ECS", "SYS_AIRFRAME")
+        assert len(subsystems) == subsystem_count
+        assert len(modules) == module_count
+        assert len(parameters) == parameter_count
+        assert len(aircraft_spec.couplings) == coupling_count
+        assert any(coupling.lag_seconds > 0.0 for coupling in aircraft_spec.couplings)
+        assert any(coupling.phase_gate for coupling in aircraft_spec.couplings)
+        assert any(coupling.source_mode_gate for coupling in aircraft_spec.couplings)
+        assert all(coupling.allowed_misbehavior_families for coupling in aircraft_spec.couplings)
+        assert {0.5, 1.0, 2.0}.issubset({float(parameter.sampling_rate_hz or 0.0) for parameter in parameters})
 
 
-def test_composite_flight_spec_carries_faults_and_validation_expectations():
-    flight_spec = build_power_pressurization_hierarchy_composite_flight_spec()
+def test_composite_flight_spec_carries_misbehaviors_and_validation_expectations():
+    expectations = {
+        "smoke": (build_power_pressurization_hierarchy_smoke_flight_spec, 24, 14, 9),
+        "medium": (build_power_pressurization_hierarchy_medium_flight_spec, 48, 28, 18),
+        "composite": (build_power_pressurization_hierarchy_composite_flight_spec, 96, 56, 36),
+    }
+    expected_phase_segments = (
+        ("gate_turnaround", 480),
+        ("takeoff_climb", 720),
+        ("cruise", 1440),
+        ("descent_approach", 720),
+    )
 
-    assert flight_spec.metadata["flight_name"] == "power_pressurization_hierarchy_composite"
-    assert len(flight_spec.input_program_spec.steps) == 32
-    assert flight_spec.phase_program_spec is not None
-    assert flight_spec.fault_program_spec is not None
-    assert len(flight_spec.fault_program_spec.windows) == 4
-    assert flight_spec.metadata["validation"]["expected_lag_edges"]
+    for scale, (builder, parameter_count, coupling_count, misbehavior_count) in expectations.items():
+        flight_spec = builder()
+        systems = flight_spec.aircraft_spec.systems
+        parameters = tuple(
+            parameter
+            for system in systems
+            for subsystem in system.subsystems
+            for module in subsystem.modules
+            for parameter in module.parameters
+        )
+
+        assert flight_spec.metadata["flight_name"] == f"power_pressurization_hierarchy_{scale}"
+        assert len(flight_spec.input_program_spec.steps) == 3360
+        assert flight_spec.input_program_spec.hold_last_step is False
+        assert flight_spec.input_program_spec.metadata["default_dt_seconds"] == 0.5
+        assert flight_spec.metadata["simulation_defaults"]["dt_seconds"] == 0.5
+        assert flight_spec.metadata["simulation_defaults"]["n_steps"] == 3360
+        assert flight_spec.phase_program_spec is not None
+        assert tuple(
+            (str(segment.phase_label), int(segment.duration_steps))
+            for segment in flight_spec.phase_program_spec.schedule.segments
+        ) == expected_phase_segments
+        assert flight_spec.misbehavior_program_spec is not None
+        assert len(flight_spec.misbehavior_program_spec.windows) == misbehavior_count
+        assert flight_spec.fault_program_spec is not None
+        assert len(flight_spec.fault_program_spec.windows) == misbehavior_count
+        assert len(parameters) == parameter_count
+        assert len(flight_spec.aircraft_spec.couplings) == coupling_count
+        assert flight_spec.metadata["validation"]["expected_lag_edges"]
+        assert flight_spec.metadata["validation"]["expected_fused_edges"]
+        assert flight_spec.metadata["validation"]["expected_coupling_signatures"]

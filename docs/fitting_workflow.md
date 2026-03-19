@@ -67,11 +67,11 @@ Purpose:
 ### 3.4 Window feature extraction and backbone fitting
 
 Artifacts:
-- `WindowFeaturesDataFrame` as the conceptual many-window feature artifact
+- `window_features` as the many-window feature artifact
 - `backbone`
 - `backbone_sensor_energy`
 
-The old `window_x` terminology has been replaced conceptually by the `WindowFeaturesDataFrame` and `WindowFeatures` model.
+The old `window_x` terminology has been replaced by the persisted `window_features` artifact and its per-window feature representation.
 
 ### 3.5 Graph, phase, and scoring stages
 

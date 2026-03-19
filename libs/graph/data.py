@@ -13,15 +13,15 @@ def prepare_events_df(events_df: pd.DataFrame) -> pd.DataFrame:
     default_text = pd.Series("", index=rows.index, dtype="object")
     rows["tail_id"] = rows.get("tail_id", default_text).astype(str)
     rows["flight_id"] = rows.get("flight_id", default_text).astype(str)
-    if "parameter_name" not in rows.columns and "sensor" in rows.columns:
-        rows["parameter_name"] = rows["sensor"]
-    if "timestamp_utc" not in rows.columns and "ts" in rows.columns:
-        rows["timestamp_utc"] = rows["ts"]
+    if "event_seq_id" not in rows.columns:
+        raise ValueError("graph builders expect canonical events with event_seq_id; missing columns: event_seq_id")
     rows["parameter_name"] = rows.get("parameter_name", default_text).astype(str)
+    rows["event_seq_id"] = pd.to_numeric(rows.get("event_seq_id"), errors="coerce")
     rows["timestamp_utc"] = pd.to_datetime(rows.get("timestamp_utc"), utc=True, errors="coerce")
     rows["event_type_detected"] = rows.get("event_type_detected", default_text).astype(str)
-    rows = rows.dropna(subset=["tail_id", "flight_id", "parameter_name", "timestamp_utc"])
-    return rows.sort_values(["tail_id", "flight_id", "timestamp_utc", "parameter_name"], kind="mergesort").reset_index(drop=True)
+    rows = rows.dropna(subset=["tail_id", "flight_id", "event_seq_id", "parameter_name", "timestamp_utc"])
+    rows["event_seq_id"] = rows["event_seq_id"].astype("int64")
+    return rows.sort_values(["tail_id", "flight_id", "event_seq_id"], kind="mergesort").reset_index(drop=True)
 
 
 def prepare_windows_df(windows_df: pd.DataFrame) -> pd.DataFrame:
@@ -92,14 +92,14 @@ def retain_top_k_directed(
     return [row for row in rows if (str(row["parameter_name_u"]), str(row["parameter_name_v"])) in keep]
 
 
-def parameter_name_union_from_window_x(
-    window_x_df: pd.DataFrame,
+def parameter_name_union_from_window_features(
+    window_features_df: pd.DataFrame,
     events_df: pd.DataFrame,
     selected_sensors: list[str],
 ) -> list[str]:
     return sorted(
         set(
-            window_x_df.get("continuous_vector_t_end_scaled", pd.Series(dtype=object))
+            window_features_df.get("continuous_vector_t_end_scaled", pd.Series(dtype=object))
             .apply(lambda item: list(item.keys()) if isinstance(item, dict) else [])
             .explode()
             .dropna()

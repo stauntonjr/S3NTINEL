@@ -14,6 +14,7 @@ It does not own:
 - Use `libs/io/schemas/*` for persisted artifact schemas.
 - Use `libs/io/contracts.py` for in-memory row contracts.
 - Use `delta.py`, `pandas_spark.py`, and `transforms.py` for IO-oriented helpers.
+  Import `pandas_spark.py` directly when you need the local pandas-to-Spark bridge; it is not part of the main `libs.io` package root API.
 
 ## Contents
 

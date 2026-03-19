@@ -15,8 +15,8 @@ def add_source_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument("--flight-name", default="power_chain", help="Named flight")
     parser.add_argument("--tail-id", default="T_SIM", help="Synthetic tail identifier")
     parser.add_argument("--flight-id", default="F_SIM", help="Synthetic flight identifier")
-    parser.add_argument("--n-steps", type=int, default=8, help="Number of simulation ticks")
-    parser.add_argument("--dt-seconds", type=float, default=1.0, help="Tick duration in seconds")
+    parser.add_argument("--n-steps", type=int, default=None, help="Number of simulation ticks; defaults to the flight preset mission length")
+    parser.add_argument("--dt-seconds", type=float, default=None, help="Tick duration in seconds; defaults to the flight preset mission cadence")
     return parser
 
 
@@ -32,7 +32,7 @@ def add_window_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument("--window-event-threshold", type=int, default=20, help="Window event threshold")
     parser.add_argument("--window-min-ms", type=int, default=50, help="Minimum window duration in ms")
     parser.add_argument("--window-inactivity-timeout-ms", type=int, default=0, help="Window inactivity timeout in ms")
-    parser.add_argument("--window-strategy", default="bucketed", choices=("bucketed", "stream_parity"))
+    parser.add_argument("--window-strategy", default="segmented", choices=("segmented",))
     return parser
 
 

@@ -27,13 +27,14 @@ Canonical stage order:
 1. `00_ingest_raw.py`
 2. `05_parameter_profiles_fit.py`
 3. `10_backbone_fit.py`
-4. `11_graph_fit.py`
-5. `20_events_extract.py`
-6. `30_windows_adaptive.py`
-7. `50_phase_fit.py`
-8. `60_window_scores_raw.py`
-9. `70_window_scores_calibrate.py`
-10. `80_anomaly_attribution.py`
+4. `11_build_graph.py`
+5. `12_fit_hierarchy.py`
+6. `20_events_extract.py`
+7. `30_windows_adaptive.py`
+8. `50_phase_fit.py`
+9. `60_window_scores_raw.py`
+10. `70_window_scores_calibrate.py`
+11. `80_anomaly_attribution.py`
 
 Grouped execution is coordinated by `pipelines/_pipeline_runner.py`.
 

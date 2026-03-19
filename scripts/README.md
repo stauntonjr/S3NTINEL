@@ -28,15 +28,51 @@ Incremental patches:
 ## Canonical Simulation
 
 - Run the canonical simulation pipeline into one persisted run bundle:
-  - `python -m scripts.run_sim_pipeline --flight-name power_chain --base-dir data/sim_runs --mode full --format parquet`
+  - `python -m scripts.run_sim_pipeline --flight-name power_chain --base-dir data/simulation_runs --mode full --format parquet`
   - this emits canonical raw telemetry plus simulation truth metadata, then runs the real persisted fitting and inference stages into one run directory containing:
     - input raw telemetry
     - fitted/profiled tables
+    - persisted `window_features`
     - structural graph artifacts
     - phase/scoring/attribution outputs
     - local stage summaries and manifests under `reports/`
     - a run manifest at `reports/run_manifest.json`
     - a consolidated console log at `logs/run.log`
+- Realistic hierarchy presets are available through the same entrypoint:
+  - `power_pressurization_hierarchy_smoke`
+  - `power_pressurization_hierarchy_medium`
+  - `power_pressurization_hierarchy_composite`
+  - the realistic preset family uses a `28` minute authored mission on a `0.5` second internal tick, sparse multi-rate emission, parameter and coupling misbehavior truth, and writes `reports/coupling_validation_summary.json` alongside the existing validation reports
+- For larger local full runs on a laptop, set `S3NTINEL_SPARK_PROFILE=laptop_large_sim` before invoking the runner.
+  - the profile currently applies `local[4]`, `spark.driver.memory=8g`, `spark.driver.maxResultSize=2g`, `spark.sql.shuffle.partitions=16`, `spark.default.parallelism=8`, adaptive execution, Kryo serialization, and a dedicated `/tmp` spill directory
+  - explicit `S3NTINEL_SPARK_*` env vars still override the profile when you need to tune around a specific machine or workload
+  - if you also want the benchmark-winning larger sequence segments, use:
+    - `S3NTINEL_SPARK_PROFILE=laptop_large_sim_large_segments`
+    - this keeps the same Spark runtime settings as `laptop_large_sim` and additionally applies:
+      - event segments: `100000` rows / `1800000` ms
+      - window segments: `100000` rows / `1800000` ms
+      - phase segments: `10000` rows / `3600000` ms
+- Profile semantics-preserving performance variants of the canonical simulation pipeline:
+  - `python -m scripts.profile_pipeline_performance --flight-name power_pressurization_hierarchy_composite --mode full --base-dir data/performance_profiles`
+  - run a single named variant when you want a targeted check instead of the whole quick sweep:
+    - `python -m scripts.profile_pipeline_performance --flight-name power_pressurization_hierarchy_composite --mode full --variant baseline --variant all_small_segments`
+  - the benchmark runner executes the canonical simulation pipeline repeatedly with different sequence-segmentation overrides and writes:
+    - per-variant child run bundles under `runs/`
+    - `reports/performance_profile_summary.json`
+    - `reports/performance_profile_summary.md`
+  - variant failures are recorded in the summary by default; the run only exits non-zero if every variant fails
+  - pass `--fail-on-variant-error` if you want any failed variant to make the benchmark command fail
+  - the built-in quick sweep compares:
+    - baseline
+    - moderately smaller event/window/phase segments
+    - larger event/window/phase segments
+  - segment tuning uses these semantics-preserving env overrides:
+    - `S3NTINEL_EVENT_SEGMENT_MAX_ROWS`
+    - `S3NTINEL_EVENT_SEGMENT_MAX_SPAN_MS`
+    - `S3NTINEL_WINDOW_SEGMENT_MAX_ROWS`
+    - `S3NTINEL_WINDOW_SEGMENT_MAX_SPAN_MS`
+    - `S3NTINEL_PHASE_SEGMENT_MAX_ROWS`
+    - `S3NTINEL_PHASE_SEGMENT_MAX_SPAN_MS`
 
 ## Developer Utilities
 
@@ -52,7 +88,7 @@ These are useful for local development and regression checks, but they are not t
     - `00_ingest_raw.py`
     - `05_parameter_profiles_fit.py`
     - `10_backbone_fit.py`
-    - `11_graph_fit.py`
+    - `11_build_graph.py`
     - `20_events_extract.py`
     - `30_windows_adaptive.py`
     - `50_phase_fit.py`
@@ -63,8 +99,8 @@ These are useful for local development and regression checks, but they are not t
     - `reports/smoke_quality_report.json`
     - includes phase-detection accuracy/confusion if `phase_labels` are present
     - includes hierarchy exact-match diagnostics if `hierarchy_sensor_map_label` is present
-- Compare `bucketed` vs `stream_parity` windows during smoke:
-  - `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format parquet --compare-window-strategies`
+- Smoke runs now use the canonical segmented window builder:
+  - `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format parquet`
 - Sweep graph/hierarchy settings against the smoke pipeline:
   - `python -m scripts.sweep_smoke_graph_hierarchy --base-dir data/smoke_sweep --format parquet --min-warm 1`
   - if your current shell interpreter is not the active repo env, run:
@@ -81,7 +117,7 @@ Fitting:
   - `00_ingest_raw.py`
   - `05_parameter_profiles_fit.py`
   - `10_backbone_fit.py`
-  - `11_graph_fit.py`
+  - `11_build_graph.py`
 
 Inference:
 

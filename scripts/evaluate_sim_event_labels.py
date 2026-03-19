@@ -1,4 +1,4 @@
-"""Evaluate detector performance against simulator event labels per sensor type and event type."""
+"""Evaluate detector performance against simulator event labels per parameter type and event type."""
 
 from __future__ import annotations
 
@@ -8,10 +8,10 @@ from collections import Counter
 from pathlib import Path
 
 import pandas as pd
+from pyspark.sql import SparkSession
 
-from libs.common import SensorDataType, normalize_sensor_datatype
-from libs.events.categorical import CategoricalSample, detect_categorical_events_stream
-from libs.events.extrema import ContinuousDetectorConfig, ContinuousSample, detect_continuous_events_stream
+from libs.common import ParameterDataType, normalize_parameter_datatype
+from libs.events import build_events_table
 from libs.testing.evaluation import evaluate_event_detection
 
 
@@ -48,18 +48,20 @@ def _load_telemetry_df(dataset_root: Path, telemetry_table: str) -> pd.DataFrame
 def _build_label_events(telemetry_df: pd.DataFrame) -> list[dict[str, object]]:
     events: list[dict[str, object]] = []
     for row in telemetry_df.itertuples(index=False):
-        # Use per-sensor simulated event label `event_type_label` when present
+        # Use per-parameter simulated event label `event_type_label` when present.
         sim_event = getattr(row, "event_type_label", None)
         if not sim_event:
             continue
         ts = pd.to_datetime(getattr(row, "timestamp_utc"), utc=True).to_pydatetime()
-        parameter_datatype = normalize_sensor_datatype(getattr(row, "parameter_datatype", SensorDataType.UNKNOWN.value))
+        parameter_datatype = normalize_parameter_datatype(
+            getattr(row, "parameter_datatype", ParameterDataType.UNKNOWN.value)
+        )
         events.append(
             {
                 "tail_id": str(getattr(row, "tail_id")),
                 "flight_id": str(getattr(row, "flight_id")),
-                "sensor": str(getattr(row, "sensor")),
-                "ts": ts,
+                "parameter_name": str(getattr(row, "sensor")),
+                "timestamp_utc": ts,
                 "event_type_label": str(sim_event),
                 "parameter_datatype": parameter_datatype,
             }
@@ -72,41 +74,63 @@ def _build_detected_events(
     *,
     emit_extrema_events: bool,
 ) -> list[dict[str, object]]:
-    ordered = telemetry_df.sort_values(["tail_id", "flight_id", "sensor", "timestamp_utc"]).reset_index(drop=True)
-    cfg = ContinuousDetectorConfig(emit_extrema_events=emit_extrema_events)
+    spark = (
+        SparkSession.builder.appName("evaluate_sim_event_labels")
+        .master("local[*]")
+        .config("spark.sql.session.timeZone", "UTC")
+        .getOrCreate()
+    )
+    event_source_df = telemetry_df.rename(columns={"sensor": "parameter_name"}).copy()
+    event_source_df["parameter_name"] = event_source_df["parameter_name"].astype(str)
+    event_source_df["parameter_datatype_profiled"] = event_source_df.get("parameter_datatype", ParameterDataType.UNKNOWN.value).map(
+        normalize_parameter_datatype
+    )
+    event_source_df["val"] = pd.to_numeric(
+        event_source_df.get("parameter_value_clean", event_source_df.get("parameter_value")),
+        errors="coerce",
+    )
+    spark_df = spark.createDataFrame(
+        event_source_df[
+            [
+                "tail_id",
+                "flight_id",
+                "timestamp_utc",
+                "parameter_name",
+                "parameter_value",
+                "val",
+                "date_utc",
+                "parameter_datatype_profiled",
+            ]
+        ]
+    )
+    events_df = build_events_table(spark_df)
+    rows = events_df.select(
+        "tail_id",
+        "flight_id",
+        "parameter_name",
+        "timestamp_utc",
+        "event_type_detected",
+    ).collect()
+    datatype_lookup = (
+        event_source_df[["tail_id", "flight_id", "parameter_name", "parameter_datatype_profiled"]]
+        .drop_duplicates(subset=["tail_id", "flight_id", "parameter_name"])
+        .set_index(["tail_id", "flight_id", "parameter_name"])["parameter_datatype_profiled"]
+        .to_dict()
+    )
     events: list[dict[str, object]] = []
-
-    for (tail_id, flight_id, sensor), group_df in ordered.groupby(["tail_id", "flight_id", "sensor"], sort=False):
-        group_df = group_df.sort_values("timestamp_utc")
-        dtype_series = group_df.get("parameter_datatype")
-        dtype = (
-            normalize_sensor_datatype(dtype_series.dropna().astype(str).iloc[0])
-            if dtype_series is not None and dtype_series.notna().any()
-            else SensorDataType.UNKNOWN.value
+    for row in rows:
+        parameter_key = (str(row["tail_id"]), str(row["flight_id"]), str(row["parameter_name"]))
+        events.append(
+            {
+                "tail_id": str(row["tail_id"]),
+                "flight_id": str(row["flight_id"]),
+                "parameter_name": str(row["parameter_name"]),
+                "timestamp_utc": pd.to_datetime(row["timestamp_utc"], utc=True).to_pydatetime(),
+                "event_type_detected": str(row["event_type_detected"]),
+                "parameter_datatype": datatype_lookup.get(parameter_key, ParameterDataType.UNKNOWN.value),
+            }
         )
-
-        if dtype == SensorDataType.NUMERIC.value:
-            samples: list[ContinuousSample] = []
-            for row in group_df.itertuples(index=False):
-                value = getattr(row, "parameter_value_clean", None)
-                if pd.isna(value):
-                    raw = getattr(row, "parameter_value", None)
-                    value = None if pd.isna(raw) else float(raw)
-                ts = pd.to_datetime(getattr(row, "timestamp_utc"), utc=True).to_pydatetime()
-                samples.append(ContinuousSample(str(tail_id), str(flight_id), str(sensor), ts, None if value is None else float(value)))
-            for event in detect_continuous_events_stream(samples, config=cfg):
-                events.append({**event, "parameter_datatype": dtype})
-        elif dtype in {SensorDataType.BINARY.value, SensorDataType.CATEGORICAL.value, SensorDataType.HIGH_CARDINALITY.value}:
-            samples: list[CategoricalSample] = []
-            for row in group_df.itertuples(index=False):
-                state = getattr(row, "parameter_value", None)
-                if pd.isna(state):
-                    state = getattr(row, "parameter_value", None)
-                ts = pd.to_datetime(getattr(row, "timestamp_utc"), utc=True).to_pydatetime()
-                samples.append(CategoricalSample(str(tail_id), str(flight_id), str(sensor), ts, None if pd.isna(state) else str(state)))
-            for event in detect_categorical_events_stream(samples):
-                events.append({**event, "parameter_datatype": dtype})
-
+    spark.stop()
     return events
 
 
@@ -137,7 +161,7 @@ def main() -> None:
     key_space = sorted(
         {
             (
-                str(event.get("parameter_datatype", SensorDataType.UNKNOWN.value)),
+                str(event.get("parameter_datatype", ParameterDataType.UNKNOWN.value)),
                 str(event.get("event_type_label") or event.get("event_type_detected") or ""),
             )
             for event in label_events + detected_events

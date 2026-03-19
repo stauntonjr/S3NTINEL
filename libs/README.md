@@ -22,7 +22,7 @@ Those live under [`pipelines/`](./../pipelines/README.md), [`scripts/`](./../scr
 - `simulation/`
   - aircraft, flight, phase, fault, coupling, and authored examples
 - `windows/`
-  - window lifecycle, buffering, feature extraction, and the `WindowFeaturesDataFrame`
+  - window lifecycle, buffering, feature extraction, and the `window_features` artifact
 - `profiling/`
   - datatype, scaling, and behavior profiling
 - `backbone/`
@@ -30,7 +30,7 @@ Those live under [`pipelines/`](./../pipelines/README.md), [`scripts/`](./../scr
 - `graph/`
   - precision, event, lag, transition, fused graph, and hierarchy logic
 - `phase/`
-  - phase feature selection, runtime detection, analysis, and validation
+  - phase feature selection, detection, analysis, and validation
 - `scoring/`
   - raw and calibrated window scoring
 - `anomaly/`
@@ -48,7 +48,7 @@ Those live under [`pipelines/`](./../pipelines/README.md), [`scripts/`](./../scr
 - `conformal/`
   - score calibration implementation
 - `common/`
-  - narrow shared constants such as event types and sensor datatype helpers
+  - narrow shared constants such as event types and parameter datatype helpers
 
 ## Data / Artifacts
 

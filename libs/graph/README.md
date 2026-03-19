@@ -19,6 +19,7 @@ It does not own:
   - `FusedGraph`
   - `GraphHierarchy`
 - Use `libs/graph/pipeline.py` only as the Spark/table adapter layer for persisted stages.
+- Use `build_graph_components_with_diagnostics_spark_table(...)` during development when you need explicit per-component timings and row counts.
 
 ## Contents
 
@@ -27,7 +28,7 @@ It does not own:
 - `lag.py`
 - `transition.py`
 - `fused.py`
-- `hierarchy_model.py`
+- `hierarchy_artifacts.py`
   - first-class graph objects and hierarchy logic
 - `data.py`
   - graph data preparation helpers

@@ -2,128 +2,164 @@
 
 import os
 
+import numpy as np
+
 from libs.backbone import (
-    aggregate_backbone_gh,
-    build_backbone_gh_spark_table,
+    build_backbone_g_spark_table,
+    build_backbone_h_spark_table,
+    build_backbone_selected_sensor_frame,
     build_backbone_sensor_energy_spark_table,
-    select_backbone_sensors_by_energy,
+    select_backbone_sensors_by_energy_spark,
     solve_backbone_weights,
 )
-from libs.io.schemas import BACKBONE_SCHEMA, BACKBONE_SENSOR_ENERGY_SCHEMA
+from libs.io.schemas import BACKBONE_SCHEMA
 from libs.io.delta import get_spark, read_table, write_table
 from libs.perf import (
     build_artifact_manifest,
     build_stage_manifest,
     get_logger,
+    log_memory_usage,
     log_dict_artifact_if_active,
     log_params_if_active,
     log_stage_manifest_if_active,
     log_wall_time,
     track_mlflow_run,
 )
-from libs.windows import build_window_features_spark_dataframe
+from libs.windows import build_window_features_spark_table
 from pipelines.common import build_context
 
 
 LOGGER = get_logger(__name__)
 
-
-def _bounded_count(df: "DataFrame", *, limit: int) -> int:
-    return int(df.limit(max(int(limit), 0) + 1).count())
-
-
 @track_mlflow_run(stage_name="10_backbone_fit", logger=LOGGER)
+@log_memory_usage(logger=LOGGER, label="10_backbone_fit")
 @log_wall_time(logger=LOGGER)
 def run() -> None:
+    from pyspark.sql import functions as F
+    from pyspark import StorageLevel
+
     context = build_context()
     raw_path = os.getenv("S3NTINEL_RAW_TABLE_PATH", "data/delta/raw_telemetry")
+    events_path = os.getenv("S3NTINEL_EVENTS_TABLE_PATH", "data/delta/events")
     windows_path = os.getenv("S3NTINEL_WINDOWS_TABLE_PATH", "data/delta/windows")
+    window_features_path = os.getenv("S3NTINEL_WINDOW_FEATURES_TABLE_PATH", "")
     backbone_path = os.getenv("S3NTINEL_BACKBONE_TABLE_PATH", "data/delta/backbone")
     backbone_energy_path = os.getenv("S3NTINEL_BACKBONE_SENSOR_ENERGY_TABLE_PATH", "data/delta/backbone_sensor_energy")
     table_format = os.getenv("S3NTINEL_TABLE_FORMAT", "delta")
     write_mode = os.getenv("S3NTINEL_FIT_WRITE_MODE", "overwrite")
-    max_bridge_rows = int(os.getenv("S3NTINEL_MAX_BRIDGE_BACKBONE_INPUT_ROWS", "250000"))
+    max_backbone_sensor_universe = int(os.getenv("S3NTINEL_MAX_BACKBONE_SENSOR_UNIVERSE", "50000"))
 
     backbone_sensor_count = int(os.getenv("S3NTINEL_BACKBONE_SENSOR_COUNT", "8"))
     backbone_ridge_lambda = float(os.getenv("S3NTINEL_BACKBONE_RIDGE_LAMBDA", "1.0"))
 
     spark = get_spark("s3ntinel.backbone_fit")
     raw_df = read_table(spark, raw_path, fmt=table_format)
+    events_df = read_table(spark, events_path, fmt=table_format)
     windows_df = read_table(spark, windows_path, fmt=table_format)
-    raw_count = _bounded_count(raw_df, limit=max_bridge_rows)
-    windows_count = _bounded_count(windows_df, limit=max_bridge_rows)
-    if raw_count > max_bridge_rows or windows_count > max_bridge_rows:
-        raise RuntimeError(
-            "10_backbone_fit still uses a bounded pandas bridge; input exceeds "
-            f"S3NTINEL_MAX_BRIDGE_BACKBONE_INPUT_ROWS={max_bridge_rows}. "
-            "Reduce input size or replace this stage with a distributed implementation."
-        )
+    raw_count = int(raw_df.count())
+    events_count = int(events_df.count())
+    windows_count = int(windows_df.count())
 
-    empty_events_df = spark.createDataFrame(
-        [],
-        schema="tail_id string, flight_id string, parameter_name string, timestamp_utc timestamp, event_type_detected string, payload map<string,string>",
+    window_features_df = build_window_features_spark_table(raw_df, events_df, windows_df).persist(
+        StorageLevel.MEMORY_AND_DISK
     )
-    window_x_df = build_window_features_spark_dataframe(raw_df, empty_events_df, windows_df)
-    window_x_count = _bounded_count(window_x_df, limit=max_bridge_rows)
-    if window_x_count > max_bridge_rows:
-        raise RuntimeError(
-            "10_backbone_fit still performs a bounded driver-side solve after Spark aggregation; "
-            f"window_x exceeds S3NTINEL_MAX_BRIDGE_BACKBONE_INPUT_ROWS={max_bridge_rows}. "
-            "Replace the remaining backbone fit with a distributed implementation."
-        )
+    try:
+        window_features_count = int(window_features_df.count())
 
-    energy_sdf = build_backbone_sensor_energy_spark_table(window_x_df)
-    energy_pdf = energy_sdf.orderBy(energy_sdf.energy.desc(), energy_sdf.parameter_name.asc()).toPandas()
-    sensor_energy_rows = energy_pdf.to_dict(orient="records")
-    selected_sensors_c = select_backbone_sensors_by_energy(sensor_energy_rows, k=max(int(backbone_sensor_count), 1))
+        energy_sdf = build_backbone_sensor_energy_spark_table(window_features_df).persist(StorageLevel.MEMORY_AND_DISK)
+        try:
+            sensor_energy_count = int(energy_sdf.count())
+            selected_sensors_c = select_backbone_sensors_by_energy_spark(energy_sdf, k=max(int(backbone_sensor_count), 1))
+            selected_sensor_frame_df = build_backbone_selected_sensor_frame(
+                window_features_df,
+                selected_sensors=selected_sensors_c,
+            ).persist(StorageLevel.MEMORY_AND_DISK)
+            try:
+                g_row = build_backbone_g_spark_table(
+                    window_features_df,
+                    selected_sensors=selected_sensors_c,
+                    selected_sensor_frame_df=selected_sensor_frame_df,
+                ).first().asDict()
+                sensor_rows = (
+                    build_backbone_h_spark_table(
+                        window_features_df,
+                        selected_sensors=selected_sensors_c,
+                        selected_sensor_frame_df=selected_sensor_frame_df,
+                    )
+                    .limit(max_backbone_sensor_universe + 1)
+                    .collect()
+                )
+            finally:
+                selected_sensor_frame_df.unpersist()
+            if len(sensor_rows) > max_backbone_sensor_universe:
+                raise RuntimeError(
+                    "10_backbone_fit performs a bounded local ridge solve over the sensor universe; "
+                    f"sensor count {len(sensor_rows)} exceeds S3NTINEL_MAX_BACKBONE_SENSOR_UNIVERSE={max_backbone_sensor_universe}."
+                )
 
-    gh_sdf = build_backbone_gh_spark_table(window_x_df, selected_sensors=selected_sensors_c)
-    gh_pdf = gh_sdf.toPandas()
-    gh_rows = gh_pdf.to_dict(orient="records")
-    g, h, total_window_count = aggregate_backbone_gh(gh_rows)
-    all_sensors = (
-        window_x_df.selectExpr("explode(map_keys(continuous_vector_t_end_scaled)) as parameter_name")
-        .where("parameter_name is not null")
-        .distinct()
-        .orderBy("parameter_name")
-        .toPandas()["parameter_name"]
-        .astype(str)
-        .tolist()
-    )
-    weights_b = solve_backbone_weights(g, h, ridge_lambda=float(backbone_ridge_lambda))
+            total_window_count = int(g_row.get("window_count", 0) or 0)
+            g = np.asarray(
+                [
+                    [float(g_row.get(f"g_{i}_{j}", 0.0) or 0.0) for j in range(len(selected_sensors_c))]
+                    for i in range(len(selected_sensors_c))
+                ],
+                dtype=float,
+            )
+            all_sensors = [str(row["parameter_name"]) for row in sensor_rows if str(row["parameter_name"])]
+            h = np.asarray(
+                [
+                    [float(row["h_vector_c"][idx] or 0.0) for row in sensor_rows]
+                    for idx in range(len(selected_sensors_c))
+                ],
+                dtype=float,
+            )
+            weights_b = solve_backbone_weights(g, h, ridge_lambda=float(backbone_ridge_lambda))
 
-    backbone_pdf = spark.createDataFrame(
-        [
-            {
-                "backbone_version": 2,
-                "selected_sensors_c": list(selected_sensors_c),
-                "all_sensors": list(all_sensors),
-                "weights_b": [[float(value) for value in row] for row in weights_b.tolist()],
-                "lambda_ridge": float(backbone_ridge_lambda),
-                "training_window_count": int(total_window_count),
-            }
-        ]
-    ).toPandas()
+            backbone_rows = [
+                [
+                    {
+                        "backbone_version": 2,
+                        "selected_sensors_c": list(selected_sensors_c),
+                        "all_sensors": list(all_sensors),
+                        "weights_b": [[float(value) for value in row] for row in weights_b.tolist()],
+                        "lambda_ridge": float(backbone_ridge_lambda),
+                        "training_window_count": int(total_window_count),
+                    }
+                ][0]
+            ]
 
-    energy_pdf = energy_pdf.copy()
-    energy_pdf["selected_backbone"] = energy_pdf["parameter_name"].astype(str).isin(set(selected_sensors_c))
-    energy_pdf["backbone_version"] = 2
+            backbone_df = (
+                spark.createDataFrame(backbone_rows)
+                if backbone_rows
+                else spark.createDataFrame([], schema=BACKBONE_SCHEMA)
+            )
+            energy_df = (
+                energy_sdf.withColumn("selected_backbone", F.col("parameter_name").isin(selected_sensors_c))
+                .withColumn("backbone_version", F.lit(2).cast("int"))
+                .select(
+                    F.col("parameter_name").cast("string").alias("parameter_name"),
+                    F.col("energy").cast("double").alias("energy"),
+                    F.col("support_count").cast("int").alias("support_count"),
+                    F.col("selected_backbone").cast("boolean").alias("selected_backbone"),
+                    F.col("backbone_version").cast("int").alias("backbone_version"),
+                )
+            )
+        finally:
+            energy_sdf.unpersist()
 
-    backbone_df = (
-        spark.createDataFrame(backbone_pdf)
-        if not backbone_pdf.empty
-        else spark.createDataFrame([], schema=BACKBONE_SCHEMA)
-    )
-    energy_df = (
-        spark.createDataFrame(energy_pdf)
-        if not energy_pdf.empty
-        else spark.createDataFrame([], schema=BACKBONE_SENSOR_ENERGY_SCHEMA)
-    )
+        if str(window_features_path).strip():
+            write_table(
+                window_features_df,
+                path=window_features_path,
+                mode=write_mode,
+                fmt=table_format,
+                partition_by=context.config["output"]["partition_by"],
+            )
+        write_table(backbone_df, path=backbone_path, mode=write_mode, fmt=table_format)
+        write_table(energy_df, path=backbone_energy_path, mode=write_mode, fmt=table_format)
+    finally:
+        window_features_df.unpersist()
 
-    write_table(backbone_df, path=backbone_path, mode=write_mode, fmt=table_format)
-    write_table(energy_df, path=backbone_energy_path, mode=write_mode, fmt=table_format)
-
-    backbone_rows = backbone_pdf.to_dict(orient="records")
     selected_sensor_count = len(backbone_rows[0]["selected_sensors_c"]) if backbone_rows else 0
     training_window_count = int(backbone_rows[0]["training_window_count"]) if backbone_rows else 0
 
@@ -137,15 +173,18 @@ def run() -> None:
         {
             "stage": "10_backbone_fit",
             "raw_path": raw_path,
+            "events_path": events_path,
             "windows_path": windows_path,
+            "window_features_path": window_features_path,
             "backbone_path": backbone_path,
             "backbone_energy_path": backbone_energy_path,
             "table_format": table_format,
             "write_mode": write_mode,
-            "max_bridge_backbone_input_rows": max_bridge_rows,
+            "max_backbone_sensor_universe": max_backbone_sensor_universe,
             "raw_count_bounded": raw_count,
+            "events_count_bounded": events_count,
             "windows_count_bounded": windows_count,
-            "window_x_count_bounded": window_x_count,
+            "window_features_count": window_features_count,
             "backbone_sensor_count": backbone_sensor_count,
             "selected_sensor_count": selected_sensor_count,
             "training_window_count": training_window_count,
@@ -153,6 +192,27 @@ def run() -> None:
         },
         "reports/stages/10_backbone_fit_summary.json",
     )
+    output_artifacts = {
+        "backbone": build_artifact_manifest(
+            path=backbone_path,
+            dataframe=backbone_df,
+            row_count=len(backbone_rows),
+            artifact_version="BACKBONE_V2",
+        ),
+        "backbone_sensor_energy": build_artifact_manifest(
+            path=backbone_energy_path,
+            dataframe=energy_df,
+            row_count=sensor_energy_count,
+            artifact_version="BACKBONE_SENSOR_ENERGY_V2",
+        ),
+    }
+    if str(window_features_path).strip():
+        output_artifacts["window_features"] = build_artifact_manifest(
+            path=window_features_path,
+            dataframe=window_features_df,
+            row_count=window_features_count,
+        )
+
     stage_manifest = build_stage_manifest(
         stage_name="10_backbone_fit",
         config={
@@ -160,28 +220,20 @@ def run() -> None:
             "write_mode": write_mode,
             "backbone_sensor_count": backbone_sensor_count,
             "backbone_ridge_lambda": backbone_ridge_lambda,
-            "max_bridge_backbone_input_rows": max_bridge_rows,
+            "max_backbone_sensor_universe": max_backbone_sensor_universe,
         },
         input_artifacts={
             "raw_telemetry": build_artifact_manifest(path=raw_path, dataframe=raw_df, row_count=raw_count),
+            "events": build_artifact_manifest(path=events_path, dataframe=events_df, row_count=events_count),
             "windows": build_artifact_manifest(path=windows_path, dataframe=windows_df, row_count=windows_count),
-            "window_x": build_artifact_manifest(path="window_x::ephemeral", dataframe=window_x_df, row_count=window_x_count),
-        },
-        output_artifacts={
-            "backbone": build_artifact_manifest(
-                path=backbone_path,
-                dataframe=backbone_df,
-                row_count=len(backbone_rows),
-                artifact_version="BACKBONE_V2",
-            ),
-            "backbone_sensor_energy": build_artifact_manifest(
-                path=backbone_energy_path,
-                dataframe=energy_df,
-                row_count=len(sensor_energy_rows),
-                artifact_version="BACKBONE_SENSOR_ENERGY_V2",
+            "window_features": build_artifact_manifest(
+                path=(window_features_path or "window_features::ephemeral"),
+                dataframe=window_features_df,
+                row_count=window_features_count,
             ),
         },
-        replayable_from=["window_x", "backbone_sensor_energy"],
+        output_artifacts=output_artifacts,
+        replayable_from=["window_features", "backbone_sensor_energy"],
     )
     log_stage_manifest_if_active(stage_manifest, "reports/stages/10_backbone_fit_manifest.json")
     LOGGER.info(

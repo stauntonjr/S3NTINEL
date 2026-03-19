@@ -39,7 +39,7 @@ def analyze_phase_behavior(telemetry_df: pd.DataFrame, *, top_k: int = 10) -> di
         return {"continuous_top": [], "categorical_top": []}
 
     working = telemetry_df.copy()
-    working["sensor"] = working["sensor"].astype(str)
+    working["parameter_name"] = working["parameter_name"].astype(str)
     working["phase_name"] = working["phase_name"].astype(str)
     working["parameter_datatype_label"] = working["parameter_datatype_label"].astype(str)
     working["parameter_value_clean_num"] = pd.to_numeric(working["parameter_value_clean"], errors="coerce")
@@ -47,29 +47,29 @@ def analyze_phase_behavior(telemetry_df: pd.DataFrame, *, top_k: int = 10) -> di
     continuous_rows: list[dict[str, float | str]] = []
     categorical_rows: list[dict[str, float | str]] = []
 
-    for sensor, sensor_df in working.groupby("sensor", sort=False):
-        datatype_labels = {str(v) for v in sensor_df["parameter_datatype_label"].dropna().tolist()}
+    for parameter_name, parameter_df in working.groupby("parameter_name", sort=False):
+        datatype_labels = {str(v) for v in parameter_df["parameter_datatype_label"].dropna().tolist()}
         if "numeric" in datatype_labels or "continuous" in datatype_labels:
             continuous_rows.append(
                 {
-                    "sensor": sensor,
-                    "phase_separation_score": _continuous_phase_separation_score(sensor_df),
+                    "parameter_name": parameter_name,
+                    "phase_separation_score": _continuous_phase_separation_score(parameter_df),
                 }
             )
         else:
             categorical_rows.append(
                 {
-                    "sensor": sensor,
-                    "phase_separation_score": _categorical_phase_separation_score(sensor_df),
+                    "parameter_name": parameter_name,
+                    "phase_separation_score": _categorical_phase_separation_score(parameter_df),
                 }
             )
 
     continuous_top = sorted(
         continuous_rows,
-        key=lambda row: (-float(row["phase_separation_score"]), str(row["sensor"])),
+        key=lambda row: (-float(row["phase_separation_score"]), str(row["parameter_name"])),
     )[:top_k]
     categorical_top = sorted(
         categorical_rows,
-        key=lambda row: (-float(row["phase_separation_score"]), str(row["sensor"])),
+        key=lambda row: (-float(row["phase_separation_score"]), str(row["parameter_name"])),
     )[:top_k]
     return {"continuous_top": continuous_top, "categorical_top": categorical_top}

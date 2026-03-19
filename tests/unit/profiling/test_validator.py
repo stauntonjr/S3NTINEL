@@ -2,14 +2,18 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from libs.profiling.validator import profiler_datatype_rows, simulator_datatype_label_rows, stream_profiler_validation
+from libs.profiling.validator import (
+    iter_profile_validation_snapshots,
+    profiler_datatype_rows,
+    simulator_datatype_label_rows,
+)
 
 
 def _ts(offset: int) -> datetime:
     return datetime(2026, 3, 1, tzinfo=timezone.utc) + timedelta(seconds=offset)
 
 
-def test_stream_profiler_validation_confusion_counts_and_monotonicity():
+def test_iter_profile_validation_snapshots_confusion_counts_and_monotonicity():
     simulator_rows = [
         {"tail_id": "T1", "flight_id": "F1", "parameter_name": "S1", "timestamp_utc": _ts(0), "parameter_datatype_label": "numeric"},  # TP
         {"tail_id": "T1", "flight_id": "F1", "parameter_name": "S1", "timestamp_utc": _ts(1), "parameter_datatype_label": "numeric"},  # mismatch FP+FN
@@ -23,7 +27,7 @@ def test_stream_profiler_validation_confusion_counts_and_monotonicity():
     ]
 
     snapshots = list(
-        stream_profiler_validation(
+        iter_profile_validation_snapshots(
             simulator_rows=simulator_rows,
             profiler_rows=profiler_rows,
             emit_orphan_fp=True,
@@ -47,7 +51,7 @@ def test_stream_profiler_validation_confusion_counts_and_monotonicity():
     assert tn_values == sorted(tn_values)
 
 
-def test_stream_profiler_validation_without_orphan_fp():
+def test_iter_profile_validation_snapshots_without_orphan_fp():
     simulator_rows = [
         {"tail_id": "T1", "flight_id": "F1", "parameter_name": "S1", "timestamp_utc": _ts(0), "parameter_datatype_label": "numeric"},
     ]
@@ -56,7 +60,7 @@ def test_stream_profiler_validation_without_orphan_fp():
         {"tail_id": "T9", "flight_id": "F9", "parameter_name": "S9", "timestamp_utc": _ts(9), "parameter_datatype_profiled": "binary"},
     ]
     snapshots = list(
-        stream_profiler_validation(
+        iter_profile_validation_snapshots(
             simulator_rows=simulator_rows,
             profiler_rows=profiler_rows,
             emit_orphan_fp=False,

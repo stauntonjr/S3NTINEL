@@ -24,7 +24,18 @@ class CouplingSpec:
     target_mode_name: str | None = None
     target_mode_gate: tuple[str, ...] = ()
     shared_noise_group: str | None = None
+    allowed_misbehavior_families: tuple[str, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def coupling_id(self) -> str:
+        explicit = self.metadata.get("coupling_id")
+        if explicit:
+            return str(explicit)
+        return (
+            f"{self.source_module_id}:{self.source_port_name}:{self.relation_type}:"
+            f"{self.target_module_id}:{self.target_port_name}"
+        )
 
     @classmethod
     def drive(
@@ -48,6 +59,7 @@ class CouplingSpec:
             gain=float(gain),
             sign=int(sign),
             lag_seconds=float(lag_seconds),
+            allowed_misbehavior_families=(),
             metadata=dict(metadata or {}),
         )
 
@@ -73,6 +85,7 @@ class CouplingSpec:
             gain=float(gain),
             sign=int(sign),
             lag_seconds=float(lag_seconds),
+            allowed_misbehavior_families=(),
             metadata=dict(metadata or {}),
         )
 
@@ -98,5 +111,6 @@ class CouplingSpec:
             gain=float(gain),
             sign=int(sign),
             lag_seconds=float(lag_seconds),
+            allowed_misbehavior_families=(),
             metadata=dict(metadata or {}),
         )

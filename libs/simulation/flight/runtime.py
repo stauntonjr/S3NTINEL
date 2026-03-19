@@ -4,13 +4,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from libs.behavior import BehaviorRegistry, BehaviorSample, BehaviorStepInput
-from libs.simulation.aircraft.runtime import Aircraft
-from libs.simulation.fault.runtime import FaultProgram
+from libs.simulation.fault.runtime import FaultProgram, MisbehaviorProgram, MisbehaviorStepContext
 from libs.simulation.flight.spec import FlightSpec, InputProgramSpec, StepInputSpec
 from libs.simulation.phase.runtime import PhaseProgram
+from libs.simulation.tail.runtime import Tail
+
+if TYPE_CHECKING:
+    from libs.simulation.aircraft.runtime import Aircraft
 
 
 DEFAULT_START_TIMESTAMP_UTC = datetime(2025, 1, 1, tzinfo=timezone.utc)
@@ -22,15 +25,31 @@ class FlightTick:
     flight_id: str
     step_index: int
     timestamp_utc: datetime
+    dt_seconds: float
     phase_label: str | None
     samples_by_module_id: dict[str, list[BehaviorSample]]
-    fault_context_by_module: dict[str, dict[str, dict[str, Any]]]
+    step_misbehavior_context: MisbehaviorStepContext
+
+    @property
+    def misbehavior_context_by_module(self) -> dict[str, dict[str, dict[str, Any]]]:
+        return self.step_misbehavior_context.parameter_context_by_module
+
+    @property
+    def coupling_misbehavior_context_by_id(self) -> dict[str, dict[str, Any]]:
+        return self.step_misbehavior_context.coupling_context_by_id
+
+    @property
+    def fault_context_by_module(self) -> dict[str, dict[str, dict[str, Any]]]:
+        return self.misbehavior_context_by_module
 
     def telemetry_rows(self) -> list[dict[str, object]]:
         rows: list[dict[str, object]] = []
         for module_id, samples in self.samples_by_module_id.items():
             for sample in samples:
                 metadata = dict(sample.metadata)
+                rate_hz = metadata.get("rate_hz")
+                if not self._should_emit_sample(rate_hz):
+                    continue
                 rows.append(
                     {
                         "tail_id": self.tail_id,
@@ -43,12 +62,23 @@ class FlightTick:
                         "module_id": module_id,
                         "parameter_name": sample.parameter_name,
                         "sensor": sample.parameter_name,
+                        "unit": metadata.get("unit"),
+                        "rate_hz": rate_hz,
                         "behavior_family_label": metadata.get("behavior_family_label"),
                         "parameter_datatype_label": metadata.get("parameter_datatype_label"),
                         "parameter_value_clean": sample.parameter_value_clean,
                         "parameter_value": None if sample.parameter_value is None else str(sample.parameter_value),
                         "phase_label": self.phase_label,
                         "target_source": metadata.get("target_source"),
+                        "misbehavior_active": bool(metadata.get("misbehavior_active", False)),
+                        "misbehavior_applied": bool(metadata.get("misbehavior_applied", False)),
+                        "misbehavior_family_label": metadata.get("misbehavior_family_label", ""),
+                        "misbehavior_detail_label": metadata.get("misbehavior_detail_label", ""),
+                        "misbehavior_window_id": metadata.get("misbehavior_window_id", ""),
+                        "event_type_label": metadata.get("event_type_label", ""),
+                        "anomaly_type_label": metadata.get("anomaly_type_label", ""),
+                        "anomaly_score_label": metadata.get("anomaly_score_label"),
+                        "coupling_id_label": metadata.get("coupling_id_label", ""),
                         "fault_active": bool(metadata.get("fault_active", False)),
                         "fault_applied": bool(metadata.get("fault_applied", False)),
                         "fault_family_label": metadata.get("fault_family_label", ""),
@@ -57,6 +87,18 @@ class FlightTick:
                     }
                 )
         return rows
+
+    def _should_emit_sample(self, rate_hz: object) -> bool:
+        if rate_hz in (None, "", 0, 0.0):
+            return True
+        try:
+            resolved_rate_hz = float(rate_hz)
+        except Exception:
+            return True
+        if resolved_rate_hz <= 0.0:
+            return True
+        steps_per_sample = max(int(round(1.0 / (resolved_rate_hz * max(self.dt_seconds, 1e-9)))), 1)
+        return int(self.step_index) % steps_per_sample == 0
 
     def phase_row(self) -> dict[str, object]:
         return {
@@ -109,13 +151,12 @@ class InputProgram:
 @dataclass(slots=True)
 class Flight:
     spec: FlightSpec
-    aircraft: Aircraft
-    tail_id: str
+    tail: Tail
     flight_id: str
     start_timestamp_utc: datetime
     input_program: InputProgram
     phase_program: PhaseProgram
-    fault_program: FaultProgram
+    misbehavior_program: MisbehaviorProgram
     step_index: int = 0
     current_timestamp_utc: datetime | None = None
     current_phase_label: str | None = None
@@ -131,19 +172,48 @@ class Flight:
         start_timestamp_utc: datetime | None = None,
         behavior_registry: BehaviorRegistry | None = None,
     ) -> "Flight":
+        tail = Tail.from_spec(
+            spec.aircraft_spec,
+            tail_id=str(tail_id),
+            behavior_registry=behavior_registry,
+        )
+        return cls.from_tail(
+            tail,
+            spec,
+            flight_id=flight_id,
+            start_timestamp_utc=start_timestamp_utc,
+        )
+
+    @classmethod
+    def from_tail(
+        cls,
+        tail: Tail,
+        spec: FlightSpec,
+        *,
+        flight_id: str = "",
+        start_timestamp_utc: datetime | None = None,
+    ) -> "Flight":
         return cls(
             spec=spec,
-            aircraft=Aircraft.from_spec(
-                spec.aircraft_spec,
-                behavior_registry=behavior_registry,
-            ),
-            tail_id=str(tail_id),
+            tail=tail,
             flight_id=str(flight_id),
             start_timestamp_utc=start_timestamp_utc or DEFAULT_START_TIMESTAMP_UTC,
             input_program=InputProgram.from_spec(spec.input_program_spec),
             phase_program=PhaseProgram.from_spec(spec.phase_program_spec),
-            fault_program=FaultProgram.from_spec(spec.fault_program_spec),
+            misbehavior_program=MisbehaviorProgram.from_spec(spec.misbehavior_program_spec),
         )
+
+    @property
+    def aircraft(self) -> "Aircraft":
+        return self.tail.aircraft
+
+    @property
+    def fault_program(self) -> FaultProgram:
+        return self.misbehavior_program
+
+    @property
+    def tail_id(self) -> str:
+        return self.tail.id
 
     def step(
         self,
@@ -169,15 +239,16 @@ class Flight:
             if not self._initial_state_applied
             else {}
         )
-        fault_context_by_module = (
-            self.fault_program.context_for_step(resolved_step_index)
+        step_misbehavior_context = (
+            self.misbehavior_program.step_context_for_step(resolved_step_index)
             if apply_faults
-            else {}
+            else MisbehaviorStepContext(parameter_context_by_module={}, coupling_context_by_id={})
         )
         samples_by_module_id = self.aircraft.step(
             step_inputs_by_module=step_inputs_by_module,
             initial_state_by_module=initial_state_by_module,
-            fault_context_by_module=fault_context_by_module,
+            fault_context_by_module=step_misbehavior_context.parameter_context_by_module,
+            coupling_misbehavior_context_by_id=step_misbehavior_context.coupling_context_by_id,
             apply_faults=apply_faults,
             timestamp_utc=timestamp_utc,
             current_phase_label=phase_label,
@@ -191,9 +262,10 @@ class Flight:
             flight_id=self.flight_id,
             step_index=resolved_step_index,
             timestamp_utc=timestamp_utc,
+            dt_seconds=float(dt_seconds),
             phase_label=phase_label,
             samples_by_module_id=samples_by_module_id,
-            fault_context_by_module=fault_context_by_module,
+            step_misbehavior_context=step_misbehavior_context,
         )
 
     def iter_ticks(

@@ -1,13 +1,13 @@
-"""Streaming validator for profiled datatype rows against simulator datatype labels."""
+"""Streaming and summary validators for profile artifacts against simulator labels."""
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Generator, Iterable
+from typing import Any, Generator, Iterable
 
 import pandas as pd
 
-from libs.common import normalize_sensor_datatype
+from libs.common import normalize_parameter_datatype
 from libs.io.contracts import DatatypeLabelRow, DatatypeProfiledRow, ProfilerValidatorSnapshot, TelemetryRow
 
 
@@ -33,7 +33,7 @@ def _dtype_text(value: Any) -> str:
     text = str(value).strip()
     if not text or text.lower() in {"none", "null"}:
         return ""
-    return normalize_sensor_datatype(text)
+    return normalize_parameter_datatype(text)
 
 
 def simulator_datatype_label_rows(
@@ -70,7 +70,7 @@ def profiler_datatype_rows(
         }
 
 
-def stream_profiler_validation(
+def iter_profile_validation_snapshots(
     *,
     simulator_rows: Iterable[TelemetryRow],
     profiler_rows: Iterable[DatatypeProfiledRow],
@@ -142,3 +142,79 @@ def stream_profiler_validation(
             "fn": fn,
             "tn": tn,
         }
+
+
+def build_profile_validation_summary(
+    *,
+    raw_telemetry_df: pd.DataFrame,
+    parameter_datatype_profile_df: pd.DataFrame,
+    parameter_behavior_profile_df: pd.DataFrame,
+) -> dict[str, Any]:
+    if raw_telemetry_df is None or raw_telemetry_df.empty:
+        return {
+            "status": "ok",
+            "parameter_count": 0,
+            "datatype_labeled_parameter_count": 0,
+            "datatype_profiled_parameter_count": 0,
+            "behavior_labeled_parameter_count": 0,
+            "behavior_profiled_parameter_count": 0,
+        }
+
+    raw_df = raw_telemetry_df.copy()
+    raw_df["parameter_name"] = raw_df.get("parameter_name", "").fillna("").astype(str)
+    raw_df["parameter_datatype_label"] = raw_df.get("parameter_datatype_label", "").fillna("").astype(str)
+    raw_df["behavior_family_label"] = raw_df.get("behavior_family_label", "").fillna("").astype(str)
+    label_df = (
+        raw_df.groupby("parameter_name", dropna=False)
+        .agg(
+            parameter_datatype_label=("parameter_datatype_label", lambda values: next((value for value in values if value), "")),
+            behavior_family_label=("behavior_family_label", lambda values: next((value for value in values if value), "")),
+        )
+        .reset_index()
+    )
+
+    merged = label_df.merge(
+        parameter_datatype_profile_df[["parameter_name", "parameter_datatype_profiled"]]
+        if parameter_datatype_profile_df is not None and not parameter_datatype_profile_df.empty
+        else pd.DataFrame(columns=["parameter_name", "parameter_datatype_profiled"]),
+        on="parameter_name",
+        how="left",
+    ).merge(
+        parameter_behavior_profile_df[["parameter_name", "behavior_family_profiled"]]
+        if parameter_behavior_profile_df is not None and not parameter_behavior_profile_df.empty
+        else pd.DataFrame(columns=["parameter_name", "behavior_family_profiled"]),
+        on="parameter_name",
+        how="left",
+    )
+
+    datatype_mask = merged["parameter_datatype_label"].fillna("").astype(str) != ""
+    behavior_mask = merged["behavior_family_label"].fillna("").astype(str) != ""
+    datatype_profiled_mask = merged.get("parameter_datatype_profiled", pd.Series(dtype="object")).fillna("").astype(str) != ""
+    behavior_profiled_mask = merged.get("behavior_family_profiled", pd.Series(dtype="object")).fillna("").astype(str) != ""
+    datatype_match_mask = datatype_mask & datatype_profiled_mask & (
+        merged["parameter_datatype_label"].astype(str) == merged["parameter_datatype_profiled"].fillna("").astype(str)
+    )
+    behavior_match_mask = behavior_mask & behavior_profiled_mask & (
+        merged["behavior_family_label"].astype(str) == merged["behavior_family_profiled"].fillna("").astype(str)
+    )
+
+    return {
+        "status": "ok",
+        "parameter_count": int(len(merged)),
+        "datatype_labeled_parameter_count": int(datatype_mask.sum()),
+        "datatype_profiled_parameter_count": int(datatype_profiled_mask.sum()),
+        "datatype_exact_match_count": int(datatype_match_mask.sum()),
+        "datatype_accuracy": (
+            float(datatype_match_mask.sum() / datatype_mask.sum())
+            if int(datatype_mask.sum()) > 0
+            else None
+        ),
+        "behavior_labeled_parameter_count": int(behavior_mask.sum()),
+        "behavior_profiled_parameter_count": int(behavior_profiled_mask.sum()),
+        "behavior_exact_match_count": int(behavior_match_mask.sum()),
+        "behavior_accuracy": (
+            float(behavior_match_mask.sum() / behavior_mask.sum())
+            if int(behavior_mask.sum()) > 0
+            else None
+        ),
+    }

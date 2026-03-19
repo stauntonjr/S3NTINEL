@@ -28,7 +28,7 @@ The plan below is grounded in the current repo shape:
   improvements
 - pandas and Spark boundaries are still duplicated across:
   - `pipelines/10_backbone_fit.py`
-  - `pipelines/11_graph_fit.py`
+  - `pipelines/11_build_graph.py`
   - `libs/phase/pipeline.py`
   - `libs/scoring/pipeline.py`
 - phase and anomaly logic now have cleaner ownership, but further realism and
@@ -240,7 +240,7 @@ separate and enforce bounded behavior at their interfaces.
 ### Concrete reduction targets
 
 - `pipelines/10_backbone_fit.py`
-- `pipelines/11_graph_fit.py`
+- `pipelines/11_build_graph.py`
 - `libs/phase/pipeline.py`
 - `libs/scoring/pipeline.py`
 
@@ -254,7 +254,7 @@ pandas, and Spark boundaries in repetitive or partially duplicated ways.
   - raw
   - events
   - windows
-  - `WindowFeaturesDataFrame`
+  - `window_features`
   across adjacent stages when one bounded shared context or persisted seam is
   sufficient
 - use the full-run path as the standard local performance and regression

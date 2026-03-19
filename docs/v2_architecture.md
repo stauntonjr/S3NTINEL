@@ -42,7 +42,7 @@ Then the active structural stages are:
 1. `pipelines/00_ingest_raw.py`
 2. `pipelines/05_parameter_profiles_fit.py`
 3. `pipelines/10_backbone_fit.py`
-4. `pipelines/11_graph_fit.py`
+4. `pipelines/11_build_graph.py`
 
 ### Inference
 
@@ -55,12 +55,12 @@ Then the active structural stages are:
 
 ## Core representations
 
-- `WindowFeaturesDataFrame`
+- `window_features`
   - persisted many-window feature artifact
   - used for drift, energy, backbone fitting, graph fitting, and phase fitting
 
-- `WindowFeatures`
-  - one-window semantic feature object used to build the dataframe artifact
+- per-window feature row
+  - one-window feature representation used to build the persisted artifact
 
 - `window_s`
   - final structure vector
@@ -139,15 +139,15 @@ Then the active structural stages are:
 
 ## Current Spark boundary
 
-- `20_events_extract.py` uses Spark grouped execution around generator-based detector cores.
+- `20_events_extract.py` uses the segmented Spark sequence kernel over `(tail_id, flight_id, parameter_name)` streams.
 - `10_backbone_fit.py` keeps fact-table work in Spark and collects only bounded
   sensor-energy and per-flight `G_f/H_f` aggregates for the final solve.
-- `11_graph_fit.py` keeps component-graph construction in Spark and collects only
+- `11_build_graph.py` keeps component-graph construction in Spark and collects only
   small backbone metadata and the already-pruned fused edge set for final hierarchy
   assignment. Precision, event, lag, transition, and fused graph construction are
   all Spark-native.
-- `50_phase_fit.py` builds window features and emits per-tail phase artifacts with grouped
-  Spark execution; the remaining driver-side work is bounded global configuration.
+- `50_phase_fit.py` consumes persisted `window_features` and emits per-flight phase artifacts
+  with segmented Spark assignment; the remaining driver-side work is bounded global configuration.
 - `60_window_scores_raw.py` keeps the main fact table distributed, but still collects bounded reference artifacts.
 
 Bridge rule:

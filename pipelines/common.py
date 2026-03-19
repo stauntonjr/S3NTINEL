@@ -38,3 +38,16 @@ def build_context(
         flight_id=flight_id,
         date_utc=date_utc,
     )
+
+
+def require_artifact_path(path: str, *, env_name: str, artifact_name: str) -> Path:
+    resolved = Path(str(path).strip()) if str(path).strip() else None
+    if resolved is None:
+        raise RuntimeError(
+            f"{artifact_name} is required for this stage; expected {env_name} to point to the canonical persisted artifact."
+        )
+    if not resolved.exists():
+        raise RuntimeError(
+            f"{artifact_name} is required for this stage; {env_name}={resolved} does not exist."
+        )
+    return resolved

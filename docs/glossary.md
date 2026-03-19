@@ -171,7 +171,7 @@ Recommended artifact name:
 
 Simulation/source behavior-family label for a parameter.
 
-Planned canonical field:
+Canonical field:
 - `behavior_family_label`
 
 Optional future companion:
@@ -205,7 +205,7 @@ Recommended artifact name:
 
 Simulation/source misbehavior-family label.
 
-Planned canonical fields:
+Canonical fields:
 - `misbehavior_family_label`
 - `misbehavior_detail_label`
 
@@ -220,10 +220,10 @@ Planned canonical fields:
 
 ## 6. Representations
 
-### WindowFeatures
+### window feature row
 
-The one-window semantic feature representation used for backbone fitting, graph
-fitting, phase fitting, and related structural computations.
+The one-window feature representation used for backbone fitting, graph fitting,
+phase fitting, and related structural computations.
 
 Typical contents:
 - robust-scaled continuous end-of-window snapshot
@@ -231,9 +231,9 @@ Typical contents:
 - event counts
 - drift-oriented summaries
 
-### WindowFeaturesDataFrame
+### window_features
 
-The many-window dataframe artifact built from `WindowFeatures`.
+The many-window artifact built from per-window feature rows.
 
 Math shorthand:
 - `x_w`

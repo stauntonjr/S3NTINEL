@@ -8,7 +8,7 @@
 
 - `event_types.py`
   - canonical event type labels
-- `sensor_datatypes.py`
+- `parameter_datatypes.py`
   - datatype labels and normalization helpers
 
 ## Data / Artifacts

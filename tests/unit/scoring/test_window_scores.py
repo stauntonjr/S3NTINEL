@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from libs.scoring import WindowScoreArtifacts, build_phase_score_baselines, score_window_s_rows
+from libs.scoring import WindowScoreArtifacts, build_phase_window_score_baselines, score_phase_window_rows
 
 
 def test_scoring_v2_builds_baselines_and_scores():
@@ -57,8 +57,8 @@ def test_scoring_v2_builds_baselines_and_scores():
         },
     ]
 
-    baselines = build_phase_score_baselines(window_s_rows, phase_assignments)
-    scores = score_window_s_rows(window_s_rows, phase_assignments, baselines)
+    baselines = build_phase_window_score_baselines(window_s_rows, phase_assignments)
+    scores = score_phase_window_rows(window_s_rows, phase_assignments, baselines)
 
     assert len(baselines) == 1
     assert baselines[0]["stable_window_count"] == 2

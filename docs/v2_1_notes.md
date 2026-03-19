@@ -18,7 +18,7 @@ Deferred. Keep in mind for the next modeling-focused iteration, especially once:
 ## Motivation
 
 The current path uses a single continuous end-of-window snapshot inside the
-`WindowFeatures` / `WindowFeaturesDataFrame` representation, then adds compact event
+window feature representation and the persisted `window_features` artifact, then adds compact event
 and categorical summaries.
 
 That is clean, but it under-represents mixed-rate continuous behavior:

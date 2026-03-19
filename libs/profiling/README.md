@@ -20,7 +20,7 @@ It does not own:
 
 ## Contents
 
-- `model.py`
+- `profiles.py`
   - `ParameterProfile`
   - `ParameterDatatypeProfile`
   - `ContinuousScalingProfile`

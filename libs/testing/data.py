@@ -122,6 +122,7 @@ def create_sample_events_df(spark: "SparkSession") -> "DataFrame":
             {
                 "tail_id": "T001",
                 "flight_id": "F001",
+                "event_seq_id": idx,
                 "win_id": (idx - 1) // 4 + 1,
                 "timestamp_utc": ts,
                 "parameter_name": "ENG_TEMP_1" if idx % 2 else "PUMP_STATE",

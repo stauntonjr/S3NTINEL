@@ -13,17 +13,16 @@ from libs.io.contracts import (
     PhaseWindowRow,
     ProfilerValidatorSnapshot,
     TelemetryRow,
+    WindowFeatureRow,
     WindowScoreRow,
-    WindowXRow,
 )
-from libs.io.pandas_spark import pandas_records_for_spark, spark_safe_value
 
 __all__ = [
     "TelemetryRow",
     "DetectedEventRow",
     "EventLabelRow",
     "AdaptiveWindowRow",
-    "WindowXRow",
+    "WindowFeatureRow",
     "PhaseAssignmentRow",
     "PhaseBaselineRow",
     "PhaseWindowRow",
@@ -32,6 +31,4 @@ __all__ = [
     "DatatypeProfiledRow",
     "EventValidatorSnapshot",
     "ProfilerValidatorSnapshot",
-    "pandas_records_for_spark",
-    "spark_safe_value",
 ]

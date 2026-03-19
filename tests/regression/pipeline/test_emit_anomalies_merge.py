@@ -2,17 +2,22 @@ import importlib
 from types import SimpleNamespace
 
 
+class _FakeFrame:
+    def count(self) -> int:
+        return 0
+
+
 def _patch_common(monkeypatch, module):
     monkeypatch.setattr(module, "build_context", lambda: SimpleNamespace(config={"output": {"anomalies_merge_key": ["tail_id", "flight_id", "win_id"], "partition_by": ["tail_id", "flight_id", "date_utc"]}}))
     monkeypatch.setattr(module, "get_spark", lambda _app: object())
 
     def fake_read_table(_spark, path, fmt="delta"):
-        return object()
+        return _FakeFrame()
 
     monkeypatch.setattr(module, "read_table", fake_read_table)
-    monkeypatch.setattr(module, "build_anomaly_window_attribution_df", lambda **_kwargs: object())
-    monkeypatch.setattr(module, "build_anomaly_telemetry_attribution_df", lambda **_kwargs: object())
-    monkeypatch.setattr(module, "build_anomaly_event_attribution_df", lambda **_kwargs: object())
+    monkeypatch.setattr(module, "build_anomaly_window_attribution_table", lambda **_kwargs: _FakeFrame())
+    monkeypatch.setattr(module, "build_anomaly_telemetry_attribution_table", lambda **_kwargs: _FakeFrame())
+    monkeypatch.setattr(module, "build_anomaly_event_attribution_table", lambda **_kwargs: _FakeFrame())
     monkeypatch.setattr(module, "log_params_if_active", lambda *_args, **_kwargs: None)
 
 

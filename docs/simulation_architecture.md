@@ -17,7 +17,7 @@ The simulator should be:
 - behaviorally expressive enough to represent regulated, inertial, accumulative, and discrete-state dynamics
 - coupling-aware enough to generate meaningful multivariate structure
 - phase-aware enough to drive realistic operating context
-- fault-aware enough to inject simulation truth that downstream validators can compare against detection outputs
+- misbehavior-aware enough to inject simulation truth that downstream validators can compare against detection outputs
 
 ## 2. Core Design Rule
 
@@ -27,7 +27,7 @@ Use:
 - behavior families for local dynamics
 - couplings for cross-module structure
 - phase programs for operating context
-- fault programs for injected misbehavior
+- misbehavior programs for injected behavior deviations
 
 ## 3. Current Simulation Model
 
@@ -43,7 +43,7 @@ The static simulation model is expressed through:
 - `PortSpec`
 - `CouplingSpec`
 - `PhaseProgramSpec`
-- `FaultProgramSpec`
+- `MisbehaviorProgramSpec` with deprecated `FaultProgramSpec` alias
 - `FlightSpec`
 
 These specs describe what the aircraft is and how a flight should exercise it.
@@ -61,7 +61,7 @@ The live runtime model is:
 - `Port`
 - `Coupling`
 - phase runtime objects in `libs/simulation/phase`
-- fault runtime objects in `libs/simulation/fault`
+- misbehavior runtime objects in `libs/simulation/fault` with deprecated fault aliases
 
 The important boundary is:
 
@@ -71,7 +71,7 @@ The important boundary is:
 `Flight` owns:
 - run clock state
 - phase progression
-- fault scheduling
+- misbehavior scheduling
 - row emission over time
 
 `Aircraft` owns:
@@ -89,9 +89,10 @@ The simulation layer attaches those behaviors to parameters and feeds them:
 - port inputs
 - latent state
 - phase-conditioned context
-- fault/violation context
+- misbehavior/violation context
 
-Simulation-side injected misbehavior should be called **faults**.
+Simulation-side injected behavior deviations should be called **misbehaviors**.
+Deprecated compatibility aliases still use `fault_*` in a few validator/report surfaces.
 Downstream anomaly outputs should be called **anomalies**.
 
 ## 5. Simulation Output Contract
@@ -114,7 +115,7 @@ Simulation adds metadata on the same rows, including:
 - `system_id`
 - `subsystem_id`
 - `module_id`
-- behavior/fault truth metadata
+- behavior/misbehavior truth metadata plus deprecated `fault_*` compatibility fields
 
 This is intentional: simulation should feed the same persisted fitting and inference pipeline that real telemetry feeds.
 

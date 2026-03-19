@@ -201,3 +201,104 @@ def build_graph_validation_summary(
             expected_fused_edges=expected_fused_edges,
         ),
     }
+
+
+def build_coupling_validation_summary(
+    *,
+    coupling_truth_df: pd.DataFrame,
+    lag_graph_df: pd.DataFrame | None = None,
+    precision_graph_df: pd.DataFrame | None = None,
+    fused_graph_df: pd.DataFrame | None = None,
+    expected_coupling_signatures: tuple[dict[str, Any], ...] = (),
+) -> dict[str, Any]:
+    if coupling_truth_df is None or coupling_truth_df.empty:
+        return {
+            "status": "skipped",
+            "reason": "missing coupling misbehavior truth rows",
+            "coupling_window_count": 0,
+        }
+
+    lag_rows = lag_graph_df if lag_graph_df is not None else pd.DataFrame()
+    precision_rows = precision_graph_df if precision_graph_df is not None else pd.DataFrame()
+    fused_rows = fused_graph_df if fused_graph_df is not None else pd.DataFrame()
+
+    lag_index = {
+        (str(row["parameter_name_u"]), str(row["parameter_name_v"])): {
+            "lag_weight": float(row.get("lag_weight", 0.0) or 0.0),
+            "mean_lag_seconds": row.get("mean_lag_seconds"),
+        }
+        for row in lag_rows.to_dict(orient="records")
+    }
+    precision_index = {
+        tuple(sorted((str(row["parameter_name_u"]), str(row["parameter_name_v"])))): {
+            "partial_corr": row.get("partial_corr"),
+            "precision_weight": row.get("precision_weight"),
+        }
+        for row in precision_rows.to_dict(orient="records")
+    }
+    fused_index = {
+        tuple(sorted((str(row["parameter_name_u"]), str(row["parameter_name_v"])))): float(row.get("fused_weight", 0.0) or 0.0)
+        for row in fused_rows.to_dict(orient="records")
+    }
+
+    signature_rows = []
+    for signature in expected_coupling_signatures:
+        key = (str(signature["parameter_name_u"]), str(signature["parameter_name_v"]))
+        unordered_key = tuple(sorted(key))
+        lag_payload = lag_index.get(key) or lag_index.get((key[1], key[0])) or {}
+        precision_payload = precision_index.get(unordered_key) or {}
+        fused_weight = fused_index.get(unordered_key)
+        signature_type = str(signature.get("signature_type", "edge_present"))
+        partial_corr = precision_payload.get("partial_corr")
+        if signature_type == "lag_shift":
+            hit = bool(lag_payload.get("mean_lag_seconds") is not None)
+        elif signature_type == "sign_flip":
+            hit = bool(partial_corr is not None and float(partial_corr) < 0.0)
+        else:
+            hit = bool(lag_payload or precision_payload or fused_weight is not None)
+        signature_rows.append(
+            {
+                "coupling_id": str(signature.get("coupling_id", "")),
+                "parameter_name_u": key[0],
+                "parameter_name_v": key[1],
+                "signature_type": signature_type,
+                "hit": hit,
+                "lag_weight": lag_payload.get("lag_weight"),
+                "mean_lag_seconds": lag_payload.get("mean_lag_seconds"),
+                "partial_corr": partial_corr,
+                "precision_weight": precision_payload.get("precision_weight"),
+                "fused_weight": fused_weight,
+            }
+        )
+
+    coupling_windows = (
+        coupling_truth_df[
+            [
+                "coupling_id",
+                "misbehavior_window_id",
+                "misbehavior_family_label",
+                "misbehavior_detail_label",
+                "start_step",
+                "end_step_exclusive",
+            ]
+        ]
+        .drop_duplicates()
+        .sort_values(["coupling_id", "start_step", "misbehavior_window_id"])
+    )
+
+    return {
+        "status": "ok",
+        "coupling_window_count": int(len(coupling_windows)),
+        "coupling_id_count": int(coupling_windows["coupling_id"].astype(str).nunique()),
+        "misbehavior_detail_counts": {
+            str(key): int(value)
+            for key, value in coupling_windows["misbehavior_detail_label"].astype(str).value_counts().to_dict().items()
+        },
+        "signature_count": len(signature_rows),
+        "signature_hit_rate": (
+            float(sum(1 for row in signature_rows if row["hit"]) / len(signature_rows))
+            if signature_rows
+            else None
+        ),
+        "signatures": signature_rows,
+    }

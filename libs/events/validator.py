@@ -1,10 +1,10 @@
-"""Streaming validator for detector outputs against simulator label stream."""
+"""Streaming and summary validators for detector outputs against simulator labels."""
 
 from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime
-from typing import Generator, Iterable
+from typing import Any, Generator, Iterable
 
 import pandas as pd
 
@@ -52,7 +52,7 @@ def simulator_label_events(
         }
 
 
-def stream_event_detector_validation(
+def iter_event_validation_snapshots(
     *,
     simulator_rows: Iterable[TelemetryRow],
     detected_events: Iterable[DetectedEventRow],
@@ -175,3 +175,39 @@ def stream_event_detector_validation(
             "fn": fn,
             "tn": tn,
         }
+
+
+def build_event_validation_summary(
+    *,
+    simulator_rows: Iterable[TelemetryRow],
+    detected_events: Iterable[DetectedEventRow],
+    tolerance_seconds: float = 0.5,
+) -> dict[str, Any]:
+    simulator_list = [dict(row) for row in simulator_rows]
+    detected_list = [dict(row) for row in detected_events]
+    snapshots = list(
+        iter_event_validation_snapshots(
+            simulator_rows=simulator_list,
+            detected_events=detected_list,
+            tolerance_seconds=tolerance_seconds,
+        )
+    )
+    last = snapshots[-1] if snapshots else {"tp": 0, "fp": 0, "fn": 0, "tn": 0}
+    label_events = list(simulator_label_events(simulator_list))
+    tp = int(last.get("tp", 0))
+    fp = int(last.get("fp", 0))
+    fn = int(last.get("fn", 0))
+    precision = float(tp / (tp + fp)) if (tp + fp) > 0 else None
+    recall = float(tp / (tp + fn)) if (tp + fn) > 0 else None
+    return {
+        "status": "ok",
+        "label_event_count": int(len(label_events)),
+        "detected_event_count": int(len(detected_list)),
+        "tp": tp,
+        "fp": fp,
+        "fn": fn,
+        "tn": int(last.get("tn", 0)),
+        "precision": precision,
+        "recall": recall,
+        "tolerance_seconds": float(abs(tolerance_seconds)),
+    }

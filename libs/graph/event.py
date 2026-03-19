@@ -35,7 +35,7 @@ class EventGraph:
         pair_counts: Counter[tuple[str, str]] = Counter()
         parameter_name_window_counts: Counter[str] = Counter()
         by_events = {
-            key: group.sort_values(["timestamp_utc", "parameter_name"], kind="mergesort").reset_index(drop=True)
+            key: group.sort_values(["event_seq_id"], kind="mergesort").reset_index(drop=True)
             for key, group in event_rows.groupby(["tail_id", "flight_id"], sort=True)
         }
         total_windows = int(len(window_rows))
@@ -127,14 +127,14 @@ class EventGraph:
         default_text = pd.Series("", index=rows.index, dtype="object")
         rows["tail_id"] = rows.get("tail_id", default_text).astype(str)
         rows["flight_id"] = rows.get("flight_id", default_text).astype(str)
-        if "parameter_name" not in rows.columns and "sensor" in rows.columns:
-            rows["parameter_name"] = rows["sensor"]
-        if "timestamp_utc" not in rows.columns and "ts" in rows.columns:
-            rows["timestamp_utc"] = rows["ts"]
+        if "event_seq_id" not in rows.columns:
+            raise ValueError("graph builders expect canonical events with event_seq_id; missing columns: event_seq_id")
         rows["parameter_name"] = rows.get("parameter_name", default_text).astype(str)
+        rows["event_seq_id"] = pd.to_numeric(rows.get("event_seq_id"), errors="coerce")
         rows["timestamp_utc"] = pd.to_datetime(rows.get("timestamp_utc"), utc=True, errors="coerce")
-        rows = rows.dropna(subset=["tail_id", "flight_id", "parameter_name", "timestamp_utc"])
-        return rows.sort_values(["tail_id", "flight_id", "timestamp_utc", "parameter_name"], kind="mergesort").reset_index(drop=True)
+        rows = rows.dropna(subset=["tail_id", "flight_id", "event_seq_id", "parameter_name", "timestamp_utc"])
+        rows["event_seq_id"] = rows["event_seq_id"].astype("int64")
+        return rows.sort_values(["tail_id", "flight_id", "event_seq_id"], kind="mergesort").reset_index(drop=True)
 
     @staticmethod
     def normalize_windows(windows_df: pd.DataFrame) -> pd.DataFrame:

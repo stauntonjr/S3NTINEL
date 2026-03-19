@@ -1,6 +1,6 @@
 # Misbehavior Taxonomy
 
-This note defines the planned misbehavior taxonomy for the active S3NTINEL path.
+This note defines the active misbehavior taxonomy for the active S3NTINEL path.
 
 The purpose is to separate:
 
@@ -10,7 +10,7 @@ The purpose is to separate:
 
 This keeps anomaly logic structured and interpretable.
 
-## 1. Canonical planned fields
+## 1. Canonical fields
 
 Simulation/source side:
 

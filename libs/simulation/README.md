@@ -21,11 +21,13 @@ The intended flow is:
 The runtime model is:
 
 - `Aircraft`: the machine
+- `Tail`: one physical aircraft instance with flight history
 - `Flight`: one run of that machine
+- `Fleet`: a collection of tails
 - `System`, `Subsystem`, `Module`, `Parameter`, `Port`: the object hierarchy inside the aircraft
 - `Coupling`: cross-module signal wiring
 - `PhaseProgram`: operating phase schedule and envelopes
-- `FaultProgram`: injected misbehavior schedule
+- `MisbehaviorProgram`: injected misbehavior schedule
 
 The static model mirrors that shape with specs:
 
@@ -37,7 +39,7 @@ The static model mirrors that shape with specs:
 - `PortSpec`
 - `CouplingSpec`
 - `PhaseProgramSpec`
-- `FaultProgramSpec`
+- `MisbehaviorProgramSpec` with deprecated `FaultProgramSpec` alias
 - `FlightSpec`
 
 ## Package layout
@@ -46,6 +48,12 @@ The static model mirrors that shape with specs:
   - `spec.py`: aircraft structure
   - `runtime.py`: live aircraft object
   - `examples.py`: example aircraft specs
+- `tail/`
+  - `runtime.py`: live tail object
+  - `examples.py`: example tail builders
+- `fleet/`
+  - `runtime.py`: live fleet object
+  - `examples.py`: example fleet builders
 - `system/`
   - `spec.py`, `runtime.py`, `examples.py`
 - `subsystem/`
@@ -72,9 +80,9 @@ The static model mirrors that shape with specs:
   - `runtime.py`: label resolution and envelope application
   - `examples.py`: example phase programs
 - `fault/`
-  - `spec.py`: fault-window declarations
-  - `runtime.py`: per-step fault resolution
-  - `examples.py`: example fault programs
+  - `spec.py`: misbehavior-window declarations with deprecated fault aliases
+  - `runtime.py`: per-step misbehavior resolution
+  - `examples.py`: example misbehavior programs plus deprecated fault builders
 - `flight/`
   - `spec.py`: run program definition
   - `runtime.py`: live flight execution
@@ -96,7 +104,7 @@ It does not own:
 - step index for a flight
 - phase schedule
 - phase label resolution
-- fault scheduling
+- misbehavior scheduling
 
 Those belong to `Flight`.
 
@@ -105,7 +113,6 @@ Those belong to `Flight`.
 `Flight` is the run coordinator.
 
 It owns:
-- `tail_id`
 - `flight_id`
 - `start_timestamp_utc`
 - `step_index`
@@ -115,6 +122,11 @@ It owns:
 - phase resolution and phase envelope application
 - fault resolution
 - the outer run loop
+
+It belongs to a `Tail`, which owns:
+- `tail_id`
+- the live `Aircraft` instance
+- flight history across runs
 
 Key runtime methods:
 - `Flight.from_spec(...)`
@@ -216,7 +228,7 @@ Use `FlightSpec` to declare:
 - input program over time
 - initial conditions
 - phase program
-- fault program
+- misbehavior program
 
 It should answer: "how is this aircraft being exercised in this run?"
 
@@ -225,7 +237,7 @@ It should answer: "how is this aircraft being exercised in this run?"
 - `input_program_spec`
 - `initial_state_spec`
 - `phase_program_spec`
-- `fault_program_spec`
+- `misbehavior_program_spec` with deprecated `fault_program_spec` alias
 - optional metadata
 
 ## Named examples
@@ -244,16 +256,16 @@ Simulation rows are emitted in canonical telemetry shape and are intended to fee
 
 Important row fields:
 - canonical telemetry fields such as `tail_id`, `flight_id`, `timestamp_utc`, `parameter_name`, `parameter_value`, `date_utc`
-- additive simulation metadata such as clean values, phase labels, hierarchy context, and fault truth metadata
+- additive simulation metadata such as clean values, phase labels, hierarchy context, and misbehavior truth metadata
 
-Downstream structure such as the `WindowFeaturesDataFrame` belongs to `libs/windows`, not to this package.
+Downstream structure such as `window_features` belongs to `libs/windows`, not to this package.
 
 ## Subject Matter View
 
 This package answers:
 - what aircraft structure is being simulated
 - how a particular flight exercises that structure over time
-- what injected faults and phase programs shape the telemetry
+- what injected misbehaviors and phase programs shape the telemetry
 
 ## Testing / Validation
 
@@ -263,7 +275,16 @@ This package answers:
 ## Notes / Constraints
 
 - The canonical simulation entrypoint is `python -m scripts.run_sim_pipeline ...`
-- `ParameterSpec.sampling_rate_hz` remains a tracked TODO; current behavior is one emitted sample per parameter per tick
+- `ParameterSpec.sampling_rate_hz` is active for the realistic hierarchy presets and emits sparse rows at authored rates
+- the realistic preset ladder is:
+  - `power_pressurization_hierarchy_smoke`
+  - `power_pressurization_hierarchy_medium`
+  - `power_pressurization_hierarchy_composite`
+- the realistic preset family uses a `28` minute authored mission on a `0.5` second internal tick across:
+  - `gate_turnaround`
+  - `takeoff_climb`
+  - `cruise`
+  - `descent_approach`
 
 The main named public example seam today is:
 - `libs.simulation.flight.examples`
@@ -293,7 +314,14 @@ Simulation adds metadata columns on the same rows, including:
 - `subsystem_id`
 - `module_id`
 - `parameter_value_clean`
+- `unit`
+- `rate_hz`
 - `behavior_family_label`
+- `misbehavior_active`
+- `misbehavior_family_label`
+- `misbehavior_detail_label`
+- `misbehavior_window_id`
+- `coupling_id_label`
 - `target_source`
 
 This means simulation is not producing a separate bespoke telemetry schema that later has to be translated into the pipeline contract. The rows are already pipeline-shaped.
@@ -306,7 +334,7 @@ Simulation should feed the same persisted pipelines used for real telemetry.
 
 The canonical operational entrypoint is:
 
-- `python -m scripts.run_sim_pipeline --flight-name power_chain --base-dir data/sim_runs --mode full --format parquet`
+- `python -m scripts.run_sim_pipeline --flight-name power_chain --base-dir data/simulation_runs --mode full --format parquet`
 
 That runner:
 
@@ -314,7 +342,7 @@ That runner:
 2. builds a live `Flight`
 3. runs the flight
 4. writes canonical raw telemetry rows to `input/raw_telemetry`
-5. writes phase labels and hierarchy labels
+5. writes phase labels, hierarchy labels, and coupling misbehavior windows
 6. invokes the real persisted stage stack
 
 There is no separate simulation-specific fitting or inference pipeline anymore.
@@ -331,14 +359,15 @@ That is persistence, not schema translation.
 
 ### Parameter sampling rate
 
-`ParameterSpec.sampling_rate_hz` exists, but true parameter-rate-aware emission is still deferred.
+`ParameterSpec.sampling_rate_hz` is now honored for the realistic hierarchy presets.
 
 Current behavior:
-- one emitted sample per parameter per simulation tick
+- sparse emission on the authored internal mission tick
+- the current realistic presets use `0.5`, `1.0`, and `2.0` Hz buckets on a `0.5` second internal tick
 
-Follow-up work still needed:
-- make parameter emission cadence honor `sampling_rate_hz`
-- decide sparse emission vs carry-forward semantics
+Current limitations:
+- rate-aware downstream modeling is still coarse; the pipeline mostly recovers observed cadence rather than using rate as a first-class structural feature
+- the simpler legacy example flights still behave as fixed-rate-per-tick scenarios unless explicitly authored otherwise
 
 ### Ports
 
@@ -359,12 +388,14 @@ The curated `libs.simulation` root surface exports noun types and phase helpers 
 Examples:
 - `Aircraft`, `AircraftSpec`
 - `Flight`, `FlightSpec`, `FlightTick`
+- `Tail`
+- `Fleet`
 - `Module`, `ModuleSpec`
 - `Parameter`, `ParameterSpec`
 - `Port`, `PortSpec`
 - `Coupling`, `CouplingSpec`
 - `PhaseProgram`, `PhaseProgramSpec`
-- `FaultProgramSpec`
+- `MisbehaviorProgramSpec`
 
 The root does not export:
 - pipeline bridge helpers

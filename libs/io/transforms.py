@@ -45,14 +45,22 @@ def normalize_raw_telemetry(raw_df: "DataFrame") -> "DataFrame":
             timestamp_col.cast("timestamp").alias("timestamp_utc"),
             F.col("parameter_name").cast("string").alias("parameter_name"),
             value_text.alias("parameter_value"),
+            (
+                F.trim(F.coalesce(F.col("unit").cast("string"), F.lit("")))
+                if "unit" in raw_df.columns
+                else F.lit(None).cast("string")
+            ).alias("unit"),
+            (
+                F.col("rate_hz").cast("double")
+                if "rate_hz" in raw_df.columns
+                else F.lit(None).cast("double")
+            ).alias("rate_hz"),
             *(F.col(column) for column in passthrough_columns),
         )
         .where(F.col("tail_id").isNotNull() & F.col("flight_id").isNotNull())
         .where(F.col("timestamp_utc").isNotNull() & F.col("parameter_name").isNotNull())
         .withColumn("sensor", F.col("parameter_name"))
         .withColumn("val", F.expr("try_cast(parameter_value as double)"))
-        .withColumn("unit", F.lit(None).cast("string"))
-        .withColumn("rate_hz", F.lit(None).cast("double"))
         .withColumn("meta", F.expr("cast(map() as map<string,string>)"))
         .withColumn("date_utc", F.to_date(F.col("timestamp_utc")))
     )

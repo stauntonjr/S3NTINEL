@@ -36,7 +36,7 @@ Interpretation:
 
 This coordinate system is used for:
 
-- `WindowFeatures`
+- per-window feature vectors
 - drift magnitude
 - backbone fitting
 - reconstruction residuals
@@ -46,12 +46,10 @@ The fitted metadata artifact is:
 
 ## 2. Window Features
 
-The active many-window artifact is the **WindowFeaturesDataFrame**.
+The active many-window artifact is **`window_features`**.
 
-For one window, the semantic object is:
-- `WindowFeatures`
-
-Its continuous block is the robust-scaled end-of-window state, plus associated categorical/event summaries.
+For one window, the semantic unit is the window-level feature row: robust-scaled
+continuous end state plus associated categorical and event summaries.
 
 This replaces older implementation-era references to `window_x` as the primary concept.
 
@@ -127,12 +125,9 @@ The phase layer operates on selected structure vectors derived from window featu
 Key current nouns:
 
 - `PhaseFeatureConfig`
-- `PhaseFeatures`
-- `PhaseDetectionPolicy`
-- `PhaseBuffer`
-- `PhaseClustering`
-- `PhaseClusterAssignment`
-- `PhaseStream`
+- `PhaseFeatureFrame`
+- `PhaseClusterModel`
+- `PhaseDetectionPlan`
 
 The conceptual steps are:
 

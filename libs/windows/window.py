@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
-
-import pandas as pd
 
 from libs.io.contracts import AdaptiveWindowRow, DetectedEventRow
 from libs.windows.buffer import WindowSensorBuffer
@@ -51,6 +49,30 @@ class WindowPolicy:
     def effective_duration_ms(self, duration_ms: int) -> int:
         return max(int(duration_ms), int(self.min_ms))
 
+    def duration_ms_expr(self, *, t_start: "Column", t_end: "Column") -> "Column":
+        from pyspark.sql import functions as F
+
+        return (F.unix_millis(t_end) - F.unix_millis(t_start)).cast("int")
+
+    def cap_timestamp_expr(self, *, t_start: "Column") -> "Column":
+        from pyspark.sql import functions as F
+
+        return F.timestamp_millis(F.unix_millis(t_start) + F.lit(int(self.max_ms)))
+
+    def should_close_expr(self, *, duration_ms: "Column", event_count: "Column") -> "Column":
+        return (duration_ms >= int(self.max_ms)) | (event_count >= int(self.event_threshold))
+
+    def close_reason_expr(self, *, duration_ms: "Column", event_count: "Column") -> "Column":
+        from pyspark.sql import functions as F
+
+        by_duration = duration_ms >= int(self.max_ms)
+        by_count = event_count >= int(self.event_threshold)
+        return (
+            F.when(by_duration & by_count, F.lit("event_threshold+max_ms"))
+            .when(by_count, F.lit("event_threshold"))
+            .otherwise(F.lit("max_ms"))
+        )
+
 
 @dataclass
 class Window:
@@ -85,7 +107,7 @@ class Window:
         return len(self.sensor_buffer.last_seen)
 
     def cap_timestamp(self, max_ms: int) -> datetime:
-        return self.t_start + pd.Timedelta(milliseconds=int(max_ms))
+        return self.t_start + timedelta(milliseconds=int(max_ms))
 
     def ingest_event(self, event: DetectedEventRow) -> None:
         ts = event.get("timestamp_utc", event.get("ts"))
@@ -130,3 +152,9 @@ class Window:
         if self.window_events is not None:
             row["window_events"] = list(self.window_events)
         return row
+
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pyspark.sql.column import Column

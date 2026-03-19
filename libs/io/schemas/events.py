@@ -1,6 +1,7 @@
 EVENTS_COLUMNS = [
     "tail_id",
     "flight_id",
+    "event_seq_id",
     "win_id",
     "timestamp_utc",
     "parameter_name",
@@ -14,6 +15,7 @@ EVENTS_COLUMNS = [
 EVENTS_SCHEMA = """
 tail_id string,
 flight_id string,
+event_seq_id long,
 win_id int,
 timestamp_utc timestamp,
 parameter_name string,

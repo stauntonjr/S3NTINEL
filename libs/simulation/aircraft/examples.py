@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from libs.simulation.aircraft.spec import AircraftSpec
 from libs.simulation.coupling.examples import build_drive_coupling_spec, build_enable_coupling_spec
 from libs.simulation.module.examples import (
@@ -1242,3 +1244,223 @@ def build_power_pressurization_hierarchy_composite_aircraft_spec() -> AircraftSp
         ),
         metadata={"example_name": "power_pressurization_hierarchy_composite"},
     )
+
+
+_LEGACY_BUILD_POWER_PRESSURIZATION_HIERARCHY_COMPOSITE_AIRCRAFT_SPEC = build_power_pressurization_hierarchy_composite_aircraft_spec
+
+_COMPOSITE_RATE_HZ_BY_PARAMETER = {
+    "master_power_state": 0.5,
+    "generator_tie_state": 0.5,
+    "bus_voltage_v": 1.0,
+    "bus_current_a": 1.0,
+    "compressor_speed_pct": 2.0,
+    "compressor_energy_total_kwh": 0.5,
+    "electrical_load_pct": 1.0,
+    "inverter_temp_c": 1.0,
+    "press_mode_state": 0.5,
+    "pack_mode_state": 0.5,
+    "outflow_cmd_pct": 2.0,
+    "pack_flow_cmd_pct": 2.0,
+    "actuator_position_pct": 2.0,
+    "actuator_load_pct": 1.0,
+    "cabin_altitude_ft": 2.0,
+    "cabin_delta_p_psi": 1.0,
+    "aircraft_altitude_ft": 2.0,
+    "vertical_speed_fpm": 2.0,
+    "ambient_pressure_kpa": 1.0,
+    "ambient_temp_c": 1.0,
+    "bleed_supply_psi": 2.0,
+    "bleed_usage_total": 0.5,
+    "pack_flow_rate_pct": 2.0,
+    "pack_temp_c": 1.0,
+}
+
+_COUPLING_ALLOWED_MISBEHAVIORS = (
+    "coupling_break",
+    "coupling_inversion",
+    "timing_lag",
+    "timing_jitter",
+    "phase_context_violation",
+)
+
+_BRANCH_COUNT_BY_SCALE = {
+    "smoke": 1,
+    "medium": 2,
+    "composite": 4,
+}
+
+
+def _branch_suffix(branch_index: int) -> str:
+    return "" if int(branch_index) == 0 else f"_B{int(branch_index) + 1}"
+
+
+def _branch_metadata(*, branch_index: int, base_id: str) -> dict[str, object]:
+    return {
+        "branch_index": int(branch_index),
+        "base_id": str(base_id),
+    }
+
+
+def _branch_parameter_name(parameter_name: str, branch_index: int) -> str:
+    return str(parameter_name) if int(branch_index) == 0 else f"{parameter_name}_b{int(branch_index) + 1}"
+
+
+def _scaled_parameter_spec(parameter_spec, *, branch_index: int, module_id: str, subsystem_id: str):
+    branch_suffix = _branch_suffix(branch_index)
+    rate_hz = _COMPOSITE_RATE_HZ_BY_PARAMETER.get(str(parameter_spec.parameter_name), parameter_spec.sampling_rate_hz)
+    allowed_fault_families = tuple(str(name) for name in parameter_spec.allowed_fault_families)
+    if str(parameter_spec.behavior_family_label or "") == "regulated" and "bias" not in allowed_fault_families:
+        allowed_fault_families = (*allowed_fault_families, "bias")
+    metadata = {
+        **dict(parameter_spec.metadata),
+        **_branch_metadata(branch_index=branch_index, base_id=parameter_spec.parameter_name),
+    }
+    return replace(
+        parameter_spec,
+        parameter_name=_branch_parameter_name(str(parameter_spec.parameter_name), branch_index),
+        module_id=f"{parameter_spec.module_id}{branch_suffix}" if branch_suffix else str(parameter_spec.module_id),
+        subsystem_id=f"{parameter_spec.subsystem_id}{branch_suffix}" if branch_suffix else str(parameter_spec.subsystem_id),
+        sampling_rate_hz=(None if rate_hz is None else float(rate_hz)),
+        allowed_fault_families=allowed_fault_families,
+        metadata=metadata,
+    )
+
+
+def _scaled_module_spec(module_spec, *, branch_index: int):
+    branch_suffix = _branch_suffix(branch_index)
+    module_id = f"{module_spec.module_id}{branch_suffix}" if branch_suffix else str(module_spec.module_id)
+    subsystem_id = f"{module_spec.subsystem_id}{branch_suffix}" if branch_suffix else str(module_spec.subsystem_id)
+    gain_scale = 1.0 + (0.04 * float(branch_index))
+    offset_scale = float(branch_index) * 0.25
+    return replace(
+        module_spec,
+        module_id=module_id,
+        subsystem_id=subsystem_id,
+        parameters=tuple(
+            _scaled_parameter_spec(
+                parameter_spec,
+                branch_index=branch_index,
+                module_id=module_id,
+                subsystem_id=subsystem_id,
+            )
+            for parameter_spec in module_spec.parameters
+        ),
+        latent_update_specs=tuple(
+            replace(
+                latent_update,
+                gain=float(latent_update.gain) * gain_scale,
+                offset=float(latent_update.offset) + offset_scale,
+                metadata={
+                    **dict(latent_update.metadata),
+                    **_branch_metadata(branch_index=branch_index, base_id=latent_update.latent_name),
+                },
+            )
+            for latent_update in module_spec.latent_update_specs
+        ),
+        metadata={
+            **dict(module_spec.metadata),
+            **_branch_metadata(branch_index=branch_index, base_id=module_spec.module_id),
+        },
+    )
+
+
+def _scaled_coupling_spec(coupling_spec, *, branch_index: int):
+    branch_suffix = _branch_suffix(branch_index)
+    lag_scale = 1.0 + (0.15 * float(branch_index))
+    gain_scale = 1.0 + (0.03 * float(branch_index))
+    metadata = {
+        **dict(coupling_spec.metadata),
+        **_branch_metadata(branch_index=branch_index, base_id=coupling_spec.coupling_id),
+        "coupling_id": (
+            str(coupling_spec.coupling_id)
+            if not branch_suffix
+            else f"{coupling_spec.coupling_id}{branch_suffix}"
+        ),
+    }
+    return replace(
+        coupling_spec,
+        source_module_id=f"{coupling_spec.source_module_id}{branch_suffix}" if branch_suffix else str(coupling_spec.source_module_id),
+        target_module_id=f"{coupling_spec.target_module_id}{branch_suffix}" if branch_suffix else str(coupling_spec.target_module_id),
+        gain=float(coupling_spec.gain) * gain_scale,
+        lag_seconds=float(coupling_spec.lag_seconds) * lag_scale,
+        allowed_misbehavior_families=_COUPLING_ALLOWED_MISBEHAVIORS,
+        metadata=metadata,
+    )
+
+
+def _build_scaled_composite_aircraft_spec(*, scale: str) -> AircraftSpec:
+    try:
+        branch_count = int(_BRANCH_COUNT_BY_SCALE[str(scale)])
+    except KeyError as exc:
+        raise ValueError(f"unsupported composite aircraft scale {scale!r}") from exc
+
+    legacy = _LEGACY_BUILD_POWER_PRESSURIZATION_HIERARCHY_COMPOSITE_AIRCRAFT_SPEC()
+    systems_by_id: dict[str, list] = {system.system_id: [] for system in legacy.systems}
+    couplings = []
+
+    for branch_index in range(branch_count):
+        subsystem_specs = []
+        for system_spec in legacy.systems:
+            for subsystem_spec in system_spec.subsystems:
+                subsystem_specs.append(
+                    replace(
+                        subsystem_spec,
+                        subsystem_id=(
+                            f"{subsystem_spec.subsystem_id}{_branch_suffix(branch_index)}"
+                            if _branch_suffix(branch_index)
+                            else str(subsystem_spec.subsystem_id)
+                        ),
+                        modules=tuple(
+                            _scaled_module_spec(module_spec, branch_index=branch_index)
+                            for module_spec in subsystem_spec.modules
+                        ),
+                        metadata={
+                            **dict(subsystem_spec.metadata),
+                            **_branch_metadata(branch_index=branch_index, base_id=subsystem_spec.subsystem_id),
+                        },
+                    )
+                )
+            systems_by_id[system_spec.system_id].extend(
+                item for item in subsystem_specs if item.system_id == system_spec.system_id
+            )
+            subsystem_specs = []
+        couplings.extend(
+            _scaled_coupling_spec(coupling_spec, branch_index=branch_index)
+            for coupling_spec in legacy.couplings
+        )
+
+    systems = tuple(
+        replace(
+            system_spec,
+            subsystems=tuple(systems_by_id[system_spec.system_id]),
+            metadata={
+                **dict(system_spec.metadata),
+                "scale": str(scale),
+                "branch_count": branch_count,
+            },
+        )
+        for system_spec in legacy.systems
+    )
+    return AircraftSpec(
+        aircraft_id=f"power_pressurization_hierarchy_{scale}",
+        systems=systems,
+        couplings=tuple(couplings),
+        metadata={
+            **dict(legacy.metadata),
+            "example_name": f"power_pressurization_hierarchy_{scale}",
+            "scale": str(scale),
+            "branch_count": branch_count,
+        },
+    )
+
+
+def build_power_pressurization_hierarchy_smoke_aircraft_spec() -> AircraftSpec:
+    return _build_scaled_composite_aircraft_spec(scale="smoke")
+
+
+def build_power_pressurization_hierarchy_medium_aircraft_spec() -> AircraftSpec:
+    return _build_scaled_composite_aircraft_spec(scale="medium")
+
+
+def build_power_pressurization_hierarchy_composite_aircraft_spec() -> AircraftSpec:
+    return _build_scaled_composite_aircraft_spec(scale="composite")

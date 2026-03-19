@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
+from typing import TYPE_CHECKING
 
 from libs.perf.annotations import hot_path
 
@@ -22,6 +23,18 @@ class WindowSensorBuffer:
             if payload.get("state") is not None:
                 return str(payload.get("state"))
         return str(event.get("event_type_detected", "unknown"))
+
+    @staticmethod
+    def spark_event_value_expr() -> "Column":
+        from pyspark.sql import functions as F
+
+        payload_col = F.col("payload")
+        return (
+            F.when(F.element_at(payload_col, F.lit("to")).isNotNull(), F.element_at(payload_col, F.lit("to")).cast("string"))
+            .when(F.element_at(payload_col, F.lit("value")).isNotNull(), F.element_at(payload_col, F.lit("value")).cast("string"))
+            .when(F.element_at(payload_col, F.lit("state")).isNotNull(), F.element_at(payload_col, F.lit("state")).cast("string"))
+            .otherwise(F.col("event_type_detected").cast("string"))
+        )
 
     @hot_path
     def update(self, *, sensor: str, timestamp_utc: datetime, value: str) -> dict[str, Any]:
@@ -52,3 +65,7 @@ class WindowSensorBuffer:
 
     def copy(self) -> "WindowSensorBuffer":
         return WindowSensorBuffer(last_seen={key: dict(value) for key, value in self.last_seen.items()})
+
+
+if TYPE_CHECKING:
+    from pyspark.sql.column import Column

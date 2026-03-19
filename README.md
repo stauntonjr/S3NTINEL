@@ -63,6 +63,7 @@ Run with:
 - `pipelines/`: ordered job entrypoints (`00_...` through `80_...`).
 - `libs/`: reusable domain modules (`backbone`, `graph`, `events`, `windows`, `phase`, `scoring`, `conformal`, `io`, `anomaly`).
 - `notebooks/`: exploratory and validation notebooks.
+  Notebook workflow and kernel registration guidance live in [notebooks/README.md](/home/jrs/code/S3NTINEL/sentinel/notebooks/README.md).
 - `scripts/`: local-to-AVD handoff helpers (bundle/patch export-import).
 - `docs/v2_architecture.md`: architecture and contract source of truth.
 - `docs/glossary.md`: active code/data taxonomy and naming conventions.
@@ -114,16 +115,34 @@ Run with:
 	- `export S3NTINEL_TABLE_FORMAT=parquet`
 - Active Spark baseline: `sentinel-spark35` on Python `3.11` with Spark `3.5.1` and Delta `3.0.0`.
 - Local smoke/default recommendation: use `sentinel-spark35` and `S3NTINEL_TABLE_FORMAT=parquet` unless your Spark runtime already has Delta JVM jars available. The `delta-spark` Python package alone is not sufficient for offline Delta writes.
+- For larger local simulation bundles on a 16 GB class laptop, use the built-in profile:
+	- `export S3NTINEL_SPARK_PROFILE=laptop_large_sim`
+	- this applies `local[4]`, `spark.driver.memory=8g`, `spark.driver.maxResultSize=2g`, `spark.sql.shuffle.partitions=16`, `spark.default.parallelism=8`, adaptive execution, Kryo serialization, and a dedicated local spill dir under `/tmp`
+	- you can still override any individual setting with the explicit env vars below
+- To use the benchmark-winning larger sequence segments with the same laptop Spark settings, use:
+	- `export S3NTINEL_SPARK_PROFILE=laptop_large_sim_large_segments`
+	- this keeps the same Spark runtime config as `laptop_large_sim` and also applies:
+		- event segments: `100000` rows / `1800000` ms
+		- window segments: `100000` rows / `1800000` ms
+		- phase segments: `10000` rows / `3600000` ms
 - Spark bootstrap also supports:
 	- `S3NTINEL_DELTA_JAR_PATH=/abs/path/to/delta.jar[,more.jar]`
 	- `S3NTINEL_SPARK_EXTRA_JARS=/abs/path/to/extra.jar[,more.jar]`
 	- `S3NTINEL_DELTA_ALLOW_MAVEN=false` to disable Maven fallback when you want local jars only
+	- `S3NTINEL_SPARK_DRIVER_MEMORY=8g`
+	- `S3NTINEL_SPARK_DRIVER_MAX_RESULT_SIZE=2g`
+	- `S3NTINEL_SPARK_EXECUTOR_MEMORY=4g`
+	- `S3NTINEL_SPARK_LOCAL_DIR=/tmp/s3ntinel-spark-local`
+	- `S3NTINEL_SPARK_SQL_ADAPTIVE_ENABLED=true`
+	- `S3NTINEL_SPARK_SQL_ADAPTIVE_COALESCE_PARTITIONS_ENABLED=true`
+	- `S3NTINEL_SPARK_SQL_ADAPTIVE_LOCAL_SHUFFLE_READER_ENABLED=true`
+	- `S3NTINEL_SPARK_SERIALIZER=org.apache.spark.serializer.KryoSerializer`
 - Generate deterministic sample test data: `python -m scripts.generate_sample_data --base-dir data --mode overwrite`
 - Run end-to-end smoke test (00->80, including `05_parameter_profiles_fit`): `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format parquet --min-warm 1`
 - Smoke test now seeds a deterministic `sensor_subsystem_map` and asserts emitted anomaly quality gates: non-empty output, no duplicate `(tail_id, flight_id, win_id)`, at least one non-null `panel_context`, and at least one populated `subsystems[].top_sensors`.
 - For stage-80 merge idempotence validation in smoke: `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format delta --min-warm 1 --write-mode merge`
 - Merge smoke checks require a Spark runtime with Delta JVM classes available.
-- Generate bucketed vs stream_parity window diagnostics in smoke: `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format parquet --compare-window-strategies`
+- Run the canonical segmented smoke pipeline: `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format parquet`
 - Run grouped fitting+inference per partition row from any manifest: `python -m scripts.run_partition_manifest_jobs --partition-manifest-path data/smoke/_partition_manifest --manifest-format parquet --job grouped --jobs-base-dir data/fleet_jobs_grouped --table-format parquet --write-mode overwrite`
 - Run the simulation/event-detection evaluation harness: `python -m scripts.run_sim_detection_eval --output-json reports/eda/sim_detection_eval_report.json`
 - Use handoff helpers for AVD transfer: see `scripts/README.md`
@@ -224,9 +243,9 @@ Run with:
 	- `--sensor-count` (default `3`)
 	- `--timestamp-count` (default `12`)
 	- `--step-ms` (default `100`)
-- `30_windows_adaptive` strategy:
-	- `S3NTINEL_WINDOW_STRATEGY` supports `bucketed` (legacy) and `stream_parity` (stateful max_ms/event_threshold parity with stream windower)
-	- `S3NTINEL_WINDOW_INACTIVITY_TIMEOUT_MS` controls timeout-based closure in `stream_parity` mode (default `0` = disabled)
+- `30_windows_adaptive` windowing:
+	- `S3NTINEL_WINDOW_STRATEGY` is retained as a run-setting surface but only `segmented` is supported by the canonical builder
+	- `S3NTINEL_WINDOW_INACTIVITY_TIMEOUT_MS` controls timeout-based closure for the segmented builder (default `0` = disabled)
 
 ## v1 conventions
 

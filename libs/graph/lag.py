@@ -31,15 +31,18 @@ class LagGraph:
         lag_sums: defaultdict[tuple[str, str], float] = defaultdict(float)
         outgoing_counts: Counter[str] = Counter()
         for _, group in event_rows.groupby(["tail_id", "flight_id"], sort=True):
-            buffer: deque[tuple[pd.Timestamp, str]] = deque()
-            for row in group.sort_values(["timestamp_utc", "parameter_name"], kind="mergesort").to_dict(orient="records"):
+            buffer: deque[tuple[int, pd.Timestamp, str]] = deque()
+            for row in group.sort_values(["event_seq_id"], kind="mergesort").to_dict(orient="records"):
+                event_seq_id = int(row["event_seq_id"])
                 timestamp_utc = pd.to_datetime(row["timestamp_utc"], utc=True)
                 parameter_name = str(row["parameter_name"])
                 lower = timestamp_utc - pd.Timedelta(seconds=tau)
-                while buffer and buffer[0][0] < lower:
+                while buffer and buffer[0][1] < lower:
                     buffer.popleft()
                 seen_prev_parameters: set[str] = set()
-                for prev_timestamp_utc, prev_parameter_name in reversed(buffer):
+                for prev_event_seq_id, prev_timestamp_utc, prev_parameter_name in reversed(buffer):
+                    if prev_event_seq_id >= event_seq_id:
+                        continue
                     if prev_parameter_name == parameter_name or prev_parameter_name in seen_prev_parameters:
                         continue
                     pair = (prev_parameter_name, parameter_name)
@@ -48,7 +51,7 @@ class LagGraph:
                     lag_sums[pair] += lag
                     outgoing_counts[prev_parameter_name] += 1
                     seen_prev_parameters.add(prev_parameter_name)
-                buffer.append((timestamp_utc, parameter_name))
+                buffer.append((event_seq_id, timestamp_utc, parameter_name))
         out: list[dict[str, object]] = []
         for (left, right), count in sorted(pair_counts.items(), key=lambda item: (-item[1], item[0][0], item[0][1])):
             if count < max(int(spec.min_count), 1):

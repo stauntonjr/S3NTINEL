@@ -275,6 +275,110 @@ def test_coupling_grouping_is_owned_by_coupling_class():
     assert len(grouped["MOD_A"]) == 2
 
 
+def test_coupling_break_misbehavior_prevents_transfer():
+    timestamp_utc = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    source_module = _source_module_with_output(value=28.0, timestamp_utc=timestamp_utc)
+    target_module = Module.from_spec(_target_module_spec())
+    coupling = Coupling.drive(
+        source_module_id="MOD_SOURCE",
+        source_port_name="voltage_out",
+        target_module_id="MOD_TARGET",
+        target_port_name="voltage_in",
+        gain=0.5,
+    )
+
+    coupling.apply(
+        source_module,
+        target_module,
+        timestamp_utc=timestamp_utc,
+        misbehavior_context={"misbehavior_detail_label": "coupling_break"},
+    )
+
+    assert target_module.input_port("voltage_in").current_value is None
+
+
+def test_coupling_inversion_misbehavior_reverses_sign():
+    timestamp_utc = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    source_module = _source_module_with_output(value=28.0, timestamp_utc=timestamp_utc)
+    target_module = Module.from_spec(_target_module_spec())
+    coupling = Coupling.drive(
+        source_module_id="MOD_SOURCE",
+        source_port_name="voltage_out",
+        target_module_id="MOD_TARGET",
+        target_port_name="voltage_in",
+        gain=0.5,
+    )
+
+    coupling.apply(
+        source_module,
+        target_module,
+        timestamp_utc=timestamp_utc,
+        misbehavior_context={"misbehavior_detail_label": "coupling_inversion"},
+    )
+
+    assert target_module.input_port("voltage_in").current_value == -14.0
+
+
+def test_coupling_timing_lag_misbehavior_delays_transfer():
+    t0 = datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    t1 = datetime(2025, 1, 1, 0, 0, 1, tzinfo=timezone.utc)
+    source_module = _source_module_with_output(value=28.0, timestamp_utc=t0)
+    target_module = Module.from_spec(_target_module_spec())
+    coupling = Coupling.drive(
+        source_module_id="MOD_SOURCE",
+        source_port_name="voltage_out",
+        target_module_id="MOD_TARGET",
+        target_port_name="voltage_in",
+        gain=0.5,
+    )
+
+    coupling.apply(
+        source_module,
+        target_module,
+        timestamp_utc=t0,
+        misbehavior_context={"misbehavior_detail_label": "timing_lag", "lag_delta_seconds": 1.0},
+    )
+    assert target_module.input_port("voltage_in").current_value is None
+
+    coupling.apply(
+        source_module,
+        target_module,
+        timestamp_utc=t1,
+        misbehavior_context={"misbehavior_detail_label": "timing_lag", "lag_delta_seconds": 1.0},
+    )
+    assert target_module.input_port("voltage_in").current_value == 14.0
+
+
+def test_coupling_timing_jitter_misbehavior_uses_override_lag():
+    t0 = datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    t1 = datetime(2025, 1, 1, 0, 0, 1, tzinfo=timezone.utc)
+    source_module = _source_module_with_output(value=28.0, timestamp_utc=t0)
+    target_module = Module.from_spec(_target_module_spec())
+    coupling = Coupling.drive(
+        source_module_id="MOD_SOURCE",
+        source_port_name="voltage_out",
+        target_module_id="MOD_TARGET",
+        target_port_name="voltage_in",
+        gain=0.5,
+    )
+
+    coupling.apply(
+        source_module,
+        target_module,
+        timestamp_utc=t0,
+        misbehavior_context={"misbehavior_detail_label": "timing_jitter", "jitter_seconds": 1.0},
+    )
+    assert target_module.input_port("voltage_in").current_value is None
+
+    coupling.apply(
+        source_module,
+        target_module,
+        timestamp_utc=t1,
+        misbehavior_context={"misbehavior_detail_label": "timing_jitter", "jitter_seconds": 1.0},
+    )
+    assert target_module.input_port("voltage_in").current_value == 14.0
+
+
 def test_module_step_raises_for_missing_target_module_on_coupling():
     timestamp_utc = datetime(2025, 1, 1, tzinfo=timezone.utc)
     source_module = Module.from_spec(_source_module_spec())

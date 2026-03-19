@@ -11,6 +11,7 @@
 		"terminal.integrated.env.linux": {
 			"VIRTUAL_ENV": "",
 			"PATH": "/home/jrs/anaconda3/envs/sentinel-spark35/bin:${env:PATH}"
-		}
+		},
+		"chatgpt.openOnStartup": true
 	}
 }

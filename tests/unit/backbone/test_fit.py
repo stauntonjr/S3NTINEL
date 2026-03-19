@@ -75,8 +75,8 @@ def test_compute_gh_and_solve_weights_reconstructs_simple_system():
     assert residuals == {"s1": 0.0, "s2": 0.0, "s3": 0.0}
 
 
-def test_backbone_model_from_window_x_rows_builds_model_and_energy_rows():
-    window_x_rows = [
+def test_backbone_model_from_window_feature_rows_builds_model_and_energy_rows():
+    window_feature_rows = [
         {
             "tail_id": "T1",
             "flight_id": "F1",
@@ -97,8 +97,8 @@ def test_backbone_model_from_window_x_rows_builds_model_and_energy_rows():
         },
     ]
 
-    model, sensor_energies = BackboneModel.from_window_x_rows(
-        window_x_rows,
+    model, sensor_energies = BackboneModel.from_window_feature_rows(
+        window_feature_rows,
         spec=BackboneSpec(sensor_count=1, ridge_lambda=0.0),
     )
 

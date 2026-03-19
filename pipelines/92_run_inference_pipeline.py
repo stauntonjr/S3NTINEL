@@ -2,6 +2,7 @@
 
 import os
 
+from libs.perf import log_memory_usage
 from pipelines._pipeline_runner import run_stage_group
 
 INFERENCE_STAGE_SCRIPTS = [
@@ -14,6 +15,7 @@ INFERENCE_STAGE_SCRIPTS = [
 ]
 
 
+@log_memory_usage(label="92_run_inference_pipeline")
 def run() -> None:
     os.environ.setdefault("S3NTINEL_WRITE_MODE", "overwrite")
     run_stage_group(

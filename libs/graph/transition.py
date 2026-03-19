@@ -27,7 +27,7 @@ class TransitionGraph:
         outgoing_counts: Counter[str] = Counter()
         for _, group in event_rows.groupby(["tail_id", "flight_id"], sort=True):
             previous_parameter_name: str | None = None
-            for row in group.sort_values(["timestamp_utc", "parameter_name"], kind="mergesort").to_dict(orient="records"):
+            for row in group.sort_values(["event_seq_id"], kind="mergesort").to_dict(orient="records"):
                 parameter_name = str(row["parameter_name"])
                 if previous_parameter_name is not None and previous_parameter_name != parameter_name:
                     pair = (previous_parameter_name, parameter_name)

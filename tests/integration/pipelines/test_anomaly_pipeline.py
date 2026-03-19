@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 import pytest
 
-from libs.anomaly.attribution import build_anomaly_window_attribution_df
+from libs.anomaly.pipeline import build_anomaly_window_attribution_table
 from libs.testing.data import (
     create_sample_calibrated_df,
     create_sample_events_df,
@@ -50,7 +50,7 @@ def test_anomaly_object_includes_panel_context_component_contrib_and_sensor_scor
         ]
     )
 
-    anomaly_window_attribution_df = build_anomaly_window_attribution_df(
+    anomaly_window_attribution_df = build_anomaly_window_attribution_table(
         calibrated_df=calibrated_df,
         phase_windows_df=phase_windows_df,
         windows_df=windows_df,
@@ -104,7 +104,7 @@ def test_anomaly_window_attribution_sets_v2_version_fields(spark):
         ]
     )
 
-    anomaly_window_attribution_df = build_anomaly_window_attribution_df(
+    anomaly_window_attribution_df = build_anomaly_window_attribution_table(
         calibrated_df=calibrated_df,
         phase_windows_df=phase_windows_df,
         windows_df=windows_df,

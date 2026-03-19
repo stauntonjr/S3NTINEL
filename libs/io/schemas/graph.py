@@ -46,6 +46,10 @@ FUSED_GRAPH_COLUMNS = [
     "edge_family",
 ]
 
+GRAPH_PARAMETER_UNIVERSE_COLUMNS = [
+    "parameter_name",
+]
+
 HIERARCHY_SENSOR_MAP_COLUMNS = [
     "parameter_name",
     "system_id",
@@ -120,6 +124,15 @@ def FUSED_GRAPH_SCHEMA():
             T.StructField("lag_weight", T.DoubleType(), False),
             T.StructField("fused_weight", T.DoubleType(), False),
             T.StructField("edge_family", T.StringType(), False),
+        ]
+    )
+
+
+def GRAPH_PARAMETER_UNIVERSE_SCHEMA():
+    T = _types()
+    return T.StructType(
+        [
+            T.StructField("parameter_name", T.StringType(), False),
         ]
     )
 

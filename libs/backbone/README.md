@@ -13,12 +13,12 @@ Those belong to `libs/windows`, `libs/graph`, and `libs/phase`.
 
 ## How To Use
 
-- Use `BackboneModel.from_window_x_rows(...)` for in-memory fitting.
+- Use `BackboneModel.from_window_feature_rows(...)` for in-memory fitting.
 - Use the package pipeline helpers for persisted Spark-facing adapters.
 
 ## Contents
 
-- `model.py`
+- `artifacts.py`
   - backbone nouns and fitting results
 - `energy.py`
   - sensor energy calculations

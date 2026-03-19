@@ -19,12 +19,12 @@ class PrecisionGraph:
     edges: pd.DataFrame
 
     @classmethod
-    def from_window_x(cls, window_x_df: pd.DataFrame, *, spec: PrecisionGraphSpec) -> PrecisionGraph:
-        if not spec.selected_sensors or window_x_df.empty:
+    def from_window_features(cls, window_feature_df: pd.DataFrame, *, spec: PrecisionGraphSpec) -> PrecisionGraph:
+        if not spec.selected_sensors or window_feature_df.empty:
             return cls(spec=spec, edges=cls.empty_edges())
 
         rows: list[list[float]] = []
-        for _, row in window_x_df.sort_values(["tail_id", "flight_id", "t_end", "win_id"], kind="mergesort").iterrows():
+        for _, row in window_feature_df.sort_values(["tail_id", "flight_id", "t_end", "win_id"], kind="mergesort").iterrows():
             scaled = row.get("continuous_vector_t_end_scaled")
             if not isinstance(scaled, dict):
                 continue
@@ -76,9 +76,9 @@ class PrecisionGraph:
         return cls(spec=spec, edges=pd.DataFrame(out, columns=cls.empty_edges().columns))
 
     @classmethod
-    def from_window_x_spark(
+    def from_window_features_spark(
         cls,
-        window_x_df: "DataFrame",
+        window_feature_df: "DataFrame",
         *,
         spec: PrecisionGraphSpec,
     ) -> PrecisionGraph:
@@ -95,7 +95,7 @@ class PrecisionGraph:
             ).alias(f"x_{idx}")
             for idx, parameter_name in enumerate(backbone_sensors)
         ]
-        projected = window_x_df.select(*projection_exprs)
+        projected = window_feature_df.select(*projection_exprs)
 
         agg_exprs = [F.count(F.lit(1)).cast("long").alias("n")]
         for idx in range(len(backbone_sensors)):
@@ -104,7 +104,7 @@ class PrecisionGraph:
             for j in range(i, len(backbone_sensors)):
                 agg_exprs.append((F.sum(F.col(f"x_{i}") * F.col(f"x_{j}")).cast("double")).alias(f"sum_{i}_{j}"))
 
-        stats_row = projected.agg(*agg_exprs).collect()[0]
+        stats_row = projected.agg(*agg_exprs).first()
         row_count = int(stats_row["n"] or 0)
         if row_count < 2:
             return cls(spec=spec, edges=cls.empty_edges())

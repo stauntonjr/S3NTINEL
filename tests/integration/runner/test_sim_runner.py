@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from libs.io.delta import get_spark
+from libs.simulation.flight.examples import build_named_flight_spec
 from scripts import run_sim_pipeline as runner
 
 
@@ -28,7 +29,7 @@ def _runner_config(tmp_path):
         window_event_threshold=2,
         window_min_ms=50,
         window_inactivity_timeout_ms=0,
-        window_strategy="bucketed",
+        window_strategy="segmented",
         phase_count=3,
         backbone_parameter_count=4,
         backbone_ridge_lambda=1.0,
@@ -38,12 +39,17 @@ def _runner_config(tmp_path):
 def test_sim_runner_uses_grouped_full_stage_scripts(monkeypatch, tmp_path):
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(runner, "resolve_flight", lambda _flight_name: object())
+    monkeypatch.setattr(runner, "resolve_flight", lambda _flight_name: build_named_flight_spec("power_chain"))
     monkeypatch.setattr(runner, "get_spark", lambda _app_name: object())
     monkeypatch.setattr(
         runner,
         "_write_seed_tables",
-        lambda **_kwargs: {"raw_input_rows": 1, "phase_label_rows": 1, "hierarchy_label_rows": 1},
+        lambda **_kwargs: {
+            "raw_input_rows": 1,
+            "phase_label_rows": 1,
+            "hierarchy_label_rows": 1,
+            "coupling_misbehavior_window_rows": 0,
+        },
     )
     monkeypatch.setattr(runner, "_write_validation_reports", lambda **_kwargs: {})
 
@@ -61,7 +67,8 @@ def test_sim_runner_uses_grouped_full_stage_scripts(monkeypatch, tmp_path):
         "20_events_extract.py",
         "30_windows_adaptive.py",
         "10_backbone_fit.py",
-        "11_graph_fit.py",
+        "11_build_graph.py",
+        "12_fit_hierarchy.py",
         "50_phase_fit.py",
         "60_window_scores_raw.py",
         "70_window_scores_calibrate.py",
@@ -112,6 +119,7 @@ def test_sim_runner_writes_seed_tables(tmp_path, monkeypatch):
         assert counts["raw_input_rows"] > 0
         assert counts["phase_label_rows"] > 0
         assert counts["hierarchy_label_rows"] > 0
+        assert "coupling_misbehavior_window_rows" in counts
 
         raw_input = written_tables["raw_input"]
         phase_labels = written_tables[str(run_dir / "delta" / "phase_labels")]
@@ -152,7 +160,7 @@ def test_sim_runner_full_smoke_emits_bundle(monkeypatch, tmp_path):
         window_event_threshold=2,
         window_min_ms=50,
         window_inactivity_timeout_ms=0,
-        window_strategy="bucketed",
+        window_strategy="segmented",
         phase_count=3,
         backbone_parameter_count=4,
         backbone_ridge_lambda=1.0,
@@ -166,20 +174,31 @@ def test_sim_runner_full_smoke_emits_bundle(monkeypatch, tmp_path):
     assert (run_dir / "reports" / "pipeline_run_summary.json").exists()
     assert (run_dir / "reports" / "stages" / "05_parameter_profiles_fit_manifest.json").exists()
     assert (run_dir / "reports" / "stages" / "10_backbone_fit_manifest.json").exists()
-    assert (run_dir / "reports" / "stages" / "11_graph_fit_manifest.json").exists()
+    assert (run_dir / "reports" / "stages" / "11_build_graph_manifest.json").exists()
+    assert (run_dir / "reports" / "stages" / "12_fit_hierarchy_manifest.json").exists()
     assert (run_dir / "reports" / "stages" / "50_phase_fit_manifest.json").exists()
     assert (run_dir / "reports" / "stages" / "60_window_scores_raw_manifest.json").exists()
     assert (run_dir / "reports" / "phase_validation_summary.json").exists()
     assert (run_dir / "reports" / "hierarchy_validation_summary.json").exists()
+    assert (run_dir / "reports" / "coupling_validation_summary.json").exists()
+    assert (run_dir / "reports" / "profile_validation_summary.json").exists()
+    assert (run_dir / "reports" / "event_validation_summary.json").exists()
+    assert (run_dir / "reports" / "label_contract_summary.json").exists()
     assert (run_dir / "reports" / "score_validation_summary.json").exists()
+    assert (run_dir / "reports" / "misbehavior_window_validation_summary.json").exists()
     assert (run_dir / "reports" / "fault_window_validation_summary.json").exists()
+    assert (run_dir / "reports" / "misbehavior_attribution_validation_summary.json").exists()
     assert (run_dir / "reports" / "attribution_validation_summary.json").exists()
 
     assert len(pd.read_parquet(run_dir / "delta" / "raw_telemetry")) > 0
     assert len(pd.read_parquet(run_dir / "delta" / "events")) > 0
     assert len(pd.read_parquet(run_dir / "delta" / "windows")) > 0
+    window_features_df = pd.read_parquet(run_dir / "delta" / "window_features")
+    assert len(window_features_df) > 0
+    assert window_features_df["event_type_counts"].apply(lambda value: bool(value)).any()
     assert len(pd.read_parquet(run_dir / "delta" / "backbone")) > 0
     assert len(pd.read_parquet(run_dir / "delta" / "precision_graph")) > 0
+    assert len(pd.read_parquet(run_dir / "delta" / "graph_parameter_universe")) > 0
     assert len(pd.read_parquet(run_dir / "delta" / "hierarchy_sensor_map")) > 0
     assert len(pd.read_parquet(run_dir / "delta" / "phase_windows")) > 0
     assert len(pd.read_parquet(run_dir / "delta" / "window_scores_calibrated")) > 0
@@ -188,12 +207,17 @@ def test_sim_runner_full_smoke_emits_bundle(monkeypatch, tmp_path):
 
 def test_sim_runner_uses_library_validation_reports(monkeypatch, tmp_path):
     config = _runner_config(tmp_path)
-    monkeypatch.setattr(runner, "resolve_flight", lambda _flight_name: object())
+    monkeypatch.setattr(runner, "resolve_flight", lambda _flight_name: build_named_flight_spec("power_chain"))
     monkeypatch.setattr(runner, "get_spark", lambda _app_name: object())
     monkeypatch.setattr(
         runner,
         "_write_seed_tables",
-        lambda **_kwargs: {"raw_input_rows": 1, "phase_label_rows": 1, "hierarchy_label_rows": 1},
+        lambda **_kwargs: {
+            "raw_input_rows": 1,
+            "phase_label_rows": 1,
+            "hierarchy_label_rows": 1,
+            "coupling_misbehavior_window_rows": 0,
+        },
     )
     monkeypatch.setattr(runner, "run_stage_group", lambda **_kwargs: None)
     called: dict[str, object] = {}

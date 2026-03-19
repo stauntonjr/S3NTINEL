@@ -1,0 +1,4 @@
+interface:
+  display_name: "PySpark Refactor"
+  short_description: "Review and refactor Python/PySpark code"
+  default_prompt: "Use $refactor-python-pyspark to review or refactor this Python or PySpark code into concise, domain-driven dataclasses with tests that stay aligned to the code."

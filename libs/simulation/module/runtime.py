@@ -194,6 +194,20 @@ class Module:
             )
         return hydrated
 
+    def _active_coupling_metadata_for_parameter(
+        self,
+        *,
+        parameter: Parameter,
+    ) -> dict[str, Any]:
+        for port_name in parameter.input_port_names:
+            port = self.input_ports.get(str(port_name))
+            if port is None:
+                continue
+            metadata = dict(port.metadata or {})
+            if metadata.get("coupling_id") or metadata.get("misbehavior_window_id") or metadata.get("misbehavior_family_label"):
+                return metadata
+        return {}
+
     def apply_latent_updates(
         self,
         step_inputs_by_parameter: Mapping[str, BehaviorStepInput],
@@ -259,22 +273,78 @@ class Module:
                 violation_context=fault_context,
             ):
                 metadata = dict(sample.metadata)
+                misbehavior_active = bool(fault_context)
+                misbehavior_applied = bool(metadata.get("misbehavior_applied", False))
+                misbehavior_family_label = (
+                    metadata.get("misbehavior_family_label")
+                    or fault_context.get("misbehavior_family_label")
+                    or fault_context.get("violation_type")
+                )
+                misbehavior_detail_label = (
+                    metadata.get("misbehavior_detail_label")
+                    or fault_context.get("misbehavior_detail_label")
+                    or fault_context.get("violation_type")
+                    or misbehavior_family_label
+                )
+                misbehavior_window_id = (
+                    metadata.get("misbehavior_window_id")
+                    or fault_context.get("misbehavior_window_id")
+                    or fault_context.get("fault_window_id")
+                    or ""
+                )
                 metadata.setdefault("system_id", self.system_id)
                 metadata.setdefault("subsystem_id", self.subsystem_id)
                 metadata.setdefault("module_id", self.id)
                 metadata.setdefault("behavior_family_label", parameter.behavior_family_label)
                 metadata.setdefault("parameter_datatype_label", parameter.datatype_label)
-                metadata.setdefault("fault_active", bool(fault_context))
-                metadata.setdefault("fault_applied", bool(metadata.get("misbehavior_applied", False)))
-                metadata.setdefault(
-                    "fault_family_label",
-                    fault_context.get("fault_family_label") if fault_context else "",
+                metadata.setdefault("unit", parameter.unit)
+                metadata.setdefault("rate_hz", parameter.sampling_rate_hz)
+                metadata["misbehavior_active"] = misbehavior_active
+                metadata["misbehavior_applied"] = misbehavior_applied
+                metadata["misbehavior_family_label"] = str(misbehavior_family_label or "")
+                metadata["misbehavior_detail_label"] = str(misbehavior_detail_label or "")
+                metadata["misbehavior_window_id"] = str(misbehavior_window_id or "")
+                metadata["event_type_label"] = str((fault_context.get("event_type_label") or "") if misbehavior_applied else "")
+                metadata["anomaly_type_label"] = str((fault_context.get("anomaly_type_label") or "") if misbehavior_applied else "")
+                metadata["anomaly_score_label"] = (
+                    fault_context.get("anomaly_score_label") if misbehavior_applied else 0.0
                 )
-                metadata.setdefault(
-                    "fault_type",
-                    (fault_context.get("fault_type") or fault_context.get("violation_type")) if fault_context else "",
+                metadata["fault_active"] = misbehavior_active
+                metadata["fault_applied"] = misbehavior_applied
+                metadata["fault_family_label"] = str(
+                    (
+                        fault_context.get("fault_family_label")
+                        or parameter.behavior_family_label
+                    )
+                    if fault_context
+                    else ""
                 )
-                metadata.setdefault("fault_window_id", fault_context.get("fault_window_id") if fault_context else "")
+                metadata["fault_type"] = str(
+                    (
+                        fault_context.get("fault_type")
+                        or fault_context.get("violation_type")
+                        or misbehavior_detail_label
+                    )
+                    if fault_context
+                    else ""
+                )
+                metadata["fault_window_id"] = str(fault_context.get("fault_window_id") if fault_context else "")
+                coupling_metadata = self._active_coupling_metadata_for_parameter(parameter=parameter)
+                metadata["coupling_id_label"] = str(coupling_metadata.get("coupling_id", "") or "")
+                if coupling_metadata and not metadata["misbehavior_applied"]:
+                    metadata["misbehavior_active"] = bool(coupling_metadata.get("misbehavior_active", True))
+                    metadata["misbehavior_applied"] = bool(coupling_metadata.get("misbehavior_active", True))
+                    metadata["misbehavior_family_label"] = str(coupling_metadata.get("misbehavior_family_label", "") or "")
+                    metadata["misbehavior_detail_label"] = str(coupling_metadata.get("misbehavior_detail_label", "") or "")
+                    metadata["misbehavior_window_id"] = str(coupling_metadata.get("misbehavior_window_id", "") or "")
+                    metadata["event_type_label"] = str(coupling_metadata.get("event_type_label", "") or "")
+                    metadata["anomaly_type_label"] = str(coupling_metadata.get("anomaly_type_label", "") or "")
+                    metadata["anomaly_score_label"] = coupling_metadata.get("anomaly_score_label", 0.0)
+                    metadata["fault_active"] = bool(coupling_metadata.get("fault_active", True))
+                    metadata["fault_applied"] = bool(coupling_metadata.get("fault_active", True))
+                    metadata["fault_family_label"] = str(coupling_metadata.get("fault_family_label", "") or "")
+                    metadata["fault_type"] = str(coupling_metadata.get("fault_type", "") or "")
+                    metadata["fault_window_id"] = str(coupling_metadata.get("fault_window_id", "") or "")
                 yield BehaviorSample(
                     parameter_name=sample.parameter_name,
                     parameter_value_clean=sample.parameter_value_clean,
@@ -312,6 +382,7 @@ class Module:
         outgoing_couplings: tuple[Coupling, ...] = (),
         initial_state_by_parameter: Mapping[str, Any] | None = None,
         fault_context_by_parameter: Mapping[str, Mapping[str, Any]] | None = None,
+        coupling_misbehavior_context_by_id: Mapping[str, Mapping[str, Any]] | None = None,
         apply_faults: bool = True,
         timestamp_utc: datetime | None = None,
         current_phase_label: str | None = None,
@@ -346,5 +417,6 @@ class Module:
                 target_module,
                 timestamp_utc=timestamp_utc,
                 current_phase_label=current_phase_label,
+                misbehavior_context=(coupling_misbehavior_context_by_id or {}).get(coupling.coupling_id, {}),
             )
         return samples

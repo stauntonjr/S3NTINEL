@@ -18,6 +18,7 @@ class Parameter:
     module_id: str
     datatype_label: str
     unit: str = ""
+    sampling_rate_hz: float | None = None
     behavior_family_label: str | None = None
     allowed_fault_families: tuple[str, ...] = ()
     input_port_names: tuple[str, ...] = ()
@@ -52,6 +53,7 @@ class Parameter:
             module_id=str(spec.module_id),
             datatype_label=str(spec.parameter_datatype_label),
             unit=str(spec.unit),
+            sampling_rate_hz=(None if spec.sampling_rate_hz is None else float(spec.sampling_rate_hz)),
             behavior_family_label=spec.behavior_family_label,
             allowed_fault_families=tuple(str(item) for item in spec.allowed_fault_families),
             input_port_names=tuple(str(item) for item in spec.input_port_names),

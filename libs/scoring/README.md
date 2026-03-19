@@ -13,13 +13,13 @@ It does not own:
 
 - Use `WindowScoreArtifacts` for in-memory score assembly semantics.
 - Use `pipeline.py` for Spark-facing artifact construction.
-- Use `window_scores.py` for lower-level score computations.
+- Use `rules.py` for lower-level score computations.
 
 ## Contents
 
-- `model.py`
+- `artifacts.py`
   - score-domain nouns and rollup semantics
-- `window_scores.py`
+- `rules.py`
   - lower-level score calculations
 - `pipeline.py`
   - persisted adapter

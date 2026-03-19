@@ -4,10 +4,15 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from libs.anomaly import validate_attribution_against_fault_truth
-from libs.graph import build_graph_validation_summary
+from libs.anomaly import validate_attribution_against_fault_truth, validate_attribution_against_misbehavior_truth
+from libs.graph import build_coupling_validation_summary, build_graph_validation_summary
 from libs.phase import validate_detected_phases_from_tables
-from libs.scoring import summarize_fault_window_detection, validate_scores_against_fault_windows
+from libs.scoring import (
+    summarize_fault_window_detection,
+    summarize_misbehavior_window_detection,
+    validate_scores_against_fault_windows,
+    validate_scores_against_misbehavior_windows,
+)
 
 
 def _ts(second: int) -> datetime:
@@ -120,6 +125,49 @@ def test_build_graph_validation_summary_reports_hierarchy_and_expected_lag_edges
     assert summary["hierarchy"]["subsystem_partition"]["same_cluster_pair_recall"] == 1.0
 
 
+def test_build_coupling_validation_summary_reports_expected_signatures():
+    coupling_truth_df = pd.DataFrame.from_records(
+        [
+            {
+                "coupling_id": "C1",
+                "misbehavior_window_id": "MBW_C1",
+                "misbehavior_family_label": "timing_lag",
+                "misbehavior_detail_label": "timing_lag",
+                "start_step": 10,
+                "end_step_exclusive": 20,
+            }
+        ]
+    )
+    lag_graph_df = pd.DataFrame.from_records(
+        [
+            {
+                "parameter_name_u": "outflow_cmd_pct",
+                "parameter_name_v": "actuator_position_pct",
+                "lag_weight": 0.8,
+                "mean_lag_seconds": 1.5,
+            }
+        ]
+    )
+
+    summary = build_coupling_validation_summary(
+        coupling_truth_df=coupling_truth_df,
+        lag_graph_df=lag_graph_df,
+        expected_coupling_signatures=(
+            {
+                "coupling_id": "C1",
+                "parameter_name_u": "outflow_cmd_pct",
+                "parameter_name_v": "actuator_position_pct",
+                "signature_type": "lag_shift",
+            },
+        ),
+    )
+
+    assert summary["status"] == "ok"
+    assert summary["coupling_window_count"] == 1
+    assert summary["signature_count"] == 1
+    assert summary["signature_hit_rate"] == 1.0
+
+
 def test_score_and_fault_window_validators_summarize_fault_overlap():
     raw_telemetry_df = pd.DataFrame.from_records(
         [
@@ -131,6 +179,10 @@ def test_score_and_fault_window_validators_summarize_fault_overlap():
                 "system_id": "SYS_AIRFRAME",
                 "subsystem_id": "SUB_AIR_BLEED",
                 "module_id": "MOD_BLEED_SUPPLY",
+                "misbehavior_active": True,
+                "misbehavior_family_label": "saturation",
+                "misbehavior_detail_label": "saturation",
+                "misbehavior_window_id": "MBW1",
                 "fault_active": True,
                 "fault_family_label": "regulated",
                 "fault_type": "saturation",
@@ -144,6 +196,10 @@ def test_score_and_fault_window_validators_summarize_fault_overlap():
                 "system_id": "SYS_AIRFRAME",
                 "subsystem_id": "SUB_AIR_BLEED",
                 "module_id": "MOD_BLEED_SUPPLY",
+                "misbehavior_active": True,
+                "misbehavior_family_label": "saturation",
+                "misbehavior_detail_label": "saturation",
+                "misbehavior_window_id": "MBW1",
                 "fault_active": True,
                 "fault_family_label": "regulated",
                 "fault_type": "saturation",
@@ -175,7 +231,17 @@ def test_score_and_fault_window_validators_summarize_fault_overlap():
         windows_df=windows_df,
         calibrated_scores_df=calibrated_scores_df,
     )
+    misbehavior_score_summary = validate_scores_against_misbehavior_windows(
+        raw_telemetry_df=raw_telemetry_df,
+        windows_df=windows_df,
+        calibrated_scores_df=calibrated_scores_df,
+    )
     fault_summary = summarize_fault_window_detection(
+        raw_telemetry_df=raw_telemetry_df,
+        windows_df=windows_df,
+        calibrated_scores_df=calibrated_scores_df,
+    )
+    misbehavior_summary = summarize_misbehavior_window_detection(
         raw_telemetry_df=raw_telemetry_df,
         windows_df=windows_df,
         calibrated_scores_df=calibrated_scores_df,
@@ -184,8 +250,12 @@ def test_score_and_fault_window_validators_summarize_fault_overlap():
     assert score_summary["status"] == "ok"
     assert score_summary["detected_fault_window_count"] == 1
     assert score_summary["emit_ready_fault_window_count"] == 1
+    assert misbehavior_score_summary["detected_misbehavior_window_count"] == 1
+    assert misbehavior_score_summary["emit_ready_misbehavior_window_count"] == 1
     assert fault_summary["fault_window_count"] == 1
     assert fault_summary["fault_windows"][0]["fault_window_id"] == "FW1"
+    assert misbehavior_summary["misbehavior_window_count"] == 1
+    assert misbehavior_summary["misbehavior_windows"][0]["misbehavior_window_id"] == "MBW1"
 
 
 def test_anomaly_validator_compares_attribution_to_fault_truth():
@@ -199,6 +269,10 @@ def test_anomaly_validator_compares_attribution_to_fault_truth():
                 "system_id": "SYS_AIRFRAME",
                 "subsystem_id": "SUB_AIR_BLEED",
                 "module_id": "MOD_BLEED_SUPPLY",
+                "misbehavior_active": True,
+                "misbehavior_family_label": "saturation",
+                "misbehavior_detail_label": "saturation",
+                "misbehavior_window_id": "MBW1",
                 "fault_active": True,
                 "fault_family_label": "regulated",
                 "fault_type": "saturation",
@@ -234,9 +308,18 @@ def test_anomaly_validator_compares_attribution_to_fault_truth():
         anomaly_telemetry_attribution_df=anomaly_telemetry_df,
         anomaly_event_attribution_df=anomaly_event_df,
     )
+    misbehavior_summary = validate_attribution_against_misbehavior_truth(
+        raw_telemetry_df=raw_telemetry_df,
+        windows_df=windows_df,
+        anomaly_window_attribution_df=anomaly_window_df,
+        anomaly_telemetry_attribution_df=anomaly_telemetry_df,
+        anomaly_event_attribution_df=anomaly_event_df,
+    )
 
     assert summary["status"] == "ok"
     assert summary["dominant_subsystem_match_rate"] == 1.0
     assert summary["dominant_subsystem_mappable_rate"] == 1.0
     assert summary["telemetry_parameter_match_rate"] == 1.0
     assert summary["event_parameter_match_rate"] == 1.0
+    assert misbehavior_summary["misbehavior_window_count"] == 1
+    assert misbehavior_summary["dominant_subsystem_match_rate"] == 1.0

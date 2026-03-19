@@ -8,7 +8,7 @@ from scripts import run_sim_pipeline as runner
 
 def _runner_config(tmp_path):
     return runner.PipelineRunConfig(
-        flight_name="pressurization",
+        flight_name="power_chain",
         tail_id="TPUB",
         flight_id="FPUB",
         n_steps=6,
@@ -25,7 +25,7 @@ def _runner_config(tmp_path):
         window_event_threshold=2,
         window_min_ms=50,
         window_inactivity_timeout_ms=0,
-        window_strategy="bucketed",
+        window_strategy="segmented",
         phase_count=3,
         backbone_parameter_count=4,
         backbone_ridge_lambda=1.0,
@@ -40,11 +40,16 @@ def test_libs_simulation_exports_curated_noun_surface_only():
         "CouplingSpec",
         "FaultProgramSpec",
         "FaultWindowSpec",
+        "Fleet",
         "Flight",
         "FlightSpec",
         "FlightTick",
         "InitialStateSpec",
         "InputProgramSpec",
+        "MisbehaviorProgram",
+        "MisbehaviorProgramSpec",
+        "MisbehaviorStepContext",
+        "MisbehaviorWindowSpec",
         "LatentUpdate",
         "LatentSourceKind",
         "LatentUpdateSpec",
@@ -65,6 +70,7 @@ def test_libs_simulation_exports_curated_noun_surface_only():
         "SubsystemSpec",
         "System",
         "SystemSpec",
+        "Tail",
     }
     for exported_name in exported_names:
         assert hasattr(simulation, exported_name), exported_name
@@ -82,7 +88,7 @@ def test_libs_simulation_exports_curated_noun_surface_only():
         "list_flight_names",
         "phase_labels_to_table_df",
         "raw_telemetry_to_events_sdf",
-        "raw_telemetry_to_window_x_sdf",
+        "raw_telemetry_to_window_features_sdf",
         "raw_telemetry_to_windows_sdf",
     }
     for removed_name in removed_names:
@@ -96,6 +102,8 @@ def test_object_level_examples_are_public_from_subpackages():
 
     assert aircraft_spec.aircraft_id == "coupled_module"
     assert "pressurization" in flight_names
+    assert "power_pressurization_hierarchy_smoke" in flight_names
+    assert "power_pressurization_hierarchy_medium" in flight_names
     assert pressurization_flight.metadata["flight_name"] == "pressurization"
 
 
@@ -109,6 +117,12 @@ def test_simulation_public_api_runs_end_to_end(tmp_path):
     assert (result.paths.run_dir / "delta" / "window_scores_calibrated").exists()
     assert (result.paths.run_dir / "reports" / "phase_validation_summary.json").exists()
     assert (result.paths.run_dir / "reports" / "hierarchy_validation_summary.json").exists()
+    assert (result.paths.run_dir / "reports" / "coupling_validation_summary.json").exists()
+    assert (result.paths.run_dir / "reports" / "profile_validation_summary.json").exists()
+    assert (result.paths.run_dir / "reports" / "event_validation_summary.json").exists()
+    assert (result.paths.run_dir / "reports" / "label_contract_summary.json").exists()
     assert (result.paths.run_dir / "reports" / "score_validation_summary.json").exists()
+    assert (result.paths.run_dir / "reports" / "misbehavior_window_validation_summary.json").exists()
     assert (result.paths.run_dir / "reports" / "fault_window_validation_summary.json").exists()
+    assert (result.paths.run_dir / "reports" / "misbehavior_attribution_validation_summary.json").exists()
     assert (result.paths.run_dir / "reports" / "attribution_validation_summary.json").exists()

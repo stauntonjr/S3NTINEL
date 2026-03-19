@@ -16,14 +16,12 @@ It does not own:
 
 ## Contents
 
-- `extrema.py`
-  - continuous event detection
+- `continuous.py`
+  - canonical continuous event detection
 - `categorical.py`
-  - categorical and state-based event detection
+  - canonical categorical and state-based event detection
 - `pipeline.py`
-  - thin composition layer for event building
-- `cooccur.py`
-  - event-pair relation utilities for cooccurrence/lag contexts
+  - thin composition layer for event-source preparation and event building
 - `validator.py`
   - event detection evaluation
 
@@ -43,7 +41,7 @@ Events turn raw telemetry into discrete structural signals that support windows,
 
 ## Testing / Validation
 
-- unit tests cover event detectors and event relation utilities
+- unit tests cover the production Spark detectors
 - integration tests cover stage 20 and simulation-backed validation
 
 ## Notes

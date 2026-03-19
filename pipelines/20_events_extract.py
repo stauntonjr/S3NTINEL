@@ -9,6 +9,7 @@ from libs.perf import (
     build_artifact_manifest,
     build_stage_manifest,
     get_logger,
+    log_memory_usage,
     log_dict_artifact_if_active,
     log_params_if_active,
     log_stage_manifest_if_active,
@@ -22,10 +23,12 @@ LOGGER = get_logger(__name__)
 
 
 @track_mlflow_run(stage_name="20_events_extract", logger=LOGGER)
+@log_memory_usage(logger=LOGGER, label="20_events_extract")
 @log_wall_time(logger=LOGGER)
 def run() -> None:
     context = build_context()
     input_path = os.getenv("S3NTINEL_RAW_TABLE_PATH", "data/delta/raw_telemetry")
+    datatype_profile_path = os.getenv("S3NTINEL_PARAMETER_DATATYPE_PROFILE_TABLE_PATH", "data/delta/parameter_datatype_profile")
     output_path = os.getenv("S3NTINEL_EVENTS_TABLE_PATH", "data/delta/events")
     table_format = os.getenv("S3NTINEL_TABLE_FORMAT", "delta")
     write_mode = os.getenv("S3NTINEL_WRITE_MODE", "append")
@@ -35,9 +38,11 @@ def run() -> None:
 
     spark = get_spark("s3ntinel.events_extract")
     raw_df = read_table(spark, input_path, fmt=table_format)
+    datatype_profile_df = read_table(spark, datatype_profile_path, fmt=table_format)
 
     events_df = build_events_table(
         raw_df,
+        datatype_profile_df=datatype_profile_df,
         delta_threshold=delta_threshold,
         slope_source=slope_source,
         ema_alpha=ema_alpha,
@@ -51,6 +56,7 @@ def run() -> None:
         partition_by=context.config["output"]["partition_by"],
     )
     raw_count = int(raw_df.count())
+    datatype_profile_count = int(datatype_profile_df.count())
     events_count = int(events_df.count())
 
     log_params_if_active(
@@ -63,6 +69,7 @@ def run() -> None:
             "stage": "20_events_extract",
             "input_path": input_path,
             "output_path": output_path,
+            "parameter_datatype_profile_path": datatype_profile_path,
             "table_format": table_format,
             "write_mode": write_mode,
             "delta_threshold": delta_threshold,
@@ -84,15 +91,20 @@ def run() -> None:
         },
         input_artifacts={
             "raw_telemetry": build_artifact_manifest(path=input_path, dataframe=raw_df, row_count=raw_count),
+            "parameter_datatype_profile": build_artifact_manifest(
+                path=datatype_profile_path,
+                dataframe=datatype_profile_df,
+                row_count=datatype_profile_count,
+            ),
         },
         output_artifacts={
             "events": build_artifact_manifest(path=output_path, dataframe=events_df, row_count=events_count),
         },
-        replayable_from=["raw_telemetry"],
+        replayable_from=["raw_telemetry", "parameter_datatype_profile"],
     )
     log_stage_manifest_if_active(stage_manifest, "reports/stages/20_events_extract_manifest.json")
     LOGGER.info(
-        "pipeline=events_extract format=%s write_mode=%s event_threshold=%s delta_threshold=%s slope_source=%s ema_alpha=%s input=%s output=%s",
+        "pipeline=events_extract format=%s write_mode=%s event_threshold=%s delta_threshold=%s slope_source=%s ema_alpha=%s input=%s datatype_profile=%s output=%s",
         table_format,
         write_mode,
         context.config["windowing"]["event_threshold"],
@@ -100,6 +112,7 @@ def run() -> None:
         slope_source,
         ema_alpha,
         input_path,
+        datatype_profile_path,
         output_path,
     )
 

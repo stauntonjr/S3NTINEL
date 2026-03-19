@@ -12,7 +12,7 @@ def _event_key(event: dict[str, Any]) -> tuple[str, str, str]:
     return (
         str(event.get("tail_id", "")),
         str(event.get("flight_id", "")),
-        str(event.get("sensor", "")),
+        str(event.get("parameter_name", "")),
     )
 
 
@@ -25,12 +25,12 @@ def _detected_event_type(event: dict[str, Any]) -> str:
 
 
 def _event_ts(event: dict[str, Any]) -> datetime:
-    value = event.get("ts")
+    value = event.get("timestamp_utc")
     if isinstance(value, datetime):
         return value
     if isinstance(value, str):
         return datetime.fromisoformat(value)
-    raise ValueError("event ts must be datetime or ISO8601 string")
+    raise ValueError("event timestamp_utc must be datetime or ISO8601 string")
 
 
 def evaluate_event_detection(

@@ -3,7 +3,13 @@ import importlib
 
 def test_fitting_runner_contains_expected_stage_grouping():
     module = importlib.import_module("pipelines.91_run_fitting_pipeline")
-    assert module.FITTING_STAGE_SCRIPTS == ["00_ingest_raw.py", "05_parameter_profiles_fit.py", "10_backbone_fit.py", "11_graph_fit.py"]
+    assert module.FITTING_STAGE_SCRIPTS == [
+        "00_ingest_raw.py",
+        "05_parameter_profiles_fit.py",
+        "10_backbone_fit.py",
+        "11_build_graph.py",
+        "12_fit_hierarchy.py",
+    ]
 
 
 def test_inference_runner_contains_expected_stage_grouping():

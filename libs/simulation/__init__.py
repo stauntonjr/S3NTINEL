@@ -2,7 +2,14 @@ from libs.simulation.aircraft.runtime import Aircraft
 from libs.simulation.aircraft.spec import AircraftSpec
 from libs.simulation.coupling.runtime import Coupling
 from libs.simulation.coupling.spec import CouplingSpec
-from libs.simulation.fault.spec import FaultProgramSpec, FaultWindowSpec
+from libs.simulation.fault.spec import (
+    FaultProgramSpec,
+    FaultWindowSpec,
+    MisbehaviorProgramSpec,
+    MisbehaviorWindowSpec,
+)
+from libs.simulation.fleet.runtime import Fleet
+from libs.simulation.fault.runtime import MisbehaviorProgram, MisbehaviorStepContext
 from libs.simulation.flight.runtime import Flight, FlightTick
 from libs.simulation.flight.spec import FlightSpec, InitialStateSpec, InputProgramSpec, StepInputSpec
 from libs.simulation.module.runtime import LatentUpdate, Module
@@ -32,6 +39,7 @@ from libs.simulation.subsystem.runtime import Subsystem
 from libs.simulation.subsystem.spec import SubsystemSpec
 from libs.simulation.system.runtime import System
 from libs.simulation.system.spec import SystemSpec
+from libs.simulation.tail.runtime import Tail
 
 __all__ = [
     "Aircraft",
@@ -43,11 +51,16 @@ __all__ = [
     "CouplingSpec",
     "FaultProgramSpec",
     "FaultWindowSpec",
+    "Fleet",
     "Flight",
     "FlightSpec",
     "FlightTick",
     "InitialStateSpec",
     "InputProgramSpec",
+    "MisbehaviorProgram",
+    "MisbehaviorProgramSpec",
+    "MisbehaviorStepContext",
+    "MisbehaviorWindowSpec",
     "LatentUpdate",
     "LatentSourceKind",
     "LatentUpdateSpec",
@@ -68,6 +81,7 @@ __all__ = [
     "SubsystemSpec",
     "System",
     "SystemSpec",
+    "Tail",
     "index_phase_envelopes_by_label",
     "resolve_phase_label_for_step",
     "validate_phase_label",

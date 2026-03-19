@@ -8,7 +8,7 @@ runtime:
   date_derivation: to_date(timestamp_utc)
 
 windowing:
-  strategy: bucketed
+  strategy: segmented
   min_sampling_rate_hz: 1.0
   max_ms: 10000
   min_ms: 50

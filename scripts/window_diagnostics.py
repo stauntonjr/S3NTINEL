@@ -39,7 +39,12 @@ def compute_window_diagnostics(
             "close_reason_counts": {},
         }
 
-    events_df = read_table(spark, path=events_path, fmt=table_format).select("tail_id", "flight_id", "sensor", "ts")
+    events_df = read_table(spark, path=events_path, fmt=table_format).select(
+        "tail_id",
+        "flight_id",
+        "parameter_name",
+        "timestamp_utc",
+    )
 
     sensor_counts = (
         windows_df.alias("w")
@@ -48,8 +53,8 @@ def compute_window_diagnostics(
             on=(
                 (F.col("e.tail_id") == F.col("w.tail_id"))
                 & (F.col("e.flight_id") == F.col("w.flight_id"))
-                & (F.col("e.ts") >= F.col("w.t_start"))
-                & (F.col("e.ts") <= F.col("w.t_end"))
+                & (F.col("e.timestamp_utc") >= F.col("w.t_start"))
+                & (F.col("e.timestamp_utc") <= F.col("w.t_end"))
             ),
             how="left",
         )
@@ -58,7 +63,7 @@ def compute_window_diagnostics(
             F.col("w.flight_id").alias("flight_id"),
             F.col("w.win_id").alias("win_id"),
         )
-        .agg(F.countDistinct(F.col("e.sensor")).cast("double").alias("sensor_count"))
+        .agg(F.countDistinct(F.col("e.parameter_name")).cast("double").alias("sensor_count"))
     )
 
     enriched = (

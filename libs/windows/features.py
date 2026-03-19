@@ -1,331 +1,624 @@
-"""Window feature-domain objects."""
+"""Class-oriented builders for the canonical ``window_features`` artifact."""
 
 from __future__ import annotations
 
-from collections import Counter
-from dataclasses import dataclass
-from typing import Any
+import time
+from dataclasses import dataclass, field
 
-import pandas as pd
+from libs.common import empty_map
+from libs.perf.annotations import hot_path
+from libs.perf.logger import get_logger
 
-from libs.common.event_types import CATEGORICAL_EVENT_TYPES, CONTINUOUS_EVENT_TYPES
-from libs.io.contracts import AdaptiveWindowRow, DetectedEventRow, PhaseWindowRow, WindowXRow
-from libs.windows.context import WindowContext
+LOGGER = get_logger("libs.windows.features")
 
 
 @dataclass(frozen=True)
-class WindowScaler:
-    by_parameter: dict[str, dict[str, float]]
+class WindowFeatureVectorSpec:
+    timestamp_column: str = "timestamp_utc"
+    parameter_name_column: str = "parameter_name"
+    numeric_value_column: str = "value_num"
+    text_value_column: str = "parameter_value"
 
-    @classmethod
-    def from_telemetry_df(cls, telemetry_df: pd.DataFrame) -> "WindowScaler":
-        values = telemetry_df.copy()
-        if "parameter_name" not in values.columns and "sensor" in values.columns:
-            values["parameter_name"] = values["sensor"]
-        values["parameter_name"] = values.get("parameter_name", "").astype(str)
-        value_source = values.get("parameter_value")
-        if value_source is None:
-            value_source = values.get("parameter_value_clean")
-        values["value_num"] = pd.to_numeric(value_source, errors="coerce")
-        values = values.dropna(subset=["parameter_name", "value_num"])
-        if values.empty:
-            return cls(by_parameter={})
 
-        scaler: dict[str, dict[str, float]] = {}
-        for parameter_name, series in values.groupby("parameter_name")["value_num"]:
-            median = float(series.median())
-            q25 = float(series.quantile(0.25))
-            q75 = float(series.quantile(0.75))
-            scaler[str(parameter_name)] = {"median": median, "iqr": max(q75 - q25, 1e-6)}
-        return cls(by_parameter=scaler)
+@dataclass(frozen=True)
+class WindowFeatureStepDiagnostics:
+    step_name: str
+    row_count: int
+    timing_ms: float
 
-    def scale(self, parameter_name: str, value: float) -> float | None:
-        spec = self.by_parameter.get(str(parameter_name))
-        if spec is None:
-            return None
-        median = float(spec.get("median", 0.0))
-        iqr = max(float(spec.get("iqr", 1.0)), 1e-6)
-        return (float(value) - median) / iqr
 
-    def vectors_for_window(
+@dataclass(frozen=True)
+class WindowFeaturesDiagnostics:
+    steps: list[WindowFeatureStepDiagnostics]
+    output_row_count: int
+    total_timing_ms: float
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "steps": [
+                {
+                    "step_name": step.step_name,
+                    "row_count": int(step.row_count),
+                    "timing_ms": float(step.timing_ms),
+                }
+                for step in self.steps
+            ],
+            "output_row_count": int(self.output_row_count),
+            "total_timing_ms": float(self.total_timing_ms),
+        }
+
+
+@dataclass(frozen=True)
+class WindowFeaturesPlan:
+    vector_spec: WindowFeatureVectorSpec = field(default_factory=WindowFeatureVectorSpec)
+
+    @staticmethod
+    def _checkpoint(df: "DataFrame") -> "DataFrame":
+        return df.localCheckpoint(eager=True)
+
+    def _materialize_step(
+        self,
+        name: str,
+        build_frame: "Callable[[], DataFrame]",
+        diagnostics: list[WindowFeatureStepDiagnostics],
+    ) -> "DataFrame":
+        start = time.perf_counter()
+        dataframe = self._checkpoint(build_frame())
+        row_count = int(dataframe.count())
+        diagnostics.append(
+            WindowFeatureStepDiagnostics(
+                step_name=name,
+                row_count=row_count,
+                timing_ms=(time.perf_counter() - start) * 1000.0,
+            )
+        )
+        return dataframe
+
+    def _build_step(
+        self,
+        name: str,
+        build_frame: "Callable[[], DataFrame]",
+        *,
+        materialize: "Callable[[str, Callable[[], DataFrame]], DataFrame] | None" = None,
+    ) -> "DataFrame":
+        if materialize is None:
+            return build_frame()
+        return materialize(name, build_frame)
+
+    def _prepare_raw(self, raw_df: "DataFrame") -> "DataFrame":
+        from pyspark.sql import functions as F
+
+        raw_columns = set(raw_df.columns)
+        prepared_raw_df = raw_df
+        if "timestamp_utc" not in raw_columns and "timestamp" in raw_columns:
+            prepared_raw_df = prepared_raw_df.withColumn("timestamp_utc", F.col("timestamp").cast("timestamp"))
+            raw_columns = set(prepared_raw_df.columns)
+
+        parameter_value_col = (
+            F.col("parameter_value").cast("string")
+            if "parameter_value" in raw_columns
+            else F.col("parameter_value_clean").cast("string")
+            if "parameter_value_clean" in raw_columns
+            else F.lit(None).cast("string")
+        )
+        value_num_col = (
+            F.col("val").cast("double")
+            if "val" in raw_columns
+            else F.expr("try_cast(parameter_value as double)")
+            if "parameter_value" in raw_columns
+            else F.expr("try_cast(parameter_value_clean as double)")
+            if "parameter_value_clean" in raw_columns
+            else F.lit(None).cast("double")
+        )
+        return (
+            prepared_raw_df.select(
+                F.col("tail_id").cast("string").alias("tail_id"),
+                F.col("flight_id").cast("string").alias("flight_id"),
+                F.col("timestamp_utc").cast("timestamp").alias(self.vector_spec.timestamp_column),
+                F.col("parameter_name").cast("string").alias(self.vector_spec.parameter_name_column),
+                parameter_value_col.alias(self.vector_spec.text_value_column),
+                value_num_col.alias(self.vector_spec.numeric_value_column),
+            )
+            .where(
+                F.col("tail_id").isNotNull()
+                & F.col("flight_id").isNotNull()
+                & F.col(self.vector_spec.parameter_name_column).isNotNull()
+                & F.col(self.vector_spec.timestamp_column).isNotNull()
+            )
+        )
+
+    def _build_scaler_frame(self, prepared_raw_df: "DataFrame") -> "DataFrame":
+        from pyspark.sql import functions as F
+
+        return (
+            prepared_raw_df.where(F.col(self.vector_spec.numeric_value_column).isNotNull())
+            .groupBy(self.vector_spec.parameter_name_column)
+            .agg(
+                F.expr(
+                    f"percentile({self.vector_spec.numeric_value_column}, array(0.25D, 0.5D, 0.75D))"
+                ).alias("scaling_quantiles"),
+            )
+            .withColumn("q25", F.col("scaling_quantiles").getItem(0).cast("double"))
+            .withColumn("median", F.col("scaling_quantiles").getItem(1).cast("double"))
+            .withColumn("q75", F.col("scaling_quantiles").getItem(2).cast("double"))
+            .withColumn("iqr", F.greatest(F.col("q75") - F.col("q25"), F.lit(1e-6)))
+            .select(
+                F.col(self.vector_spec.parameter_name_column).alias("parameter_name"),
+                "median",
+                "iqr",
+            )
+        )
+
+    def _base_windows(self, windows_df: "DataFrame") -> "DataFrame":
+        return windows_df.select(
+            "tail_id",
+            "flight_id",
+            "win_id",
+            "t_start",
+            "t_end",
+            "duration_ms",
+            "event_count",
+            "date_utc",
+        )
+
+    def _build_raw_intervals(self, prepared_raw_df: "DataFrame") -> "DataFrame":
+        from pyspark.sql import functions as F
+        from pyspark.sql.window import Window
+
+        parameter_window = Window.partitionBy(
+            "tail_id",
+            "flight_id",
+            self.vector_spec.parameter_name_column,
+        ).orderBy(self.vector_spec.timestamp_column)
+        far_future_ts = F.lit("9999-12-31 23:59:59").cast("timestamp")
+        return prepared_raw_df.withColumn(
+            "next_timestamp_utc",
+            F.lead(self.vector_spec.timestamp_column).over(parameter_window),
+        ).withColumn("next_timestamp_utc", F.coalesce(F.col("next_timestamp_utc"), far_future_ts))
+
+    def _build_snapshot_rows(self, *, base_windows_df: "DataFrame", raw_intervals_df: "DataFrame") -> "DataFrame":
+        from pyspark.sql import functions as F
+
+        return (
+            base_windows_df.alias("w")
+            .join(
+                raw_intervals_df.alias("r"),
+                on=(
+                    (F.col("w.tail_id") == F.col("r.tail_id"))
+                    & (F.col("w.flight_id") == F.col("r.flight_id"))
+                    & (F.col("w.t_end") >= F.col(f"r.{self.vector_spec.timestamp_column}"))
+                    & (F.col("w.t_end") < F.col("r.next_timestamp_utc"))
+                ),
+                how="left",
+            )
+            .select(
+                F.col("w.tail_id").alias("tail_id"),
+                F.col("w.flight_id").alias("flight_id"),
+                F.col("w.win_id").alias("win_id"),
+                F.col(f"r.{self.vector_spec.parameter_name_column}").alias("parameter_name"),
+                F.col(f"r.{self.vector_spec.text_value_column}").alias("parameter_value"),
+                F.col(f"r.{self.vector_spec.numeric_value_column}").alias("value_num"),
+            )
+            .where(F.col("parameter_name").isNotNull())
+        )
+
+    def _build_snapshot_feature_frames(
         self,
         *,
-        window_events: list[DetectedEventRow],
-        snapshot: dict[str, Any],
-    ) -> tuple[dict[str, float], dict[str, float]]:
-        raw_by_parameter: dict[str, float] = {}
-        for event in window_events:
-            parameter_name = str(event.get("parameter_name") or event.get("sensor") or "")
-            if not parameter_name:
-                continue
-            payload = event.get("payload")
-            if not isinstance(payload, dict):
-                continue
-            value = payload.get("value")
-            if value is None:
-                continue
-            try:
-                value_num = float(value)
-            except Exception:
-                continue
-            raw_by_parameter[parameter_name] = value_num
+        snapshot_rows_df: "DataFrame",
+        scaler_df: "DataFrame",
+    ) -> tuple["DataFrame", "DataFrame", "DataFrame"]:
+        from pyspark.sql import functions as F
 
-        scaled_by_parameter: dict[str, float] = {}
-        for parameter_name, value in raw_by_parameter.items():
-            scaled = self.scale(parameter_name, value)
-            if scaled is not None:
-                scaled_by_parameter[parameter_name] = float(scaled)
-
-        if raw_by_parameter:
-            return raw_by_parameter, scaled_by_parameter
-
-        for parameter_name, value in snapshot.items():
-            parameter_name_text = str(parameter_name)
-            if not parameter_name_text:
-                continue
-            try:
-                value_num = float(value)
-            except Exception:
-                continue
-            raw_by_parameter[parameter_name_text] = value_num
-            scaled = self.scale(parameter_name_text, value_num)
-            if scaled is not None:
-                scaled_by_parameter[parameter_name_text] = float(scaled)
-        return raw_by_parameter, scaled_by_parameter
-
-
-@dataclass(frozen=True)
-class WindowFeatures:
-    row: WindowXRow
-
-    @staticmethod
-    def categorical_state_from_snapshot(snapshot: dict[str, Any]) -> dict[str, str]:
-        out: dict[str, str] = {}
-        for parameter_name, value in snapshot.items():
-            parameter_name_text = str(parameter_name)
-            if not parameter_name_text:
-                continue
-            value_text = "" if value is None else str(value).strip()
-            if not value_text:
-                continue
-            try:
-                float(value_text)
-                continue
-            except Exception:
-                pass
-            out[parameter_name_text] = value_text
-        return out
-
-    @staticmethod
-    def drift_magnitude(previous_scaled: dict[str, float], current_scaled: dict[str, float]) -> float:
-        parameter_union = set(previous_scaled.keys()) | set(current_scaled.keys())
-        if not parameter_union:
-            return 0.0
-        drift_sq = 0.0
-        for parameter_name in parameter_union:
-            prev = float(previous_scaled.get(parameter_name, 0.0))
-            curr = float(current_scaled.get(parameter_name, 0.0))
-            delta = curr - prev
-            drift_sq += delta * delta
-        return drift_sq ** 0.5
-
-    @classmethod
-    def from_window_row(
-        cls,
-        *,
-        window: AdaptiveWindowRow,
-        scaler: WindowScaler,
-        previous_scaled_by_flight: dict[tuple[str, str], dict[str, float]],
-        phase_label: str | None = None,
-    ) -> "WindowFeatures":
-        snapshot = dict(window.get("zoh_snapshot", {})) if isinstance(window.get("zoh_snapshot"), dict) else {}
-        window_events = list(window.get("window_events", []))
-        raw_vector, scaled_vector = scaler.vectors_for_window(window_events=window_events, snapshot=snapshot)
-        flight_key = (str(window.get("tail_id", "")), str(window.get("flight_id", "")))
-        prev_vector = previous_scaled_by_flight.get(flight_key, {})
-        drift_magnitude_profiled = cls.drift_magnitude(prev_vector, scaled_vector)
-        previous_scaled_by_flight[flight_key] = dict(scaled_vector)
-
-        event_type_counts = window.get("event_type_counts")
-        if not isinstance(event_type_counts, dict):
-            event_type_counts = {}
-
-        return cls(
-            row={
-                "tail_id": str(window.get("tail_id", "")),
-                "flight_id": str(window.get("flight_id", "")),
-                "win_id": int(window.get("win_id", 0)),
-                "t_start": window.get("t_start"),
-                "t_end": window.get("t_end"),
-                "duration_ms": int(window.get("duration_ms", 0)),
-                "event_count": int(window.get("event_count", 0)),
-                "date_utc": window.get("date_utc"),
-                "event_type_counts": dict(event_type_counts),
-                "continuous_vector_t_end": {
-                    key: float(value) for key, value in sorted(raw_vector.items(), key=lambda item: item[0])
-                },
-                "continuous_vector_t_end_scaled": {
-                    key: float(value) for key, value in sorted(scaled_vector.items(), key=lambda item: item[0])
-                },
-                "categorical_state_t_end": cls.categorical_state_from_snapshot(snapshot),
-                "drift_magnitude_profiled": float(drift_magnitude_profiled),
-                "phase_label": phase_label,
-            }
-        )
-
-    @classmethod
-    def from_context(
-        cls,
-        *,
-        context: WindowContext,
-        scaler: WindowScaler,
-        previous_scaled_by_flight: dict[tuple[str, str], dict[str, float]],
-        phase_label: str | None = None,
-    ) -> "WindowFeatures":
-        return cls.from_window_row(
-            window=context.row,
-            scaler=scaler,
-            previous_scaled_by_flight=previous_scaled_by_flight,
-            phase_label=phase_label,
-        )
-
-    @staticmethod
-    def top_phase_event_types(window_x_rows: list[WindowXRow], *, k: int) -> list[str]:
-        counts: Counter[str] = Counter()
-        for item in window_x_rows:
-            event_type_counts = item.get("event_type_counts")
-            if not isinstance(event_type_counts, dict):
-                continue
-            for event_type, count in event_type_counts.items():
-                counts[str(event_type)] += int(count)
-        limit = max(int(k), 0)
-        if limit <= 0:
-            return []
-        continuous = [(event_type, count) for event_type, count in counts.most_common() if event_type in CONTINUOUS_EVENT_TYPES]
-        categorical = [(event_type, count) for event_type, count in counts.most_common() if event_type in CATEGORICAL_EVENT_TYPES]
-        continuous_k = max(limit // 2, 1) if continuous else 0
-        categorical_k = max(limit - continuous_k, 0) if categorical else 0
-        selected = [event_type for event_type, _ in continuous[:continuous_k]]
-        selected.extend(event_type for event_type, _ in categorical[:categorical_k] if event_type not in selected)
-        if len(selected) < limit:
-            for event_type, _ in counts.most_common():
-                if event_type in selected:
-                    continue
-                selected.append(event_type)
-                if len(selected) >= limit:
-                    break
-        return selected
-
-    @staticmethod
-    def top_categorical_state_pairs(window_x_rows: list[WindowXRow], *, k: int) -> list[tuple[str, str]]:
-        counts: Counter[tuple[str, str]] = Counter()
-        for item in window_x_rows:
-            categorical_state_t_end = item.get("categorical_state_t_end")
-            if not isinstance(categorical_state_t_end, dict):
-                continue
-            for parameter_name, state in categorical_state_t_end.items():
-                counts[(str(parameter_name), str(state))] += 1
-        return [pair for pair, _ in counts.most_common(max(int(k), 0))]
-
-    @staticmethod
-    def top_cooccurrence_sensor_pairs(window_x_rows: list[WindowXRow], *, k: int) -> list[tuple[str, str]]:
-        counts: Counter[tuple[str, str]] = Counter()
-        for item in window_x_rows:
-            parameter_names = sorted(str(parameter_name) for parameter_name in item.get("continuous_vector_t_end_scaled", {}).keys())
-            parameter_names.extend(
-                sorted(
-                    str(parameter_name)
-                    for parameter_name in item.get("categorical_state_t_end", {}).keys()
-                    if str(parameter_name) not in set(parameter_names)
-                )
+        continuous_snapshot_df = (
+            snapshot_rows_df.where(F.col("value_num").isNotNull())
+            .groupBy("tail_id", "flight_id", "win_id")
+            .agg(
+                F.map_from_entries(
+                    F.collect_list(F.struct(F.col("parameter_name"), F.col("value_num").cast("double")))
+                ).alias("snapshot_continuous_vector_t_end")
             )
-            distinct = sorted(set(parameter_names))
-            for idx, left in enumerate(distinct):
-                for right in distinct[idx + 1 :]:
-                    counts[(left, right)] += 1
-        return [pair for pair, _ in counts.most_common(max(int(k), 0))]
-
-
-@dataclass(frozen=True)
-class WindowFeatureSelection:
-    selected_sensors_c: list[str]
-    selected_event_types: list[str]
-    selected_categorical_state_pairs: list[tuple[str, str]]
-    selected_cooccurrence_sensor_pairs: list[tuple[str, str]] | None = None
-
-    @property
-    def feature_names(self) -> list[str]:
-        names = [f"parameter_name::{parameter_name}" for parameter_name in self.selected_sensors_c]
-        names.extend(f"event_type::{event_type}" for event_type in self.selected_event_types)
-        names.extend(
-            f"categorical::{parameter_name}={state}"
-            for parameter_name, state in self.selected_categorical_state_pairs
         )
-        for left, right in self.cooccurrence_pairs:
-            names.append(f"cooccur::{left}&{right}")
-        names.extend(
-            [
-                "summary::event_density_hz",
-                "summary::continuous_event_fraction",
-                "summary::categorical_event_fraction",
-                "summary::active_sensor_fraction",
-            ]
+        continuous_snapshot_scaled_df = (
+            snapshot_rows_df.where(F.col("value_num").isNotNull())
+            .join(scaler_df, on="parameter_name", how="left")
+            .withColumn("scaled_value", (F.col("value_num") - F.col("median")) / F.col("iqr"))
+            .groupBy("tail_id", "flight_id", "win_id")
+            .agg(
+                F.map_from_entries(
+                    F.collect_list(F.struct(F.col("parameter_name"), F.col("scaled_value").cast("double")))
+                ).alias("snapshot_continuous_vector_t_end_scaled")
+            )
         )
-        return names
+        categorical_snapshot_df = (
+            snapshot_rows_df.where(
+                F.col("value_num").isNull()
+                & F.col("parameter_value").isNotNull()
+                & (F.length(F.trim(F.col("parameter_value"))) > 0)
+            )
+            .groupBy("tail_id", "flight_id", "win_id")
+            .agg(
+                F.map_from_entries(
+                    F.collect_list(F.struct(F.col("parameter_name"), F.col("parameter_value").cast("string")))
+                ).alias("snapshot_categorical_state_t_end")
+            )
+        )
+        return continuous_snapshot_df, continuous_snapshot_scaled_df, categorical_snapshot_df
 
-    @property
-    def cooccurrence_pairs(self) -> list[tuple[str, str]]:
-        return [
-            (str(left), str(right))
-            for left, right in (self.selected_cooccurrence_sensor_pairs or [])
-            if str(left) and str(right)
+    def _build_events_in_windows(self, *, base_windows_df: "DataFrame", events_df: "DataFrame") -> "DataFrame":
+        from pyspark.sql import functions as F
+
+        event_value_expr = (
+            F.expr("try_cast(element_at(payload, 'value') as double)")
+            if "payload" in events_df.columns
+            else F.lit(None).cast("double")
+        )
+        event_type_col = (
+            F.col("event_type_detected").cast("string")
+            if "event_type_detected" in events_df.columns
+            else F.lit("").cast("string")
+        )
+        selected_columns = [
+            F.col("w.tail_id").alias("tail_id"),
+            F.col("w.flight_id").alias("flight_id"),
+            F.col("w.win_id").alias("win_id"),
+            F.col("e.parameter_name").cast("string").alias("parameter_name"),
+            F.col("e.timestamp_utc").cast("timestamp").alias("timestamp_utc"),
+            event_type_col.alias("event_type_detected"),
+            event_value_expr.alias("value_num"),
         ]
-
-    def encode_row(self, window: WindowXRow) -> PhaseWindowRow:
-        scaled = window.get("continuous_vector_t_end_scaled")
-        if not isinstance(scaled, dict):
-            scaled = {}
-        event_counts = window.get("event_type_counts")
-        if not isinstance(event_counts, dict):
-            event_counts = {}
-        categorical_t_end = window.get("categorical_state_t_end")
-        if not isinstance(categorical_t_end, dict):
-            categorical_t_end = {}
-        active_parameters = set(str(parameter_name) for parameter_name in scaled.keys()) | set(
-            str(parameter_name) for parameter_name in categorical_t_end.keys()
-        )
-        event_total = max(int(window.get("event_count", 0) or 0), 0)
-        duration_ms = max(int(window.get("duration_ms", 0) or 0), 1)
-        duration_s = float(duration_ms) / 1000.0
-
-        vector: list[float] = []
-        x_c: list[float] = []
-        for parameter_name in self.selected_sensors_c:
-            value = float(scaled.get(parameter_name, 0.0) or 0.0)
-            vector.append(value)
-            x_c.append(value)
-        for event_type in self.selected_event_types:
-            vector.append(float(event_counts.get(event_type, 0) or 0.0) / float(max(event_total, 1)))
-        for parameter_name, state in self.selected_categorical_state_pairs:
-            vector.append(1.0 if str(categorical_t_end.get(parameter_name, "")) == state else 0.0)
-        for left, right in self.cooccurrence_pairs:
-            vector.append(1.0 if left in active_parameters and right in active_parameters else 0.0)
-        continuous_count = float(sum(int(event_counts.get(item, 0) or 0) for item in CONTINUOUS_EVENT_TYPES))
-        categorical_count = float(sum(int(event_counts.get(item, 0) or 0) for item in CATEGORICAL_EVENT_TYPES))
-        active_sensor_fraction = float(len(scaled)) / float(max(len(self.selected_sensors_c), 1))
-        vector.extend(
-            [
-                float(event_total) / float(max(duration_s, 1e-6)),
-                continuous_count / float(max(event_total, 1)),
-                categorical_count / float(max(event_total, 1)),
-                active_sensor_fraction,
-            ]
+        if "event_seq_id" in events_df.columns:
+            selected_columns.append(F.col("e.event_seq_id").cast("long").alias("event_seq_id"))
+        return (
+            base_windows_df.alias("w")
+            .join(
+                events_df.alias("e"),
+                on=(
+                    (F.col("w.tail_id") == F.col("e.tail_id"))
+                    & (F.col("w.flight_id") == F.col("e.flight_id"))
+                    & (F.col("e.timestamp_utc") >= F.col("w.t_start"))
+                    & (F.col("e.timestamp_utc") <= F.col("w.t_end"))
+                ),
+                how="left",
+            )
+            .select(*selected_columns)
+            .where(F.col("parameter_name").isNotNull() & F.col("timestamp_utc").isNotNull())
         )
 
-        enriched = dict(window)
-        enriched["x_c"] = x_c
-        enriched["s_w"] = vector
-        return enriched
+    def _build_event_feature_frames(
+        self,
+        *,
+        events_in_windows_df: "DataFrame",
+        scaler_df: "DataFrame",
+    ) -> tuple["DataFrame", "DataFrame", "DataFrame"]:
+        from pyspark.sql import functions as F
+        from pyspark.sql.window import Window
 
-    def encode_rows(self, window_x_rows: list[WindowXRow]) -> tuple[list[PhaseWindowRow], list[str]]:
-        return [self.encode_row(window) for window in window_x_rows], list(self.feature_names)
+        latest_event_order_columns = [F.col("timestamp_utc").desc()]
+        if "event_seq_id" in events_in_windows_df.columns:
+            latest_event_order_columns.append(F.col("event_seq_id").desc())
+        latest_event_order_columns.append(F.col("event_type_detected").desc())
+        latest_event_window = Window.partitionBy("tail_id", "flight_id", "win_id", "parameter_name").orderBy(
+            *latest_event_order_columns,
+        )
+        event_numeric_latest = (
+            events_in_windows_df.where(F.col("value_num").isNotNull())
+            .withColumn("rn", F.row_number().over(latest_event_window))
+            .where(F.col("rn") == 1)
+            .drop("rn")
+        )
+        continuous_event_df = (
+            event_numeric_latest.groupBy("tail_id", "flight_id", "win_id")
+            .agg(
+                F.map_from_entries(
+                    F.collect_list(F.struct(F.col("parameter_name"), F.col("value_num").cast("double")))
+                ).alias("event_continuous_vector_t_end")
+            )
+        )
+        continuous_event_scaled_df = (
+            event_numeric_latest.join(scaler_df, on="parameter_name", how="left")
+            .withColumn("scaled_value", (F.col("value_num") - F.col("median")) / F.col("iqr"))
+            .groupBy("tail_id", "flight_id", "win_id")
+            .agg(
+                F.map_from_entries(
+                    F.collect_list(F.struct(F.col("parameter_name"), F.col("scaled_value").cast("double")))
+                ).alias("event_continuous_vector_t_end_scaled")
+            )
+        )
+        event_type_counts_df = (
+            events_in_windows_df.where(F.col("event_type_detected").isNotNull())
+            .groupBy("tail_id", "flight_id", "win_id", "event_type_detected")
+            .agg(F.count(F.lit(1)).cast("int").alias("event_type_count"))
+            .groupBy("tail_id", "flight_id", "win_id")
+            .agg(
+                F.map_from_entries(
+                    F.collect_list(F.struct(F.col("event_type_detected"), F.col("event_type_count")))
+                ).alias("window_event_type_counts")
+            )
+        )
+        return continuous_event_df, continuous_event_scaled_df, event_type_counts_df
+
+    def _merge_feature_sources(
+        self,
+        *,
+        base_windows_df: "DataFrame",
+        continuous_snapshot_df: "DataFrame",
+        continuous_snapshot_scaled_df: "DataFrame",
+        continuous_event_df: "DataFrame",
+        continuous_event_scaled_df: "DataFrame",
+        categorical_snapshot_df: "DataFrame",
+        event_type_counts_df: "DataFrame",
+    ) -> "DataFrame":
+        from pyspark.sql import functions as F
+
+        return (
+            base_windows_df.join(continuous_snapshot_df, on=["tail_id", "flight_id", "win_id"], how="left")
+            .join(continuous_snapshot_scaled_df, on=["tail_id", "flight_id", "win_id"], how="left")
+            .join(continuous_event_df, on=["tail_id", "flight_id", "win_id"], how="left")
+            .join(continuous_event_scaled_df, on=["tail_id", "flight_id", "win_id"], how="left")
+            .join(categorical_snapshot_df, on=["tail_id", "flight_id", "win_id"], how="left")
+            .join(event_type_counts_df, on=["tail_id", "flight_id", "win_id"], how="left")
+            .withColumn(
+                "continuous_vector_t_end",
+                F.when(
+                    F.size(F.coalesce(F.col("event_continuous_vector_t_end"), empty_map("string", "double")))
+                    > 0,
+                    F.col("event_continuous_vector_t_end"),
+                ).otherwise(
+                    F.coalesce(
+                        F.col("snapshot_continuous_vector_t_end"),
+                        empty_map("string", "double"),
+                    )
+                ),
+            )
+            .withColumn(
+                "continuous_vector_t_end_scaled",
+                F.when(
+                    F.size(
+                        F.coalesce(
+                            F.col("event_continuous_vector_t_end_scaled"),
+                            empty_map("string", "double"),
+                        )
+                    )
+                    > 0,
+                    F.col("event_continuous_vector_t_end_scaled"),
+                ).otherwise(
+                    F.coalesce(
+                        F.col("snapshot_continuous_vector_t_end_scaled"),
+                        empty_map("string", "double"),
+                    )
+                ),
+            )
+            .withColumn(
+                "categorical_state_t_end",
+                F.when(
+                    F.col("snapshot_categorical_state_t_end").isNotNull(),
+                    F.col("snapshot_categorical_state_t_end"),
+                ).otherwise(empty_map()),
+            )
+            .withColumn(
+                "event_type_counts",
+                F.coalesce(F.col("window_event_type_counts"), empty_map("string", "int")),
+            )
+        )
+
+    def _with_drift_profile(self, combined_df: "DataFrame") -> "DataFrame":
+        from pyspark.sql import functions as F
+        from pyspark.sql.window import Window
+
+        flight_window = Window.partitionBy("tail_id", "flight_id").orderBy("t_end", "win_id")
+        return (
+            combined_df.withColumn(
+                "prev_continuous_vector_t_end_scaled",
+                F.lag("continuous_vector_t_end_scaled").over(flight_window),
+            )
+            .withColumn(
+                "drift_magnitude_profiled",
+                F.expr(
+                    """
+                    sqrt(
+                      aggregate(
+                        map_values(
+                          map_zip_with(
+                            coalesce(continuous_vector_t_end_scaled, cast(map() as map<string,double>)),
+                            coalesce(prev_continuous_vector_t_end_scaled, cast(map() as map<string,double>)),
+                            (k, current_value, prev_value) -> coalesce(current_value, 0D) - coalesce(prev_value, 0D)
+                          )
+                        ),
+                        cast(0.0 as double),
+                        (acc, delta_value) -> acc + (delta_value * delta_value)
+                      )
+                    )
+                    """
+                ),
+            )
+        )
+
+    def _finalize_feature_frame(self, enriched_df: "DataFrame") -> "DataFrame":
+        from pyspark.sql import functions as F
+
+        return enriched_df.select(
+            "tail_id",
+            "flight_id",
+            "win_id",
+            "t_start",
+            "t_end",
+            "duration_ms",
+            "event_count",
+            "date_utc",
+            "event_type_counts",
+            "continuous_vector_t_end",
+            "continuous_vector_t_end_scaled",
+            F.coalesce(
+                F.col("categorical_state_t_end"),
+                empty_map(),
+            ).alias("categorical_state_t_end"),
+            F.coalesce(F.col("drift_magnitude_profiled"), F.lit(0.0)).cast("double").alias(
+                "drift_magnitude_profiled"
+            ),
+            F.lit(None).cast("string").alias("phase_label"),
+        )
+
+    def _assemble_feature_frame(
+        self,
+        *,
+        base_windows_df: "DataFrame",
+        continuous_snapshot_df: "DataFrame",
+        continuous_snapshot_scaled_df: "DataFrame",
+        continuous_event_df: "DataFrame",
+        continuous_event_scaled_df: "DataFrame",
+        categorical_snapshot_df: "DataFrame",
+        event_type_counts_df: "DataFrame",
+    ) -> "DataFrame":
+        combined_df = self._merge_feature_sources(
+            base_windows_df=base_windows_df,
+            continuous_snapshot_df=continuous_snapshot_df,
+            continuous_snapshot_scaled_df=continuous_snapshot_scaled_df,
+            continuous_event_df=continuous_event_df,
+            continuous_event_scaled_df=continuous_event_scaled_df,
+            categorical_snapshot_df=categorical_snapshot_df,
+            event_type_counts_df=event_type_counts_df,
+        )
+        return self._finalize_feature_frame(self._with_drift_profile(combined_df))
+
+    def _build_feature_frame(
+        self,
+        raw_df: "DataFrame",
+        events_df: "DataFrame",
+        windows_df: "DataFrame",
+        *,
+        materialize: "Callable[[str, Callable[[], DataFrame]], DataFrame] | None" = None,
+    ) -> "DataFrame":
+        base_windows_df = self._build_step(
+            "base_windows",
+            lambda: self._base_windows(windows_df),
+            materialize=materialize,
+        )
+        prepared_raw_df = self._build_step(
+            "prepare_raw",
+            lambda: self._prepare_raw(raw_df),
+            materialize=materialize,
+        )
+        raw_intervals_df = self._build_step(
+            "raw_intervals",
+            lambda: self._build_raw_intervals(prepared_raw_df),
+            materialize=materialize,
+        )
+        scaler_df = self._build_step(
+            "scaler_frame",
+            lambda: self._build_scaler_frame(prepared_raw_df),
+            materialize=materialize,
+        )
+        snapshot_rows_df = self._build_step(
+            "snapshot_rows",
+            lambda: self._build_snapshot_rows(base_windows_df=base_windows_df, raw_intervals_df=raw_intervals_df),
+            materialize=materialize,
+        )
+        snapshot_feature_frames = self._build_snapshot_feature_frames(
+            snapshot_rows_df=snapshot_rows_df,
+            scaler_df=scaler_df,
+        )
+        continuous_snapshot_df = self._build_step(
+            "continuous_snapshot",
+            lambda: snapshot_feature_frames[0],
+            materialize=materialize,
+        )
+        continuous_snapshot_scaled_df = self._build_step(
+            "continuous_snapshot_scaled",
+            lambda: snapshot_feature_frames[1],
+            materialize=materialize,
+        )
+        categorical_snapshot_df = self._build_step(
+            "categorical_snapshot",
+            lambda: snapshot_feature_frames[2],
+            materialize=materialize,
+        )
+        events_in_windows_df = self._build_step(
+            "events_in_windows",
+            lambda: self._build_events_in_windows(base_windows_df=base_windows_df, events_df=events_df),
+            materialize=materialize,
+        )
+        event_feature_frames = self._build_event_feature_frames(
+            events_in_windows_df=events_in_windows_df,
+            scaler_df=scaler_df,
+        )
+        continuous_event_df = self._build_step(
+            "continuous_event",
+            lambda: event_feature_frames[0],
+            materialize=materialize,
+        )
+        continuous_event_scaled_df = self._build_step(
+            "continuous_event_scaled",
+            lambda: event_feature_frames[1],
+            materialize=materialize,
+        )
+        event_type_counts_df = self._build_step(
+            "event_type_counts",
+            lambda: event_feature_frames[2],
+            materialize=materialize,
+        )
+        return self._build_step(
+            "assemble_feature_frame",
+            lambda: self._assemble_feature_frame(
+                base_windows_df=base_windows_df,
+                continuous_snapshot_df=continuous_snapshot_df,
+                continuous_snapshot_scaled_df=continuous_snapshot_scaled_df,
+                continuous_event_df=continuous_event_df,
+                continuous_event_scaled_df=continuous_event_scaled_df,
+                categorical_snapshot_df=categorical_snapshot_df,
+                event_type_counts_df=event_type_counts_df,
+            ),
+            materialize=materialize,
+        )
+
+    @hot_path
+    def build(self, raw_df: "DataFrame", events_df: "DataFrame", windows_df: "DataFrame") -> "DataFrame":
+        return self._build_feature_frame(raw_df, events_df, windows_df)
+
+    @hot_path
+    def build_with_diagnostics(
+        self,
+        raw_df: "DataFrame",
+        events_df: "DataFrame",
+        windows_df: "DataFrame",
+    ) -> tuple["DataFrame", WindowFeaturesDiagnostics]:
+        start = time.perf_counter()
+        step_diagnostics: list[WindowFeatureStepDiagnostics] = []
+        output_df = self._build_feature_frame(
+            raw_df,
+            events_df,
+            windows_df,
+            materialize=lambda name, build_frame: self._materialize_step(
+                name,
+                build_frame,
+                step_diagnostics,
+            ),
+        )
+        diagnostics = WindowFeaturesDiagnostics(
+            steps=step_diagnostics,
+            output_row_count=step_diagnostics[-1].row_count if step_diagnostics else 0,
+            total_timing_ms=(time.perf_counter() - start) * 1000.0,
+        )
+        LOGGER.info("window_features_build diagnostics=%s", diagnostics.to_dict())
+        return output_df, diagnostics
+
+@hot_path
+def build_window_features_spark_table(raw_df: "DataFrame", events_df: "DataFrame", windows_df: "DataFrame") -> "DataFrame":
+    """Build the canonical ``window_features`` artifact in Spark."""
+    return WindowFeaturesPlan().build(raw_df, events_df, windows_df)
+
+
+@hot_path
+def build_window_features_with_diagnostics_spark_table(
+    raw_df: "DataFrame",
+    events_df: "DataFrame",
+    windows_df: "DataFrame",
+) -> tuple["DataFrame", WindowFeaturesDiagnostics]:
+    """Build ``window_features`` and emit explicit per-step diagnostics for development tuning."""
+    return WindowFeaturesPlan().build_with_diagnostics(raw_df, events_df, windows_df)
+
+
+from typing import TYPE_CHECKING, Callable
+
+if TYPE_CHECKING:
+    from pyspark.sql import DataFrame

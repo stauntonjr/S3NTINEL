@@ -8,13 +8,16 @@ from pathlib import Path
 
 from libs.perf import (
     active_run_id,
+    capture_memory_snapshot,
     get_logger,
     log_dict_artifact_if_active,
+    log_memory_usage,
     log_metric_if_active,
     pipeline_run_context,
 )
 
 
+@log_memory_usage(label="pipeline_stage_group")
 def run_stage_group(
     *,
     run_name: str,
@@ -86,6 +89,13 @@ def run_stage_group(
             "failed_stage_count": failed_count,
             "stages": stage_results,
         }
+        summary["memory_snapshot_end"] = capture_memory_snapshot(
+            label=run_name,
+            event="pipeline_summary",
+            started_at=run_start,
+            status=str(summary["status"]),
+            include_spark=True,
+        )
 
         log_metric_if_active("pipeline_total_elapsed_ms", total_elapsed_ms)
         log_metric_if_active("pipeline_completed_stage_count", float(completed_count))

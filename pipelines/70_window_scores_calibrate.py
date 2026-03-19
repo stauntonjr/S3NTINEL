@@ -1,14 +1,15 @@
 # File: pipelines/70_window_scores_calibrate.py
-"""Calibrate raw window scores with phase-conditioned conformal buffers."""
+"""Calibrate raw window scores with phase-conditioned conformal calibration."""
 
 import os
 
-from libs.conformal.build import build_calibrated_scores_df
+from libs.conformal import build_calibrated_window_scores_table
 from libs.io.delta import get_spark, read_table, write_table
 from libs.perf import (
     build_artifact_manifest,
     build_stage_manifest,
     get_logger,
+    log_memory_usage,
     log_dict_artifact_if_active,
     log_params_if_active,
     log_stage_manifest_if_active,
@@ -22,6 +23,7 @@ LOGGER = get_logger(__name__)
 
 
 @track_mlflow_run(stage_name="70_window_scores_calibrate", logger=LOGGER)
+@log_memory_usage(logger=LOGGER, label="70_window_scores_calibrate")
 @log_wall_time(logger=LOGGER)
 def run() -> None:
     context = build_context()
@@ -34,7 +36,7 @@ def run() -> None:
 
     spark = get_spark("s3ntinel.window_scores_calibrate")
     scores_df = read_table(spark, scores_path, fmt=table_format)
-    calibrated_df = build_calibrated_scores_df(scores_df=scores_df, min_warm=min_warm)
+    calibrated_df = build_calibrated_window_scores_table(scores_df=scores_df, min_warm=min_warm)
 
     write_table(
         calibrated_df,

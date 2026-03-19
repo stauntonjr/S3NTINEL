@@ -22,14 +22,32 @@ class TelemetryRow(TypedDict, total=False):
     timestamp_utc: datetime
     parameter_value: str | None
     parameter_value_clean: str | float | int | None
+    unit: str | None
+    rate_hz: float | None
+    behavior_family_label: str | None
     parameter_datatype_label: str | None
     parameter_datatype_profiled: str | None
+    misbehavior_active: bool
+    misbehavior_applied: bool
+    misbehavior_family_label: str | None
+    misbehavior_detail_label: str | None
+    misbehavior_window_id: str | None
+    coupling_id_label: str | None
+    event_type_label: str | None
+    anomaly_type_label: str | None
+    anomaly_score_label: float | None
+    fault_active: bool
+    fault_applied: bool
+    fault_family_label: str | None
+    fault_type: str | None
+    fault_window_id: str | None
     date_utc: date
 
 
 class DetectedEventRow(TypedDict, total=False):
     tail_id: str
     flight_id: str
+    event_seq_id: int
     parameter_name: str
     timestamp_utc: datetime
     event_type_detected: str
@@ -64,7 +82,7 @@ class AdaptiveWindowRow(TypedDict, total=False):
     window_events: list[DetectedEventRow]
 
 
-class WindowXRow(TypedDict, total=False):
+class WindowFeatureRow(TypedDict, total=False):
     tail_id: str
     flight_id: str
     win_id: int

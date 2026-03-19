@@ -6,10 +6,11 @@ import pandas as pd
 
 from libs.events import build_events_table
 from libs.io.pandas_spark import pandas_records_for_spark
+from libs.io.schemas import SIMULATION_RAW_INPUT_SCHEMA
 from libs.io.transforms import normalize_raw_telemetry
 from libs.simulation.flight.examples import build_named_flight_spec
 from libs.simulation.flight.runtime import Flight
-from libs.windows import build_window_features_spark_dataframe, build_windows_table
+from libs.windows import build_window_features_spark_table, build_windows_table
 
 
 def _build_flight(*, flight_name: str, tail_id: str = "TSIM", flight_id: str = "FSIM") -> Flight:
@@ -45,12 +46,23 @@ def test_flight_simulate_rows_emits_canonical_raw_rows_and_phase_rows():
     }.issubset(raw_df.columns)
     assert {
         "parameter_value_clean",
+        "unit",
+        "rate_hz",
         "phase_label",
         "system_id",
         "subsystem_id",
         "module_id",
         "behavior_family_label",
         "parameter_datatype_label",
+        "misbehavior_active",
+        "misbehavior_applied",
+        "misbehavior_family_label",
+        "misbehavior_detail_label",
+        "misbehavior_window_id",
+        "coupling_id_label",
+        "event_type_label",
+        "anomaly_type_label",
+        "anomaly_score_label",
         "fault_active",
         "fault_applied",
         "fault_family_label",
@@ -91,34 +103,48 @@ def test_flight_tick_emits_canonical_rows_for_named_flight():
 
 def test_composite_flight_emits_fault_truth_metadata():
     raw_rows, _phase_rows = _build_flight(
-        flight_name="power_pressurization_hierarchy_composite",
+        flight_name="power_pressurization_hierarchy_smoke",
         tail_id="TCOMP",
         flight_id="FCOMP",
     ).simulate_rows(
-        n_steps=32,
-        dt_seconds=1.0,
+        n_steps=3360,
+        dt_seconds=0.5,
         apply_faults=True,
     )
 
     raw_df = pd.DataFrame.from_records(raw_rows)
+    misbehavior_rows = raw_df[raw_df["misbehavior_active"].fillna(False).astype(bool)]
     fault_rows = raw_df[raw_df["fault_active"].fillna(False).astype(bool)]
 
     assert not raw_df.empty
+    assert not misbehavior_rows.empty
     assert not fault_rows.empty
     assert {
+        "misbehavior_active",
+        "misbehavior_applied",
+        "misbehavior_family_label",
+        "misbehavior_detail_label",
+        "misbehavior_window_id",
         "fault_active",
         "fault_applied",
         "fault_family_label",
         "fault_type",
         "fault_window_id",
     }.issubset(raw_df.columns)
-    assert {"regulated", "inertial", "accumulative", "discrete_state"}.issubset(
+    assert {"timing_lag", "bias", "saturation", "drift", "state_chatter", "illegal_transition"}.issubset(
+        set(misbehavior_rows["misbehavior_family_label"].dropna().astype(str))
+    )
+    assert misbehavior_rows["misbehavior_window_id"].dropna().astype(str).nunique() >= 9
+    assert {"regulated", "inertial", "accumulative", "discrete_state", "coupling"}.issubset(
         set(fault_rows["fault_family_label"].dropna().astype(str))
     )
-    assert fault_rows["fault_window_id"].dropna().astype(str).nunique() >= 4
+    assert fault_rows["fault_window_id"].dropna().astype(str).nunique() >= 9
+    assert {"0.5", "1.0", "2.0"}.issubset(set(raw_df["rate_hz"].fillna(0.0).astype(str)))
+    assert raw_df["unit"].fillna("").astype(str).str.len().max() > 0
+    assert misbehavior_rows["coupling_id_label"].fillna("").astype(str).str.len().max() > 0
 
 
-def test_canonical_sim_rows_flow_into_events_windows_and_window_x(spark):
+def test_canonical_sim_rows_flow_into_events_windows_and_window_features(spark):
     raw_rows, _phase_rows = _build_flight(
         flight_name="pressurization",
         tail_id="TSTRUC",
@@ -129,7 +155,10 @@ def test_canonical_sim_rows_flow_into_events_windows_and_window_x(spark):
         apply_faults=True,
     )
 
-    raw_sdf = spark.createDataFrame(pandas_records_for_spark(pd.DataFrame.from_records(raw_rows)))
+    raw_sdf = spark.createDataFrame(
+        pandas_records_for_spark(pd.DataFrame.from_records(raw_rows)),
+        schema=SIMULATION_RAW_INPUT_SCHEMA(),
+    )
     normalized_raw_sdf = normalize_raw_telemetry(raw_sdf)
     events_sdf = build_events_table(normalized_raw_sdf, delta_threshold=0.0, slope_source="ema", ema_alpha=0.2)
     windows_sdf = build_windows_table(
@@ -138,15 +167,15 @@ def test_canonical_sim_rows_flow_into_events_windows_and_window_x(spark):
         event_threshold=20,
         min_ms=50,
         inactivity_timeout_ms=0,
-        strategy="bucketed",
+        strategy="segmented",
     )
-    window_x_sdf = build_window_features_spark_dataframe(normalized_raw_sdf, events_sdf, windows_sdf)
+    window_features_sdf = build_window_features_spark_table(normalized_raw_sdf, events_sdf, windows_sdf)
 
     assert events_sdf.count() > 0
     assert windows_sdf.count() > 0
-    assert window_x_sdf.count() > 0
-    assert {"tail_id", "flight_id", "timestamp_utc", "parameter_name", "event_type_detected"}.issubset(events_sdf.columns)
-    assert {"tail_id", "flight_id", "win_id", "event_count", "close_reason"}.issubset(windows_sdf.columns)
+    assert window_features_sdf.count() > 0
+    assert {"tail_id", "flight_id", "event_seq_id", "timestamp_utc", "parameter_name", "event_type_detected"}.issubset(events_sdf.columns)
+    assert {"tail_id", "flight_id", "win_id", "event_count", "sensor_count", "event_type_counts", "zoh_snapshot", "close_reason"}.issubset(windows_sdf.columns)
     assert {"tail_id", "flight_id", "win_id", "continuous_vector_t_end", "categorical_state_t_end"}.issubset(
-        window_x_sdf.columns
+        window_features_sdf.columns
     )

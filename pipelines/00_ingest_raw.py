@@ -8,6 +8,7 @@ from libs.perf import (
     build_stage_manifest,
     get_logger,
     log_dataframe_dataset_if_active,
+    log_memory_usage,
     log_dict_artifact_if_active,
     log_params_if_active,
     log_stage_manifest_if_active,
@@ -27,6 +28,7 @@ def resolve_output_format() -> str:
 
 
 @track_mlflow_run(stage_name="00_ingest_raw", logger=LOGGER)
+@log_memory_usage(logger=LOGGER, label="00_ingest_raw")
 @log_wall_time(logger=LOGGER)
 def run() -> None:
     context = build_context()
