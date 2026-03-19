@@ -11,22 +11,18 @@ It does not own:
 
 ## How To Use
 
-- Use the graph nouns for in-memory reasoning:
+- Use the graph nouns for in-memory reasoning where they still exist:
   - `PrecisionGraph`
   - `EventGraph`
-  - `LagGraph`
-  - `TransitionGraph`
   - `FusedGraph`
   - `GraphHierarchy`
-- Use `libs/graph/pipeline.py` only as the Spark/table adapter layer for persisted stages.
+- Use `libs/graph/pipeline.py` as the canonical Spark implementation surface for graph fitting stages.
 - Use `build_graph_components_with_diagnostics_spark_table(...)` during development when you need explicit per-component timings and row counts.
 
 ## Contents
 
 - `precision.py`
 - `event.py`
-- `lag.py`
-- `transition.py`
 - `fused.py`
 - `hierarchy_artifacts.py`
   - first-class graph objects and hierarchy logic
@@ -35,7 +31,7 @@ It does not own:
 - `validator.py`
   - graph and hierarchy validation
 - `pipeline.py`
-  - persisted Spark-facing adapter
+  - canonical Spark graph builders and diagnostics
 
 ## Model / Concepts
 
@@ -56,8 +52,8 @@ Persisted graph artifacts are defined in `libs/io/schemas/graph.py`.
 Graph construction mixes:
 - correlation / partial-correlation structure
 - event-pair counting
-- lagged relation counting
-- transition counts
+- lagged relation counting in Spark
+- transition counts in Spark
 - weighted fusion and clustering
 
 ## Subject Matter View
@@ -66,9 +62,9 @@ This package turns local telemetry relationships into structural models that sup
 
 ## Testing / Validation
 
-- unit tests cover graph objects and hierarchy behavior
-- integration tests cover stage 11 and hierarchy validation
+- unit tests cover remaining graph objects and hierarchy behavior
+- integration tests cover Spark graph semantics, stage 11, and hierarchy validation
 
 ## Notes
 
-- `pipeline.py` is an adapter, not the conceptual home of the graph domain.
+- `pipeline.py` is the canonical implementation surface for lag and transition graph construction.

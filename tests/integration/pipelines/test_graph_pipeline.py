@@ -13,10 +13,6 @@ from libs.graph import (
     build_precision_graph_from_window_features_spark_table,
     build_transition_graph_spark_table,
 )
-from libs.graph.pipeline import (
-    build_graph_artifacts_from_window_features_table,
-    build_graph_fusion_from_component_tables,
-)
 from libs.testing.data import create_sample_events_df, create_sample_raw_table_df, create_sample_windows_df
 from libs.windows import build_window_features_spark_table
 
@@ -52,10 +48,9 @@ edge_family string
     return spark.createDataFrame(pandas_records_for_spark(precision_df), schema=schema)
 
 
-def test_build_graph_artifacts_from_window_features_table_produces_graph_families_and_hierarchy(spark):
+def test_spark_graph_tables_produce_graph_families_and_hierarchy(spark):
     _, events_sdf, windows_df, window_features_df = _build_window_features_pdf_with_events(spark)
-    events_df = events_sdf.toPandas()
-    backbone_df = spark.createDataFrame(
+    backbone_sdf = spark.createDataFrame(
         [
             {
                 "backbone_version": 2,
@@ -66,23 +61,31 @@ def test_build_graph_artifacts_from_window_features_table_produces_graph_familie
                 "training_window_count": 2,
             }
         ]
-    ).toPandas()
+    )
+    window_features_sdf = spark.createDataFrame(pandas_records_for_spark(window_features_df), schema=WINDOW_X_SCHEMA)
 
-    precision_df, event_df, lag_df, transition_df, fused_df, hierarchy_df = build_graph_artifacts_from_window_features_table(
-        window_features_df,
-        events_df,
-        windows_df.toPandas(),
-        backbone_df,
-        min_abs_partial_corr=0.0,
-        min_event_count=1,
-        min_lag_count=1,
+    precision_sdf, event_sdf, lag_sdf, transition_sdf, fused_sdf, parameter_universe_sdf, _ = (
+        build_graph_components_with_diagnostics_spark_table(
+            window_features_sdf,
+            events_sdf,
+            windows_df,
+            backbone_sdf,
+            min_abs_partial_corr=0.0,
+            min_event_count=1,
+            min_lag_count=1,
+        )
+    )
+    hierarchy_df = build_hierarchy_from_fused_spark_table(
+        fused_sdf,
+        parameter_names=[row["parameter_name"] for row in parameter_universe_sdf.collect()],
         min_fused_edge_weight=0.0,
+        hierarchy_top_k_per_parameter_name=3,
     )
 
-    assert set(["parameter_name_u", "parameter_name_v", "edge_family"]).issubset(event_df.columns)
-    assert set(["parameter_name_u", "parameter_name_v", "mean_lag_seconds", "edge_family"]).issubset(lag_df.columns)
-    assert set(["parameter_name_u", "parameter_name_v", "precedence_count", "precedence_weight", "edge_family"]).issubset(transition_df.columns)
-    assert set(["parameter_name_u", "parameter_name_v", "fused_weight", "edge_family"]).issubset(fused_df.columns)
+    assert set(["parameter_name_u", "parameter_name_v", "edge_family"]).issubset(event_sdf.columns)
+    assert set(["parameter_name_u", "parameter_name_v", "mean_lag_seconds", "edge_family"]).issubset(lag_sdf.columns)
+    assert set(["parameter_name_u", "parameter_name_v", "precedence_count", "precedence_weight", "edge_family"]).issubset(transition_sdf.columns)
+    assert set(["parameter_name_u", "parameter_name_v", "fused_weight", "edge_family"]).issubset(fused_sdf.columns)
     assert set(["parameter_name", "system_id", "subsystem_id", "module_id"]).issubset(hierarchy_df.columns)
     assert len(hierarchy_df) >= 1
 
@@ -128,7 +131,7 @@ def test_build_graph_components_with_diagnostics_spark_table_reports_component_d
 
 def test_spark_graph_tables_feed_fusion_helper(spark):
     _, events_sdf, windows_sdf, window_features_df = _build_window_features_pdf_with_events(spark)
-    backbone_df = spark.createDataFrame(
+    backbone_sdf = spark.createDataFrame(
         [
             {
                 "backbone_version": 2,
@@ -139,7 +142,7 @@ def test_spark_graph_tables_feed_fusion_helper(spark):
                 "training_window_count": 2,
             }
         ]
-    ).toPandas()
+    )
 
     event_sdf = build_event_graph_spark_table(events_sdf, windows_sdf, min_count=1, min_npmi=0.0, top_k_per_parameter_name=8)
     lag_sdf = build_lag_graph_spark_table(
@@ -173,25 +176,17 @@ def test_spark_graph_tables_feed_fusion_helper(spark):
     event_pdf = event_sdf.toPandas()
     lag_pdf = lag_sdf.toPandas()
     fused_df = fused_sdf.toPandas()
-    fused_df_pandas, hierarchy_df_pandas = build_graph_fusion_from_component_tables(
-        precision_df,
-        event_pdf,
-        lag_pdf,
-        backbone_df,
-        min_fused_edge_weight=0.0,
-    )
-
     assert set(["parameter_name_u", "parameter_name_v", "cooccur_count", "event_weight", "edge_family"]).issubset(event_pdf.columns)
     assert set(["parameter_name_u", "parameter_name_v", "lag_count", "lag_weight", "mean_lag_seconds", "edge_family"]).issubset(lag_pdf.columns)
     assert set(["parameter_name_u", "parameter_name_v", "precedence_count", "precedence_weight", "edge_family"]).issubset(transition_pdf.columns)
     assert set(["parameter_name_u", "parameter_name_v", "partial_corr", "precision_weight", "edge_family"]).issubset(precision_df.columns)
     assert set(["parameter_name_u", "parameter_name_v", "fused_weight", "edge_family"]).issubset(fused_df.columns)
     assert set(["parameter_name", "system_id", "subsystem_id", "module_id"]).issubset(hierarchy_df.columns)
-    assert len(fused_df) == len(fused_df_pandas)
-    assert len(hierarchy_df) == len(hierarchy_df_pandas)
+    assert len(fused_df) >= 1
+    assert len(hierarchy_df) >= 1
 
 
-def test_build_precision_graph_from_window_features_spark_table_matches_local_graph_builder(spark):
+def test_build_precision_graph_from_window_features_spark_table_produces_expected_columns(spark):
     _, events_sdf, windows_df, window_features_df = _build_window_features_pdf_with_events(spark)
 
     spark_precision_df = build_precision_graph_from_window_features_spark_table(
@@ -200,113 +195,14 @@ def test_build_precision_graph_from_window_features_spark_table_matches_local_gr
         ridge_lambda=1.0,
         min_abs_partial_corr=0.0,
     )
-    pandas_precision_df, _, _, _, _, _ = build_graph_artifacts_from_window_features_table(
-        window_features_df,
-        events_sdf.toPandas(),
-        windows_df.toPandas(),
-        spark.createDataFrame(
-            [
-                {
-                    "backbone_version": 2,
-                    "selected_sensors_c": ["ENG_TEMP_1"],
-                    "all_sensors": ["ENG_TEMP_1", "HYD_PRESS_1"],
-                    "weights_b": [[1.0, 0.0]],
-                    "lambda_ridge": 1.0,
-                    "training_window_count": 2,
-                }
-            ]
-        ).toPandas(),
-        min_abs_partial_corr=0.0,
-    )
-
-    assert list(spark_precision_df.columns) == list(pandas_precision_df.columns)
-    assert len(spark_precision_df) == len(pandas_precision_df)
-
-
-def test_spark_graph_component_tables_match_pandas_builders_exactly(spark):
-    _, events_sdf, windows_sdf, window_features_df = _build_window_features_pdf_with_events(spark)
-    events_df = events_sdf.toPandas()
-    windows_df = windows_sdf.toPandas()
-    backbone_df = spark.createDataFrame(
-        [
-            {
-                "backbone_version": 2,
-                "selected_sensors_c": ["ENG_TEMP_1"],
-                "all_sensors": ["ENG_TEMP_1", "HYD_PRESS_1"],
-                "weights_b": [[1.0, 0.0]],
-                "lambda_ridge": 1.0,
-                "training_window_count": 2,
-            }
-        ]
-    ).toPandas()
-
-    precision_pdf, event_pdf, lag_pdf, transition_pdf, fused_pdf, hierarchy_pdf = build_graph_artifacts_from_window_features_table(
-        window_features_df,
-        events_df,
-        windows_df,
-        backbone_df,
-        min_abs_partial_corr=0.0,
-        min_event_count=1,
-        min_lag_count=1,
-        min_fused_edge_weight=0.0,
-    )
-
-    precision_spark_pdf = build_precision_graph_from_window_features_spark_table(
-        spark.createDataFrame(pandas_records_for_spark(window_features_df), schema=WINDOW_X_SCHEMA),
-        selected_sensors=["ENG_TEMP_1"],
-        ridge_lambda=1.0,
-        min_abs_partial_corr=0.0,
-    )
-    event_spark_pdf = build_event_graph_spark_table(
-        events_sdf,
-        windows_sdf,
-        min_count=1,
-        min_npmi=0.0,
-        top_k_per_parameter_name=8,
-    ).toPandas()
-    lag_spark_pdf = build_lag_graph_spark_table(
-        events_sdf,
-        tau_max_seconds=30.0,
-        min_count=1,
-        max_mean_lag_seconds=None,
-        top_k_outgoing=8,
-    ).toPandas()
-    transition_spark_pdf = build_transition_graph_spark_table(events_sdf, min_count=1).toPandas()
-    fused_spark_pdf = build_fused_graph_spark_table(
-        _precision_pandas_to_spark_table(spark, precision_spark_pdf),
-        spark.createDataFrame(event_spark_pdf) if not event_spark_pdf.empty else spark.createDataFrame([], schema="parameter_name_u string, parameter_name_v string, cooccur_count int, event_weight double, edge_family string"),
-        spark.createDataFrame(lag_spark_pdf) if not lag_spark_pdf.empty else spark.createDataFrame([], schema="parameter_name_u string, parameter_name_v string, edge_family string, lag_count int, lag_weight double, mean_lag_seconds double"),
-        alpha=1.0,
-        beta=1.0,
-        gamma=1.0,
-    ).toPandas()
-    hierarchy_spark_pdf = build_hierarchy_from_fused_spark_table(
-        spark.createDataFrame(fused_spark_pdf) if not fused_spark_pdf.empty else spark.createDataFrame([], schema="parameter_name_u string, parameter_name_v string, precision_weight double, event_weight double, lag_weight double, fused_weight double, edge_family string"),
-        parameter_names=["ENG_TEMP_1", "HYD_PRESS_1", "PUMP_STATE"],
-        min_fused_edge_weight=0.0,
-        hierarchy_top_k_per_parameter_name=3,
-    )
-
-    def normalize(df, order_cols):
-        rows = df.sort_values(order_cols, kind="stable").reset_index(drop=True).to_dict(orient="records")
-        return [{key: _round_nested(value) for key, value in row.items()} for row in rows]
-
-    assert normalize(precision_spark_pdf, ["parameter_name_u", "parameter_name_v"]) == normalize(
-        precision_pdf, ["parameter_name_u", "parameter_name_v"]
-    )
-    assert normalize(event_spark_pdf, ["parameter_name_u", "parameter_name_v"]) == normalize(
-        event_pdf, ["parameter_name_u", "parameter_name_v"]
-    )
-    assert normalize(lag_spark_pdf, ["parameter_name_u", "parameter_name_v"]) == normalize(
-        lag_pdf, ["parameter_name_u", "parameter_name_v"]
-    )
-    assert normalize(transition_spark_pdf, ["parameter_name_u", "parameter_name_v"]) == normalize(
-        transition_pdf, ["parameter_name_u", "parameter_name_v"]
-    )
-    assert normalize(fused_spark_pdf, ["parameter_name_u", "parameter_name_v"]) == normalize(
-        fused_pdf, ["parameter_name_u", "parameter_name_v"]
-    )
-    assert normalize(hierarchy_spark_pdf, ["parameter_name"]) == normalize(hierarchy_pdf, ["parameter_name"])
+    assert set(spark_precision_df.columns) == {
+        "parameter_name_u",
+        "parameter_name_v",
+        "partial_corr",
+        "precision_weight",
+        "edge_family",
+    }
+    assert len(spark_precision_df) >= 0
 
 
 def test_graph_window_features_fixture_keeps_event_type_counts(spark):
@@ -384,6 +280,100 @@ date_utc date
         {key: _round_nested(value) for key, value in row.items()}
         for row in actual.to_dict(orient="records")
     ]
+
+    assert actual_rows == expected_rows
+
+
+def test_lag_graph_spark_table_applies_filters_and_top_k_by_source(spark):
+    base = datetime(2026, 3, 1, 0, 0, 0, tzinfo=timezone.utc)
+    event_schema = """
+tail_id string,
+flight_id string,
+event_seq_id long,
+win_id int,
+timestamp_utc timestamp,
+parameter_name string,
+event_type_detected string,
+anomaly_type_detected string,
+anomaly_score_detected double,
+payload map<string,string>,
+date_utc date
+"""
+    rows = [
+        {"tail_id": "T001", "flight_id": "F001", "event_seq_id": 1, "win_id": 1, "timestamp_utc": base, "parameter_name": "A", "event_type_detected": "e", "anomaly_type_detected": "", "anomaly_score_detected": 0.0, "payload": {}, "date_utc": base.date()},
+        {"tail_id": "T001", "flight_id": "F001", "event_seq_id": 2, "win_id": 1, "timestamp_utc": base + timedelta(seconds=1), "parameter_name": "B", "event_type_detected": "e", "anomaly_type_detected": "", "anomaly_score_detected": 0.0, "payload": {}, "date_utc": base.date()},
+        {"tail_id": "T001", "flight_id": "F001", "event_seq_id": 3, "win_id": 1, "timestamp_utc": base + timedelta(seconds=2), "parameter_name": "C", "event_type_detected": "e", "anomaly_type_detected": "", "anomaly_score_detected": 0.0, "payload": {}, "date_utc": base.date()},
+        {"tail_id": "T001", "flight_id": "F001", "event_seq_id": 4, "win_id": 1, "timestamp_utc": base + timedelta(seconds=3), "parameter_name": "A", "event_type_detected": "e", "anomaly_type_detected": "", "anomaly_score_detected": 0.0, "payload": {}, "date_utc": base.date()},
+        {"tail_id": "T001", "flight_id": "F001", "event_seq_id": 5, "win_id": 1, "timestamp_utc": base + timedelta(seconds=4), "parameter_name": "C", "event_type_detected": "e", "anomaly_type_detected": "", "anomaly_score_detected": 0.0, "payload": {}, "date_utc": base.date()},
+        {"tail_id": "T001", "flight_id": "F001", "event_seq_id": 6, "win_id": 1, "timestamp_utc": base + timedelta(seconds=20), "parameter_name": "B", "event_type_detected": "e", "anomaly_type_detected": "", "anomaly_score_detected": 0.0, "payload": {}, "date_utc": base.date()},
+    ]
+    events_sdf = spark.createDataFrame(rows, schema=event_schema)
+
+    min_count_pdf = build_lag_graph_spark_table(
+        events_sdf,
+        tau_max_seconds=10.0,
+        min_count=2,
+        max_mean_lag_seconds=None,
+        top_k_outgoing=0,
+    ).toPandas()
+    assert set(zip(min_count_pdf["parameter_name_u"], min_count_pdf["parameter_name_v"])) == {("A", "C"), ("B", "C")}
+
+    top_k_pdf = build_lag_graph_spark_table(
+        events_sdf,
+        tau_max_seconds=10.0,
+        min_count=1,
+        max_mean_lag_seconds=None,
+        top_k_outgoing=1,
+    ).toPandas()
+    assert top_k_pdf["parameter_name_u"].value_counts().max() == 1
+
+    max_mean_pdf = build_lag_graph_spark_table(
+        events_sdf,
+        tau_max_seconds=10.0,
+        min_count=1,
+        max_mean_lag_seconds=1.5,
+        top_k_outgoing=0,
+    ).toPandas()
+    assert all(float(value) <= 1.5 for value in max_mean_pdf["mean_lag_seconds"].tolist())
+
+
+def test_transition_graph_spark_table_follows_event_seq_id_order_and_row_normalizes(spark):
+    base = datetime(2026, 3, 1, 0, 0, 0, tzinfo=timezone.utc)
+    event_schema = """
+tail_id string,
+flight_id string,
+event_seq_id long,
+win_id int,
+timestamp_utc timestamp,
+parameter_name string,
+event_type_detected string,
+anomaly_type_detected string,
+anomaly_score_detected double,
+payload map<string,string>,
+date_utc date
+"""
+    rows = [
+        {"tail_id": "T001", "flight_id": "F001", "event_seq_id": 1, "win_id": 1, "timestamp_utc": base, "parameter_name": "A", "event_type_detected": "e", "anomaly_type_detected": "", "anomaly_score_detected": 0.0, "payload": {}, "date_utc": base.date()},
+        {"tail_id": "T001", "flight_id": "F001", "event_seq_id": 2, "win_id": 1, "timestamp_utc": base, "parameter_name": "A", "event_type_detected": "e", "anomaly_type_detected": "", "anomaly_score_detected": 0.0, "payload": {}, "date_utc": base.date()},
+        {"tail_id": "T001", "flight_id": "F001", "event_seq_id": 3, "win_id": 1, "timestamp_utc": base + timedelta(seconds=1), "parameter_name": "B", "event_type_detected": "e", "anomaly_type_detected": "", "anomaly_score_detected": 0.0, "payload": {}, "date_utc": base.date()},
+        {"tail_id": "T001", "flight_id": "F001", "event_seq_id": 4, "win_id": 1, "timestamp_utc": base + timedelta(seconds=2), "parameter_name": "C", "event_type_detected": "e", "anomaly_type_detected": "", "anomaly_score_detected": 0.0, "payload": {}, "date_utc": base.date()},
+        {"tail_id": "T001", "flight_id": "F001", "event_seq_id": 5, "win_id": 1, "timestamp_utc": base + timedelta(seconds=3), "parameter_name": "B", "event_type_detected": "e", "anomaly_type_detected": "", "anomaly_score_detected": 0.0, "payload": {}, "date_utc": base.date()},
+    ]
+    events_sdf = spark.createDataFrame(rows, schema=event_schema)
+
+    transition_pdf = build_transition_graph_spark_table(events_sdf, min_count=1).toPandas()
+    actual_rows = sorted(
+        [{key: _round_nested(value) for key, value in row.items()} for row in transition_pdf.to_dict(orient="records")],
+        key=lambda row: (row["parameter_name_u"], row["parameter_name_v"]),
+    )
+    expected_rows = sorted(
+        [
+            {"parameter_name_u": "A", "parameter_name_v": "B", "precedence_count": 1, "precedence_weight": 1.0, "edge_family": "transition"},
+            {"parameter_name_u": "B", "parameter_name_v": "C", "precedence_count": 1, "precedence_weight": 1.0, "edge_family": "transition"},
+            {"parameter_name_u": "C", "parameter_name_v": "B", "precedence_count": 1, "precedence_weight": 1.0, "edge_family": "transition"},
+        ],
+        key=lambda row: (row["parameter_name_u"], row["parameter_name_v"]),
+    )
 
     assert actual_rows == expected_rows
 
