@@ -22,9 +22,6 @@ from libs.perf.logger import get_logger
 from libs.perf.annotations import hot_path
 from libs.graph.data import (
     parameter_name_union_from_component_tables,
-    parameter_name_union_from_window_features,
-    prepare_events_df,
-    prepare_windows_df,
     retain_top_k_directed,
     retain_top_k_undirected,
     selected_backbone_sensors,
@@ -32,9 +29,7 @@ from libs.graph.data import (
 from libs.graph.event import EventGraph, EventGraphSpec
 from libs.graph.fused import FusedGraph, FusedGraphSpec
 from libs.graph.hierarchy_artifacts import GraphHierarchy, HierarchySpec
-from libs.graph.lag import LagGraph, LagGraphSpec
 from libs.graph.precision import PrecisionGraph, PrecisionGraphSpec
-from libs.graph.transition import TransitionGraph, TransitionGraphSpec
 from libs.io.schemas import (
     EVENT_GRAPH_SCHEMA,
     FUSED_GRAPH_SCHEMA,
@@ -243,32 +238,6 @@ def _build_event_graph(
             min_npmi=min_npmi,
             top_k_per_parameter_name=top_k_per_parameter_name,
         ),
-    ).edges
-
-
-def _build_lag_graph(
-    events_df: pd.DataFrame,
-    *,
-    tau_max_seconds: float,
-    min_count: int,
-    max_mean_lag_seconds: float | None,
-    top_k_outgoing: int,
-) -> pd.DataFrame:
-    return LagGraph.from_events(
-        events_df,
-        spec=LagGraphSpec(
-            tau_max_seconds=tau_max_seconds,
-            min_count=min_count,
-            max_mean_lag_seconds=max_mean_lag_seconds,
-            top_k_outgoing=top_k_outgoing,
-        ),
-    ).edges
-
-
-def _build_transition_graph(events_df: pd.DataFrame, *, min_count: int) -> pd.DataFrame:
-    return TransitionGraph.from_events(
-        events_df,
-        spec=TransitionGraphSpec(min_count=min_count),
     ).edges
 
 
@@ -816,127 +785,6 @@ def _assign_hierarchy(
             system_min_edge_weight=system_min_edge_weight,
         ),
     ).rows
-
-
-@hot_path
-def build_graph_artifacts_from_window_features_table(
-    window_features_df: pd.DataFrame,
-    events_df: pd.DataFrame,
-    windows_df: pd.DataFrame,
-    backbone_df: pd.DataFrame,
-    *,
-    precision_ridge_lambda: float = 1.0,
-    min_abs_partial_corr: float = 0.05,
-    min_event_count: int = 1,
-    min_event_npmi: float = 0.0,
-    event_top_k_per_parameter_name: int = 8,
-    lag_tau_max_seconds: float = 30.0,
-    min_lag_count: int = 1,
-    max_mean_lag_seconds: float | None = None,
-    lag_top_k_outgoing: int = 8,
-    min_transition_count: int = 1,
-    alpha: float = 1.0,
-    beta: float = 1.0,
-    gamma: float = 1.0,
-    min_fused_edge_weight: float = 0.05,
-    hierarchy_top_k_per_parameter_name: int = 3,
-    hierarchy_subsystem_min_edge_weight: float | None = None,
-    hierarchy_system_min_edge_weight: float | None = None,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    event_rows = prepare_events_df(events_df)
-    window_rows = prepare_windows_df(windows_df)
-    selected_sensors = selected_backbone_sensors(backbone_df)
-
-    precision_df = _build_precision_graph(
-        window_features_df,
-        selected_sensors,
-        ridge_lambda=precision_ridge_lambda,
-        min_abs_partial_corr=min_abs_partial_corr,
-    )
-    event_df = _build_event_graph(
-        event_rows,
-        window_rows,
-        min_count=min_event_count,
-        min_npmi=min_event_npmi,
-        top_k_per_parameter_name=event_top_k_per_parameter_name,
-    )
-    lag_df = _build_lag_graph(
-        event_rows,
-        tau_max_seconds=lag_tau_max_seconds,
-        min_count=min_lag_count,
-        max_mean_lag_seconds=max_mean_lag_seconds,
-        top_k_outgoing=lag_top_k_outgoing,
-    )
-    transition_df = _build_transition_graph(
-        event_rows,
-        min_count=min_transition_count,
-    )
-    fused_df = _fuse_graphs(
-        precision_df,
-        event_df,
-        lag_df,
-        alpha=float(alpha),
-        beta=float(beta),
-        gamma=float(gamma),
-    )
-    parameter_name_union = parameter_name_union_from_window_features(window_features_df, event_rows, selected_sensors)
-    hierarchy_df = _assign_hierarchy(
-        fused_df,
-        parameter_name_union,
-        min_edge_weight=min_fused_edge_weight,
-        top_k_per_parameter_name=hierarchy_top_k_per_parameter_name,
-        subsystem_min_edge_weight=hierarchy_subsystem_min_edge_weight,
-        system_min_edge_weight=hierarchy_system_min_edge_weight,
-    )
-    return precision_df, event_df, lag_df, transition_df, fused_df, hierarchy_df
-
-
-@hot_path
-def build_graph_component_tables_from_window_features_table(
-    window_features_df: pd.DataFrame,
-    events_df: pd.DataFrame,
-    windows_df: pd.DataFrame,
-    backbone_df: pd.DataFrame,
-    *,
-    precision_ridge_lambda: float = 1.0,
-    min_abs_partial_corr: float = 0.05,
-    min_event_count: int = 1,
-    min_event_npmi: float = 0.0,
-    lag_tau_max_seconds: float = 30.0,
-    min_lag_count: int = 1,
-    max_mean_lag_seconds: float | None = None,
-    min_transition_count: int = 1,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Build graph components without event/lag top-k pruning for cacheable graph sweeps."""
-    event_rows = prepare_events_df(events_df)
-    window_rows = prepare_windows_df(windows_df)
-    selected_sensors = selected_backbone_sensors(backbone_df)
-
-    precision_df = _build_precision_graph(
-        window_features_df,
-        selected_sensors,
-        ridge_lambda=precision_ridge_lambda,
-        min_abs_partial_corr=min_abs_partial_corr,
-    )
-    event_df = _build_event_graph(
-        event_rows,
-        window_rows,
-        min_count=min_event_count,
-        min_npmi=min_event_npmi,
-        top_k_per_parameter_name=0,
-    )
-    lag_df = _build_lag_graph(
-        event_rows,
-        tau_max_seconds=lag_tau_max_seconds,
-        min_count=min_lag_count,
-        max_mean_lag_seconds=max_mean_lag_seconds,
-        top_k_outgoing=0,
-    )
-    transition_df = _build_transition_graph(
-        event_rows,
-        min_count=min_transition_count,
-    )
-    return precision_df, event_df, lag_df, transition_df
 
 
 @hot_path
