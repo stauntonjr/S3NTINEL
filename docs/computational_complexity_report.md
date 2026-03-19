@@ -101,7 +101,7 @@ In particular:
 | `20` events | per-parameter ordered windows, segmented stateful folds | `O(sum_p R_p log R_p) + O(R)` |
 | `30` windows | per-flight event ordering, segmented fold, event-to-window assignment | `O(sum_f E_f log E_f) + O(E) + O(J_{E,W})` |
 | `40` window features + backbone | raw interval build, raw/event interval joins, sparse-map agg, small ridge solve | `O(J_{R,W} + J_{E,W} + W * d_w + W * C^2 + W * C * d_w + C^3)` |
-| `50` graphs | same-window pair expansion, lag-bucket pair expansion, transition pass, small precision solve | `O(sum_w K_w^2) + O(sum_b n_b (n_b + n_{b-1})) + O(E) + O(W * C^2 + C^3)` |
+| `50` graphs | same-window pair expansion, candidate-pruned lag-bucket pair expansion, transition pass, small precision solve | `O(sum_w K_w^2) + O(E) + O(sum_b sum_v n_{b,v} * c_v * (m_{b,u} + m_{b-1,u})) + O(M) + O(W * C^2 + C^3)` |
 | `60` hierarchy | Spark neighbor ranking + bounded driver rollup | `O(H log k) + O(P + retained_edges)` |
 | `70` phase | dense residual reconstruction, per-flight scaling, centroid refinement, segmented decode | `O(W * P_n) + O(W * F_phi) + O(I * W * F_phi * phase_count)` |
 | `80` raw scores | small broadcast joins, dense residual explode, subsystem regroup | `O(W * F_phi) + O(W * P_n)` |
@@ -142,9 +142,34 @@ matters more than global row count alone.
 Two codepaths matter:
 
 - event graph: upper-triangular same-window parameter pairing, `O(K_w^2)` per window
-- lag profile: candidate pairing across same and adjacent lag buckets, `O(n_b (n_b + n_{b-1}))` per bucket
+- lag profile: candidate-pruned nearest-prior pairing across same and adjacent lag buckets, `O(sum_v n_{b,v} * c_v * (m_{b,u} + m_{b-1,u}))` per bucket in the current implementation
 
-The lag-profile path is fundamentally more dangerous because `n_b` is driven by event density in wall-clock time, not by the window policy. The current code collapses `lag_profile` into a legacy `lag_graph` afterward, but that collapse is not the asymptotic hotspot.
+The lag-profile path is still the most dangerous part of stage `50` because local density is driven by wall-clock event concentration, not by the window policy. The current code collapses `lag_profile` into a legacy `lag_graph` afterward, but that collapse is linear in the materialized profile rows and is not the asymptotic hotspot.
+
+Before the multi-band redesign, the lag term was better approximated as:
+
+- old single-lag path: `O(sum_b n_b (n_b + n_{b-1}))`
+
+because each current event could pair with every prior event in the same or previous `tau` bucket before nearest-prior aggregation removed duplicates.
+
+After the redesign, the implemented lag term is better approximated as:
+
+- current multi-band path: `O(E) + O(sum_b sum_v n_{b,v} * c_v * (m_{b,u} + m_{b-1,u})) + O(M)`
+
+where:
+
+- `n_{b,v}` is the count of current events for target parameter `v` in bucket `b`
+- `c_v` is the number of candidate predecessor parameters allowed for target `v`
+- `m_{b,u}` and `m_{b-1,u}` are the counts of prior events for candidate source `u` in the current and previous bucket
+- `M` is the number of retained `lag_profile` rows after aggregation
+
+This is the important complexity change in stage `50`:
+
+- the old lag builder expanded over all cross-parameter event pairs inside the bounded `tau` neighborhood
+- the new lag builder first restricts to candidate parameter pairs derived from `event_graph` and `transition_graph`
+- multiple lag bands do not multiply the self-join cost, because band assignment happens after the single nearest-prior pass
+
+So the new path is strictly better for the intended workload when the candidate graph is sparse, but it is not a proof of subquadratic worst-case behavior. If candidate pruning degenerates and a hot bucket contains many events for many candidate parameters, the local lag join can still approach the old quadratic regime.
 
 #### Interval-Join Stages
 
