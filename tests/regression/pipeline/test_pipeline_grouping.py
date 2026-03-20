@@ -6,6 +6,9 @@ def test_fitting_runner_contains_expected_stage_grouping():
     assert module.FITTING_STAGE_SCRIPTS == [
         "00_ingest_raw.py",
         "10_parameter_profiles_fit.py",
+        "20_events_extract.py",
+        "25_window_policy_profile.py",
+        "30_windows_adaptive.py",
         "40_backbone_fit.py",
         "50_build_graph.py",
         "60_fit_hierarchy.py",
@@ -15,12 +18,11 @@ def test_fitting_runner_contains_expected_stage_grouping():
 def test_inference_runner_contains_expected_stage_grouping():
     module = importlib.import_module("pipelines.98_run_inference_pipeline")
     assert module.INFERENCE_STAGE_SCRIPTS == [
-        "20_events_extract.py",
-        "30_windows_adaptive.py",
         "70_phase_fit.py",
         "80_window_scores_raw.py",
         "85_window_scores_calibrate.py",
         "90_anomaly_attribution.py",
+        "95_emit_explorer_bundle.py",
     ]
 
 

@@ -5,10 +5,12 @@ from libs.config.pipeline import load_pipeline_artifact_paths, load_pipeline_con
 
 def test_load_pipeline_artifact_paths_includes_lag_profile(monkeypatch):
     monkeypatch.setenv("S3NTINEL_LAG_PROFILE_TABLE_PATH", "/tmp/test-lag-profile")
+    monkeypatch.setenv("S3NTINEL_WINDOW_POLICY_PROFILE_TABLE_PATH", "/tmp/test-window-policy-profile")
 
     paths = load_pipeline_artifact_paths()
 
     assert paths.lag_profile == "/tmp/test-lag-profile"
+    assert paths.window_policy_profile == "/tmp/test-window-policy-profile"
 
 
 def test_load_pipeline_context_settings_parses_lag_bands(monkeypatch):

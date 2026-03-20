@@ -48,6 +48,7 @@ def set_env_paths(base_dir: str, table_format: str, write_mode: str, min_warm: i
     os.environ["S3NTINEL_CONTINUOUS_SCALING_PROFILE_TABLE_PATH"] = str(base / "delta" / "continuous_scaling_profile")
     os.environ["S3NTINEL_PARAMETER_BEHAVIOR_PROFILE_TABLE_PATH"] = str(base / "delta" / "parameter_behavior_profile")
     os.environ["S3NTINEL_EVENTS_TABLE_PATH"] = str(base / "delta" / "events")
+    os.environ["S3NTINEL_WINDOW_POLICY_PROFILE_TABLE_PATH"] = str(base / "delta" / "window_policy_profile")
     os.environ["S3NTINEL_WINDOWS_TABLE_PATH"] = str(base / "delta" / "windows")
     os.environ["S3NTINEL_PHASE_LABELS_TABLE_PATH"] = str(base / "delta" / "phase_labels")
     os.environ["S3NTINEL_HIERARCHY_SENSOR_MAP_LABEL_TABLE_PATH"] = str(base / "delta" / "hierarchy_sensor_map_label")
@@ -78,10 +79,11 @@ def run_stages(stage_80_write_mode: str) -> None:
     stage_scripts = [
         "00_ingest_raw.py",
         "10_parameter_profiles_fit.py",
+        "20_events_extract.py",
+        "25_window_policy_profile.py",
+        "30_windows_adaptive.py",
         "40_backbone_fit.py",
         "50_build_graph.py",
-        "20_events_extract.py",
-        "30_windows_adaptive.py",
         "70_phase_fit.py",
         "80_window_scores_raw.py",
         "85_window_scores_calibrate.py",
@@ -103,6 +105,7 @@ def print_row_counts(spark: "SparkSession", table_format: str) -> None:
         "continuous_scaling_profile": os.environ["S3NTINEL_CONTINUOUS_SCALING_PROFILE_TABLE_PATH"],
         "parameter_behavior_profile": os.environ["S3NTINEL_PARAMETER_BEHAVIOR_PROFILE_TABLE_PATH"],
         "events": os.environ["S3NTINEL_EVENTS_TABLE_PATH"],
+        "window_policy_profile": os.environ["S3NTINEL_WINDOW_POLICY_PROFILE_TABLE_PATH"],
         "windows": os.environ["S3NTINEL_WINDOWS_TABLE_PATH"],
         "phase_labels": os.environ["S3NTINEL_PHASE_LABELS_TABLE_PATH"],
         "hierarchy_sensor_map_label": os.environ["S3NTINEL_HIERARCHY_SENSOR_MAP_LABEL_TABLE_PATH"],
@@ -188,6 +191,7 @@ def assert_anomaly_payload_quality(spark: "SparkSession", table_format: str, wri
 def assert_active_v2_table_contracts(spark: "SparkSession", table_format: str) -> None:
     path_by_table = {
         "events": os.environ["S3NTINEL_EVENTS_TABLE_PATH"],
+        "window_policy_profile": os.environ["S3NTINEL_WINDOW_POLICY_PROFILE_TABLE_PATH"],
         "parameter_datatype_profile": os.environ["S3NTINEL_PARAMETER_DATATYPE_PROFILE_TABLE_PATH"],
         "continuous_scaling_profile": os.environ["S3NTINEL_CONTINUOUS_SCALING_PROFILE_TABLE_PATH"],
         "parameter_behavior_profile": os.environ["S3NTINEL_PARAMETER_BEHAVIOR_PROFILE_TABLE_PATH"],

@@ -9,6 +9,9 @@ from pipelines._pipeline_runner import run_stage_group
 FITTING_STAGE_SCRIPTS = [
     "00_ingest_raw.py",
     "10_parameter_profiles_fit.py",
+    "20_events_extract.py",
+    "25_window_policy_profile.py",
+    "30_windows_adaptive.py",
     "40_backbone_fit.py",
     "50_build_graph.py",
     "60_fit_hierarchy.py",

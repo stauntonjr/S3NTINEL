@@ -27,15 +27,16 @@ Canonical stage order:
 1. `00_ingest_raw.py`
 2. `10_parameter_profiles_fit.py`
 3. `20_events_extract.py`
-4. `30_windows_adaptive.py`
-5. `40_backbone_fit.py`
-6. `50_build_graph.py`
-7. `60_fit_hierarchy.py`
-8. `70_phase_fit.py`
-9. `80_window_scores_raw.py`
-10. `85_window_scores_calibrate.py`
-11. `90_anomaly_attribution.py`
-12. `95_emit_explorer_bundle.py`
+4. `25_window_policy_profile.py`
+5. `30_windows_adaptive.py`
+6. `40_backbone_fit.py`
+7. `50_build_graph.py`
+8. `60_fit_hierarchy.py`
+9. `70_phase_fit.py`
+10. `80_window_scores_raw.py`
+11. `85_window_scores_calibrate.py`
+12. `90_anomaly_attribution.py`
+13. `95_emit_explorer_bundle.py`
 
 Grouped execution is coordinated by `pipelines/_pipeline_runner.py`.
 
@@ -56,8 +57,10 @@ Grouped execution is coordinated by `pipelines/_pipeline_runner.py`.
 
 The stage model is:
 - ingest canonical raw telemetry
+- infer events
+- fit a reusable window policy profile
+- materialize adaptive windows
 - fit reusable structural artifacts
-- infer events and windows
 - fit phase structure
 - compute raw and calibrated scores
 - attribute anomalies

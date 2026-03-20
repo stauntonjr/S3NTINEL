@@ -94,6 +94,7 @@ class PipelineArtifactPaths:
     continuous_scaling_profile: str
     parameter_behavior_profile: str
     events: str
+    window_policy_profile: str
     windows: str
     window_features: str
     backbone: str
@@ -257,6 +258,10 @@ def load_pipeline_artifact_paths() -> PipelineArtifactPaths:
             "data/delta/parameter_behavior_profile",
         ),
         events=_env_str("S3NTINEL_EVENTS_TABLE_PATH", "data/delta/events"),
+        window_policy_profile=_env_str(
+            "S3NTINEL_WINDOW_POLICY_PROFILE_TABLE_PATH",
+            "data/delta/window_policy_profile",
+        ),
         windows=_env_str("S3NTINEL_WINDOWS_TABLE_PATH", "data/delta/windows"),
         window_features=_env_str("S3NTINEL_WINDOW_FEATURES_TABLE_PATH", ""),
         backbone=_env_str("S3NTINEL_BACKBONE_TABLE_PATH", "data/delta/backbone"),

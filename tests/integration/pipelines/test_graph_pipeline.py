@@ -17,6 +17,8 @@ from libs.graph import (
     collapse_lag_profile_spark_table,
     LagBandSpec,
 )
+from libs.graph.evaluation import build_graph_stage_evaluation_report_spark
+from libs.graph.hierarchy_artifacts import HierarchySpec
 from libs.testing.data import create_sample_events_df, create_sample_raw_table_df, create_sample_windows_df
 from libs.windows import build_window_features_spark_table
 
@@ -132,6 +134,94 @@ def test_build_graph_components_with_diagnostics_spark_table_reports_component_d
     assert diagnostics.steps
     assert any(step.step_name == "lag_profile_build" for step in diagnostics.steps)
     assert any(step.step_name == "lag_graph_build" for step in diagnostics.steps)
+
+
+def test_build_graph_stage_evaluation_report_spark_reports_band_skew_and_sensitivity(spark):
+    _, events_sdf, windows_sdf, window_features_pdf = _build_window_features_pdf_with_events(spark)
+    window_features_sdf = spark.createDataFrame(pandas_records_for_spark(window_features_pdf), schema=WINDOW_X_SCHEMA)
+    backbone_sdf = spark.createDataFrame(
+        [
+            {
+                "backbone_version": 2,
+                "selected_sensors_c": ["ENG_TEMP_1"],
+                "all_sensors": ["ENG_TEMP_1", "HYD_PRESS_1"],
+                "weights_b": [[1.0, 0.0]],
+                "lambda_ridge": 1.0,
+                "training_window_count": 2,
+            }
+        ]
+    )
+    precision_sdf, event_sdf, lag_sdf, transition_sdf, fused_sdf, parameter_universe_sdf, _ = (
+        build_graph_components_with_diagnostics_spark_table(
+            window_features_sdf,
+            events_sdf,
+            windows_sdf,
+            backbone_sdf,
+            min_abs_partial_corr=0.0,
+            min_event_count=1,
+            min_lag_count=1,
+            lag_bands=(
+                LagBandSpec(name="quick", lower_seconds=0.0, upper_seconds=2.0, combine_weight=1.0),
+                LagBandSpec(name="slow", lower_seconds=2.0, upper_seconds=30.0, combine_weight=0.5),
+            ),
+        )
+    )
+    lag_profile_sdf = build_lag_profile_spark_table(
+        events_sdf,
+        tau_max_seconds=30.0,
+        bands=(
+            LagBandSpec(name="quick", lower_seconds=0.0, upper_seconds=2.0, combine_weight=1.0),
+            LagBandSpec(name="slow", lower_seconds=2.0, upper_seconds=30.0, combine_weight=0.5),
+        ),
+        candidate_pairs_df=build_lag_candidate_pairs_spark_table(event_sdf, transition_sdf),
+    )
+
+    report = build_graph_stage_evaluation_report_spark(
+        spark=spark,
+        events_df=events_sdf,
+        windows_df=windows_sdf,
+        window_features_df=window_features_sdf,
+        backbone_df=backbone_sdf,
+        precision_df=precision_sdf.toPandas(),
+        event_sdf=event_sdf,
+        lag_profile_sdf=lag_profile_sdf,
+        lag_sdf=lag_sdf,
+        transition_sdf=transition_sdf,
+        fused_sdf=fused_sdf,
+        parameter_universe_df=parameter_universe_sdf,
+        precision_ridge_lambda=1.0,
+        min_abs_partial_corr=0.0,
+        min_event_count=1,
+        min_event_npmi=0.0,
+        event_top_k_per_parameter_name=8,
+        lag_tau_max_seconds=30.0,
+        lag_bands=(
+            LagBandSpec(name="quick", lower_seconds=0.0, upper_seconds=2.0, combine_weight=1.0),
+            LagBandSpec(name="slow", lower_seconds=2.0, upper_seconds=30.0, combine_weight=0.5),
+        ),
+        min_lag_count=1,
+        max_mean_lag_seconds=None,
+        lag_top_k_outgoing=8,
+        min_transition_count=1,
+        alpha=1.0,
+        beta=1.0,
+        gamma=1.0,
+        max_graph_sensor_universe=50000,
+        hierarchy_spec=HierarchySpec(
+            min_edge_weight=0.0,
+            top_k_per_parameter_name=3,
+            subsystem_min_edge_weight=0.0,
+            system_min_edge_weight=0.0,
+        ),
+    )
+
+    assert report["status"] == "ok"
+    assert report["graph_counts"]["lag_profile_edge_count"] >= report["graph_counts"]["lag_edge_count"]
+    assert report["lag_profile_band_skew"]["status"] == "ok"
+    assert report["lag_profile_band_skew"]["band_count"] >= 1
+    assert report["hierarchy_sensitivity"]["status"] == "ok"
+    assert report["hierarchy_sensitivity"]["scenario_count"] >= 1
+    assert "edge_stability" in report
 
 
 def test_spark_graph_tables_feed_fusion_helper(spark):

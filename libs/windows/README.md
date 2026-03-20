@@ -4,6 +4,7 @@
 
 `libs/windows` owns:
 - window lifecycle and closure semantics
+- window-policy profiling and selection
 - per-window signal buffering
 - the canonical segmented Spark window builder
 - window feature extraction
@@ -17,6 +18,7 @@ It does not own:
 ## How To Use
 
 - Use `WindowPolicy`, `Window`, and `AdaptiveWindowPlan` for the active runtime model.
+- Use `WindowPolicyProfileSpec` and `build_window_policy_profile_table(...)` to fit candidate window policies from detected events.
 - Use `build_windows_table(...)` for canonical window materialization.
 - Use `build_window_features_spark_table(...)` for canonical dataframe materialization.
 - Use `build_window_features_with_diagnostics_spark_table(...)` during development when you need explicit per-step timings and row counts.
@@ -30,6 +32,8 @@ It does not own:
   - `WindowSensorBuffer`
 - `coverage.py`
   - coverage sampling helpers
+- `policy_profile.py`
+  - window policy candidate generation, scoring, and selected-policy resolution
 - `features.py`
   - canonical Spark `window_features` builder
 - `pipeline.py`
@@ -39,6 +43,7 @@ It does not own:
 
 The windows model is:
 - `WindowPolicy` decides when a window closes
+- `WindowPolicyProfile` fits candidate `WindowPolicy` rows from the event stream
 - `Window` owns one window's mutable state
 - `WindowSensorBuffer` owns last-seen sensor state within a window
 - `AdaptiveWindowPlan` is the canonical segmented Spark window builder
@@ -47,6 +52,7 @@ The windows model is:
 ## Data / Artifacts
 
 Persisted window artifacts are defined in `libs/io/schemas/windows.py`:
+- window policy profile
 - windows
 - window features
 

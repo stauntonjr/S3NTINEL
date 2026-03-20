@@ -65,6 +65,7 @@ def test_sim_runner_uses_grouped_full_stage_scripts(monkeypatch, tmp_path):
         "00_ingest_raw.py",
         "10_parameter_profiles_fit.py",
         "20_events_extract.py",
+        "25_window_policy_profile.py",
         "30_windows_adaptive.py",
         "40_backbone_fit.py",
         "50_build_graph.py",
@@ -179,8 +180,10 @@ def test_sim_runner_full_smoke_emits_bundle(monkeypatch, tmp_path):
     assert (run_dir / "reports" / "pipeline_run_summary.json").exists()
     assert (run_dir / "reports" / "full_run_report.md").exists()
     assert (run_dir / "reports" / "stages" / "10_parameter_profiles_fit_manifest.json").exists()
+    assert (run_dir / "reports" / "stages" / "25_window_policy_profile_manifest.json").exists()
     assert (run_dir / "reports" / "stages" / "40_backbone_fit_manifest.json").exists()
     assert (run_dir / "reports" / "stages" / "50_build_graph_manifest.json").exists()
+    assert (run_dir / "reports" / "stages" / "50_build_graph_evaluation.json").exists()
     assert (run_dir / "reports" / "stages" / "60_fit_hierarchy_manifest.json").exists()
     assert (run_dir / "reports" / "stages" / "70_phase_fit_manifest.json").exists()
     assert (run_dir / "reports" / "stages" / "80_window_scores_raw_manifest.json").exists()
@@ -199,6 +202,7 @@ def test_sim_runner_full_smoke_emits_bundle(monkeypatch, tmp_path):
 
     assert len(pd.read_parquet(run_dir / "delta" / "raw_telemetry")) > 0
     assert len(pd.read_parquet(run_dir / "delta" / "events")) > 0
+    assert len(pd.read_parquet(run_dir / "delta" / "window_policy_profile")) > 0
     assert len(pd.read_parquet(run_dir / "delta" / "windows")) > 0
     window_features_df = pd.read_parquet(run_dir / "delta" / "window_features")
     assert len(window_features_df) > 0

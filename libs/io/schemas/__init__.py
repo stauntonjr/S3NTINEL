@@ -60,13 +60,20 @@ from libs.io.schemas.scoring import (
     WINDOW_SCORES_RAW_SCHEMA,
 )
 from libs.io.schemas.telemetry import RAW_TELEMETRY_COLUMNS, SIMULATION_RAW_INPUT_COLUMNS, SIMULATION_RAW_INPUT_SCHEMA
-from libs.io.schemas.windows import WINDOWS_COLUMNS, WINDOWS_SCHEMA, WINDOW_X_SCHEMA
+from libs.io.schemas.windows import (
+    WINDOWS_COLUMNS,
+    WINDOWS_SCHEMA,
+    WINDOW_POLICY_PROFILE_COLUMNS,
+    WINDOW_POLICY_PROFILE_SCHEMA,
+    WINDOW_X_SCHEMA,
+)
 
 ACTIVE_V2_TABLES = {
     "parameter_datatype_profile": PARAMETER_DATATYPE_PROFILE_COLUMNS,
     "continuous_scaling_profile": CONTINUOUS_SCALING_PROFILE_COLUMNS,
     "parameter_behavior_profile": PARAMETER_BEHAVIOR_PROFILE_COLUMNS,
     "events": EVENTS_COLUMNS,
+    "window_policy_profile": WINDOW_POLICY_PROFILE_COLUMNS,
     "windows": WINDOWS_COLUMNS,
     "backbone": BACKBONE_COLUMNS,
     "backbone_sensor_energy": BACKBONE_SENSOR_ENERGY_COLUMNS,
@@ -108,6 +115,8 @@ __all__ = [
     "EXPLORER_PHASE_INTERVALS_COLUMNS",
     "WINDOWS_COLUMNS",
     "WINDOWS_SCHEMA",
+    "WINDOW_POLICY_PROFILE_COLUMNS",
+    "WINDOW_POLICY_PROFILE_SCHEMA",
     "WINDOW_X_SCHEMA",
     "PARAMETER_DATATYPE_PROFILE_COLUMNS",
     "CONTINUOUS_SCALING_PROFILE_COLUMNS",

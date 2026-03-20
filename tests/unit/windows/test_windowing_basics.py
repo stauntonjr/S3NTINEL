@@ -1,6 +1,14 @@
 from datetime import datetime, timedelta, timezone
 
-from libs.windows import Window, WindowPolicy, WindowSensorBuffer, build_windows_table
+from libs.windows import (
+    Window,
+    WindowPolicy,
+    WindowPolicyProfile,
+    WindowPolicyProfileSpec,
+    WindowSensorBuffer,
+    build_window_policy_profile_table,
+    build_windows_table,
+)
 
 
 def test_window_policy_closes_by_duration_or_event_count():
@@ -102,3 +110,80 @@ def test_build_windows_table_emits_expected_sparse_max_ms_windows(spark):
     assert observed[1]["sensor_count"] == 1
     assert observed[1]["event_type_counts"] == {"slope_pos": 1}
     assert observed[1]["zoh_snapshot"] == {"p1": "2.0"}
+
+
+def test_build_window_policy_profile_table_emits_ranked_selected_candidate(spark):
+    events = [
+        {
+            "tail_id": "T1",
+            "flight_id": "F1",
+            "event_seq_id": index + 1,
+            "parameter_name": f"p{(index % 2) + 1}",
+            "timestamp_utc": datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc) + timedelta(milliseconds=200 * index),
+            "event_type_detected": "slope_pos" if index % 2 == 0 else "transition",
+            "payload": {"value": str(index)},
+            "date_utc": datetime(2026, 1, 1, tzinfo=timezone.utc).date(),
+        }
+        for index in range(8)
+    ]
+    profile_df = build_window_policy_profile_table(
+        spark.createDataFrame(events),
+        spec=WindowPolicyProfileSpec(
+            min_sampling_rate_hz=1.0,
+            configured_max_ms=2000,
+            configured_event_threshold=4,
+            min_ms=50,
+            inactivity_timeout_ms=0,
+            gap_quantiles=(0.5,),
+            event_threshold_multipliers=(1.0,),
+            max_profile_flights=1,
+        ),
+    )
+    rows = [row.asDict() for row in profile_df.orderBy("candidate_rank").collect()]
+
+    assert rows
+    assert rows[0]["candidate_rank"] == 1
+    assert rows[0]["is_selected"] is True
+    assert sum(1 for row in rows if row["is_selected"]) == 1
+    assert all(int(row["max_ms"]) >= 50 for row in rows)
+    assert all(int(row["event_threshold"]) >= 2 for row in rows)
+
+
+def test_window_policy_profile_resolves_selected_policy_over_fallback(spark):
+    profile_df = spark.createDataFrame(
+        [
+            {
+                "profile_id": "WINDOW_POLICY_PROFILE_V1",
+                "profile_scope": "global",
+                "candidate_rank": 1,
+                "is_selected": True,
+                "max_ms": 1200,
+                "event_threshold": 6,
+                "min_ms": 50,
+                "inactivity_timeout_ms": 0,
+                "objective_score": 1.0,
+                "balance_penalty": 0.1,
+                "predicted_window_count": 10,
+                "mean_duration_ms": 400.0,
+                "p95_duration_ms": 800.0,
+                "mean_event_count": 5.0,
+                "p95_event_count": 6.0,
+                "mean_sensor_count": 2.0,
+                "mean_event_type_count": 1.5,
+                "event_threshold_close_rate": 0.7,
+                "max_ms_close_rate": 0.3,
+                "pair_cost_proxy": 250.0,
+                "sampled_event_count": 50,
+                "sampled_flight_count": 2,
+            }
+        ]
+    )
+
+    resolved, source = WindowPolicyProfile.resolve_selected_policy(
+        profile_df,
+        fallback_policy=WindowPolicy(max_ms=10000, event_threshold=20, min_ms=50, inactivity_timeout_ms=0),
+    )
+
+    assert source == "profile"
+    assert resolved.max_ms == 1200
+    assert resolved.event_threshold == 6

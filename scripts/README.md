@@ -32,6 +32,7 @@ Incremental patches:
   - this emits canonical raw telemetry plus simulation truth metadata, then runs the real persisted fitting and inference stages into one run directory containing:
     - input raw telemetry
     - fitted/profiled tables
+    - persisted `window_policy_profile`
     - persisted `window_features`
     - structural graph artifacts, including `lag_profile` and the collapsed compatibility `lag_graph`
     - phase/scoring/attribution outputs
@@ -89,6 +90,7 @@ These are useful for local development and regression checks, but they are not t
     - `00_ingest_raw.py`
     - `10_parameter_profiles_fit.py`
     - `20_events_extract.py`
+    - `25_window_policy_profile.py`
     - `30_windows_adaptive.py`
     - `40_backbone_fit.py`
     - `50_build_graph.py`
@@ -118,19 +120,22 @@ Fitting:
 - stages:
   - `00_ingest_raw.py`
   - `10_parameter_profiles_fit.py`
+  - `20_events_extract.py`
+  - `25_window_policy_profile.py`
+  - `30_windows_adaptive.py`
   - `40_backbone_fit.py`
   - `50_build_graph.py`
+  - `60_fit_hierarchy.py`
 
 Inference:
 
 - `python -m pipelines.98_run_inference_pipeline`
 - stages:
-  - `20_events_extract.py`
-  - `30_windows_adaptive.py`
   - `70_phase_fit.py`
   - `80_window_scores_raw.py`
   - `85_window_scores_calibrate.py`
   - `90_anomaly_attribution.py`
+  - `95_emit_explorer_bundle.py`
 
 ## Partition-Manifest Jobs
 

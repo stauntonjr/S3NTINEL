@@ -14,6 +14,31 @@ WINDOWS_COLUMNS = [
     "date_utc",
 ]
 
+WINDOW_POLICY_PROFILE_COLUMNS = [
+    "profile_id",
+    "profile_scope",
+    "candidate_rank",
+    "is_selected",
+    "max_ms",
+    "event_threshold",
+    "min_ms",
+    "inactivity_timeout_ms",
+    "objective_score",
+    "balance_penalty",
+    "predicted_window_count",
+    "mean_duration_ms",
+    "p95_duration_ms",
+    "mean_event_count",
+    "p95_event_count",
+    "mean_sensor_count",
+    "mean_event_type_count",
+    "event_threshold_close_rate",
+    "max_ms_close_rate",
+    "pair_cost_proxy",
+    "sampled_event_count",
+    "sampled_flight_count",
+]
+
 WINDOWS_SCHEMA = """
 tail_id string,
 flight_id string,
@@ -46,3 +71,34 @@ categorical_state_t_end map<string,string>,
 drift_magnitude_profiled double,
 phase_label string
 """
+
+
+def WINDOW_POLICY_PROFILE_SCHEMA():
+    from pyspark.sql import types as T
+
+    return T.StructType(
+        [
+            T.StructField("profile_id", T.StringType(), False),
+            T.StructField("profile_scope", T.StringType(), False),
+            T.StructField("candidate_rank", T.IntegerType(), False),
+            T.StructField("is_selected", T.BooleanType(), False),
+            T.StructField("max_ms", T.IntegerType(), False),
+            T.StructField("event_threshold", T.IntegerType(), False),
+            T.StructField("min_ms", T.IntegerType(), False),
+            T.StructField("inactivity_timeout_ms", T.IntegerType(), False),
+            T.StructField("objective_score", T.DoubleType(), False),
+            T.StructField("balance_penalty", T.DoubleType(), False),
+            T.StructField("predicted_window_count", T.LongType(), False),
+            T.StructField("mean_duration_ms", T.DoubleType(), False),
+            T.StructField("p95_duration_ms", T.DoubleType(), False),
+            T.StructField("mean_event_count", T.DoubleType(), False),
+            T.StructField("p95_event_count", T.DoubleType(), False),
+            T.StructField("mean_sensor_count", T.DoubleType(), False),
+            T.StructField("mean_event_type_count", T.DoubleType(), False),
+            T.StructField("event_threshold_close_rate", T.DoubleType(), False),
+            T.StructField("max_ms_close_rate", T.DoubleType(), False),
+            T.StructField("pair_cost_proxy", T.DoubleType(), False),
+            T.StructField("sampled_event_count", T.LongType(), False),
+            T.StructField("sampled_flight_count", T.IntegerType(), False),
+        ]
+    )

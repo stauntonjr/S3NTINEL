@@ -12,6 +12,8 @@ from libs.graph import (
     collapse_lag_profile_spark_table,
     LagBandSpec,
 )
+from libs.graph.evaluation import build_graph_stage_evaluation_report_spark
+from libs.graph.hierarchy_artifacts import HierarchySpec
 from libs.io.schemas import GRAPH_PARAMETER_UNIVERSE_SCHEMA, PRECISION_GRAPH_SCHEMA
 from libs.io.delta import get_spark, read_table, write_table
 from libs.perf import (
@@ -120,6 +122,7 @@ def run() -> None:
     gamma = settings.graph.fusion.gamma
     min_fused_edge_weight = settings.graph.fusion.min_fused_edge_weight
     max_graph_sensor_universe = settings.graph.max_sensor_universe
+    graph_evaluation_report_path = "reports/stages/50_build_graph_evaluation.json"
 
     spark = get_spark("s3ntinel.build_graph")
     events_df = read_table(spark, events_path, fmt=table_format)
@@ -142,6 +145,7 @@ def run() -> None:
     lag_sdf = None
     fused_df = None
     parameter_universe_df = None
+    graph_evaluation_report: dict[str, object] | None = None
     try:
         started = time.perf_counter()
         window_features_count = int(window_features_df.count())
@@ -251,6 +255,43 @@ def run() -> None:
                     fmt=table_format,
                 )
                 timing_ms["output_writes"] = _elapsed_ms(started)
+                started = time.perf_counter()
+                graph_evaluation_report = build_graph_stage_evaluation_report_spark(
+                    spark=spark,
+                    events_df=graph_events_df,
+                    windows_df=graph_windows_df,
+                    window_features_df=window_features_df,
+                    backbone_df=backbone_df,
+                    precision_df=precision_pdf,
+                    event_sdf=event_sdf,
+                    lag_profile_sdf=lag_profile_sdf,
+                    lag_sdf=lag_sdf,
+                    transition_sdf=transition_sdf,
+                    fused_sdf=fused_df,
+                    parameter_universe_df=parameter_universe_df,
+                    precision_ridge_lambda=precision_ridge_lambda,
+                    min_abs_partial_corr=min_abs_partial_corr,
+                    min_event_count=min_event_count,
+                    min_event_npmi=min_event_npmi,
+                    event_top_k_per_parameter_name=settings.graph.event.top_k_per_parameter_name,
+                    lag_tau_max_seconds=lag_tau_max_seconds,
+                    lag_bands=lag_band_specs,
+                    min_lag_count=min_lag_count,
+                    max_mean_lag_seconds=settings.graph.lag.max_mean_lag_seconds,
+                    lag_top_k_outgoing=settings.graph.lag.top_k_outgoing,
+                    min_transition_count=min_transition_count,
+                    alpha=alpha,
+                    beta=beta,
+                    gamma=gamma,
+                    max_graph_sensor_universe=max_graph_sensor_universe,
+                    hierarchy_spec=HierarchySpec(
+                        min_edge_weight=min_fused_edge_weight,
+                        top_k_per_parameter_name=settings.hierarchy.top_k_per_parameter_name,
+                        subsystem_min_edge_weight=settings.hierarchy.subsystem_min_edge_weight,
+                        system_min_edge_weight=settings.hierarchy.system_min_edge_weight,
+                    ),
+                )
+                timing_ms["graph_evaluation_report"] = _elapsed_ms(started)
             finally:
                 if parameter_universe_df is not None:
                     parameter_universe_df.unpersist()
@@ -301,6 +342,7 @@ def run() -> None:
             "transition_graph_path": transition_graph_path,
             "fused_graph_path": fused_graph_path,
             "graph_parameter_universe_path": graph_parameter_universe_path,
+            "graph_evaluation_report_path": graph_evaluation_report_path,
             "precision_edge_count": int(len(precision_pdf)),
             "event_edge_count": event_count_out,
             "lag_profile_edge_count": lag_profile_count_out,
@@ -317,6 +359,11 @@ def run() -> None:
         },
         "reports/stages/50_build_graph_summary.json",
     )
+    if graph_evaluation_report is not None:
+        log_dict_artifact_if_active(
+            graph_evaluation_report,
+            graph_evaluation_report_path,
+        )
     stage_manifest = build_stage_manifest(
         stage_name="50_build_graph",
         config={
@@ -377,6 +424,7 @@ def run() -> None:
                 "transition_graph_path": transition_graph_path,
                 "fused_graph_path": fused_graph_path,
                 "graph_parameter_universe_path": graph_parameter_universe_path,
+                "graph_evaluation_report_path": graph_evaluation_report_path,
             }
         },
     )

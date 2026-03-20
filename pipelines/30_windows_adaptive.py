@@ -1,6 +1,8 @@
 # File: pipelines/30_windows_adaptive.py
 """Build adaptive windows from event thresholds and max duration."""
 
+from pathlib import Path
+
 from libs.io.delta import get_spark, read_table, write_table
 from libs.perf import (
     build_artifact_manifest,
@@ -13,7 +15,7 @@ from libs.perf import (
     log_wall_time,
     track_mlflow_run,
 )
-from libs.windows import WindowPolicy, build_windows_table
+from libs.windows import WindowPolicy, WindowPolicyProfile, WindowPolicyProfileSpec, build_windows_table
 from libs.windows.window import DEFAULT_MIN_SAMPLING_RATE_HZ
 from pipelines.common import build_context, context_artifacts, context_execution, context_settings
 
@@ -30,6 +32,7 @@ def run() -> None:
     execution = context_execution(context)
     settings = context_settings(context)
     input_path = artifacts.events
+    window_policy_profile_path = artifacts.window_policy_profile
     output_path = artifacts.windows
     table_format = execution.table_format
     write_mode = execution.write_mode
@@ -45,12 +48,29 @@ def run() -> None:
 
     spark = get_spark("s3ntinel.windows_adaptive")
     events_df = read_table(spark, input_path, fmt=table_format)
+    fallback_policy = WindowPolicyProfileSpec(
+        min_sampling_rate_hz=min_sampling_rate_hz,
+        configured_max_ms=max_ms,
+        configured_event_threshold=int(event_threshold),
+        min_ms=int(min_ms),
+        inactivity_timeout_ms=int(inactivity_timeout_ms),
+        strategy=str(window_strategy),
+    ).fallback_policy
+    policy_source = "configured"
+    profile_df = None
+    profile_path_obj = Path(str(window_policy_profile_path).strip()) if str(window_policy_profile_path).strip() else None
+    if profile_path_obj is not None and profile_path_obj.exists():
+        profile_df = read_table(spark, str(profile_path_obj), fmt=table_format)
+    selected_policy, policy_source = WindowPolicyProfile.resolve_selected_policy(
+        profile_df,
+        fallback_policy=fallback_policy,
+    )
     windows_df = build_windows_table(
         events_df,
-        max_ms=max_ms,
-        event_threshold=event_threshold,
-        min_ms=min_ms,
-        inactivity_timeout_ms=inactivity_timeout_ms,
+        max_ms=selected_policy.max_ms,
+        event_threshold=selected_policy.event_threshold,
+        min_ms=selected_policy.min_ms,
+        inactivity_timeout_ms=selected_policy.inactivity_timeout_ms,
         strategy=window_strategy,
     )
     write_table(
@@ -65,11 +85,13 @@ def run() -> None:
 
     log_params_if_active(
         {
-            "max_ms": max_ms,
+            "max_ms": selected_policy.max_ms,
             "min_sampling_rate_hz": min_sampling_rate_hz,
-            "min_ms": min_ms,
+            "min_ms": selected_policy.min_ms,
+            "event_threshold": selected_policy.event_threshold,
             "window_strategy": window_strategy,
-            "window_inactivity_timeout_ms": inactivity_timeout_ms,
+            "window_inactivity_timeout_ms": selected_policy.inactivity_timeout_ms,
+            "window_policy_source": policy_source,
         }
     )
     log_dict_artifact_if_active(
@@ -77,33 +99,45 @@ def run() -> None:
             "stage": "30_windows_adaptive",
             "input_path": input_path,
             "output_path": output_path,
+            "window_policy_profile_path": window_policy_profile_path,
             "table_format": table_format,
             "write_mode": write_mode,
             "window_strategy": window_strategy,
-            "max_ms": max_ms,
+            "max_ms": selected_policy.max_ms,
             "min_sampling_rate_hz": min_sampling_rate_hz,
-            "min_ms": min_ms,
-            "event_threshold": event_threshold,
-            "inactivity_timeout_ms": inactivity_timeout_ms,
+            "min_ms": selected_policy.min_ms,
+            "event_threshold": selected_policy.event_threshold,
+            "inactivity_timeout_ms": selected_policy.inactivity_timeout_ms,
+            "policy_source": policy_source,
             "partition_by": list(context.config["output"]["partition_by"]),
         },
         "reports/stages/30_windows_adaptive_summary.json",
     )
+    input_artifacts = {
+        "events": build_artifact_manifest(path=input_path, dataframe=events_df, row_count=events_count),
+    }
+    if profile_df is not None:
+        input_artifacts["window_policy_profile"] = build_artifact_manifest(
+            path=str(profile_path_obj),
+            dataframe=profile_df,
+            row_count=int(profile_df.count()),
+            artifact_version="WINDOW_POLICY_PROFILE_V1",
+        )
+
     stage_manifest = build_stage_manifest(
         stage_name="30_windows_adaptive",
         config={
             "table_format": table_format,
             "write_mode": write_mode,
             "window_strategy": window_strategy,
-            "max_ms": max_ms,
+            "max_ms": selected_policy.max_ms,
             "min_sampling_rate_hz": min_sampling_rate_hz,
-            "min_ms": min_ms,
-            "event_threshold": event_threshold,
-            "inactivity_timeout_ms": inactivity_timeout_ms,
+            "min_ms": selected_policy.min_ms,
+            "event_threshold": selected_policy.event_threshold,
+            "inactivity_timeout_ms": selected_policy.inactivity_timeout_ms,
+            "policy_source": policy_source,
         },
-        input_artifacts={
-            "events": build_artifact_manifest(path=input_path, dataframe=events_df, row_count=events_count),
-        },
+        input_artifacts=input_artifacts,
         output_artifacts={
             "windows": build_artifact_manifest(path=output_path, dataframe=windows_df, row_count=windows_count),
         },
@@ -115,9 +149,9 @@ def run() -> None:
         table_format,
         write_mode,
         window_strategy,
-        max_ms,
-        event_threshold,
-        inactivity_timeout_ms,
+        selected_policy.max_ms,
+        selected_policy.event_threshold,
+        selected_policy.inactivity_timeout_ms,
         input_path,
         output_path,
     )

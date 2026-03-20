@@ -6,8 +6,6 @@ from libs.perf import log_memory_usage
 from pipelines._pipeline_runner import run_stage_group
 
 INFERENCE_STAGE_SCRIPTS = [
-    "20_events_extract.py",
-    "30_windows_adaptive.py",
     "70_phase_fit.py",
     "80_window_scores_raw.py",
     "85_window_scores_calibrate.py",

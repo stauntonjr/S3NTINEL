@@ -15,6 +15,8 @@ HOT_PATH_FILES = [
     "libs/scoring/pipeline.py",
     "pipelines/10_parameter_profiles_fit.py",
     "pipelines/20_events_extract.py",
+    "libs/windows/policy_profile.py",
+    "pipelines/25_window_policy_profile.py",
     "pipelines/30_windows_adaptive.py",
     "pipelines/80_window_scores_raw.py",
 ]

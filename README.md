@@ -21,9 +21,12 @@ Use [anomaly_injection_and_backbone_validation.md](/home/jrs/code/S3NTINEL/senti
 
 1. `pipelines/00_ingest_raw.py`
 2. `pipelines/10_parameter_profiles_fit.py`
-3. `pipelines/40_backbone_fit.py`
-4. `pipelines/50_build_graph.py`
-5. `pipelines/60_fit_hierarchy.py`
+3. `pipelines/20_events_extract.py`
+4. `pipelines/25_window_policy_profile.py`
+5. `pipelines/30_windows_adaptive.py`
+6. `pipelines/40_backbone_fit.py`
+7. `pipelines/50_build_graph.py`
+8. `pipelines/60_fit_hierarchy.py`
 
 Run with:
 
@@ -31,12 +34,11 @@ Run with:
 
 ### Active inference path
 
-1. `pipelines/20_events_extract.py`
-2. `pipelines/30_windows_adaptive.py`
-3. `pipelines/70_phase_fit.py`
-4. `pipelines/80_window_scores_raw.py`
-5. `pipelines/85_window_scores_calibrate.py`
-6. `pipelines/90_anomaly_attribution.py`
+1. `pipelines/70_phase_fit.py`
+2. `pipelines/80_window_scores_raw.py`
+3. `pipelines/85_window_scores_calibrate.py`
+4. `pipelines/90_anomaly_attribution.py`
+5. `pipelines/95_emit_explorer_bundle.py`
 
 Run with:
 
@@ -50,6 +52,7 @@ Run with:
 - `phase_baselines`
 - `window_scores_raw`
 - `window_scores_calibrated`
+- `window_policy_profile`
 - `precision_graph`
 - `event_graph`
 - `lag_profile`
@@ -87,15 +90,17 @@ Run with:
 
 1. `pipelines/00_ingest_raw.py`
 2. `pipelines/10_parameter_profiles_fit.py`
-3. `pipelines/40_backbone_fit.py`
-4. `pipelines/50_build_graph.py`
-5. `pipelines/60_fit_hierarchy.py`
-6. `pipelines/20_events_extract.py`
-7. `pipelines/30_windows_adaptive.py`
-8. `pipelines/70_phase_fit.py`
-9. `pipelines/80_window_scores_raw.py`
-10. `pipelines/85_window_scores_calibrate.py`
-11. `pipelines/90_anomaly_attribution.py`
+3. `pipelines/20_events_extract.py`
+4. `pipelines/25_window_policy_profile.py`
+5. `pipelines/30_windows_adaptive.py`
+6. `pipelines/40_backbone_fit.py`
+7. `pipelines/50_build_graph.py`
+8. `pipelines/60_fit_hierarchy.py`
+9. `pipelines/70_phase_fit.py`
+10. `pipelines/80_window_scores_raw.py`
+11. `pipelines/85_window_scores_calibrate.py`
+12. `pipelines/90_anomaly_attribution.py`
+13. `pipelines/95_emit_explorer_bundle.py`
 
 ## Quick start
 
@@ -104,8 +109,8 @@ Run with:
 - Install Spark extras for Spark/Delta pipelines and Spark-backed tests: `pip install -e .[dev,spark]`
 - Recommended Spark env spec: `conda env create -f environment.spark35.yml`
 - Run any pipeline stage directly: `python -m pipelines.00_ingest_raw`
-- Run fitting stages together (00 + 10) under one parent MLflow run: `python -m pipelines.97_run_fitting_pipeline`
-- Run inference stages together (20 -> 80) under one parent MLflow run: `python -m pipelines.98_run_inference_pipeline`
+- Run structural fitting stages together (00 -> 60) under one parent MLflow run: `python -m pipelines.97_run_fitting_pipeline`
+- Run inference stages together (70 -> 95) under one parent MLflow run: `python -m pipelines.98_run_inference_pipeline`
 - Run fitting: `python -m pipelines.97_run_fitting_pipeline`
 - Run inference: `python -m pipelines.98_run_inference_pipeline`
 - Run unit tests: `pytest`
@@ -191,6 +196,10 @@ Run with:
 	- `S3NTINEL_EVENT_DELTA_THRESHOLD` controls `threshold` event emission.
 	- When `S3NTINEL_EVENT_DELTA_THRESHOLD <= 0`, `threshold` events are disabled and continuous deltas emit only `slope_pos|slope_neg` (plus first-sample null suppression).
 
+- `25_window_policy_profile` writes:
+    - `S3NTINEL_WINDOW_POLICY_PROFILE_TABLE_PATH` (default `data/delta/window_policy_profile`)
+    - the artifact contains candidate `max_ms` / `event_threshold` policies ranked from the detected event stream
+    - stage `30` consumes the row where `is_selected=true` when the profile artifact is present
 - `40_backbone_fit` reads normalized telemetry and adaptive windows and writes backbone artifacts:
 	- `S3NTINEL_BACKBONE_TABLE_PATH` (default `data/delta/backbone`)
 	- `S3NTINEL_BACKBONE_SENSOR_ENERGY_TABLE_PATH` (default `data/delta/backbone_sensor_energy`)
@@ -252,6 +261,7 @@ Run with:
 	- `--timestamp-count` (default `12`)
 	- `--step-ms` (default `100`)
 - `30_windows_adaptive` windowing:
+    - consumes `window_policy_profile` when present and otherwise falls back to the configured policy
 	- `S3NTINEL_WINDOW_STRATEGY` is retained as a run-setting surface but only `segmented` is supported by the canonical builder
 	- `S3NTINEL_WINDOW_INACTIVITY_TIMEOUT_MS` controls timeout-based closure for the segmented builder (default `0` = disabled)
 

@@ -15,6 +15,7 @@ from libs.io.delta import get_spark, read_table
 PIPELINE_STAGE_SCRIPTS = [
     "00_ingest_raw.py",
     "20_events_extract.py",
+    "25_window_policy_profile.py",
     "30_windows_adaptive.py",
     "70_phase_fit.py",
     "80_window_scores_raw.py",
@@ -98,6 +99,7 @@ def _set_pipeline_env(
     os.environ["S3NTINEL_RAW_INPUT_PATH"] = str(raw_input_path)
     os.environ["S3NTINEL_RAW_TABLE_PATH"] = str(run_dir / "delta" / "raw_telemetry")
     os.environ["S3NTINEL_EVENTS_TABLE_PATH"] = str(run_dir / "delta" / "events")
+    os.environ["S3NTINEL_WINDOW_POLICY_PROFILE_TABLE_PATH"] = str(run_dir / "delta" / "window_policy_profile")
     os.environ["S3NTINEL_WINDOWS_TABLE_PATH"] = str(run_dir / "delta" / "windows")
     os.environ["S3NTINEL_PHASE_WINDOWS_TABLE_PATH"] = str(run_dir / "delta" / "phase_windows")
     os.environ["S3NTINEL_PHASE_BASELINES_TABLE_PATH"] = str(run_dir / "delta" / "phase_baselines")

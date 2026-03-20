@@ -42,19 +42,19 @@ Then the active structural stages are:
 1. `pipelines/00_ingest_raw.py`
 2. `pipelines/10_parameter_profiles_fit.py`
 3. `pipelines/20_events_extract.py`
-4. `pipelines/30_windows_adaptive.py`
-5. `pipelines/40_backbone_fit.py`
-6. `pipelines/50_build_graph.py`
-7. `pipelines/60_fit_hierarchy.py`
+4. `pipelines/25_window_policy_profile.py`
+5. `pipelines/30_windows_adaptive.py`
+6. `pipelines/40_backbone_fit.py`
+7. `pipelines/50_build_graph.py`
+8. `pipelines/60_fit_hierarchy.py`
 
 ### Inference
 
-1. `pipelines/20_events_extract.py`
-2. `pipelines/30_windows_adaptive.py`
-3. `pipelines/70_phase_fit.py`
-4. `pipelines/80_window_scores_raw.py`
-5. `pipelines/85_window_scores_calibrate.py`
-6. `pipelines/90_anomaly_attribution.py`
+1. `pipelines/70_phase_fit.py`
+2. `pipelines/80_window_scores_raw.py`
+3. `pipelines/85_window_scores_calibrate.py`
+4. `pipelines/90_anomaly_attribution.py`
+5. `pipelines/95_emit_explorer_bundle.py`
 
 ## Core representations
 
@@ -89,6 +89,10 @@ Then the active structural stages are:
   - `all_sensors`
   - `weights_b`
   - `lambda_ridge`
+
+- `window_policy_profile`
+  - ranked candidate `max_ms` / `event_threshold` policies fit from the event stream
+  - one row is marked `is_selected=true` and consumed by stage `30`
 
 - `backbone_sensor_energy`
   - per-sensor energy used for backbone selection

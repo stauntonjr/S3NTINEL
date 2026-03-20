@@ -29,6 +29,7 @@ SUMMARY_NAME_BY_MODE = {
 }
 TIMED_STAGE_SCRIPTS = (
     "20_events_extract.py",
+    "25_window_policy_profile.py",
     "30_windows_adaptive.py",
     "50_build_graph.py",
     "70_phase_fit.py",
