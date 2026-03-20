@@ -46,3 +46,17 @@ def test_load_pipeline_context_settings_parses_lag_bands(monkeypatch):
     assert tuple(item.name for item in settings.graph.lag.bands) == ("quick", "slow")
     assert settings.graph.lag.bands[0].upper_seconds == 2.0
     assert settings.graph.lag.bands[1].combine_weight == 0.5
+
+
+def test_load_pipeline_context_settings_parses_event_slope_threshold(monkeypatch):
+    monkeypatch.setenv("S3NTINEL_EVENT_SLOPE_ABS_THRESHOLD", "1.5")
+    monkeypatch.setenv("S3NTINEL_EVENT_SLOPE_MIN_PERSISTENCE_SAMPLES", "3")
+    monkeypatch.setenv("S3NTINEL_EVENT_SLOPE_REEMIT_RATIO", "2.0")
+    monkeypatch.setenv("S3NTINEL_BACKBONE_EVENT_PRIOR_ALPHA", "0.5")
+
+    settings = load_pipeline_context_settings({"events": {"delta_threshold": 0.0, "slope_source": "ema", "ema_alpha": 0.2}})
+
+    assert settings.events.slope_abs_threshold == 1.5
+    assert settings.events.slope_min_persistence_samples == 3
+    assert settings.events.slope_reemit_ratio == 2.0
+    assert settings.backbone.event_prior_alpha == 0.5

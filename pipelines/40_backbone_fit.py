@@ -52,6 +52,7 @@ def run() -> None:
 
     backbone_sensor_count = settings.backbone.sensor_count
     backbone_ridge_lambda = settings.backbone.ridge_lambda
+    backbone_event_prior_alpha = settings.backbone.event_prior_alpha
 
     spark = get_spark("s3ntinel.backbone_fit")
     raw_df = read_table(spark, raw_path, fmt=table_format)
@@ -67,7 +68,10 @@ def run() -> None:
     try:
         window_features_count = int(window_features_df.count())
 
-        energy_sdf = build_backbone_sensor_energy_spark_table(window_features_df).persist(StorageLevel.MEMORY_AND_DISK)
+        energy_sdf = build_backbone_sensor_energy_spark_table(
+            window_features_df,
+            event_prior_alpha=float(backbone_event_prior_alpha),
+        ).persist(StorageLevel.MEMORY_AND_DISK)
         try:
             sensor_energy_count = int(energy_sdf.count())
             selected_sensors_c = select_backbone_sensors_by_energy_spark(energy_sdf, k=max(int(backbone_sensor_count), 1))
@@ -141,6 +145,8 @@ def run() -> None:
                     F.col("parameter_name").cast("string").alias("parameter_name"),
                     F.col("energy").cast("double").alias("energy"),
                     F.col("support_count").cast("int").alias("support_count"),
+                    F.col("event_prior").cast("double").alias("event_prior"),
+                    F.col("selection_score").cast("double").alias("selection_score"),
                     F.col("selected_backbone").cast("boolean").alias("selected_backbone"),
                     F.col("backbone_version").cast("int").alias("backbone_version"),
                 )
@@ -168,6 +174,7 @@ def run() -> None:
         {
             "backbone_sensor_count": backbone_sensor_count,
             "backbone_ridge_lambda": backbone_ridge_lambda,
+            "backbone_event_prior_alpha": backbone_event_prior_alpha,
         }
     )
     log_dict_artifact_if_active(
@@ -190,6 +197,7 @@ def run() -> None:
             "selected_sensor_count": selected_sensor_count,
             "training_window_count": training_window_count,
             "backbone_ridge_lambda": backbone_ridge_lambda,
+            "backbone_event_prior_alpha": backbone_event_prior_alpha,
         },
         "reports/stages/40_backbone_fit_summary.json",
     )
@@ -222,6 +230,7 @@ def run() -> None:
             "backbone_sensor_count": backbone_sensor_count,
             "backbone_ridge_lambda": backbone_ridge_lambda,
             "max_backbone_sensor_universe": max_backbone_sensor_universe,
+            "backbone_event_prior_alpha": backbone_event_prior_alpha,
         },
         input_artifacts={
             "raw_telemetry": build_artifact_manifest(path=raw_path, dataframe=raw_df, row_count=raw_count),

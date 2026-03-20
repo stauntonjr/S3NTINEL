@@ -36,6 +36,9 @@ def run() -> None:
     delta_threshold = settings.events.delta_threshold
     slope_source = settings.events.slope_source
     ema_alpha = settings.events.ema_alpha
+    slope_abs_threshold = settings.events.slope_abs_threshold
+    slope_min_persistence_samples = settings.events.slope_min_persistence_samples
+    slope_reemit_ratio = settings.events.slope_reemit_ratio
 
     spark = get_spark("s3ntinel.events_extract")
     raw_df = read_table(spark, input_path, fmt=table_format)
@@ -47,6 +50,9 @@ def run() -> None:
         delta_threshold=delta_threshold,
         slope_source=slope_source,
         ema_alpha=ema_alpha,
+        slope_abs_threshold=slope_abs_threshold,
+        slope_min_persistence_samples=slope_min_persistence_samples,
+        slope_reemit_ratio=slope_reemit_ratio,
     )
 
     write_table(
@@ -76,6 +82,9 @@ def run() -> None:
             "delta_threshold": delta_threshold,
             "slope_source": slope_source,
             "ema_alpha": ema_alpha,
+            "slope_abs_threshold": slope_abs_threshold,
+            "slope_min_persistence_samples": slope_min_persistence_samples,
+            "slope_reemit_ratio": slope_reemit_ratio,
             "event_threshold": int(context.config["windowing"]["event_threshold"]),
             "partition_by": list(context.config["output"]["partition_by"]),
         },
@@ -89,6 +98,9 @@ def run() -> None:
             "delta_threshold": delta_threshold,
             "slope_source": slope_source,
             "ema_alpha": ema_alpha,
+            "slope_abs_threshold": slope_abs_threshold,
+            "slope_min_persistence_samples": slope_min_persistence_samples,
+            "slope_reemit_ratio": slope_reemit_ratio,
         },
         input_artifacts={
             "raw_telemetry": build_artifact_manifest(path=input_path, dataframe=raw_df, row_count=raw_count),
@@ -105,13 +117,16 @@ def run() -> None:
     )
     log_stage_manifest_if_active(stage_manifest, "reports/stages/20_events_extract_manifest.json")
     LOGGER.info(
-        "pipeline=events_extract format=%s write_mode=%s event_threshold=%s delta_threshold=%s slope_source=%s ema_alpha=%s input=%s datatype_profile=%s output=%s",
+        "pipeline=events_extract format=%s write_mode=%s event_threshold=%s delta_threshold=%s slope_source=%s ema_alpha=%s slope_abs_threshold=%s slope_min_persistence_samples=%s slope_reemit_ratio=%s input=%s datatype_profile=%s output=%s",
         table_format,
         write_mode,
         context.config["windowing"]["event_threshold"],
         delta_threshold,
         slope_source,
         ema_alpha,
+        slope_abs_threshold,
+        slope_min_persistence_samples,
+        slope_reemit_ratio,
         input_path,
         datatype_profile_path,
         output_path,

@@ -5,7 +5,7 @@ from typing import Any
 
 import numpy as np
 
-from libs.backbone.energy import compute_window_sensor_energy
+from libs.backbone.energy import EVENT_PRIOR_DEFAULT_ALPHA, compute_window_sensor_energy
 from libs.backbone.fit import (
     aggregate_backbone_gh,
     compute_backbone_gh_by_flight,
@@ -20,6 +20,7 @@ from libs.backbone.fit import (
 class BackboneSpec:
     sensor_count: int = 8
     ridge_lambda: float = 1.0
+    event_prior_alpha: float = 0.35
     backbone_version: int = 2
 
     @property
@@ -32,6 +33,8 @@ class BackboneSensorEnergy:
     parameter_name: str
     energy: float
     support_count: int
+    event_prior: float = 0.0
+    selection_score: float = 0.0
     selected_backbone: bool = False
     backbone_version: int = 2
 
@@ -40,19 +43,26 @@ class BackboneSensorEnergy:
         cls,
         window_feature_rows: list[dict[str, Any]],
         *,
+        spec: BackboneSpec | None = None,
         selected_sensors: set[str] | None = None,
         backbone_version: int = 2,
     ) -> list["BackboneSensorEnergy"]:
         selected = selected_sensors or set()
+        event_prior_alpha = float(spec.event_prior_alpha) if spec is not None else EVENT_PRIOR_DEFAULT_ALPHA
         return [
             cls(
                 parameter_name=str(row["parameter_name"]),
                 energy=float(row["energy"]),
                 support_count=int(row["support_count"]),
+                event_prior=float(row.get("event_prior", 0.0) or 0.0),
+                selection_score=float(row.get("selection_score", row["energy"]) or 0.0),
                 selected_backbone=str(row["parameter_name"]) in selected,
                 backbone_version=int(backbone_version),
             )
-            for row in compute_window_sensor_energy(window_feature_rows)
+            for row in compute_window_sensor_energy(
+                window_feature_rows,
+                event_prior_alpha=event_prior_alpha,
+            )
         ]
 
     def to_row(self) -> dict[str, Any]:
@@ -60,6 +70,8 @@ class BackboneSensorEnergy:
             "parameter_name": self.parameter_name,
             "energy": float(self.energy),
             "support_count": int(self.support_count),
+            "event_prior": float(self.event_prior),
+            "selection_score": float(self.selection_score),
             "selected_backbone": bool(self.selected_backbone),
             "backbone_version": int(self.backbone_version),
         }
@@ -84,6 +96,7 @@ class BackboneModel:
         sensor_energies = BackboneSensorEnergy.from_window_feature_rows(
             window_feature_rows,
             backbone_version=spec.backbone_version,
+            spec=spec,
         )
         selected_sensors_c = select_backbone_sensors_by_energy(
             [item.to_row() for item in sensor_energies],
@@ -101,6 +114,8 @@ class BackboneModel:
                 parameter_name=item.parameter_name,
                 energy=item.energy,
                 support_count=item.support_count,
+                event_prior=item.event_prior,
+                selection_score=item.selection_score,
                 selected_backbone=item.parameter_name in selected_sensor_set,
                 backbone_version=item.backbone_version,
             )

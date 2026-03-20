@@ -14,7 +14,19 @@ def select_backbone_sensors_by_energy(
     k: int,
 ) -> list[str]:
     limit = max(int(k), 1)
-    return [str(item.get("parameter_name", "")) for item in sensor_energy_rows[:limit] if str(item.get("parameter_name", ""))][:limit]
+    ordered_rows = sorted(
+        sensor_energy_rows,
+        key=lambda item: (
+            -float(item.get("selection_score", item.get("energy", 0.0)) or 0.0),
+            -float(item.get("energy", 0.0) or 0.0),
+            str(item.get("parameter_name", "")),
+        ),
+    )
+    return [
+        str(item.get("parameter_name", ""))
+        for item in ordered_rows[:limit]
+        if str(item.get("parameter_name", ""))
+    ][:limit]
 
 
 def compute_backbone_gh_by_flight(

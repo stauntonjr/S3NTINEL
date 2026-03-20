@@ -61,6 +61,8 @@ Then the active structural stages are:
 - `window_features`
   - persisted many-window feature artifact
   - used for drift, energy, backbone fitting, graph fitting, and phase fitting
+  - `continuous_vector_t_end(_scaled)` is the raw telemetry snapshot at `t_end` under ZOH, not a last-event payload overwrite
+  - `continuous_event_summary` carries additive run-based continuous-event context per window
 
 - per-window feature row
   - one-window feature representation used to build the persisted artifact
@@ -93,9 +95,10 @@ Then the active structural stages are:
 - `window_policy_profile`
   - ranked candidate `max_ms` / `event_threshold` policies fit from the event stream
   - one row is marked `is_selected=true` and consumed by stage `30`
+  - stage `25` also emits `reports/stages/25_window_policy_profile_evaluation.json`, a report-only summary of candidate frontier, closure mix, downstream cost proxies, and bounded window-boundary stability for the selected policy
 
 - `backbone_sensor_energy`
-  - per-sensor energy used for backbone selection
+  - per-sensor continuous energy plus event-aware selection score used for backbone selection
 
 - `phase_windows`
   - V2 per-window structure and detected phase context
@@ -157,6 +160,7 @@ Then the active structural stages are:
 - `20_events_extract.py` uses the segmented Spark sequence kernel over `(tail_id, flight_id, parameter_name)` streams.
 - `40_backbone_fit.py` keeps fact-table work in Spark and collects only bounded
   sensor-energy and per-flight `G_f/H_f` aggregates for the final solve.
+  The solve still depends only on `continuous_vector_t_end_scaled`; event summaries affect sensor ranking, not the ridge system itself.
 - `50_build_graph.py` keeps component-graph construction in Spark and collects only
   small backbone metadata and the already-pruned fused edge set for final hierarchy
   assignment. Precision, event, lag-profile, lag-collapse, transition, and fused

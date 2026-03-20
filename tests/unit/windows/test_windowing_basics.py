@@ -3,9 +3,11 @@ from datetime import datetime, timedelta, timezone
 from libs.windows import (
     Window,
     WindowPolicy,
+    WindowPolicyEvaluationSpec,
     WindowPolicyProfile,
     WindowPolicyProfileSpec,
     WindowSensorBuffer,
+    build_window_policy_profile_evaluation_report_spark,
     build_window_policy_profile_table,
     build_windows_table,
 )
@@ -187,3 +189,67 @@ def test_window_policy_profile_resolves_selected_policy_over_fallback(spark):
     assert source == "profile"
     assert resolved.max_ms == 1200
     assert resolved.event_threshold == 6
+
+
+def test_build_window_policy_profile_evaluation_report_emits_selected_summary_and_stability(spark):
+    events = [
+        {
+            "tail_id": "T1",
+            "flight_id": "F1",
+            "event_seq_id": event_index + 1,
+            "parameter_name": f"p{(event_index % 2) + 1}",
+            "timestamp_utc": datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+            + timedelta(milliseconds=200 * event_index),
+            "event_type_detected": "slope_pos" if event_index % 2 == 0 else "transition",
+            "payload": {"value": str(event_index)},
+            "date_utc": datetime(2026, 1, 1, tzinfo=timezone.utc).date(),
+        }
+        for event_index in range(4)
+    ]
+    profile_spec = WindowPolicyProfileSpec(
+        min_sampling_rate_hz=1.0,
+        configured_max_ms=1000,
+        configured_event_threshold=2,
+        min_ms=50,
+        inactivity_timeout_ms=0,
+        gap_quantiles=(0.5,),
+        event_threshold_multipliers=(1.0,),
+        max_profile_flights=1,
+    )
+    events_df = spark.createDataFrame(events)
+    profile_df = build_window_policy_profile_table(events_df, spec=profile_spec)
+
+    report = build_window_policy_profile_evaluation_report_spark(
+        events_df,
+        profile_df=profile_df,
+        profile_spec=profile_spec,
+        evaluation_spec=WindowPolicyEvaluationSpec(
+            candidate_frontier_size=2,
+            stability_sample_count=1,
+            max_stability_flights=1,
+        ),
+    )
+
+    selected_profile_row = report["selected_policy"]["profile_row"]
+    assert report["status"] in {"ok", "warning"}
+    assert selected_profile_row is not None
+    assert report["selected_policy"]["policy_source"] == "profile"
+    assert report["selected_policy"]["resolved_policy"]["max_ms"] == selected_profile_row["max_ms"]
+    assert report["selected_policy"]["resolved_policy"]["event_threshold"] == selected_profile_row["event_threshold"]
+    assert len(report["candidate_frontier"]) <= 3
+    assert [row["candidate_rank"] for row in report["candidate_frontier"]] == sorted(
+        row["candidate_rank"] for row in report["candidate_frontier"]
+    )
+    delta = report["selection_delta_vs_configured"]
+    assert delta["max_ms"]["absolute_delta"] == (
+        report["selected_policy"]["resolved_policy"]["max_ms"] - report["selected_policy"]["configured_policy"]["max_ms"]
+    )
+    assert delta["event_threshold"]["absolute_delta"] == (
+        report["selected_policy"]["resolved_policy"]["event_threshold"]
+        - report["selected_policy"]["configured_policy"]["event_threshold"]
+    )
+    closure_mix = report["closure_mix"]
+    assert abs(sum(closure_mix["rates"].values()) - 1.0) < 1e-9
+    assert "pair_cost_proxy" in report["downstream_cost_proxy"]
+    assert report["edge_stability"]["status"] in {"ok", "skipped"}
+    assert "samples" in report["edge_stability"]

@@ -45,6 +45,7 @@ from libs.testing.assertions import (
 from pipelines._pipeline_runner import run_stage_group
 from scripts.sim_common import (
     DEFAULT_START_TIMESTAMP_UTC,
+    add_backbone_args,
     add_event_args,
     add_source_args,
     add_window_args,
@@ -133,9 +134,13 @@ RUN_SETTING_ENVS = (
     "S3NTINEL_EVENT_DELTA_THRESHOLD",
     "S3NTINEL_EVENT_SLOPE_SOURCE",
     "S3NTINEL_EVENT_EMA_ALPHA",
+    "S3NTINEL_EVENT_SLOPE_ABS_THRESHOLD",
+    "S3NTINEL_EVENT_SLOPE_MIN_PERSISTENCE_SAMPLES",
+    "S3NTINEL_EVENT_SLOPE_REEMIT_RATIO",
     "S3NTINEL_PHASE_COUNT",
     "S3NTINEL_BACKBONE_SENSOR_COUNT",
     "S3NTINEL_BACKBONE_RIDGE_LAMBDA",
+    "S3NTINEL_BACKBONE_EVENT_PRIOR_ALPHA",
     "S3NTINEL_LOCAL_ARTIFACT_BASE_DIR",
 )
 
@@ -210,6 +215,10 @@ class PipelineRunConfig:
     phase_count: int
     backbone_parameter_count: int
     backbone_ridge_lambda: float
+    backbone_event_prior_alpha: float = 0.35
+    slope_abs_threshold: float = 1.0
+    slope_min_persistence_samples: int = 2
+    slope_reemit_ratio: float = 1.5
 
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> "PipelineRunConfig":
@@ -227,6 +236,9 @@ class PipelineRunConfig:
             delta_threshold=float(args.delta_threshold),
             slope_source=str(args.slope_source),
             ema_alpha=float(args.ema_alpha),
+            slope_abs_threshold=float(args.slope_abs_threshold),
+            slope_min_persistence_samples=int(args.slope_min_persistence_samples),
+            slope_reemit_ratio=float(args.slope_reemit_ratio),
             window_max_ms=int(args.window_max_ms),
             window_event_threshold=int(args.window_event_threshold),
             window_min_ms=int(args.window_min_ms),
@@ -235,6 +247,7 @@ class PipelineRunConfig:
             phase_count=int(args.phase_count),
             backbone_parameter_count=int(args.backbone_parameter_count),
             backbone_ridge_lambda=float(args.backbone_ridge_lambda),
+            backbone_event_prior_alpha=float(args.backbone_event_prior_alpha),
         )
 
     def with_flight_defaults(self, *, flight: FlightSpec) -> "PipelineRunConfig":
@@ -334,14 +347,13 @@ def parse_args() -> argparse.Namespace:
     add_source_args(parser)
     add_event_args(parser)
     add_window_args(parser)
+    add_backbone_args(parser)
     parser.add_argument("--base-dir", default="data/simulation_runs", help="Base directory for simulation pipeline runs")
     parser.add_argument("--mode", default="full", choices=("profile", "structural", "full"))
     parser.add_argument("--format", default="parquet", choices=("parquet", "delta"), help="Persisted table format")
     parser.add_argument("--write-mode", default="overwrite", choices=("overwrite", "append", "merge"))
     parser.add_argument("--min-warm", default=1, type=int, help="Conformal minimum warm size")
     parser.add_argument("--phase-count", type=int, default=3, help="Detected phase count")
-    parser.add_argument("--backbone-parameter-count", type=int, default=8, help="Backbone parameter count")
-    parser.add_argument("--backbone-ridge-lambda", type=float, default=1.0, help="Backbone ridge lambda")
     return parser.parse_args()
 
 
@@ -365,9 +377,13 @@ def _set_run_env(paths: RunPaths, config: PipelineRunConfig) -> dict[str, str | 
     os.environ["S3NTINEL_EVENT_DELTA_THRESHOLD"] = str(config.delta_threshold)
     os.environ["S3NTINEL_EVENT_SLOPE_SOURCE"] = config.slope_source
     os.environ["S3NTINEL_EVENT_EMA_ALPHA"] = str(config.ema_alpha)
+    os.environ["S3NTINEL_EVENT_SLOPE_ABS_THRESHOLD"] = str(config.slope_abs_threshold)
+    os.environ["S3NTINEL_EVENT_SLOPE_MIN_PERSISTENCE_SAMPLES"] = str(config.slope_min_persistence_samples)
+    os.environ["S3NTINEL_EVENT_SLOPE_REEMIT_RATIO"] = str(config.slope_reemit_ratio)
     os.environ["S3NTINEL_PHASE_COUNT"] = str(config.phase_count)
     os.environ["S3NTINEL_BACKBONE_SENSOR_COUNT"] = str(config.backbone_parameter_count)
     os.environ["S3NTINEL_BACKBONE_RIDGE_LAMBDA"] = str(config.backbone_ridge_lambda)
+    os.environ["S3NTINEL_BACKBONE_EVENT_PRIOR_ALPHA"] = str(config.backbone_event_prior_alpha)
     os.environ["S3NTINEL_LOCAL_ARTIFACT_BASE_DIR"] = str(paths.run_dir)
     return previous
 
@@ -816,15 +832,30 @@ def _build_profile_validation_summary_spark(
     return build_profile_validation_summary(
         raw_telemetry_df=_collect_dataframe(
             raw_telemetry_sdf,
-            columns=("parameter_name", "parameter_datatype_label", "behavior_family_label"),
+            columns=(
+                "parameter_name",
+                "parameter_datatype_label",
+                "behavior_family_label",
+                "system_id",
+                "subsystem_id",
+                "module_id",
+            ),
         ),
         parameter_datatype_profile_df=_collect_dataframe(
             parameter_datatype_profile_sdf,
-            columns=("parameter_name", "parameter_datatype_profiled"),
+            columns=(
+                "parameter_name",
+                "parameter_datatype_profiled",
+                "sampling_rate_profiled_hz",
+            ),
         ),
         parameter_behavior_profile_df=_collect_dataframe(
             parameter_behavior_profile_sdf,
-            columns=("parameter_name", "behavior_family_profiled"),
+            columns=(
+                "parameter_name",
+                "behavior_family_profiled",
+                "behavior_profile_confidence",
+            ),
         ),
     )
 
@@ -1206,13 +1237,21 @@ def _write_validation_reports(
         spark=spark,
         path=paths.artifact_path("parameter_datatype_profile"),
         fmt=table_format,
-        columns=("parameter_name", "parameter_datatype_profiled"),
+        columns=(
+            "parameter_name",
+            "parameter_datatype_profiled",
+            "sampling_rate_profiled_hz",
+        ),
     )
     parameter_behavior_profile_sdf = _read_optional_table_sdf(
         spark=spark,
         path=paths.artifact_path("parameter_behavior_profile"),
         fmt=table_format,
-        columns=("parameter_name", "behavior_family_profiled"),
+        columns=(
+            "parameter_name",
+            "behavior_family_profiled",
+            "behavior_profile_confidence",
+        ),
     )
     events_sdf = _read_optional_table_sdf(
         spark=spark,
@@ -1580,10 +1619,53 @@ def _build_engineering_performance_summary(
     }
 
 
+def _build_window_policy_profile_report_summary(*, paths: RunPaths) -> dict[str, Any]:
+    evaluation_report_path = paths.run_dir / "reports" / "stages" / "25_window_policy_profile_evaluation.json"
+    evaluation_payload = _load_json_if_exists(evaluation_report_path)
+    if evaluation_payload is None:
+        return {
+            "status": "skipped",
+            "reason": "missing stage-25 evaluation report",
+            "source_report_path": str(evaluation_report_path),
+        }
+    selected_policy = dict(evaluation_payload.get("selected_policy") or {})
+    resolved_policy = dict(selected_policy.get("resolved_policy") or {})
+    closure_mix = dict(evaluation_payload.get("closure_mix") or {})
+    downstream_cost = dict(evaluation_payload.get("downstream_cost_proxy") or {})
+    edge_stability = dict(evaluation_payload.get("edge_stability") or {})
+    return {
+        "status": evaluation_payload.get("status", "skipped"),
+        "source_report_path": str(evaluation_report_path),
+        "policy_source": selected_policy.get("policy_source"),
+        "selected_max_ms": resolved_policy.get("max_ms"),
+        "selected_event_threshold": resolved_policy.get("event_threshold"),
+        "selected_candidate_rank": ((selected_policy.get("profile_row") or {}) or {}).get("candidate_rank"),
+        "closure_mix": {
+            "event_threshold_rate": ((closure_mix.get("rates") or {}) or {}).get("event_threshold"),
+            "max_ms_rate": ((closure_mix.get("rates") or {}) or {}).get("max_ms"),
+            "event_threshold_plus_max_ms_rate": ((closure_mix.get("rates") or {}) or {}).get("event_threshold+max_ms"),
+            "end_of_stream_rate": ((closure_mix.get("rates") or {}) or {}).get("end_of_stream"),
+        },
+        "downstream_cost_proxy": {
+            "window_count": downstream_cost.get("window_count"),
+            "pair_cost_proxy": downstream_cost.get("pair_cost_proxy"),
+            "same_window_pair_expansion_proxy": downstream_cost.get("same_window_pair_expansion_proxy"),
+            "p95_event_count": downstream_cost.get("p95_event_count"),
+            "p95_sensor_count": downstream_cost.get("p95_sensor_count"),
+        },
+        "edge_stability": {
+            "status": edge_stability.get("status"),
+            "mean_boundary_jaccard": edge_stability.get("mean_boundary_jaccard"),
+        },
+        "warnings": list(evaluation_payload.get("warnings") or []),
+    }
+
+
 def _render_full_run_report_markdown(report: dict[str, Any]) -> str:
     engineering = report.get("engineering_performance", {})
     overall = engineering.get("overall", {})
     pipeline_summary = overall.get("pipeline_summary", {})
+    window_policy_profile = report.get("window_policy_profile", {})
     lines = [
         "# Full Run Report",
         "",
@@ -1631,6 +1713,15 @@ def _render_full_run_report_markdown(report: dict[str, Any]) -> str:
             "### Stages",
         ]
     )
+    lines.extend(
+        [
+            "",
+            "## Window Policy Profile",
+            "```json",
+            json.dumps(window_policy_profile, indent=2, sort_keys=True, default=str),
+            "```",
+        ]
+    )
     for stage in engineering.get("stages", []) or []:
         lines.append(f"#### {stage.get('stage_script')}")
         lines.append("```json")
@@ -1652,6 +1743,7 @@ def _write_full_run_report(
         "status": manifest.get("status"),
         "run_dir": str(paths.run_dir),
         "modeling_performance": _build_modeling_performance_summary(validation_payloads),
+        "window_policy_profile": _build_window_policy_profile_report_summary(paths=paths),
         "engineering_performance": _build_engineering_performance_summary(
             paths=paths,
             manifest=manifest,

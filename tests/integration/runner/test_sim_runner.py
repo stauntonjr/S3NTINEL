@@ -172,15 +172,22 @@ def test_sim_runner_full_smoke_emits_bundle(monkeypatch, tmp_path):
 
     manifest = json.loads((run_dir / "reports" / "run_manifest.json").read_text(encoding="utf-8"))
     full_run_report = json.loads((run_dir / "reports" / "full_run_report.json").read_text(encoding="utf-8"))
+    stage25_summary = json.loads(
+        (run_dir / "reports" / "stages" / "25_window_policy_profile_summary.json").read_text(encoding="utf-8")
+    )
     assert manifest["status"] == "success"
     assert full_run_report["status"] == "success"
     assert "modeling_performance" in full_run_report
+    assert "window_policy_profile" in full_run_report
     assert "engineering_performance" in full_run_report
+    assert full_run_report["window_policy_profile"]["status"] in {"ok", "warning", "skipped"}
     assert (run_dir / "logs" / "run.log").exists()
     assert (run_dir / "reports" / "pipeline_run_summary.json").exists()
     assert (run_dir / "reports" / "full_run_report.md").exists()
     assert (run_dir / "reports" / "stages" / "10_parameter_profiles_fit_manifest.json").exists()
     assert (run_dir / "reports" / "stages" / "25_window_policy_profile_manifest.json").exists()
+    assert (run_dir / "reports" / "stages" / "25_window_policy_profile_evaluation.json").exists()
+    assert stage25_summary["window_policy_profile_evaluation_path"] == "reports/stages/25_window_policy_profile_evaluation.json"
     assert (run_dir / "reports" / "stages" / "40_backbone_fit_manifest.json").exists()
     assert (run_dir / "reports" / "stages" / "50_build_graph_manifest.json").exists()
     assert (run_dir / "reports" / "stages" / "50_build_graph_evaluation.json").exists()
@@ -217,6 +224,84 @@ def test_sim_runner_full_smoke_emits_bundle(monkeypatch, tmp_path):
     assert len(pd.read_parquet(run_dir / "delta" / "anomaly_window_attribution")) > 0
     assert (run_dir / "delta" / "explorer_bundle" / "bundle_manifest.json").exists()
     assert len(pd.read_parquet(run_dir / "delta" / "explorer_bundle" / "parameter_catalog")) > 0
+
+
+def test_full_run_report_surfaces_window_policy_profile_and_skips_when_missing(tmp_path):
+    paths = runner.RunPaths(run_dir=tmp_path / "sim_report")
+    (paths.run_dir / "reports" / "stages").mkdir(parents=True, exist_ok=True)
+    (paths.run_dir / "reports" / "pipeline_run_summary.json").write_text(
+        json.dumps({"total_elapsed_ms": 1000.0, "stage_count": 1, "stages": []}),
+        encoding="utf-8",
+    )
+    manifest = {"status": "success", "timing": {}, "environment": {}, "artifacts": {}}
+
+    report_without_eval = runner._write_full_run_report(
+        paths=paths,
+        manifest=manifest,
+        summary_artifact_path="reports/pipeline_run_summary.json",
+        validation_payloads={},
+    )
+
+    assert report_without_eval["window_policy_profile"]["status"] == "skipped"
+
+    evaluation_payload = {
+        "status": "ok",
+        "selected_policy": {
+            "policy_source": "profile",
+            "resolved_policy": {
+                "max_ms": 1200,
+                "event_threshold": 6,
+                "min_ms": 50,
+                "inactivity_timeout_ms": 0,
+            },
+            "configured_policy": {
+                "max_ms": 10000,
+                "event_threshold": 20,
+                "min_ms": 50,
+                "inactivity_timeout_ms": 0,
+            },
+            "profile_row": {
+                "candidate_rank": 1,
+            },
+        },
+        "closure_mix": {
+            "rates": {
+                "event_threshold": 0.7,
+                "max_ms": 0.2,
+                "event_threshold+max_ms": 0.05,
+                "end_of_stream": 0.05,
+            }
+        },
+        "downstream_cost_proxy": {
+            "window_count": 10,
+            "pair_cost_proxy": 250.0,
+            "same_window_pair_expansion_proxy": 40.0,
+            "p95_event_count": 6.0,
+            "p95_sensor_count": 2.0,
+        },
+        "edge_stability": {
+            "status": "ok",
+            "mean_boundary_jaccard": 0.9,
+        },
+        "warnings": [],
+    }
+    (paths.run_dir / "reports" / "stages" / "25_window_policy_profile_evaluation.json").write_text(
+        json.dumps(evaluation_payload),
+        encoding="utf-8",
+    )
+
+    report_with_eval = runner._write_full_run_report(
+        paths=paths,
+        manifest=manifest,
+        summary_artifact_path="reports/pipeline_run_summary.json",
+        validation_payloads={},
+    )
+
+    assert report_with_eval["window_policy_profile"]["status"] == "ok"
+    assert report_with_eval["window_policy_profile"]["selected_max_ms"] == 1200
+    assert report_with_eval["window_policy_profile"]["selected_event_threshold"] == 6
+    markdown = (paths.run_dir / "reports" / "full_run_report.md").read_text(encoding="utf-8")
+    assert "## Window Policy Profile" in markdown
 
 
 def test_sim_runner_uses_library_validation_reports(monkeypatch, tmp_path):

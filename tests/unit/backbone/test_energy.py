@@ -15,6 +15,47 @@ def test_compute_window_sensor_energy_from_scaled_vectors():
     assert by_sensor["s2"] == 5.0
     assert support["s1"] == 2
     assert support["s2"] == 2
+    assert {"event_prior", "selection_score"}.issubset(out[0].keys())
+
+
+def test_compute_window_sensor_energy_uses_continuous_event_summary_in_selection_score():
+    sampled_windows = [
+        {
+            "continuous_vector_t_end_scaled": {"s1": 1.0, "s2": 1.0},
+            "continuous_event_summary": {
+                "slope_run_count_by_parameter": {"s1": 1, "s2": 1},
+                "slope_reinforcement_count_by_parameter": {"s1": 2, "s2": 0},
+                "slope_signed_impulse_by_parameter": {"s1": 4.0, "s2": 0.5},
+                "slope_abs_impulse_by_parameter": {"s1": 4.0, "s2": 0.5},
+                "slope_peak_abs_delta_by_parameter": {"s1": 4.0, "s2": 0.5},
+                "switch_count_by_parameter": {"s1": 1, "s2": 0},
+                "threshold_count_by_parameter": {"s1": 0, "s2": 0},
+                "oscillation_count_by_parameter": {"s1": 0, "s2": 0},
+                "drift_guard_count_by_parameter": {"s1": 0, "s2": 0},
+            },
+        },
+        {
+            "continuous_vector_t_end_scaled": {"s1": 1.0, "s2": 1.0},
+            "continuous_event_summary": {
+                "slope_run_count_by_parameter": {"s1": 1, "s2": 1},
+                "slope_reinforcement_count_by_parameter": {"s1": 0, "s2": 0},
+                "slope_signed_impulse_by_parameter": {"s1": 2.0, "s2": 0.5},
+                "slope_abs_impulse_by_parameter": {"s1": 2.0, "s2": 0.5},
+                "slope_peak_abs_delta_by_parameter": {"s1": 2.0, "s2": 0.5},
+                "switch_count_by_parameter": {"s1": 0, "s2": 0},
+                "threshold_count_by_parameter": {"s1": 0, "s2": 0},
+                "oscillation_count_by_parameter": {"s1": 0, "s2": 0},
+                "drift_guard_count_by_parameter": {"s1": 0, "s2": 0},
+            },
+        },
+    ]
+
+    out = compute_window_sensor_energy(sampled_windows, vector_field="continuous_vector_t_end_scaled")
+
+    assert out[0]["parameter_name"] == "s1"
+    assert float(out[0]["energy"]) == float(out[1]["energy"])
+    assert float(out[0]["event_prior"]) > float(out[1]["event_prior"])
+    assert float(out[0]["selection_score"]) > float(out[1]["selection_score"])
 
 
 def test_aggregate_sensor_energy_over_corpus():

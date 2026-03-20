@@ -11,6 +11,8 @@ BACKBONE_SENSOR_ENERGY_COLUMNS = [
     "parameter_name",
     "energy",
     "support_count",
+    "event_prior",
+    "selection_score",
     "selected_backbone",
     "backbone_version",
 ]
@@ -28,6 +30,8 @@ BACKBONE_SENSOR_ENERGY_SCHEMA = """
 parameter_name string,
 energy double,
 support_count int,
+event_prior double,
+selection_score double,
 selected_backbone boolean,
 backbone_version int
 """

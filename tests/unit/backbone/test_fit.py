@@ -23,6 +23,16 @@ def test_select_backbone_sensors_by_energy_orders_descending():
     assert select_backbone_sensors_by_energy(rows, k=2) == ["s1", "s2"]
 
 
+def test_select_backbone_sensors_by_energy_prefers_higher_selection_score():
+    rows = [
+        {"parameter_name": "s1", "energy": 5.0, "selection_score": 0.1},
+        {"parameter_name": "s2", "energy": 4.0, "selection_score": 0.2},
+        {"parameter_name": "s3", "energy": 1.0, "selection_score": -0.5},
+    ]
+
+    assert select_backbone_sensors_by_energy(rows, k=2) == ["s2", "s1"]
+
+
 def test_compute_gh_and_solve_weights_reconstructs_simple_system():
     windows = [
         {

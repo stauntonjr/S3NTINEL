@@ -16,6 +16,7 @@ from libs.events.types import (
     ThresholdEvent,
     append_detected_events,
     empty_detected_event_array,
+    null_detected_event,
 )
 from libs.perf.annotations import hot_path
 from libs.spark_sequence import SegmentedSequencePlan, SequenceOrderingPolicy, segment_policy_from_env
@@ -35,7 +36,9 @@ class ContinuousDetectorConfig:
     ema_alpha: float = 0.2
     slope_source: str = "ema"
     residual_z_threshold: float = 3.0
-    slope_abs_threshold: float = 0.0
+    slope_abs_threshold: float = 1.0
+    slope_min_persistence_samples: int = 2
+    slope_reemit_ratio: float = 1.5
     switch_z_threshold: float = 4.0
     switch_delta_z_threshold: float = 3.0
     switch_min_abs_delta: float = 15.0
@@ -67,6 +70,11 @@ class ContinuousSequenceStateLayout:
     last_oscillation_index: str = "last_oscillation_index"
     last_drift_guard_index: str = "last_drift_guard_index"
     drift_guard_cum_abs: str = "drift_guard_cum_abs"
+    slope_run_sign: str = "slope_run_sign"
+    slope_run_length: str = "slope_run_length"
+    slope_run_peak_abs_delta: str = "slope_run_peak_abs_delta"
+    slope_run_emitted: str = "slope_run_emitted"
+    slope_run_last_emitted_peak_abs_delta: str = "slope_run_last_emitted_peak_abs_delta"
     emitted_events: str = "emitted_events"
 
     def initial_state_column(self) -> "Column":
@@ -77,6 +85,11 @@ class ContinuousSequenceStateLayout:
             F.lit(-1_000_000_000).cast("long").alias(self.last_oscillation_index),
             F.lit(0).cast("long").alias(self.last_drift_guard_index),
             F.lit(0.0).cast("double").alias(self.drift_guard_cum_abs),
+            F.lit(0).cast("int").alias(self.slope_run_sign),
+            F.lit(0).cast("long").alias(self.slope_run_length),
+            F.lit(0.0).cast("double").alias(self.slope_run_peak_abs_delta),
+            F.lit(False).cast("boolean").alias(self.slope_run_emitted),
+            F.lit(0.0).cast("double").alias(self.slope_run_last_emitted_peak_abs_delta),
             empty_detected_event_array().alias(self.emitted_events),
         )
 
@@ -91,6 +104,9 @@ class ContinuousSequenceStateLayout:
         drift_guard_abs_change: "Column",
         emit_extrema_events: "Column",
         drift_guard_max_gap_samples: "Column",
+        slope_min_persistence_samples: "Column",
+        slope_reemit_ratio: "Column",
+        slope_source: "Column",
     ) -> "Column":
         from pyspark.sql import functions as F
 
@@ -107,8 +123,78 @@ class ContinuousSequenceStateLayout:
         oscillation_emit = step["oscillation_candidate"] & (
             (step["sample_index"] - acc[self.last_oscillation_index]) >= oscillation_refractory_samples
         )
+        slope_candidate_sign = step["slope_candidate_sign"]
+        slope_candidate_abs_delta = F.abs(F.coalesce(step["delta"], F.lit(0.0)))
+        slope_run_reset = slope_candidate_sign == F.lit(0)
+        slope_run_started = (slope_candidate_sign != F.lit(0)) & (slope_candidate_sign != acc[self.slope_run_sign])
+        slope_run_length = (
+            F.when(slope_run_reset, F.lit(0).cast("long"))
+            .when(slope_run_started, F.lit(1).cast("long"))
+            .otherwise(acc[self.slope_run_length] + F.lit(1).cast("long"))
+        )
+        slope_run_peak_abs_delta = (
+            F.when(slope_run_reset, F.lit(0.0))
+            .when(slope_run_started, slope_candidate_abs_delta)
+            .otherwise(F.greatest(acc[self.slope_run_peak_abs_delta], slope_candidate_abs_delta))
+        )
+        slope_run_emitted_before = (
+            F.when(slope_run_reset | slope_run_started, F.lit(False))
+            .otherwise(acc[self.slope_run_emitted])
+        )
+        slope_last_emitted_peak_abs_delta = (
+            F.when(slope_run_reset | slope_run_started, F.lit(0.0))
+            .otherwise(acc[self.slope_run_last_emitted_peak_abs_delta])
+        )
+        effective_reemit_ratio = F.greatest(slope_reemit_ratio, F.lit(1.0))
+        slope_run_ready = (slope_candidate_sign != F.lit(0)) & (slope_run_length >= slope_min_persistence_samples)
+        slope_strengthened = slope_run_emitted_before & (
+            slope_run_peak_abs_delta >= slope_last_emitted_peak_abs_delta * effective_reemit_ratio
+        )
+        slope_emit = slope_run_ready & (~slope_run_emitted_before | slope_strengthened)
+        slope_emission_reason = (
+            F.when(slope_run_emitted_before, F.lit("run_strengthen")).otherwise(F.lit("run_start"))
+        )
 
         switch_event = SwitchEvent().optional_from_step(condition=switch_emit, step=step)
+        slope_positive_event = SlopePositiveEvent().struct_from_observation(
+            tail_id=step["tail_id"],
+            flight_id=step["flight_id"],
+            timestamp_utc=step["timestamp_utc"],
+            parameter_name=step["parameter_name"],
+            delta=step["delta"],
+            delta_raw=step["delta_raw"],
+            value=step["val"],
+            slope_source=slope_source,
+            effective_threshold=step["effective_slope_threshold"],
+            run_length=slope_run_length,
+            run_peak_delta=slope_run_peak_abs_delta,
+            emission_reason=slope_emission_reason,
+            date_utc=step["date_utc"],
+            win_id=F.lit(None).cast("long"),
+        )
+        slope_negative_event = SlopeNegativeEvent().struct_from_observation(
+            tail_id=step["tail_id"],
+            flight_id=step["flight_id"],
+            timestamp_utc=step["timestamp_utc"],
+            parameter_name=step["parameter_name"],
+            delta=step["delta"],
+            delta_raw=step["delta_raw"],
+            value=step["val"],
+            slope_source=slope_source,
+            effective_threshold=step["effective_slope_threshold"],
+            run_length=slope_run_length,
+            run_peak_delta=slope_run_peak_abs_delta,
+            emission_reason=slope_emission_reason,
+            date_utc=step["date_utc"],
+            win_id=F.lit(None).cast("long"),
+        )
+        slope_event = (
+            F.when(
+                slope_emit,
+                F.when(slope_candidate_sign > F.lit(0), slope_positive_event).otherwise(slope_negative_event),
+            )
+            .otherwise(null_detected_event())
+        )
         drift_event = DriftGuardEvent().optional_from_step(
             condition=drift_emit,
             step=step,
@@ -126,6 +212,7 @@ class ContinuousSequenceStateLayout:
         )
         emitted_events = append_detected_events(
             acc[self.emitted_events],
+            slope_event,
             switch_event,
             drift_event,
             extrema_event,
@@ -140,6 +227,17 @@ class ContinuousSequenceStateLayout:
             .otherwise(acc[self.last_drift_guard_index])
             .alias(self.last_drift_guard_index),
             F.when(drift_emit, F.lit(0.0)).otherwise(cum_abs).alias(self.drift_guard_cum_abs),
+            F.when(slope_run_reset, F.lit(0)).otherwise(slope_candidate_sign).cast("int").alias(self.slope_run_sign),
+            slope_run_length.alias(self.slope_run_length),
+            slope_run_peak_abs_delta.alias(self.slope_run_peak_abs_delta),
+            F.when(slope_run_reset, F.lit(False))
+            .when(slope_emit, F.lit(True))
+            .otherwise(slope_run_emitted_before)
+            .alias(self.slope_run_emitted),
+            F.when(slope_run_reset, F.lit(0.0))
+            .when(slope_emit, slope_run_peak_abs_delta)
+            .otherwise(slope_last_emitted_peak_abs_delta)
+            .alias(self.slope_run_last_emitted_peak_abs_delta),
             emitted_events.alias(self.emitted_events),
         )
 
@@ -151,6 +249,11 @@ class ContinuousSequenceStateLayout:
             state[self.last_oscillation_index].alias(self.last_oscillation_index),
             state[self.last_drift_guard_index].alias(self.last_drift_guard_index),
             state[self.drift_guard_cum_abs].alias(self.drift_guard_cum_abs),
+            state[self.slope_run_sign].alias(self.slope_run_sign),
+            state[self.slope_run_length].alias(self.slope_run_length),
+            state[self.slope_run_peak_abs_delta].alias(self.slope_run_peak_abs_delta),
+            state[self.slope_run_emitted].alias(self.slope_run_emitted),
+            state[self.slope_run_last_emitted_peak_abs_delta].alias(self.slope_run_last_emitted_peak_abs_delta),
             empty_detected_event_array().alias(self.emitted_events),
         )
 
@@ -201,6 +304,13 @@ class ContinuousEventDetector:
         alpha = float(active.ema_alpha)
         if not (0.0 < alpha <= 1.0):
             raise ValueError(f"ema_alpha must be in (0, 1], got {active.ema_alpha}")
+        if int(active.slope_min_persistence_samples) < 1:
+            raise ValueError(
+                "slope_min_persistence_samples must be >= 1, "
+                f"got {active.slope_min_persistence_samples}"
+            )
+        if float(active.slope_reemit_ratio) < 1.0:
+            raise ValueError(f"slope_reemit_ratio must be >= 1.0, got {active.slope_reemit_ratio}")
 
         parameter_col = "parameter_name" if "parameter_name" in raw_df.columns else "sensor"
         order_columns = ["sample_seq_id"] if "sample_seq_id" in raw_df.columns else ["timestamp_utc"]
@@ -247,6 +357,13 @@ class ContinuousEventDetector:
             .withColumn("ema_prev", F.lag("smoothed_val").over(order_window))
             .withColumn("delta_raw", F.col("val") - F.col("prev_val"))
             .withColumn("delta", (F.col("smoothed_val") - F.col("ema_prev")) if slope_mode == "ema" else F.col("delta_raw"))
+            .withColumn("effective_slope_threshold", F.lit(float(active.slope_abs_threshold)))
+            .withColumn(
+                "slope_candidate_sign",
+                F.when(F.col("delta") > F.col("effective_slope_threshold"), F.lit(1))
+                .when(F.col("delta") < -F.col("effective_slope_threshold"), F.lit(-1))
+                .otherwise(F.lit(0)),
+            )
             .withColumn("residual", F.col("val") - F.col("ema_prev"))
             .withColumn(
                 "variance_estimate",
@@ -365,6 +482,7 @@ class ContinuousEventDetector:
         from pyspark.sql import functions as F
 
         active = self.config
+        slope_mode = _normalize_slope_source(active.slope_source)
         segment_id_column = self.sequence_plan.ordering.segment_id_column
         key_columns = self.sequence_plan.ordering.key_columns
         switch_scale_candidate = (
@@ -406,8 +524,11 @@ class ContinuousEventDetector:
                 "val",
                 "ema_prev",
                 "residual",
+                "delta",
                 "delta_raw",
                 "sigma",
+                "effective_slope_threshold",
+                "slope_candidate_sign",
                 "extrema_kind",
                 "osc_value",
                 "sign_changes",
@@ -446,6 +567,9 @@ class ContinuousEventDetector:
                         drift_guard_abs_change=F.lit(float(active.drift_guard_abs_change)),
                         emit_extrema_events=F.lit(bool(active.emit_extrema_events)),
                         drift_guard_max_gap_samples=F.lit(int(active.drift_guard_max_gap_samples)),
+                        slope_min_persistence_samples=F.lit(int(max(active.slope_min_persistence_samples, 1))),
+                        slope_reemit_ratio=F.lit(float(active.slope_reemit_ratio)),
+                        slope_source=F.lit(slope_mode),
                     ),
                 ).alias("state_after"),
             )
@@ -474,7 +598,6 @@ class ContinuousEventDetector:
         from pyspark.sql import functions as F
 
         active = self.config
-        slope_mode = _normalize_slope_source(active.slope_source)
         effective_threshold = float(active.delta_threshold)
         feature_df = self._feature_frame(raw_df)
 
@@ -508,51 +631,8 @@ class ContinuousEventDetector:
             )
             .select("event.*")
         )
-        slope_rows = (
-            feature_df.where(
-                F.col("warmup_ready")
-                & F.col("delta").isNotNull()
-                & (
-                    (F.col("delta") > F.lit(float(active.slope_abs_threshold)))
-                    | (F.col("delta") < F.lit(-float(active.slope_abs_threshold)))
-                )
-            )
-            .select(
-                F.when(
-                    F.col("delta") > 0,
-                    SlopePositiveEvent().struct_from_observation(
-                        tail_id=F.col("tail_id"),
-                        flight_id=F.col("flight_id"),
-                        timestamp_utc=F.col("timestamp_utc"),
-                        parameter_name=F.col("parameter_name"),
-                        delta=F.col("delta"),
-                        delta_raw=F.col("delta_raw"),
-                        value=F.col("val"),
-                        slope_source=slope_mode,
-                        date_utc=F.col("date_utc"),
-                        win_id=F.lit(None).cast("long"),
-                    ),
-                )
-                .otherwise(
-                    SlopeNegativeEvent().struct_from_observation(
-                        tail_id=F.col("tail_id"),
-                        flight_id=F.col("flight_id"),
-                        timestamp_utc=F.col("timestamp_utc"),
-                        parameter_name=F.col("parameter_name"),
-                        delta=F.col("delta"),
-                        delta_raw=F.col("delta_raw"),
-                        value=F.col("val"),
-                        slope_source=slope_mode,
-                        date_utc=F.col("date_utc"),
-                        win_id=F.lit(None).cast("long"),
-                    ),
-                )
-                .alias("event"),
-            )
-            .select("event.*")
-        )
         stateful_rows = self._build_stateful_events(feature_df)
-        event_frames: list["DataFrame"] = [threshold_rows, slope_rows, stateful_rows]
+        event_frames: list["DataFrame"] = [threshold_rows, stateful_rows]
         events_df = event_frames[0]
         for frame in event_frames[1:]:
             events_df = events_df.unionByName(frame, allowMissingColumns=False)

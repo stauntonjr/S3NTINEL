@@ -234,6 +234,9 @@ def build_events_table(
     delta_threshold: float = 0.0,
     slope_source: str = "ema",
     ema_alpha: float = 0.2,
+    slope_abs_threshold: float = 1.0,
+    slope_min_persistence_samples: int = 2,
+    slope_reemit_ratio: float = 1.5,
 ) -> "DataFrame":
     """Stage adapter for the canonical Spark event detector plan."""
     return EventDetectionPlan(
@@ -242,6 +245,9 @@ def build_events_table(
                 delta_threshold=float(delta_threshold),
                 slope_source=str(slope_source),
                 ema_alpha=float(ema_alpha),
+                slope_abs_threshold=float(slope_abs_threshold),
+                slope_min_persistence_samples=int(slope_min_persistence_samples),
+                slope_reemit_ratio=float(slope_reemit_ratio),
             ),
         )
     ).build(raw_df, datatype_profile_df=datatype_profile_df).events_df

@@ -1,6 +1,7 @@
 # File: libs/events/__init__.py
 """Event extraction package."""
 
+from libs.events.calibration import ContinuousEventCalibrationSpec, build_continuous_event_calibration_report_spark
 from libs.events.pipeline import (
     CategoricalEventDetector,
     ContinuousEventDetector,
@@ -58,6 +59,8 @@ __all__ = [
     "EventDetectionPlan",
     "EventArtifactSet",
     "build_events_table",
+    "ContinuousEventCalibrationSpec",
+    "build_continuous_event_calibration_report_spark",
     "build_event_validation_summary",
     "simulator_label_events",
     "iter_event_validation_snapshots",

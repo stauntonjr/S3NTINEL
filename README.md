@@ -194,18 +194,25 @@ Run with:
 
 - `20_events_extract` continuous event typing:
 	- `S3NTINEL_EVENT_DELTA_THRESHOLD` controls `threshold` event emission.
-	- When `S3NTINEL_EVENT_DELTA_THRESHOLD <= 0`, `threshold` events are disabled and continuous deltas emit only `slope_pos|slope_neg` (plus first-sample null suppression).
+	- `S3NTINEL_EVENT_SLOPE_ABS_THRESHOLD` controls the minimum signed delta magnitude required for slope-run detection.
+	- `S3NTINEL_EVENT_SLOPE_MIN_PERSISTENCE_SAMPLES` controls how many consecutive above-threshold samples a slope run must persist before the first `slope_pos|slope_neg` event emits.
+	- `S3NTINEL_EVENT_SLOPE_REEMIT_RATIO` controls how much stronger a continuing run must become before another `slope_pos|slope_neg` event emits.
+	- When `S3NTINEL_EVENT_DELTA_THRESHOLD <= 0`, `threshold` events are disabled; continuous runs still emit `slope_pos|slope_neg`, but the slope channel is run-based rather than per-sample.
 
 - `25_window_policy_profile` writes:
     - `S3NTINEL_WINDOW_POLICY_PROFILE_TABLE_PATH` (default `data/delta/window_policy_profile`)
     - the artifact contains candidate `max_ms` / `event_threshold` policies ranked from the detected event stream
     - stage `30` consumes the row where `is_selected=true` when the profile artifact is present
+    - the stage also writes `reports/stages/25_window_policy_profile_evaluation.json`, a bounded evaluation report covering candidate frontier, closure mix, downstream cost proxies, and flight-subset stability for the selected policy
 - `40_backbone_fit` reads normalized telemetry and adaptive windows and writes backbone artifacts:
 	- `S3NTINEL_BACKBONE_TABLE_PATH` (default `data/delta/backbone`)
 	- `S3NTINEL_BACKBONE_SENSOR_ENERGY_TABLE_PATH` (default `data/delta/backbone_sensor_energy`)
 	- key controls:
 		- `S3NTINEL_BACKBONE_SENSOR_COUNT`
 		- `S3NTINEL_BACKBONE_RIDGE_LAMBDA`
+		- `S3NTINEL_BACKBONE_EVENT_PRIOR_ALPHA`
+	- `window_features.continuous_vector_t_end(_scaled)` now always comes from raw telemetry ZOH at `t_end`
+	- run-based continuous events enter backbone only through `window_features.continuous_event_summary`, which affects sensor ranking but not the final ridge solve
 - `50_build_graph` writes:
 		- `S3NTINEL_PRECISION_GRAPH_TABLE_PATH`
 		- `S3NTINEL_EVENT_GRAPH_TABLE_PATH`
@@ -280,6 +287,8 @@ Run with:
 - `pipelines/99_run_full_pipeline.py` creates a parent run; each stage appears as a nested child run.
 - Wall-time metrics are logged to both logger output and active MLflow runs.
 - Parent run summary is logged as `reports/pipeline_run_summary.json` with per-stage status and elapsed time.
+- Full simulation reports are written as `reports/full_run_report.json` and `reports/full_run_report.md`.
+- The full run report now includes a compact `window_policy_profile` section sourced from `reports/stages/25_window_policy_profile_evaluation.json` when that stage ran.
 - Use helpers in `libs.perf.mlflow` for additional tracking:
 	- `log_params_if_active(...)`
 	- `log_metric_if_active(...)`

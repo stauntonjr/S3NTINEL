@@ -27,6 +27,7 @@ def test_build_continuous_events_slope_source_raw_emits_noisy_slopes(spark):
     cfg = ContinuousDetectorConfig(
         slope_source="raw",
         slope_abs_threshold=5.0,
+        slope_min_persistence_samples=1,
         residual_z_threshold=1e9,
         switch_z_threshold=1e9,
         switch_delta_z_threshold=1e9,
@@ -44,6 +45,7 @@ def test_build_continuous_events_slope_source_ema_suppresses_noisy_slopes(spark)
         slope_source="ema",
         ema_alpha=0.2,
         slope_abs_threshold=5.0,
+        slope_min_persistence_samples=1,
         residual_z_threshold=1e9,
         switch_z_threshold=1e9,
         switch_delta_z_threshold=1e9,
@@ -53,6 +55,74 @@ def test_build_continuous_events_slope_source_ema_suppresses_noisy_slopes(spark)
     events_df = build_continuous_events(raw_df, config=cfg)
     slope_event_count = events_df.where("event_type_detected in ('slope_pos', 'slope_neg')").count()
     assert slope_event_count == 0
+
+
+def test_build_continuous_events_default_persistence_suppresses_one_step_slope_chatter(spark):
+    raw_df = spark.createDataFrame(_build_numeric_rows([0.0, 10.0, 0.0, 10.0, 0.0]))
+    cfg = ContinuousDetectorConfig(
+        slope_source="raw",
+        slope_abs_threshold=5.0,
+        residual_z_threshold=1e9,
+        switch_z_threshold=1e9,
+        switch_delta_z_threshold=1e9,
+        switch_min_abs_delta=1e9,
+        warmup_points=1,
+    )
+
+    events_df = build_continuous_events(raw_df, config=cfg)
+    slope_event_count = events_df.where("event_type_detected in ('slope_pos', 'slope_neg')").count()
+
+    assert slope_event_count == 0
+
+
+def test_build_continuous_events_emits_one_slope_for_persistent_run(spark):
+    raw_df = spark.createDataFrame(_build_numeric_rows([0.0, 10.0, 20.0, 30.0, 40.0]))
+    cfg = ContinuousDetectorConfig(
+        slope_source="raw",
+        slope_abs_threshold=5.0,
+        slope_min_persistence_samples=2,
+        slope_reemit_ratio=10.0,
+        residual_z_threshold=1e9,
+        switch_z_threshold=1e9,
+        switch_delta_z_threshold=1e9,
+        switch_min_abs_delta=1e9,
+        warmup_points=1,
+    )
+
+    slope_events = (
+        build_continuous_events(raw_df, config=cfg)
+        .where("event_type_detected in ('slope_pos', 'slope_neg')")
+        .select("event_type_detected")
+        .collect()
+    )
+
+    assert [str(row["event_type_detected"]) for row in slope_events] == ["slope_pos"]
+
+
+def test_build_continuous_events_reemits_when_run_strengthens(spark):
+    raw_df = spark.createDataFrame(_build_numeric_rows([0.0, 10.0, 20.0, 50.0, 90.0]))
+    cfg = ContinuousDetectorConfig(
+        slope_source="raw",
+        slope_abs_threshold=5.0,
+        slope_min_persistence_samples=2,
+        slope_reemit_ratio=1.5,
+        residual_z_threshold=1e9,
+        switch_z_threshold=1e9,
+        switch_delta_z_threshold=1e9,
+        switch_min_abs_delta=1e9,
+        warmup_points=1,
+    )
+
+    slope_events = (
+        build_continuous_events(raw_df, config=cfg)
+        .where("event_type_detected in ('slope_pos', 'slope_neg')")
+        .select("payload")
+        .collect()
+    )
+
+    assert len(slope_events) == 2
+    assert slope_events[0]["payload"]["emission_reason"] == "run_start"
+    assert slope_events[1]["payload"]["emission_reason"] == "run_strengthen"
 
 
 def test_build_continuous_events_emits_switch_from_segmented_source(spark):

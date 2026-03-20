@@ -194,20 +194,33 @@ class SlopePositiveEvent(ContinuousEvent):
         delta_raw: "Column",
         value: "Column",
         slope_source: "Column | object",
+        effective_threshold: "Column | object | None" = None,
+        run_length: "Column | object | None" = None,
+        run_peak_delta: "Column | object | None" = None,
+        emission_reason: "Column | object | None" = None,
         date_utc: "Column",
         win_id: "Column | None" = None,
     ) -> "Column":
+        payload_fields: dict[str, "Column | object"] = {
+            "delta": delta,
+            "delta_raw": delta_raw,
+            "value": value,
+            "slope_source": slope_source,
+        }
+        if effective_threshold is not None:
+            payload_fields["effective_threshold"] = effective_threshold
+        if run_length is not None:
+            payload_fields["run_length"] = run_length
+        if run_peak_delta is not None:
+            payload_fields["run_peak_delta"] = run_peak_delta
+        if emission_reason is not None:
+            payload_fields["emission_reason"] = emission_reason
         return self.struct(
             tail_id=tail_id,
             flight_id=flight_id,
             timestamp_utc=timestamp_utc,
             parameter_name=parameter_name,
-            payload=self.payload_map(
-                delta=delta,
-                delta_raw=delta_raw,
-                value=value,
-                slope_source=slope_source,
-            ),
+            payload=self.payload_map(**payload_fields),
             date_utc=date_utc,
             win_id=win_id,
         )
@@ -228,20 +241,33 @@ class SlopeNegativeEvent(ContinuousEvent):
         delta_raw: "Column",
         value: "Column",
         slope_source: "Column | object",
+        effective_threshold: "Column | object | None" = None,
+        run_length: "Column | object | None" = None,
+        run_peak_delta: "Column | object | None" = None,
+        emission_reason: "Column | object | None" = None,
         date_utc: "Column",
         win_id: "Column | None" = None,
     ) -> "Column":
+        payload_fields: dict[str, "Column | object"] = {
+            "delta": delta,
+            "delta_raw": delta_raw,
+            "value": value,
+            "slope_source": slope_source,
+        }
+        if effective_threshold is not None:
+            payload_fields["effective_threshold"] = effective_threshold
+        if run_length is not None:
+            payload_fields["run_length"] = run_length
+        if run_peak_delta is not None:
+            payload_fields["run_peak_delta"] = run_peak_delta
+        if emission_reason is not None:
+            payload_fields["emission_reason"] = emission_reason
         return self.struct(
             tail_id=tail_id,
             flight_id=flight_id,
             timestamp_utc=timestamp_utc,
             parameter_name=parameter_name,
-            payload=self.payload_map(
-                delta=delta,
-                delta_raw=delta_raw,
-                value=value,
-                slope_source=slope_source,
-            ),
+            payload=self.payload_map(**payload_fields),
             date_utc=date_utc,
             win_id=win_id,
         )

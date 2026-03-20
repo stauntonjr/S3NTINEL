@@ -150,6 +150,76 @@ def build_profile_validation_summary(
     parameter_datatype_profile_df: pd.DataFrame,
     parameter_behavior_profile_df: pd.DataFrame,
 ) -> dict[str, Any]:
+    def _first_nonempty_string(values: pd.Series) -> str:
+        for value in values:
+            if pd.notna(value):
+                text = str(value).strip()
+                if text:
+                    return text
+        return ""
+
+    def _build_match_details(
+        *,
+        merged_df: pd.DataFrame,
+        label_column: str,
+        predicted_column: str,
+        confidence_column: str | None = None,
+        extra_columns: tuple[str, ...] = (),
+        mismatch_limit: int = 25,
+    ) -> dict[str, Any]:
+        working = merged_df.copy()
+        working[label_column] = working.get(label_column, "").fillna("").astype(str)
+        working[predicted_column] = working.get(predicted_column, "").fillna("").astype(str)
+        match_mask = working[label_column] == working[predicted_column]
+
+        confusion = (
+            working.groupby([label_column, predicted_column], dropna=False)
+            .size()
+            .reset_index(name="count")
+            .sort_values(["count", label_column, predicted_column], ascending=[False, True, True], kind="stable")
+        )
+        errors_by_label = (
+            working.loc[~match_mask]
+            .groupby(label_column, dropna=False)
+            .size()
+            .reset_index(name="error_count")
+            .sort_values(["error_count", label_column], ascending=[False, True], kind="stable")
+        )
+        prediction_counts = (
+            working.groupby(predicted_column, dropna=False)
+            .size()
+            .reset_index(name="count")
+            .sort_values(["count", predicted_column], ascending=[False, True], kind="stable")
+        )
+
+        details: dict[str, Any] = {
+            "confusion_matrix": confusion.to_dict(orient="records"),
+            "errors_by_label": errors_by_label.to_dict(orient="records"),
+            "prediction_counts": prediction_counts.to_dict(orient="records"),
+            "mismatch_examples": (
+                working.loc[~match_mask, ["parameter_name", *extra_columns, label_column, predicted_column]]
+                .sort_values(["parameter_name"], kind="stable")
+                .head(mismatch_limit)
+                .to_dict(orient="records")
+            ),
+        }
+        if confidence_column is not None and confidence_column in working.columns:
+            confidence_summary = (
+                working.groupby(predicted_column, dropna=False)[confidence_column]
+                .mean()
+                .reset_index(name="mean_confidence")
+                .sort_values(["mean_confidence", predicted_column], ascending=[False, True], kind="stable")
+            )
+            mismatch_with_confidence = (
+                working.loc[~match_mask, ["parameter_name", *extra_columns, label_column, predicted_column, confidence_column]]
+                .sort_values(["parameter_name"], kind="stable")
+                .head(mismatch_limit)
+                .to_dict(orient="records")
+            )
+            details["confidence_by_predicted_family"] = confidence_summary.to_dict(orient="records")
+            details["mismatch_examples"] = mismatch_with_confidence
+        return details
+
     if raw_telemetry_df is None or raw_telemetry_df.empty:
         return {
             "status": "ok",
@@ -158,6 +228,19 @@ def build_profile_validation_summary(
             "datatype_profiled_parameter_count": 0,
             "behavior_labeled_parameter_count": 0,
             "behavior_profiled_parameter_count": 0,
+            "datatype_details": {
+                "confusion_matrix": [],
+                "errors_by_label": [],
+                "prediction_counts": [],
+                "mismatch_examples": [],
+            },
+            "behavior_details": {
+                "confusion_matrix": [],
+                "errors_by_label": [],
+                "prediction_counts": [],
+                "confidence_by_predicted_family": [],
+                "mismatch_examples": [],
+            },
         }
 
     raw_df = raw_telemetry_df.copy()
@@ -167,22 +250,38 @@ def build_profile_validation_summary(
     label_df = (
         raw_df.groupby("parameter_name", dropna=False)
         .agg(
-            parameter_datatype_label=("parameter_datatype_label", lambda values: next((value for value in values if value), "")),
-            behavior_family_label=("behavior_family_label", lambda values: next((value for value in values if value), "")),
+            parameter_datatype_label=("parameter_datatype_label", _first_nonempty_string),
+            behavior_family_label=("behavior_family_label", _first_nonempty_string),
+            system_id=("system_id", _first_nonempty_string),
+            subsystem_id=("subsystem_id", _first_nonempty_string),
+            module_id=("module_id", _first_nonempty_string),
         )
         .reset_index()
     )
 
+    if parameter_datatype_profile_df is not None and not parameter_datatype_profile_df.empty:
+        datatype_profile_df = parameter_datatype_profile_df[
+            ["parameter_name", "parameter_datatype_profiled", "sampling_rate_profiled_hz"]
+        ]
+    else:
+        datatype_profile_df = pd.DataFrame(
+            columns=["parameter_name", "parameter_datatype_profiled", "sampling_rate_profiled_hz"]
+        )
+    if parameter_behavior_profile_df is not None and not parameter_behavior_profile_df.empty:
+        behavior_profile_df = parameter_behavior_profile_df[
+            ["parameter_name", "behavior_family_profiled", "behavior_profile_confidence"]
+        ]
+    else:
+        behavior_profile_df = pd.DataFrame(
+            columns=["parameter_name", "behavior_family_profiled", "behavior_profile_confidence"]
+        )
+
     merged = label_df.merge(
-        parameter_datatype_profile_df[["parameter_name", "parameter_datatype_profiled"]]
-        if parameter_datatype_profile_df is not None and not parameter_datatype_profile_df.empty
-        else pd.DataFrame(columns=["parameter_name", "parameter_datatype_profiled"]),
+        datatype_profile_df,
         on="parameter_name",
         how="left",
     ).merge(
-        parameter_behavior_profile_df[["parameter_name", "behavior_family_profiled"]]
-        if parameter_behavior_profile_df is not None and not parameter_behavior_profile_df.empty
-        else pd.DataFrame(columns=["parameter_name", "behavior_family_profiled"]),
+        behavior_profile_df,
         on="parameter_name",
         how="left",
     )
@@ -203,6 +302,33 @@ def build_profile_validation_summary(
     behavior_labeled_parameter_count = int(behavior_mask.sum())
     behavior_profiled_parameter_count = int(behavior_profiled_mask.sum())
     behavior_exact_match_count = int(behavior_match_mask.sum())
+
+    datatype_detail_df = merged.loc[
+        datatype_mask | datatype_profiled_mask,
+        [
+            "parameter_name",
+            "system_id",
+            "subsystem_id",
+            "module_id",
+            "parameter_datatype_label",
+            "parameter_datatype_profiled",
+            "sampling_rate_profiled_hz",
+        ],
+    ].copy()
+    behavior_detail_df = merged.loc[
+        behavior_mask | behavior_profiled_mask,
+        [
+            "parameter_name",
+            "system_id",
+            "subsystem_id",
+            "module_id",
+            "parameter_datatype_label",
+            "sampling_rate_profiled_hz",
+            "behavior_family_label",
+            "behavior_family_profiled",
+            "behavior_profile_confidence",
+        ],
+    ].copy()
 
     return {
         "status": "ok",
@@ -234,5 +360,18 @@ def build_profile_validation_summary(
             float(behavior_profiled_parameter_count / behavior_labeled_parameter_count)
             if behavior_labeled_parameter_count > 0
             else None
+        ),
+        "datatype_details": _build_match_details(
+            merged_df=datatype_detail_df,
+            label_column="parameter_datatype_label",
+            predicted_column="parameter_datatype_profiled",
+            extra_columns=("sampling_rate_profiled_hz", "system_id", "subsystem_id", "module_id"),
+        ),
+        "behavior_details": _build_match_details(
+            merged_df=behavior_detail_df,
+            label_column="behavior_family_label",
+            predicted_column="behavior_family_profiled",
+            confidence_column="behavior_profile_confidence",
+            extra_columns=("parameter_datatype_label", "sampling_rate_profiled_hz", "system_id", "subsystem_id", "module_id"),
         ),
     }

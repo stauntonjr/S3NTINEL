@@ -1,8 +1,10 @@
 from datetime import datetime, timedelta, timezone
 
+import pandas as pd
 import pytest
 
 from libs.profiling.validator import (
+    build_profile_validation_summary,
     iter_profile_validation_snapshots,
     profiler_datatype_rows,
     simulator_datatype_label_rows,
@@ -88,3 +90,111 @@ def test_profiler_validator_rejects_legacy_detected_type():
                 [{"tail_id": "T1", "flight_id": "F1", "parameter_name": "S1", "timestamp_utc": _ts(0), "detected_type": "numeric"}]
             )
         )
+
+
+def test_build_profile_validation_summary_emits_confusions_and_mismatches():
+    raw_df = pd.DataFrame(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "timestamp_utc": _ts(0),
+                "parameter_name": "R1",
+                "parameter_datatype_label": "numeric",
+                "behavior_family_label": "regulated",
+                "system_id": "SYS_A",
+                "subsystem_id": "SUB_A",
+                "module_id": "MOD_A",
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "timestamp_utc": _ts(1),
+                "parameter_name": "I1",
+                "parameter_datatype_label": "numeric",
+                "behavior_family_label": "inertial",
+                "system_id": "SYS_A",
+                "subsystem_id": "SUB_B",
+                "module_id": "MOD_B",
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "timestamp_utc": _ts(2),
+                "parameter_name": "D1",
+                "parameter_datatype_label": "binary",
+                "behavior_family_label": "discrete_state",
+                "system_id": "SYS_B",
+                "subsystem_id": "SUB_C",
+                "module_id": "MOD_C",
+            },
+        ]
+    )
+    datatype_profile_df = pd.DataFrame(
+        [
+            {
+                "parameter_name": "R1",
+                "parameter_datatype_profiled": "numeric",
+                "sampling_rate_profiled_hz": 1.0,
+            },
+            {
+                "parameter_name": "I1",
+                "parameter_datatype_profiled": "numeric",
+                "sampling_rate_profiled_hz": 2.0,
+            },
+            {
+                "parameter_name": "D1",
+                "parameter_datatype_profiled": "categorical",
+                "sampling_rate_profiled_hz": 1.0,
+            },
+        ]
+    )
+    behavior_profile_df = pd.DataFrame(
+        [
+            {
+                "parameter_name": "R1",
+                "behavior_family_profiled": "inertial",
+                "behavior_profile_confidence": 0.72,
+            },
+            {
+                "parameter_name": "I1",
+                "behavior_family_profiled": "inertial",
+                "behavior_profile_confidence": 0.91,
+            },
+            {
+                "parameter_name": "D1",
+                "behavior_family_profiled": "discrete_state",
+                "behavior_profile_confidence": 0.88,
+            },
+        ]
+    )
+
+    summary = build_profile_validation_summary(
+        raw_telemetry_df=raw_df,
+        parameter_datatype_profile_df=datatype_profile_df,
+        parameter_behavior_profile_df=behavior_profile_df,
+    )
+
+    assert summary["datatype_accuracy"] == pytest.approx(2 / 3)
+    assert summary["behavior_accuracy"] == pytest.approx(2 / 3)
+    confusion_rows = summary["behavior_details"]["confusion_matrix"]
+    assert {
+        (row["behavior_family_label"], row["behavior_family_profiled"], row["count"])
+        for row in confusion_rows
+    } == {
+        ("regulated", "inertial", 1),
+        ("inertial", "inertial", 1),
+        ("discrete_state", "discrete_state", 1),
+    }
+    assert {"errors_by_label", "prediction_counts", "mismatch_examples", "confidence_by_predicted_family"}.issubset(
+        summary["behavior_details"].keys()
+    )
+    mismatch = summary["behavior_details"]["mismatch_examples"][0]
+    assert mismatch["parameter_name"] == "R1"
+    assert mismatch["behavior_family_label"] == "regulated"
+    assert mismatch["behavior_family_profiled"] == "inertial"
+    assert mismatch["behavior_profile_confidence"] == pytest.approx(0.72)
+    dtype_mismatch = summary["datatype_details"]["mismatch_examples"][0]
+    assert dtype_mismatch["parameter_name"] == "D1"
+    assert dtype_mismatch["parameter_datatype_label"] == "binary"
+    assert dtype_mismatch["parameter_datatype_profiled"] == "categorical"

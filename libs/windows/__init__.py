@@ -11,11 +11,14 @@ from libs.windows.pipeline import (
     AdaptiveWindowSegmentState,
     AdaptiveWindowTransition,
     OpenWindowState,
+    build_window_profile_rows_table,
     build_windows_table,
 )
 from libs.windows.policy_profile import (
+    WindowPolicyEvaluationSpec,
     WindowPolicyProfile,
     WindowPolicyProfileSpec,
+    build_window_policy_profile_evaluation_report_spark,
     build_window_policy_profile_table,
 )
 from libs.windows.features import (
@@ -29,6 +32,8 @@ from libs.windows.features import (
 __all__ = [
     "build_window_features_spark_table",
     "build_window_features_with_diagnostics_spark_table",
+    "build_window_policy_profile_evaluation_report_spark",
+    "build_window_profile_rows_table",
     "build_windows_table",
     "build_window_policy_profile_table",
     "AdaptiveWindowPolicy",
@@ -44,6 +49,7 @@ __all__ = [
     "WindowPolicy",
     "Window",
     "WindowCoverageSampler",
+    "WindowPolicyEvaluationSpec",
     "WindowPolicyProfile",
     "WindowPolicyProfileSpec",
 ]

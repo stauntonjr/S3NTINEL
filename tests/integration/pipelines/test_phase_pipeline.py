@@ -116,7 +116,14 @@ def test_build_window_features_spark_table_builds_expected_window_vectors(spark)
     window_features_df = _build_window_features_pdf(raw_df, events_df, windows_df)
 
     assert not window_features_df.empty
-    assert {"tail_id", "flight_id", "win_id", "continuous_vector_t_end", "categorical_state_t_end"}.issubset(window_features_df.columns)
+    assert {
+        "tail_id",
+        "flight_id",
+        "win_id",
+        "continuous_event_summary",
+        "continuous_vector_t_end",
+        "categorical_state_t_end",
+    }.issubset(window_features_df.columns)
 
 
 def test_build_window_features_with_diagnostics_spark_table_reports_step_details(spark):

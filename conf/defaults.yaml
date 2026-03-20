@@ -19,11 +19,15 @@ events:
   delta_threshold: 0.0
   slope_source: ema
   ema_alpha: 0.2
+  slope_abs_threshold: 1.0
+  slope_min_persistence_samples: 2
+  slope_reemit_ratio: 1.5
 
 backbone:
   sensor_count: 8
   ridge_lambda: 1.0
   max_sensor_universe: 50000
+  event_prior_alpha: 0.35
 
 cur:
   pivots_k: 300

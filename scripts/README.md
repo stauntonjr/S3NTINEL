@@ -75,6 +75,14 @@ Incremental patches:
     - `S3NTINEL_WINDOW_SEGMENT_MAX_SPAN_MS`
     - `S3NTINEL_PHASE_SEGMENT_MAX_ROWS`
     - `S3NTINEL_PHASE_SEGMENT_MAX_SPAN_MS`
+- Run the bounded pre-harness continuous-event calibration pass against the current raw/profile artifacts:
+  - `python -m scripts.calibrate_continuous_events`
+  - optional bounded grid overrides:
+    - `--slope-sources ema,raw`
+    - `--ema-alphas 0.2,0.35,0.5`
+    - `--slope-abs-thresholds 0.0,0.5,1.0`
+  - writes:
+    - `reports/continuous_event_calibration.json`
 
 ## Developer Utilities
 

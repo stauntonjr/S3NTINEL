@@ -638,6 +638,72 @@ def build_windows_table(
     ).build(events_df).windows_df
 
 
+@hot_path
+def build_window_profile_rows_table(
+    events_df: "DataFrame",
+    *,
+    max_ms: int,
+    event_threshold: int,
+    min_ms: int,
+    inactivity_timeout_ms: int = 0,
+    strategy: str = "segmented",
+) -> "DataFrame":
+    from pyspark.sql import functions as F
+
+    resolved_strategy = str(strategy).strip().lower()
+    if resolved_strategy != "segmented":
+        raise ValueError(
+            "build_window_profile_rows_table supports only the canonical Spark strategy: segmented"
+        )
+    plan = AdaptiveWindowPlan(
+        policy=AdaptiveWindowPolicy(
+            max_ms=int(max_ms),
+            event_threshold=int(event_threshold),
+            min_ms=int(min_ms),
+            inactivity_timeout_ms=int(inactivity_timeout_ms),
+        )
+    )
+    sequence_frame = plan._build_segment_frame(events_df)
+    assignment_events_df = plan._build_assignment_events(events_df)
+    window_summaries_df = plan._build_window_summaries(sequence_frame=sequence_frame)
+    duration_ms_col = plan.policy.to_window_policy().duration_ms_expr(t_start=F.col("t_start"), t_end=F.col("t_end"))
+    base_windows_df = window_summaries_df.select(
+        "tail_id",
+        "flight_id",
+        "win_id",
+        F.greatest(duration_ms_col, F.lit(int(plan.policy.min_ms))).cast("int").alias("duration_ms"),
+        F.col("event_count").cast("int").alias("event_count"),
+        F.col("close_reason").cast("string").alias("close_reason"),
+        "start_event_seq_id",
+        "end_event_seq_id",
+        "date_utc",
+    )
+    assignments_df = plan._build_assignments(
+        event_rows_df=assignment_events_df,
+        window_summaries_df=window_summaries_df,
+    )
+    profile_counts_df = assignments_df.groupBy("tail_id", "flight_id", "win_id").agg(
+        F.countDistinct("parameter_name").cast("int").alias("sensor_count"),
+        F.countDistinct("event_type_detected").cast("int").alias("event_type_count"),
+    )
+    return (
+        base_windows_df.join(profile_counts_df, on=["tail_id", "flight_id", "win_id"], how="left")
+        .select(
+            "tail_id",
+            "flight_id",
+            "win_id",
+            "duration_ms",
+            "event_count",
+            F.coalesce(F.col("sensor_count"), F.lit(0).cast("int")).alias("sensor_count"),
+            F.coalesce(F.col("event_type_count"), F.lit(0).cast("int")).alias("event_type_count"),
+            "close_reason",
+            "start_event_seq_id",
+            "end_event_seq_id",
+            "date_utc",
+        )
+    )
+
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:

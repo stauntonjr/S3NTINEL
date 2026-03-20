@@ -122,6 +122,9 @@ class EventSettings:
     delta_threshold: float
     slope_source: str
     ema_alpha: float
+    slope_abs_threshold: float
+    slope_min_persistence_samples: int
+    slope_reemit_ratio: float
 
 
 @dataclass(frozen=True)
@@ -139,6 +142,7 @@ class BackboneSettings:
     sensor_count: int
     ridge_lambda: float
     max_sensor_universe: int
+    event_prior_alpha: float
 
 
 @dataclass(frozen=True)
@@ -324,6 +328,18 @@ def load_pipeline_context_settings(config: dict[str, Any]) -> PipelineContextSet
                 "S3NTINEL_EVENT_EMA_ALPHA",
                 _config_float(config, ["events", "ema_alpha"], 0.2),
             ),
+            slope_abs_threshold=_env_float(
+                "S3NTINEL_EVENT_SLOPE_ABS_THRESHOLD",
+                _config_float(config, ["events", "slope_abs_threshold"], 1.0),
+            ),
+            slope_min_persistence_samples=_env_int(
+                "S3NTINEL_EVENT_SLOPE_MIN_PERSISTENCE_SAMPLES",
+                _config_int(config, ["events", "slope_min_persistence_samples"], 2),
+            ),
+            slope_reemit_ratio=_env_float(
+                "S3NTINEL_EVENT_SLOPE_REEMIT_RATIO",
+                _config_float(config, ["events", "slope_reemit_ratio"], 1.5),
+            ),
         ),
         windowing=WindowingSettings(
             min_sampling_rate_hz=_config_float(config, ["windowing", "min_sampling_rate_hz"], 1.0),
@@ -354,6 +370,10 @@ def load_pipeline_context_settings(config: dict[str, Any]) -> PipelineContextSet
             max_sensor_universe=_env_int(
                 "S3NTINEL_MAX_BACKBONE_SENSOR_UNIVERSE",
                 _config_int(config, ["backbone", "max_sensor_universe"], 50000),
+            ),
+            event_prior_alpha=_env_float(
+                "S3NTINEL_BACKBONE_EVENT_PRIOR_ALPHA",
+                _config_float(config, ["backbone", "event_prior_alpha"], 0.35),
             ),
         ),
         graph=GraphSettings(

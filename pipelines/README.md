@@ -59,6 +59,7 @@ The stage model is:
 - ingest canonical raw telemetry
 - infer events
 - fit a reusable window policy profile
+- evaluate the selected window policy and persist a stage-local report
 - materialize adaptive windows
 - fit reusable structural artifacts
 - fit phase structure
@@ -81,9 +82,12 @@ Every stage should emit:
 
 Grouped runs should emit:
 - `reports/pipeline_run_summary.json`
+- `reports/full_run_report.json` and `reports/full_run_report.md`
 - per-stage manifests under `reports/stages/`
 - MLflow metrics where configured
 - wall-time logs
+
+When stage `25_window_policy_profile.py` runs, grouped/full reports should also surface the compact selected-policy summary derived from `reports/stages/25_window_policy_profile_evaluation.json`.
 
 ## Math / Methods
 

@@ -14,7 +14,12 @@ from libs.perf import (
     log_wall_time,
     track_mlflow_run,
 )
-from libs.windows import WindowPolicyProfileSpec, build_window_policy_profile_table
+from libs.windows import (
+    WindowPolicyEvaluationSpec,
+    WindowPolicyProfileSpec,
+    build_window_policy_profile_evaluation_report_spark,
+    build_window_policy_profile_table,
+)
 from libs.windows.window import DEFAULT_MIN_SAMPLING_RATE_HZ, WindowPolicy
 from pipelines.common import build_context, context_artifacts, context_execution, context_settings
 
@@ -34,26 +39,36 @@ def run() -> None:
     output_path = artifacts.window_policy_profile
     table_format = execution.table_format
     write_mode = execution.fit_write_mode
+    evaluation_report_path = "reports/stages/25_window_policy_profile_evaluation.json"
 
     min_sampling_rate_hz = float(settings.windowing.min_sampling_rate_hz or DEFAULT_MIN_SAMPLING_RATE_HZ)
     configured_max_ms = int(settings.windowing.max_ms)
     derived_max_ms = WindowPolicy.max_ms_from_min_sampling_rate(min_sampling_rate_hz)
     resolved_max_ms = int(configured_max_ms if configured_max_ms > 0 else derived_max_ms)
+    profile_spec = WindowPolicyProfileSpec(
+        min_sampling_rate_hz=min_sampling_rate_hz,
+        configured_max_ms=resolved_max_ms,
+        configured_event_threshold=int(settings.windowing.event_threshold),
+        min_ms=int(settings.windowing.min_ms),
+        inactivity_timeout_ms=int(settings.windowing.inactivity_timeout_ms),
+        strategy=str(settings.windowing.strategy),
+    )
 
     spark = get_spark("s3ntinel.window_policy_profile")
     events_df = read_table(spark, events_path, fmt=table_format)
     profile_df = build_window_policy_profile_table(
         events_df,
-        spec=WindowPolicyProfileSpec(
-            min_sampling_rate_hz=min_sampling_rate_hz,
-            configured_max_ms=resolved_max_ms,
-            configured_event_threshold=int(settings.windowing.event_threshold),
-            min_ms=int(settings.windowing.min_ms),
-            inactivity_timeout_ms=int(settings.windowing.inactivity_timeout_ms),
-            strategy=str(settings.windowing.strategy),
-        ),
+        spec=profile_spec,
     )
     write_table(profile_df, path=output_path, mode=write_mode, fmt=table_format)
+    evaluation_report = build_window_policy_profile_evaluation_report_spark(
+        events_df,
+        profile_df=profile_df,
+        profile_spec=profile_spec,
+        evaluation_spec=WindowPolicyEvaluationSpec(
+            max_stability_flights=int(profile_spec.max_profile_flights),
+        ),
+    )
 
     events_count = int(events_df.count())
     profile_count = int(profile_df.count())
@@ -80,8 +95,19 @@ def run() -> None:
             "events_count": events_count,
             "candidate_count": profile_count,
             "selected_policy": selected_payload,
+            "window_policy_profile_evaluation_path": evaluation_report_path,
+            "selected_max_ms": selected_payload.get("max_ms"),
+            "selected_event_threshold": selected_payload.get("event_threshold"),
+            "selected_candidate_rank": selected_payload.get("candidate_rank"),
+            "selected_objective_score": selected_payload.get("objective_score"),
+            "selected_balance_penalty": selected_payload.get("balance_penalty"),
+            "evaluation_status": evaluation_report.get("status"),
         },
         "reports/stages/25_window_policy_profile_summary.json",
+    )
+    log_dict_artifact_if_active(
+        evaluation_report,
+        evaluation_report_path,
     )
     stage_manifest = build_stage_manifest(
         stage_name="25_window_policy_profile",
@@ -106,6 +132,11 @@ def run() -> None:
             ),
         },
         replayable_from=["events"],
+        cache_artifacts={
+            "window_policy_profile_cache": {
+                "window_policy_profile_evaluation_path": evaluation_report_path,
+            }
+        },
     )
     log_stage_manifest_if_active(stage_manifest, "reports/stages/25_window_policy_profile_manifest.json")
     LOGGER.info(

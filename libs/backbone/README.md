@@ -21,7 +21,7 @@ Those belong to `libs/windows`, `libs/graph`, and `libs/phase`.
 - `artifacts.py`
   - backbone nouns and fitting results
 - `energy.py`
-  - sensor energy calculations
+  - sensor energy calculations and event-aware selection scoring
 - `fit.py`
   - lower-level fitting helpers
 - `pipeline.py`
@@ -44,7 +44,11 @@ Persisted outputs are defined in `libs/io/schemas/backbone.py`:
 
 ## Math / Methods
 
-The backbone is a reconstruction-oriented continuous model over scaled end-of-window feature vectors. Sensor energy summarizes how strongly each parameter participates in the fitted structure.
+The backbone is a reconstruction-oriented continuous model over scaled end-of-window feature vectors. Sensor selection now combines:
+- continuous energy from `continuous_vector_t_end_scaled`
+- an additive event-derived prior from `window_features.continuous_event_summary`
+
+The event-derived prior influences sensor ranking only. It does not enter the `G/H` aggregates or the ridge solve directly.
 
 ## Subject Matter View
 

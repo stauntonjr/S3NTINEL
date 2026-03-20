@@ -248,10 +248,15 @@ class WindowFeaturesPlan:
     def _build_events_in_windows(self, *, base_windows_df: "DataFrame", events_df: "DataFrame") -> "DataFrame":
         from pyspark.sql import functions as F
 
-        event_value_expr = (
-            F.expr("try_cast(element_at(payload, 'value') as double)")
+        run_peak_delta_expr = (
+            F.expr("try_cast(element_at(payload, 'run_peak_delta') as double)")
             if "payload" in events_df.columns
             else F.lit(None).cast("double")
+        )
+        emission_reason_col = (
+            F.element_at("payload", F.lit("emission_reason")).cast("string")
+            if "payload" in events_df.columns
+            else F.lit(None).cast("string")
         )
         event_type_col = (
             F.col("event_type_detected").cast("string")
@@ -263,12 +268,10 @@ class WindowFeaturesPlan:
             F.col("w.flight_id").alias("flight_id"),
             F.col("w.win_id").alias("win_id"),
             F.col("e.parameter_name").cast("string").alias("parameter_name"),
-            F.col("e.timestamp_utc").cast("timestamp").alias("timestamp_utc"),
             event_type_col.alias("event_type_detected"),
-            event_value_expr.alias("value_num"),
+            run_peak_delta_expr.alias("run_peak_delta"),
+            emission_reason_col.alias("emission_reason"),
         ]
-        if "event_seq_id" in events_df.columns:
-            selected_columns.append(F.col("e.event_seq_id").cast("long").alias("event_seq_id"))
         return (
             base_windows_df.alias("w")
             .join(
@@ -282,49 +285,32 @@ class WindowFeaturesPlan:
                 how="left",
             )
             .select(*selected_columns)
-            .where(F.col("parameter_name").isNotNull() & F.col("timestamp_utc").isNotNull())
+            .where(F.col("parameter_name").isNotNull())
+        )
+
+    @staticmethod
+    def _empty_continuous_event_summary():
+        from pyspark.sql import functions as F
+
+        return F.struct(
+            empty_map("string", "int").alias("slope_run_count_by_parameter"),
+            empty_map("string", "int").alias("slope_reinforcement_count_by_parameter"),
+            empty_map("string", "double").alias("slope_signed_impulse_by_parameter"),
+            empty_map("string", "double").alias("slope_abs_impulse_by_parameter"),
+            empty_map("string", "double").alias("slope_peak_abs_delta_by_parameter"),
+            empty_map("string", "int").alias("switch_count_by_parameter"),
+            empty_map("string", "int").alias("threshold_count_by_parameter"),
+            empty_map("string", "int").alias("oscillation_count_by_parameter"),
+            empty_map("string", "int").alias("drift_guard_count_by_parameter"),
         )
 
     def _build_event_feature_frames(
         self,
         *,
         events_in_windows_df: "DataFrame",
-        scaler_df: "DataFrame",
-    ) -> tuple["DataFrame", "DataFrame", "DataFrame"]:
+    ) -> tuple["DataFrame", "DataFrame"]:
         from pyspark.sql import functions as F
-        from pyspark.sql.window import Window
 
-        latest_event_order_columns = [F.col("timestamp_utc").desc()]
-        if "event_seq_id" in events_in_windows_df.columns:
-            latest_event_order_columns.append(F.col("event_seq_id").desc())
-        latest_event_order_columns.append(F.col("event_type_detected").desc())
-        latest_event_window = Window.partitionBy("tail_id", "flight_id", "win_id", "parameter_name").orderBy(
-            *latest_event_order_columns,
-        )
-        event_numeric_latest = (
-            events_in_windows_df.where(F.col("value_num").isNotNull())
-            .withColumn("rn", F.row_number().over(latest_event_window))
-            .where(F.col("rn") == 1)
-            .drop("rn")
-        )
-        continuous_event_df = (
-            event_numeric_latest.groupBy("tail_id", "flight_id", "win_id")
-            .agg(
-                F.map_from_entries(
-                    F.collect_list(F.struct(F.col("parameter_name"), F.col("value_num").cast("double")))
-                ).alias("event_continuous_vector_t_end")
-            )
-        )
-        continuous_event_scaled_df = (
-            event_numeric_latest.join(scaler_df, on="parameter_name", how="left")
-            .withColumn("scaled_value", (F.col("value_num") - F.col("median")) / F.col("iqr"))
-            .groupBy("tail_id", "flight_id", "win_id")
-            .agg(
-                F.map_from_entries(
-                    F.collect_list(F.struct(F.col("parameter_name"), F.col("scaled_value").cast("double")))
-                ).alias("event_continuous_vector_t_end_scaled")
-            )
-        )
         event_type_counts_df = (
             events_in_windows_df.where(F.col("event_type_detected").isNotNull())
             .groupBy("tail_id", "flight_id", "win_id", "event_type_detected")
@@ -336,7 +322,117 @@ class WindowFeaturesPlan:
                 ).alias("window_event_type_counts")
             )
         )
-        return continuous_event_df, continuous_event_scaled_df, event_type_counts_df
+        is_slope = F.col("event_type_detected").isin("slope_pos", "slope_neg")
+        signed_peak_delta = (
+            F.when(F.col("event_type_detected") == "slope_pos", F.coalesce(F.col("run_peak_delta"), F.lit(0.0)))
+            .when(F.col("event_type_detected") == "slope_neg", -F.coalesce(F.col("run_peak_delta"), F.lit(0.0)))
+            .otherwise(F.lit(0.0))
+        )
+        abs_peak_delta = F.when(
+            is_slope,
+            F.abs(F.coalesce(F.col("run_peak_delta"), F.lit(0.0))),
+        ).otherwise(F.lit(0.0))
+        per_parameter_summary_df = (
+            events_in_windows_df.groupBy("tail_id", "flight_id", "win_id", "parameter_name")
+            .agg(
+                F.sum(F.when(is_slope, F.lit(1)).otherwise(F.lit(0))).cast("int").alias("slope_run_count"),
+                F.sum(
+                    F.when(
+                        is_slope & (F.col("emission_reason") == F.lit("run_strengthen")),
+                        F.lit(1),
+                    ).otherwise(F.lit(0))
+                )
+                .cast("int")
+                .alias("slope_reinforcement_count"),
+                F.sum(signed_peak_delta).cast("double").alias("slope_signed_impulse"),
+                F.sum(abs_peak_delta).cast("double").alias("slope_abs_impulse"),
+                F.max(abs_peak_delta).cast("double").alias("slope_peak_abs_delta"),
+                F.sum(F.when(F.col("event_type_detected") == "switch", F.lit(1)).otherwise(F.lit(0)))
+                .cast("int")
+                .alias("switch_count"),
+                F.sum(F.when(F.col("event_type_detected") == "threshold", F.lit(1)).otherwise(F.lit(0)))
+                .cast("int")
+                .alias("threshold_count"),
+                F.sum(F.when(F.col("event_type_detected") == "oscillation", F.lit(1)).otherwise(F.lit(0)))
+                .cast("int")
+                .alias("oscillation_count"),
+                F.sum(F.when(F.col("event_type_detected") == "drift_guard", F.lit(1)).otherwise(F.lit(0)))
+                .cast("int")
+                .alias("drift_guard_count"),
+            )
+        )
+        continuous_event_summary_df = (
+            per_parameter_summary_df.groupBy("tail_id", "flight_id", "win_id")
+            .agg(
+                F.map_from_entries(
+                    F.collect_list(F.struct(F.col("parameter_name"), F.col("slope_run_count").cast("int")))
+                ).alias("slope_run_count_by_parameter"),
+                F.map_from_entries(
+                    F.collect_list(
+                        F.struct(F.col("parameter_name"), F.col("slope_reinforcement_count").cast("int"))
+                    )
+                ).alias("slope_reinforcement_count_by_parameter"),
+                F.map_from_entries(
+                    F.collect_list(
+                        F.struct(F.col("parameter_name"), F.col("slope_signed_impulse").cast("double"))
+                    )
+                ).alias("slope_signed_impulse_by_parameter"),
+                F.map_from_entries(
+                    F.collect_list(F.struct(F.col("parameter_name"), F.col("slope_abs_impulse").cast("double")))
+                ).alias("slope_abs_impulse_by_parameter"),
+                F.map_from_entries(
+                    F.collect_list(F.struct(F.col("parameter_name"), F.col("slope_peak_abs_delta").cast("double")))
+                ).alias("slope_peak_abs_delta_by_parameter"),
+                F.map_from_entries(
+                    F.collect_list(F.struct(F.col("parameter_name"), F.col("switch_count").cast("int")))
+                ).alias("switch_count_by_parameter"),
+                F.map_from_entries(
+                    F.collect_list(F.struct(F.col("parameter_name"), F.col("threshold_count").cast("int")))
+                ).alias("threshold_count_by_parameter"),
+                F.map_from_entries(
+                    F.collect_list(F.struct(F.col("parameter_name"), F.col("oscillation_count").cast("int")))
+                ).alias("oscillation_count_by_parameter"),
+                F.map_from_entries(
+                    F.collect_list(F.struct(F.col("parameter_name"), F.col("drift_guard_count").cast("int")))
+                ).alias("drift_guard_count_by_parameter"),
+            )
+            .select(
+                "tail_id",
+                "flight_id",
+                "win_id",
+                F.struct(
+                    F.coalesce(F.col("slope_run_count_by_parameter"), empty_map("string", "int")).alias(
+                        "slope_run_count_by_parameter"
+                    ),
+                    F.coalesce(
+                        F.col("slope_reinforcement_count_by_parameter"),
+                        empty_map("string", "int"),
+                    ).alias("slope_reinforcement_count_by_parameter"),
+                    F.coalesce(F.col("slope_signed_impulse_by_parameter"), empty_map("string", "double")).alias(
+                        "slope_signed_impulse_by_parameter"
+                    ),
+                    F.coalesce(F.col("slope_abs_impulse_by_parameter"), empty_map("string", "double")).alias(
+                        "slope_abs_impulse_by_parameter"
+                    ),
+                    F.coalesce(F.col("slope_peak_abs_delta_by_parameter"), empty_map("string", "double")).alias(
+                        "slope_peak_abs_delta_by_parameter"
+                    ),
+                    F.coalesce(F.col("switch_count_by_parameter"), empty_map("string", "int")).alias(
+                        "switch_count_by_parameter"
+                    ),
+                    F.coalesce(F.col("threshold_count_by_parameter"), empty_map("string", "int")).alias(
+                        "threshold_count_by_parameter"
+                    ),
+                    F.coalesce(F.col("oscillation_count_by_parameter"), empty_map("string", "int")).alias(
+                        "oscillation_count_by_parameter"
+                    ),
+                    F.coalesce(F.col("drift_guard_count_by_parameter"), empty_map("string", "int")).alias(
+                        "drift_guard_count_by_parameter"
+                    ),
+                ).alias("continuous_event_summary"),
+            )
+        )
+        return event_type_counts_df, continuous_event_summary_df
 
     def _merge_feature_sources(
         self,
@@ -344,49 +440,30 @@ class WindowFeaturesPlan:
         base_windows_df: "DataFrame",
         continuous_snapshot_df: "DataFrame",
         continuous_snapshot_scaled_df: "DataFrame",
-        continuous_event_df: "DataFrame",
-        continuous_event_scaled_df: "DataFrame",
         categorical_snapshot_df: "DataFrame",
         event_type_counts_df: "DataFrame",
+        continuous_event_summary_df: "DataFrame",
     ) -> "DataFrame":
         from pyspark.sql import functions as F
 
         return (
             base_windows_df.join(continuous_snapshot_df, on=["tail_id", "flight_id", "win_id"], how="left")
             .join(continuous_snapshot_scaled_df, on=["tail_id", "flight_id", "win_id"], how="left")
-            .join(continuous_event_df, on=["tail_id", "flight_id", "win_id"], how="left")
-            .join(continuous_event_scaled_df, on=["tail_id", "flight_id", "win_id"], how="left")
             .join(categorical_snapshot_df, on=["tail_id", "flight_id", "win_id"], how="left")
             .join(event_type_counts_df, on=["tail_id", "flight_id", "win_id"], how="left")
+            .join(continuous_event_summary_df, on=["tail_id", "flight_id", "win_id"], how="left")
             .withColumn(
                 "continuous_vector_t_end",
-                F.when(
-                    F.size(F.coalesce(F.col("event_continuous_vector_t_end"), empty_map("string", "double")))
-                    > 0,
-                    F.col("event_continuous_vector_t_end"),
-                ).otherwise(
-                    F.coalesce(
-                        F.col("snapshot_continuous_vector_t_end"),
-                        empty_map("string", "double"),
-                    )
+                F.coalesce(
+                    F.col("snapshot_continuous_vector_t_end"),
+                    empty_map("string", "double"),
                 ),
             )
             .withColumn(
                 "continuous_vector_t_end_scaled",
-                F.when(
-                    F.size(
-                        F.coalesce(
-                            F.col("event_continuous_vector_t_end_scaled"),
-                            empty_map("string", "double"),
-                        )
-                    )
-                    > 0,
-                    F.col("event_continuous_vector_t_end_scaled"),
-                ).otherwise(
-                    F.coalesce(
-                        F.col("snapshot_continuous_vector_t_end_scaled"),
-                        empty_map("string", "double"),
-                    )
+                F.coalesce(
+                    F.col("snapshot_continuous_vector_t_end_scaled"),
+                    empty_map("string", "double"),
                 ),
             )
             .withColumn(
@@ -399,6 +476,13 @@ class WindowFeaturesPlan:
             .withColumn(
                 "event_type_counts",
                 F.coalesce(F.col("window_event_type_counts"), empty_map("string", "int")),
+            )
+            .withColumn(
+                "continuous_event_summary",
+                F.coalesce(
+                    F.col("continuous_event_summary"),
+                    self._empty_continuous_event_summary(),
+                ),
             )
         )
 
@@ -447,6 +531,7 @@ class WindowFeaturesPlan:
             "event_count",
             "date_utc",
             "event_type_counts",
+            "continuous_event_summary",
             "continuous_vector_t_end",
             "continuous_vector_t_end_scaled",
             F.coalesce(
@@ -465,19 +550,17 @@ class WindowFeaturesPlan:
         base_windows_df: "DataFrame",
         continuous_snapshot_df: "DataFrame",
         continuous_snapshot_scaled_df: "DataFrame",
-        continuous_event_df: "DataFrame",
-        continuous_event_scaled_df: "DataFrame",
         categorical_snapshot_df: "DataFrame",
         event_type_counts_df: "DataFrame",
+        continuous_event_summary_df: "DataFrame",
     ) -> "DataFrame":
         combined_df = self._merge_feature_sources(
             base_windows_df=base_windows_df,
             continuous_snapshot_df=continuous_snapshot_df,
             continuous_snapshot_scaled_df=continuous_snapshot_scaled_df,
-            continuous_event_df=continuous_event_df,
-            continuous_event_scaled_df=continuous_event_scaled_df,
             categorical_snapshot_df=categorical_snapshot_df,
             event_type_counts_df=event_type_counts_df,
+            continuous_event_summary_df=continuous_event_summary_df,
         )
         return self._finalize_feature_frame(self._with_drift_profile(combined_df))
 
@@ -540,21 +623,15 @@ class WindowFeaturesPlan:
         )
         event_feature_frames = self._build_event_feature_frames(
             events_in_windows_df=events_in_windows_df,
-            scaler_df=scaler_df,
-        )
-        continuous_event_df = self._build_step(
-            "continuous_event",
-            lambda: event_feature_frames[0],
-            materialize=materialize,
-        )
-        continuous_event_scaled_df = self._build_step(
-            "continuous_event_scaled",
-            lambda: event_feature_frames[1],
-            materialize=materialize,
         )
         event_type_counts_df = self._build_step(
             "event_type_counts",
-            lambda: event_feature_frames[2],
+            lambda: event_feature_frames[0],
+            materialize=materialize,
+        )
+        continuous_event_summary_df = self._build_step(
+            "continuous_event_summary",
+            lambda: event_feature_frames[1],
             materialize=materialize,
         )
         return self._build_step(
@@ -563,10 +640,9 @@ class WindowFeaturesPlan:
                 base_windows_df=base_windows_df,
                 continuous_snapshot_df=continuous_snapshot_df,
                 continuous_snapshot_scaled_df=continuous_snapshot_scaled_df,
-                continuous_event_df=continuous_event_df,
-                continuous_event_scaled_df=continuous_event_scaled_df,
                 categorical_snapshot_df=categorical_snapshot_df,
                 event_type_counts_df=event_type_counts_df,
+                continuous_event_summary_df=continuous_event_summary_df,
             ),
             materialize=materialize,
         )

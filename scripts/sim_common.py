@@ -24,6 +24,19 @@ def add_event_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument("--delta-threshold", type=float, default=0.0, help="Continuous event delta threshold")
     parser.add_argument("--slope-source", default="ema", choices=("ema", "raw"), help="Continuous slope source")
     parser.add_argument("--ema-alpha", type=float, default=0.2, help="EMA alpha when slope-source=ema")
+    parser.add_argument("--slope-abs-threshold", type=float, default=1.0, help="Minimum signed delta magnitude for slope runs")
+    parser.add_argument(
+        "--slope-min-persistence-samples",
+        type=int,
+        default=2,
+        help="Minimum consecutive above-threshold samples before emitting a slope run",
+    )
+    parser.add_argument(
+        "--slope-reemit-ratio",
+        type=float,
+        default=1.5,
+        help="Minimum peak-delta growth ratio required to re-emit within a continuing slope run",
+    )
     return parser
 
 
@@ -33,6 +46,18 @@ def add_window_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
     parser.add_argument("--window-min-ms", type=int, default=50, help="Minimum window duration in ms")
     parser.add_argument("--window-inactivity-timeout-ms", type=int, default=0, help="Window inactivity timeout in ms")
     parser.add_argument("--window-strategy", default="segmented", choices=("segmented",))
+    return parser
+
+
+def add_backbone_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    parser.add_argument("--backbone-parameter-count", type=int, default=8, help="Backbone parameter count")
+    parser.add_argument("--backbone-ridge-lambda", type=float, default=1.0, help="Backbone ridge lambda")
+    parser.add_argument(
+        "--backbone-event-prior-alpha",
+        type=float,
+        default=0.35,
+        help="Weight applied to the event-derived prior when ranking backbone sensors",
+    )
     return parser
 
 
