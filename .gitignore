@@ -53,6 +53,7 @@ reports/
 mlflow.db
 mlruns/
 *.egg-info/
+repo_maps/
 
 # Applications
 *.app
