@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
@@ -40,6 +41,81 @@ def schema_hash_for_dataframe(dataframe: Any) -> str:
     return hashlib.sha256(_stable_json_dumps(snapshot).encode("utf-8")).hexdigest()
 
 
+@dataclass(frozen=True)
+class ArtifactManifest:
+    path: str
+    schema_hash: str
+    schema: dict[str, Any]
+    row_count: int | None = None
+    artifact_version: str | None = None
+    extra: dict[str, Any] = field(default_factory=dict)
+
+    def to_payload(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "path": self.path,
+            "schema_hash": self.schema_hash,
+            "schema": self.schema,
+        }
+        if self.row_count is not None:
+            payload["row_count"] = int(self.row_count)
+        if self.artifact_version is not None:
+            payload["artifact_version"] = str(self.artifact_version)
+        if self.extra:
+            payload.update(self.extra)
+        return payload
+
+    @classmethod
+    def from_dataframe(
+        cls,
+        *,
+        path: str,
+        dataframe: Any,
+        row_count: int | None = None,
+        artifact_version: str | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> "ArtifactManifest":
+        return cls(
+            path=str(path),
+            schema_hash=schema_hash_for_dataframe(dataframe),
+            schema=schema_snapshot_for_dataframe(dataframe),
+            row_count=(int(row_count) if row_count is not None else None),
+            artifact_version=(str(artifact_version) if artifact_version is not None else None),
+            extra=dict(extra or {}),
+        )
+
+
+@dataclass(frozen=True)
+class StageManifest:
+    stage_name: str
+    config: dict[str, Any]
+    input_artifacts: dict[str, dict[str, Any]]
+    output_artifacts: dict[str, dict[str, Any]]
+    stage_version: str = "v2"
+    run_id: str | None = None
+    created_at_utc: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    replayable_from: list[str] = field(default_factory=list)
+    cache_artifacts: dict[str, dict[str, Any]] = field(default_factory=dict)
+    timing: dict[str, Any] = field(default_factory=dict)
+
+    def to_payload(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "stage_name": self.stage_name,
+            "stage_version": self.stage_version,
+            "run_id": self.run_id,
+            "created_at_utc": self.created_at_utc,
+            "config": self.config,
+            "input_artifacts": self.input_artifacts,
+            "output_artifacts": self.output_artifacts,
+        }
+        if self.replayable_from:
+            payload["replayable_from"] = list(self.replayable_from)
+        if self.cache_artifacts:
+            payload["cache_artifacts"] = self.cache_artifacts
+        if self.timing:
+            payload["timing"] = self.timing
+        return payload
+
+
 def build_artifact_manifest(
     *,
     path: str,
@@ -48,18 +124,13 @@ def build_artifact_manifest(
     artifact_version: str | None = None,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    artifact_manifest: dict[str, Any] = {
-        "path": path,
-        "schema_hash": schema_hash_for_dataframe(dataframe),
-        "schema": schema_snapshot_for_dataframe(dataframe),
-    }
-    if row_count is not None:
-        artifact_manifest["row_count"] = int(row_count)
-    if artifact_version is not None:
-        artifact_manifest["artifact_version"] = str(artifact_version)
-    if extra:
-        artifact_manifest.update(extra)
-    return artifact_manifest
+    return ArtifactManifest.from_dataframe(
+        path=path,
+        dataframe=dataframe,
+        row_count=row_count,
+        artifact_version=artifact_version,
+        extra=extra,
+    ).to_payload()
 
 
 def build_stage_manifest(
@@ -73,22 +144,17 @@ def build_stage_manifest(
     cache_artifacts: dict[str, dict[str, Any]] | None = None,
     timing: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    manifest: dict[str, Any] = {
-        "stage_name": stage_name,
-        "stage_version": stage_version,
-        "run_id": active_run_id(),
-        "created_at_utc": datetime.now(timezone.utc).isoformat(),
-        "config": config,
-        "input_artifacts": input_artifacts,
-        "output_artifacts": output_artifacts,
-    }
-    if replayable_from:
-        manifest["replayable_from"] = list(replayable_from)
-    if cache_artifacts:
-        manifest["cache_artifacts"] = cache_artifacts
-    if timing:
-        manifest["timing"] = timing
-    return manifest
+    return StageManifest(
+        stage_name=stage_name,
+        stage_version=stage_version,
+        run_id=active_run_id(),
+        config=config,
+        input_artifacts=input_artifacts,
+        output_artifacts=output_artifacts,
+        replayable_from=list(replayable_from or []),
+        cache_artifacts=dict(cache_artifacts or {}),
+        timing=dict(timing or {}),
+    ).to_payload()
 
 
 def log_stage_manifest_if_active(stage_manifest: dict[str, Any], artifact_file: str) -> None:

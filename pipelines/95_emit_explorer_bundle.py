@@ -25,7 +25,7 @@ from libs.plotting.explorer_bundle import (
     explorer_bundle_manifest_path,
     write_explorer_bundle,
 )
-from pipelines.common import build_context, context_artifacts, context_execution
+from pipelines.common import build_stage_runtime
 
 
 LOGGER = get_logger(__name__)
@@ -35,11 +35,11 @@ LOGGER = get_logger(__name__)
 @log_memory_usage(logger=LOGGER, label="95_emit_explorer_bundle")
 @log_wall_time(logger=LOGGER)
 def run() -> None:
-    context = build_context()
-    artifacts = context_artifacts(context)
-    execution = context_execution(context)
-    table_format = execution.table_format
-    write_mode = execution.write_mode
+    runtime = build_stage_runtime("95_emit_explorer_bundle")
+    context = runtime.context
+    artifacts = runtime.artifacts
+    table_format = runtime.execution.table_format
+    write_mode = runtime.execution.write_mode
     spark = get_spark("s3ntinel.emit_explorer_bundle")
 
     raw_df = read_table(spark, artifacts.raw_table, fmt=table_format)
@@ -75,7 +75,7 @@ def run() -> None:
             "bundle_version": bundle_manifest["bundle_version"],
         }
     )
-    log_dict_artifact_if_active(bundle_manifest, "reports/stages/95_emit_explorer_bundle_summary.json")
+    log_dict_artifact_if_active(bundle_manifest, runtime.report_paths.summary_artifact_path)
     stage_manifest = build_stage_manifest(
         stage_name="95_emit_explorer_bundle",
         config={
@@ -134,7 +134,7 @@ def run() -> None:
             "anomaly_event_attribution",
         ],
     )
-    log_stage_manifest_if_active(stage_manifest, "reports/stages/95_emit_explorer_bundle_manifest.json")
+    log_stage_manifest_if_active(stage_manifest, runtime.report_paths.manifest_artifact_path)
     LOGGER.info(
         "pipeline=emit_explorer_bundle format=%s write_mode=%s explorer_bundle=%s",
         table_format,

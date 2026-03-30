@@ -3,8 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from libs.events.pipeline import build_events_table
-from libs.windows import build_window_profile_rows_table
+from libs.events.continuous import ContinuousDetectorConfig, ContinuousEventDetector
+from libs.events.pipeline import EventDetectionPlan
+from libs.windows import WindowProfileRowsFrame
 
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame
@@ -151,25 +152,31 @@ def build_continuous_event_calibration_report_spark(
 ) -> dict[str, Any]:
     candidates: list[dict[str, Any]] = []
     for candidate in spec.candidate_grid():
-        events_df = build_events_table(
-            raw_df,
-            datatype_profile_df=datatype_profile_df,
-            delta_threshold=float(candidate["delta_threshold"]),
-            slope_source=str(candidate["slope_source"]),
-            ema_alpha=float(candidate["ema_alpha"]),
-            slope_abs_threshold=float(candidate["slope_abs_threshold"]),
+        events_df = (
+            EventDetectionPlan(
+                continuous_detector=ContinuousEventDetector(
+                    config=ContinuousDetectorConfig(
+                        delta_threshold=float(candidate["delta_threshold"]),
+                        slope_source=str(candidate["slope_source"]),
+                        ema_alpha=float(candidate["ema_alpha"]),
+                        slope_abs_threshold=float(candidate["slope_abs_threshold"]),
+                    )
+                )
+            )
+            .build(raw_df, datatype_profile_df=datatype_profile_df)
+            .events.to_dataframe()
         )
         event_type_counts = _event_type_counts(events_df)
         total_event_count = int(sum(event_type_counts.values()))
         slope_event_count = int(event_type_counts.get("slope_pos", 0) + event_type_counts.get("slope_neg", 0))
-        profile_windows_df = build_window_profile_rows_table(
+        profile_windows_df = WindowProfileRowsFrame.from_events(
             events_df,
             max_ms=int(spec.window_max_ms),
             event_threshold=int(spec.window_event_threshold),
             min_ms=int(spec.window_min_ms),
             inactivity_timeout_ms=int(spec.window_inactivity_timeout_ms),
             strategy=str(spec.window_strategy),
-        )
+        ).to_dataframe()
         window_summary = _window_summary(profile_windows_df)
         summary = {
             "slope_source": str(candidate["slope_source"]),

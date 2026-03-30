@@ -1,9 +1,8 @@
 """Fit hierarchy artifacts from fused graph and the persisted graph parameter universe."""
 import time
 
-from libs.graph import build_hierarchy_from_fused_spark_table
+from libs.graph import HierarchySensorMapTable
 from libs.io.delta import get_spark, read_table, write_table
-from libs.io.schemas import HIERARCHY_SENSOR_MAP_SCHEMA
 from libs.perf import (
     build_artifact_manifest,
     build_stage_manifest,
@@ -15,7 +14,7 @@ from libs.perf import (
     log_wall_time,
     track_mlflow_run,
 )
-from pipelines.common import build_context, context_artifacts, context_execution, context_settings
+from pipelines.common import build_stage_runtime
 
 
 LOGGER = get_logger(__name__)
@@ -29,20 +28,17 @@ def _elapsed_ms(start_time: float) -> float:
 @log_memory_usage(logger=LOGGER, label="60_fit_hierarchy")
 @log_wall_time(logger=LOGGER)
 def run() -> None:
-    context = build_context()
-    artifacts = context_artifacts(context)
-    execution = context_execution(context)
-    settings = context_settings(context)
+    runtime = build_stage_runtime("60_fit_hierarchy")
     spark = get_spark("s3ntinel.fit_hierarchy")
-    fused_graph_path = artifacts.fused_graph
-    graph_parameter_universe_path = artifacts.graph_parameter_universe
-    hierarchy_map_path = artifacts.hierarchy_sensor_map
-    table_format = execution.table_format
-    write_mode = execution.fit_write_mode
-    min_fused_edge_weight = settings.graph.fusion.min_fused_edge_weight
-    hierarchy_top_k_per_sensor = settings.hierarchy.top_k_per_parameter_name
-    hierarchy_subsystem_min_edge_weight = settings.hierarchy.subsystem_min_edge_weight
-    hierarchy_system_min_edge_weight = settings.hierarchy.system_min_edge_weight
+    fused_graph_path = runtime.artifacts.fused_graph
+    graph_parameter_universe_path = runtime.artifacts.graph_parameter_universe
+    hierarchy_map_path = runtime.artifacts.hierarchy_sensor_map
+    table_format = runtime.execution.table_format
+    write_mode = runtime.execution.fit_write_mode
+    min_fused_edge_weight = runtime.settings.graph.fusion.min_fused_edge_weight
+    hierarchy_top_k_per_sensor = runtime.settings.hierarchy.top_k_per_parameter_name
+    hierarchy_subsystem_min_edge_weight = runtime.settings.hierarchy.subsystem_min_edge_weight
+    hierarchy_system_min_edge_weight = runtime.settings.hierarchy.system_min_edge_weight
 
     fused_df = read_table(spark, fused_graph_path, fmt=table_format)
     parameter_universe_df = read_table(spark, graph_parameter_universe_path, fmt=table_format)
@@ -57,20 +53,15 @@ def run() -> None:
     timing_ms["parameter_universe_collect"] = _elapsed_ms(started)
 
     started = time.perf_counter()
-    hierarchy_pdf = build_hierarchy_from_fused_spark_table(
+    hierarchy_df = HierarchySensorMapTable.from_fused_graph(
         fused_df,
         parameter_names=parameter_names,
         min_fused_edge_weight=min_fused_edge_weight,
         hierarchy_top_k_per_parameter_name=hierarchy_top_k_per_sensor,
         hierarchy_subsystem_min_edge_weight=hierarchy_subsystem_min_edge_weight,
         hierarchy_system_min_edge_weight=hierarchy_system_min_edge_weight,
-    )
+    ).to_dataframe()
     timing_ms["hierarchy_build"] = _elapsed_ms(started)
-    hierarchy_df = (
-        spark.createDataFrame(hierarchy_pdf)
-        if not hierarchy_pdf.empty
-        else spark.createDataFrame([], schema=HIERARCHY_SENSOR_MAP_SCHEMA)
-    )
 
     started = time.perf_counter()
     write_table(hierarchy_df, path=hierarchy_map_path, mode=write_mode, fmt=table_format)
@@ -105,7 +96,7 @@ def run() -> None:
             "table_format": table_format,
             "write_mode": write_mode,
         },
-        "reports/stages/60_fit_hierarchy_summary.json",
+        runtime.report_paths.summary_artifact_path,
     )
     stage_manifest = build_stage_manifest(
         stage_name="60_fit_hierarchy",
@@ -134,7 +125,7 @@ def run() -> None:
         },
         replayable_from=["fused_graph", "graph_parameter_universe"],
     )
-    log_stage_manifest_if_active(stage_manifest, "reports/stages/60_fit_hierarchy_manifest.json")
+    log_stage_manifest_if_active(stage_manifest, runtime.report_paths.manifest_artifact_path)
     LOGGER.info(
         "pipeline=fit_hierarchy format=%s write_mode=%s fused_edges=%s parameter_universe=%s hierarchy_sensors=%s timing_ms=%s",
         table_format,
