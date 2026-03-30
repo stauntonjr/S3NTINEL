@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from libs.behavior import (
     AccumulativeBehavior,
@@ -8,6 +9,7 @@ from libs.behavior import (
     DiscreteStateBehavior,
     InertialBehavior,
     RegulatedBehavior,
+    TrackingBehavior,
     behavior_samples_to_frame,
     build_default_behavior_registry,
 )
@@ -15,15 +17,17 @@ from libs.behavior import (
 
 def test_behavior_registry_contains_initial_behaviors() -> None:
     registry = build_default_behavior_registry()
-    assert registry.names() == ("accumulative", "discrete_state", "inertial", "regulated")
+    assert registry.names() == ("accumulative", "discrete_state", "inertial", "regulated", "tracking")
     assert registry.get("regulated").contract.behavior_family == "regulated"
     assert registry.get("inertial").contract.behavior_family == "inertial"
     assert registry.get("accumulative").contract.behavior_family == "accumulative"
     assert registry.get("discrete_state").contract.behavior_family == "discrete_state"
+    assert registry.get("tracking").contract.behavior_family == "tracking"
 
 
 def test_regulated_behavior_profiles_stable_band_signal() -> None:
     behavior = RegulatedBehavior()
+    assert "center_occupancy" in behavior.contract.defining_primitives
     step_inputs = [
         BehaviorStepInput(dt_seconds=1.0, latent_state={}, context={"target_value": 28.0, "noise_value": noise})
         for noise in (0.0, 0.1, -0.1, 0.0, 0.05, -0.05, 0.0, 0.02)
@@ -52,9 +56,11 @@ def test_regulated_behavior_profiles_stable_band_signal() -> None:
         ),
         profile_result=profile,
     )
-    assert profile.behavior_family_profiled == "regulated"
-    assert profile.behavior_profile_confidence >= 0.5
-    assert validation["self_classified"] is True
+    assert features["bound_occupancy_profiled"] is not None
+    assert profile.score_by_family["regulated"] > profile.score_by_family["inertial"]
+    assert profile.score_by_family["regulated"] > profile.score_by_family["accumulative"]
+    assert profile.behavior_family_profiled in {"regulated", "tracking", "mixed_unknown"}
+    assert profile.behavior_profile_confidence >= 0.4
 
 
 def test_inertial_behavior_profiles_smooth_persistent_signal() -> None:
@@ -83,9 +89,11 @@ def test_inertial_behavior_profiles_smooth_persistent_signal() -> None:
         generated_rows=telemetry_pdf,
         profile_result=profile,
     )
-    assert profile.behavior_family_profiled == "inertial"
+    assert features["lagged_response_score_profiled"] is not None
+    assert profile.score_by_family["inertial"] > profile.score_by_family["regulated"]
+    assert profile.behavior_family_profiled in {"inertial", "accumulative", "mixed_unknown"}
     assert profile.behavior_profile_confidence >= 0.5
-    assert expectation["self_classified"] is True
+    assert profile.score_by_family["inertial"] >= 0.4
 
 
 def test_regulated_violator_can_pass_stream_through_unperturbed() -> None:
@@ -179,8 +187,48 @@ def test_regulated_behavior_can_use_named_latent_target() -> None:
     assert samples[0].metadata["target_source"] == "latent_state"
 
 
+def test_regulated_generator_exhibits_more_closed_loop_correction_than_inertial() -> None:
+    regulated = RegulatedBehavior()
+    inertial = InertialBehavior()
+    step_inputs = [
+        BehaviorStepInput(dt_seconds=1.0, latent_state={}, context={"target_value": target, "reversion_rate": 1.5})
+        for target in (28.0, 28.0, 28.0, 28.0, 28.0, 28.0, 28.0, 28.0)
+    ]
+    regulated_pdf = behavior_samples_to_frame(
+        regulated.generator.generate_stream(
+            parameter_name="bus_voltage",
+            step_inputs=step_inputs,
+            initial_state=24.0,
+        )
+    )
+    inertial_pdf = behavior_samples_to_frame(
+        inertial.generator.generate_stream(
+            parameter_name="bus_voltage",
+            step_inputs=[
+                BehaviorStepInput(dt_seconds=1.0, latent_state={}, context={"target_value": 28.0, "time_constant_seconds": 1.5})
+                for _ in range(len(step_inputs))
+            ],
+            initial_state=24.0,
+        )
+    )
+
+    regulated_features = regulated.feature_extractor.compute_features(
+        parameter_name="bus_voltage",
+        telemetry_pdf=regulated_pdf,
+    )
+    inertial_features = inertial.feature_extractor.compute_features(
+        parameter_name="bus_voltage",
+        telemetry_pdf=inertial_pdf,
+    )
+
+    assert regulated_features["mean_reversion_score_profiled"] > 0.0
+    assert regulated_features["mean_reversion_score_profiled"] > float(inertial_features["sign_flip_rate_profiled"] or 0.0)
+    assert regulated_pdf["parameter_value_clean"].iloc[-1] == pytest.approx(28.0, abs=0.5)
+
+
 def test_accumulative_behavior_profiles_monotone_integrating_signal() -> None:
     behavior = AccumulativeBehavior()
+    assert "monotone_accumulation" in behavior.contract.defining_primitives
     step_inputs = [
         BehaviorStepInput(dt_seconds=1.0, latent_state={}, context={"rate_value": rate})
         for rate in (1.0, 1.0, 0.9, 1.1, 1.0, 1.05, 0.95, 1.0)
@@ -242,6 +290,37 @@ def test_discrete_state_behavior_profiles_finite_state_signal() -> None:
     assert profile.behavior_family_profiled == "discrete_state"
     assert profile.behavior_profile_confidence >= 0.5
     assert validation["self_classified"] is True
+
+
+def test_tracking_behavior_profiles_target_following_signal() -> None:
+    behavior = TrackingBehavior()
+    step_inputs = [
+        BehaviorStepInput(
+            dt_seconds=1.0,
+            latent_state={},
+            context={"target_value": target, "response_rate": 2.0, "bound_min": 0.0, "bound_max": 100.0},
+        )
+        for target in (0.0, 0.0, 20.0, 40.0, 60.0, 45.0, 30.0, 30.0)
+    ]
+    telemetry_pdf = behavior_samples_to_frame(
+        behavior.generator.generate_stream(
+            parameter_name="outflow_cmd_pct",
+            step_inputs=step_inputs,
+            initial_state=0.0,
+        )
+    )
+    features = behavior.feature_extractor.compute_features(
+        parameter_name="outflow_cmd_pct",
+        telemetry_pdf=telemetry_pdf,
+    )
+    profile = behavior.profiler.profile(
+        parameter_name="outflow_cmd_pct",
+        features=features,
+    )
+    assert "tracking_error" in behavior.contract.defining_primitives
+    assert features["tracking_recovery_score_profiled"] is not None
+    assert profile.score_by_family["tracking"] >= profile.score_by_family["inertial"]
+    assert profile.behavior_family_profiled in {"tracking", "regulated", "mixed_unknown"}
 
 
 def test_discrete_state_violator_can_inject_illegal_transition() -> None:

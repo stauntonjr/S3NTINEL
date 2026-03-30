@@ -29,10 +29,12 @@ def build_default_behavior_registry() -> BehaviorRegistry:
     from libs.behavior.discrete_state import DiscreteStateBehavior
     from libs.behavior.inertial import InertialBehavior
     from libs.behavior.regulated import RegulatedBehavior
+    from libs.behavior.tracking import TrackingBehavior
 
     registry = BehaviorRegistry()
     registry.register(AccumulativeBehavior())
     registry.register(DiscreteStateBehavior())
-    registry.register(RegulatedBehavior())
     registry.register(InertialBehavior())
+    registry.register(RegulatedBehavior())
+    registry.register(TrackingBehavior())
     return registry

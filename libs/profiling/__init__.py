@@ -4,6 +4,7 @@
 from libs.profiling.profiles import (
     CategoricalDistribution,
     ContinuousScalingProfile,
+    ParameterBehaviorPrimitiveProfile,
     ParameterBehaviorProfile,
     ParameterDatatypeProfile,
     ParameterProfile,
@@ -12,9 +13,6 @@ from libs.profiling.profiles import (
 from libs.profiling.pipeline import (
     TelemetryProfilingArtifacts,
     TelemetryProfilingPlan,
-    build_continuous_scaling_profile_table,
-    build_parameter_behavior_profile_table,
-    build_parameter_datatype_profile_table,
 )
 from libs.profiling.validator import build_profile_validation_summary, iter_profile_validation_snapshots
 
@@ -23,13 +21,11 @@ __all__ = [
     "CategoricalDistribution",
     "ParameterDatatypeProfile",
     "ContinuousScalingProfile",
+    "ParameterBehaviorPrimitiveProfile",
     "ParameterBehaviorProfile",
     "TelemetryProfileSource",
     "TelemetryProfilingArtifacts",
     "TelemetryProfilingPlan",
-    "build_parameter_datatype_profile_table",
-    "build_continuous_scaling_profile_table",
-    "build_parameter_behavior_profile_table",
     "build_profile_validation_summary",
     "iter_profile_validation_snapshots",
 ]

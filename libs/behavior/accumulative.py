@@ -21,16 +21,23 @@ from libs.behavior.base import (
     BehaviorStepInput,
     BehaviorViolator,
 )
-from libs.behavior.utils import clip01, lag1_autocorrelation, numeric_series
+from libs.behavior.primitives import (
+    BEHAVIOR_FAMILY_DEFINITIONS,
+    build_numeric_primitive_evidence,
+    choose_behavior_family,
+    score_behavior_families_from_primitives,
+)
+from libs.behavior.utils import clip01
 from libs.behavior.validation import FamilyValidator
 
 
 @dataclass(frozen=True)
 class AccumulativeContract(BehaviorContract):
     behavior_family: str = "accumulative"
-    expected_traits: tuple[str, ...] = ("persistent", "monotone", "integrative")
-    supported_datatypes: tuple[str, ...] = ("numeric",)
-    allowed_fault_families: tuple[str, ...] = ("reset_drop", "leak_rate", "drift", "bias")
+    defining_primitives: tuple[str, ...] = BEHAVIOR_FAMILY_DEFINITIONS["accumulative"].defining_primitives
+    expected_traits: tuple[str, ...] = BEHAVIOR_FAMILY_DEFINITIONS["accumulative"].expected_traits
+    supported_datatypes: tuple[str, ...] = BEHAVIOR_FAMILY_DEFINITIONS["accumulative"].supported_datatypes
+    allowed_fault_families: tuple[str, ...] = BEHAVIOR_FAMILY_DEFINITIONS["accumulative"].allowed_fault_families
 
 
 class AccumulativeFeatureExtractor(BehaviorFeatureExtractor):
@@ -40,41 +47,7 @@ class AccumulativeFeatureExtractor(BehaviorFeatureExtractor):
         parameter_name: str,
         telemetry_pdf: pd.DataFrame,
     ) -> dict[str, float | str | None]:
-        series = numeric_series(telemetry_pdf)
-        if len(series) < 3:
-            return {
-                "sample_count_profiled": float(len(series)),
-                "lag1_autocorr_profiled": None,
-                "monotonicity_score_profiled": None,
-                "sign_flip_rate_profiled": None,
-                "net_change_ratio_profiled": None,
-            }
-        diff = series.diff().dropna()
-        if diff.empty:
-            return {
-                "sample_count_profiled": float(len(series)),
-                "lag1_autocorr_profiled": 1.0,
-                "monotonicity_score_profiled": 1.0,
-                "sign_flip_rate_profiled": 0.0,
-                "net_change_ratio_profiled": 1.0,
-            }
-        pos_ratio = float((diff > 0).mean())
-        neg_ratio = float((diff < 0).mean())
-        monotonicity = max(pos_ratio, neg_ratio)
-        sign_flips = ((diff > 0) != (diff.shift(1) > 0)).dropna().mean() if len(diff) > 1 else 0.0
-        sign_flip_rate = float(sign_flips) if sign_flips == sign_flips else 0.0
-        lag1 = lag1_autocorrelation(series)
-        lag1_autocorr = float(lag1) if lag1 is not None and lag1 == lag1 else 0.0
-        gross_change = float(diff.abs().sum())
-        net_change = float(abs(series.iloc[-1] - series.iloc[0]))
-        net_change_ratio = net_change / max(gross_change, 1e-6)
-        return {
-            "sample_count_profiled": float(len(series)),
-            "lag1_autocorr_profiled": lag1_autocorr,
-            "monotonicity_score_profiled": monotonicity,
-            "sign_flip_rate_profiled": sign_flip_rate,
-            "net_change_ratio_profiled": net_change_ratio,
-        }
+        return build_numeric_primitive_evidence(parameter_name=parameter_name, telemetry_pdf=telemetry_pdf)
 
 
 class AccumulativeGenerator(BehaviorGenerator):
@@ -113,25 +86,14 @@ class AccumulativeProfiler(BehaviorProfiler):
         parameter_name: str,
         features: Mapping[str, float | str | None],
     ) -> BehaviorProfileResult:
-        lag1 = clip01((float(features.get("lag1_autocorr_profiled") or 0.0) + 1.0) / 2.0)
-        monotonicity = float(features.get("monotonicity_score_profiled") or 0.0)
-        net_change_ratio = float(features.get("net_change_ratio_profiled") or 0.0)
-        low_flip = clip01(1.0 - float(features.get("sign_flip_rate_profiled") or 0.0))
-        accumulative_score = clip01((0.3 * lag1) + (0.35 * monotonicity) + (0.2 * net_change_ratio) + (0.15 * low_flip))
-        inertial_score = clip01(0.4 * lag1 + 0.2 * low_flip)
-        regulated_score = clip01(0.15 * low_flip)
-        mixed_unknown = clip01(1.0 - max(accumulative_score, inertial_score, regulated_score))
-        scores = {
-            "regulated": regulated_score,
-            "inertial": inertial_score,
-            "accumulative": accumulative_score,
-            "discrete_state": 0.0,
-            "mixed_unknown": mixed_unknown,
-        }
-        best_family = max(scores, key=scores.get)
+        scores = score_behavior_families_from_primitives(
+            primitive_evidence=features,
+            parameter_datatype_profiled="numeric",
+        )
+        best_family, confidence = choose_behavior_family(scores)
         return BehaviorProfileResult(
             behavior_family_profiled=best_family,
-            behavior_profile_confidence=float(scores[best_family]),
+            behavior_profile_confidence=confidence,
             score_by_family=scores,
             profiled_features=dict(features),
         )

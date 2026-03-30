@@ -12,6 +12,7 @@ import pandas as pd
 @dataclass(frozen=True)
 class BehaviorContract:
     behavior_family: str
+    defining_primitives: tuple[str, ...]
     expected_traits: tuple[str, ...]
     supported_datatypes: tuple[str, ...]
     allowed_fault_families: tuple[str, ...]

@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from libs.events import ParameterEventProfile
+from libs.profiling import TelemetryProfilingPlan
 from libs.testing.data import (
     create_sample_calibrated_df,
     create_sample_events_df,
@@ -39,6 +41,10 @@ def seed_sample_dataset(
     paths = {
         "raw_input": str(input_path),
         "raw_telemetry": str(delta_path / "raw_telemetry"),
+        "continuous_scaling_profile": str(delta_path / "continuous_scaling_profile"),
+        "parameter_behavior_primitive_profile": str(delta_path / "parameter_behavior_primitive_profile"),
+        "parameter_behavior_profile": str(delta_path / "parameter_behavior_profile"),
+        "parameter_event_profile": str(delta_path / "parameter_event_profile"),
         "events": str(delta_path / "events"),
         "windows": str(delta_path / "windows"),
         "phase_labels": str(delta_path / "phase_labels"),
@@ -77,8 +83,20 @@ def seed_sample_dataset(
             writer = writer.partitionBy(*partition_cols)
         writer.save(path)
 
-    _write_seed_table(create_sample_raw_table_df(spark), paths["raw_telemetry"])
+    raw_table_df = create_sample_raw_table_df(spark)
+    _write_seed_table(raw_table_df, paths["raw_telemetry"])
     if include_intermediate_tables:
+        profiles = TelemetryProfilingPlan.from_raw_input(raw_table_df).build()
+        _write_seed_table(profiles.scaling_profile.to_dataframe(), paths["continuous_scaling_profile"])
+        _write_seed_table(profiles.primitive_profile.to_dataframe(), paths["parameter_behavior_primitive_profile"])
+        _write_seed_table(profiles.behavior_profile.to_dataframe(), paths["parameter_behavior_profile"])
+        _write_seed_table(
+            ParameterEventProfile.from_raw_input(
+                raw_table_df,
+                datatype_profile_df=profiles.datatype_profile.to_dataframe(),
+            ).to_dataframe(),
+            paths["parameter_event_profile"],
+        )
         _write_seed_table(create_sample_events_df(spark), paths["events"])
         _write_seed_table(create_sample_windows_df(spark), paths["windows"])
         _write_seed_table(create_sample_phase_labels_df(spark), paths["phase_labels"])

@@ -5,7 +5,7 @@ pytest.importorskip("pyspark")
 from libs.profiling import ParameterDatatypeProfile, ParameterProfile
 
 
-def test_build_parameter_datatype_profile_infers_numeric_binary_and_categorical(spark):
+def test_build_parameter_datatype_profile_infers_numeric_and_small_categorical(spark):
     rows = [
         ("S_NUM", "2025-01-01T00:00:00", "1.1"),
         ("S_NUM", "2025-01-01T00:00:01", "2.5"),
@@ -24,14 +24,14 @@ def test_build_parameter_datatype_profile_infers_numeric_binary_and_categorical(
         schema="parameter_name string, timestamp_utc string, parameter_value string",
     )
 
-    prof_df = ParameterDatatypeProfile.from_parameter_profile(ParameterProfile.build_dataframe(telemetry_df))
+    prof_df = ParameterDatatypeProfile.from_parameter_profile(ParameterProfile.build_dataframe(telemetry_df)).to_dataframe()
     results = {
         row["parameter_name"]: row["parameter_datatype_profiled"]
         for row in prof_df.select("parameter_name", "parameter_datatype_profiled").collect()
     }
 
     assert results["S_NUM"] == "numeric"
-    assert results["S_BIN"] == "binary"
+    assert results["S_BIN"] == "categorical"
     assert results["S_CAT"] == "categorical"
 
 
@@ -47,7 +47,7 @@ def test_build_parameter_datatype_profile_supports_parameter_name_column(spark):
         schema="parameter_name string, timestamp_utc string, parameter_value string",
     )
 
-    prof_df = ParameterDatatypeProfile.from_parameter_profile(ParameterProfile.build_dataframe(telemetry_df))
+    prof_df = ParameterDatatypeProfile.from_parameter_profile(ParameterProfile.build_dataframe(telemetry_df)).to_dataframe()
     result_columns = set(prof_df.columns)
 
     assert {
@@ -59,4 +59,4 @@ def test_build_parameter_datatype_profile_supports_parameter_name_column(spark):
         "numeric_rate",
         "distinct_value_count",
     }.issubset(result_columns)
-    assert prof_df.where("parameter_name = 'P1'").select("parameter_datatype_profiled").first()[0] == "binary"
+    assert prof_df.where("parameter_name = 'P1'").select("parameter_datatype_profiled").first()[0] == "numeric"

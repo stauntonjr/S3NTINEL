@@ -122,7 +122,7 @@ def test_build_profile_validation_summary_emits_confusions_and_mismatches():
                 "flight_id": "F1",
                 "timestamp_utc": _ts(2),
                 "parameter_name": "D1",
-                "parameter_datatype_label": "binary",
+                "parameter_datatype_label": "categorical",
                 "behavior_family_label": "discrete_state",
                 "system_id": "SYS_B",
                 "subsystem_id": "SUB_C",
@@ -144,7 +144,7 @@ def test_build_profile_validation_summary_emits_confusions_and_mismatches():
             },
             {
                 "parameter_name": "D1",
-                "parameter_datatype_profiled": "categorical",
+                "parameter_datatype_profiled": "numeric",
                 "sampling_rate_profiled_hz": 1.0,
             },
         ]
@@ -196,5 +196,5 @@ def test_build_profile_validation_summary_emits_confusions_and_mismatches():
     assert mismatch["behavior_profile_confidence"] == pytest.approx(0.72)
     dtype_mismatch = summary["datatype_details"]["mismatch_examples"][0]
     assert dtype_mismatch["parameter_name"] == "D1"
-    assert dtype_mismatch["parameter_datatype_label"] == "binary"
-    assert dtype_mismatch["parameter_datatype_profiled"] == "categorical"
+    assert dtype_mismatch["parameter_datatype_label"] == "categorical"
+    assert dtype_mismatch["parameter_datatype_profiled"] == "numeric"

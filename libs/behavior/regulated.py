@@ -21,6 +21,12 @@ from libs.behavior.base import (
     BehaviorProfiler,
     BehaviorViolator,
 )
+from libs.behavior.primitives import (
+    BEHAVIOR_FAMILY_DEFINITIONS,
+    build_numeric_primitive_evidence,
+    choose_behavior_family,
+    score_behavior_families_from_primitives,
+)
 from libs.behavior.utils import clip01, numeric_series
 from libs.behavior.validation import FamilyValidator
 
@@ -28,9 +34,10 @@ from libs.behavior.validation import FamilyValidator
 @dataclass(frozen=True)
 class RegulatedContract(BehaviorContract):
     behavior_family: str = "regulated"
-    expected_traits: tuple[str, ...] = ("bounded", "central_band_occupancy", "mean_reverting")
-    supported_datatypes: tuple[str, ...] = ("numeric",)
-    allowed_fault_families: tuple[str, ...] = ("offset", "saturation", "tracking_degradation", "oscillation")
+    defining_primitives: tuple[str, ...] = BEHAVIOR_FAMILY_DEFINITIONS["regulated"].defining_primitives
+    expected_traits: tuple[str, ...] = BEHAVIOR_FAMILY_DEFINITIONS["regulated"].expected_traits
+    supported_datatypes: tuple[str, ...] = BEHAVIOR_FAMILY_DEFINITIONS["regulated"].supported_datatypes
+    allowed_fault_families: tuple[str, ...] = BEHAVIOR_FAMILY_DEFINITIONS["regulated"].allowed_fault_families
 
 
 class RegulatedFeatureExtractor(BehaviorFeatureExtractor):
@@ -40,31 +47,13 @@ class RegulatedFeatureExtractor(BehaviorFeatureExtractor):
         parameter_name: str,
         telemetry_pdf: pd.DataFrame,
     ) -> dict[str, float | str | None]:
+        primitive = build_numeric_primitive_evidence(parameter_name=parameter_name, telemetry_pdf=telemetry_pdf)
         series = numeric_series(telemetry_pdf)
-        if len(series) < 3:
-            return {
-                "sample_count_profiled": float(len(series)),
-                "central_band_occupancy_profiled": None,
-                "excursion_rate_profiled": None,
-                "mean_reversion_score_profiled": None,
-                "boundedness_score_profiled": None,
-            }
-        median = float(series.median())
-        iqr = float(series.quantile(0.75) - series.quantile(0.25))
-        band_radius = max(1e-6, 1.5 * iqr)
-        central_band_occupancy = float(((series - median).abs() <= band_radius).mean())
         diffs = series.diff().dropna()
-        sign_flips = float((diffs.mul(diffs.shift(1)).lt(0)).mean()) if len(diffs) > 1 else 0.0
-        excursion_rate = 1.0 - central_band_occupancy
-        total_range = float(series.max() - series.min())
-        boundedness = 1.0 / (1.0 + max(total_range, 0.0))
-        mean_reversion = clip01(sign_flips * 2.0)
         return {
-            "sample_count_profiled": float(len(series)),
-            "central_band_occupancy_profiled": central_band_occupancy,
-            "excursion_rate_profiled": excursion_rate,
-            "mean_reversion_score_profiled": mean_reversion,
-            "boundedness_score_profiled": boundedness,
+            **primitive,
+            "mean_reversion_score_profiled": clip01(float(primitive.get("reversal_rate_profiled") or 0.0) * 2.0),
+            "boundedness_score_profiled": float(primitive.get("bound_occupancy_profiled") or 0.0),
         }
 
 
@@ -77,6 +66,8 @@ class RegulatedGenerator(BehaviorGenerator):
         initial_state: Any = None,
     ) -> Iterator[BehaviorSample]:
         current = float(initial_state if initial_state is not None else 0.0)
+        trim_phase = 0.0
+        settled_steps = 0
         for step_input in step_inputs:
             context = dict(step_input.context)
             latent_target_name = context.get("latent_target_name")
@@ -86,8 +77,37 @@ class RegulatedGenerator(BehaviorGenerator):
             else:
                 target = float(context.get("target_value", current))
                 context["target_source"] = "context"
-            reversion_rate = float(context.get("reversion_rate", 1.5))
-            current = current + (target - current) * min(max(float(step_input.dt_seconds) * reversion_rate, 0.0), 1.0)
+            dt_seconds = max(float(step_input.dt_seconds), 1e-6)
+            reversion_rate = max(float(context.get("reversion_rate", 1.5)), 1e-6)
+            trim_hz = max(float(context.get("trim_oscillation_hz", 0.18)), 0.0)
+            trim_fraction = max(float(context.get("control_trim_fraction", 0.006)), 0.0)
+            control_band_fraction = max(float(context.get("control_band_fraction", 0.025)), 0.0)
+
+            error = target - current
+            control_band = max(float(context.get("control_band_abs", 0.05)), max(abs(target), 1.0) * control_band_fraction)
+            trim_amplitude = max(float(context.get("control_trim_abs", 0.02)), control_band * trim_fraction * 10.0)
+
+            # Closed-loop regulated channels should converge quickly, then continue
+            # making small bounded corrections around the setpoint instead of behaving
+            # like a plain first-order inertial response.
+            alpha = clip01(dt_seconds * reversion_rate)
+            current = current + (alpha * error)
+
+            if abs(target - current) <= control_band:
+                settled_steps += 1
+                if settled_steps >= 2:
+                    trim_phase = trim_phase + (2.0 * np.pi * trim_hz * dt_seconds)
+                    trim_value = trim_amplitude * float(np.sin(trim_phase))
+                    current = target + ((current - target) * 0.20) + trim_value
+                    context["control_mode"] = "trim"
+                else:
+                    current = target + ((current - target) * 0.35)
+                    context["control_mode"] = "track"
+            else:
+                settled_steps = 0
+                trim_phase = 0.0
+                context["control_mode"] = "track"
+
             noise = float(context.get("noise_value", 0.0))
             yield BehaviorSample(
                 parameter_name=parameter_name,
@@ -105,23 +125,14 @@ class RegulatedProfiler(BehaviorProfiler):
         parameter_name: str,
         features: Mapping[str, float | str | None],
     ) -> BehaviorProfileResult:
-        central_band = float(features.get("central_band_occupancy_profiled") or 0.0)
-        mean_reversion = float(features.get("mean_reversion_score_profiled") or 0.0)
-        boundedness = float(features.get("boundedness_score_profiled") or 0.0)
-        regulated_score = clip01((central_band + mean_reversion + boundedness) / 3.0)
-        inertial_score = clip01((1.0 - float(features.get("excursion_rate_profiled") or 0.0)) * 0.35)
-        mixed_unknown = clip01(1.0 - max(regulated_score, inertial_score))
-        scores = {
-            "regulated": regulated_score,
-            "inertial": inertial_score,
-            "accumulative": 0.0,
-            "discrete_state": 0.0,
-            "mixed_unknown": mixed_unknown,
-        }
-        best_family = max(scores, key=scores.get)
+        scores = score_behavior_families_from_primitives(
+            primitive_evidence=features,
+            parameter_datatype_profiled="numeric",
+        )
+        best_family, confidence = choose_behavior_family(scores)
         return BehaviorProfileResult(
             behavior_family_profiled=best_family,
-            behavior_profile_confidence=float(scores[best_family]),
+            behavior_profile_confidence=confidence,
             score_by_family=scores,
             profiled_features=dict(features),
         )

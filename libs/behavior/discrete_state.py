@@ -21,6 +21,12 @@ from libs.behavior.base import (
     BehaviorStepInput,
     BehaviorViolator,
 )
+from libs.behavior.primitives import (
+    BEHAVIOR_FAMILY_DEFINITIONS,
+    build_discrete_primitive_evidence,
+    choose_behavior_family,
+    score_behavior_families_from_primitives,
+)
 from libs.behavior.utils import clip01
 from libs.behavior.validation import FamilyValidator
 
@@ -28,9 +34,10 @@ from libs.behavior.validation import FamilyValidator
 @dataclass(frozen=True)
 class DiscreteStateContract(BehaviorContract):
     behavior_family: str = "discrete_state"
-    expected_traits: tuple[str, ...] = ("finite_alphabet", "state_dwell", "abrupt_transitions")
-    supported_datatypes: tuple[str, ...] = ("binary", "categorical", "high_cardinality")
-    allowed_fault_families: tuple[str, ...] = ("illegal_transition", "dwell_violation", "state_chatter", "stuck_state")
+    defining_primitives: tuple[str, ...] = BEHAVIOR_FAMILY_DEFINITIONS["discrete_state"].defining_primitives
+    expected_traits: tuple[str, ...] = BEHAVIOR_FAMILY_DEFINITIONS["discrete_state"].expected_traits
+    supported_datatypes: tuple[str, ...] = BEHAVIOR_FAMILY_DEFINITIONS["discrete_state"].supported_datatypes
+    allowed_fault_families: tuple[str, ...] = BEHAVIOR_FAMILY_DEFINITIONS["discrete_state"].allowed_fault_families
 
 
 class DiscreteStateFeatureExtractor(BehaviorFeatureExtractor):
@@ -40,40 +47,7 @@ class DiscreteStateFeatureExtractor(BehaviorFeatureExtractor):
         parameter_name: str,
         telemetry_pdf: pd.DataFrame,
     ) -> dict[str, float | str | None]:
-        values = telemetry_pdf.get("parameter_value", pd.Series(dtype="object")).fillna("").astype(str)
-        if len(values) < 2:
-            return {
-                "sample_count_profiled": float(len(values)),
-                "distinct_state_count_profiled": float(values[values != ""].nunique()),
-                "transition_rate_profiled": None,
-                "mean_dwell_profiled": None,
-                "dominant_state_ratio_profiled": None,
-            }
-        distinct_state_count = float(values[values != ""].nunique())
-        transition_count = max(int((values != values.shift(1)).sum()) - 1, 0)
-        transition_rate = transition_count / float(max(len(values) - 1, 1))
-        run_lengths: list[int] = []
-        current_run = 0
-        previous = None
-        for value in values.tolist():
-            if value == previous:
-                current_run += 1
-            else:
-                if current_run:
-                    run_lengths.append(current_run)
-                current_run = 1
-                previous = value
-        if current_run:
-            run_lengths.append(current_run)
-        mean_dwell = float(sum(run_lengths) / max(len(run_lengths), 1))
-        dominant_state_ratio = float(values.value_counts(normalize=True, dropna=False).iloc[0]) if len(values) else 0.0
-        return {
-            "sample_count_profiled": float(len(values)),
-            "distinct_state_count_profiled": distinct_state_count,
-            "transition_rate_profiled": transition_rate,
-            "mean_dwell_profiled": mean_dwell,
-            "dominant_state_ratio_profiled": dominant_state_ratio,
-        }
+        return build_discrete_primitive_evidence(parameter_name=parameter_name, telemetry_pdf=telemetry_pdf)
 
 
 class DiscreteStateGenerator(BehaviorGenerator):
@@ -113,27 +87,14 @@ class DiscreteStateProfiler(BehaviorProfiler):
         parameter_name: str,
         features: Mapping[str, float | str | None],
     ) -> BehaviorProfileResult:
-        distinct_count = float(features.get("distinct_state_count_profiled") or 0.0)
-        transition_rate = float(features.get("transition_rate_profiled") or 0.0)
-        mean_dwell = float(features.get("mean_dwell_profiled") or 0.0)
-        dominant_ratio = float(features.get("dominant_state_ratio_profiled") or 0.0)
-        low_cardinality = clip01(1.0 - min(max(distinct_count - 1.0, 0.0), 9.0) / 9.0)
-        low_transition = clip01(1.0 - transition_rate)
-        dwell_score = clip01(min(mean_dwell, 10.0) / 10.0)
-        concentration_score = clip01(dominant_ratio)
-        discrete_state_score = clip01((0.3 * low_cardinality) + (0.25 * low_transition) + (0.25 * dwell_score) + (0.2 * concentration_score))
-        mixed_unknown = clip01(1.0 - discrete_state_score)
-        scores = {
-            "regulated": 0.0,
-            "inertial": 0.0,
-            "accumulative": 0.0,
-            "discrete_state": discrete_state_score,
-            "mixed_unknown": mixed_unknown,
-        }
-        best_family = max(scores, key=scores.get)
+        scores = score_behavior_families_from_primitives(
+            primitive_evidence=features,
+            parameter_datatype_profiled="categorical",
+        )
+        best_family, confidence = choose_behavior_family(scores)
         return BehaviorProfileResult(
             behavior_family_profiled=best_family,
-            behavior_profile_confidence=float(scores[best_family]),
+            behavior_profile_confidence=confidence,
             score_by_family=scores,
             profiled_features=dict(features),
         )

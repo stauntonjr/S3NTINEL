@@ -9,6 +9,7 @@ import pandas as pd
 
 from libs.common import normalize_parameter_datatype
 from libs.io.contracts import DatatypeLabelRow, DatatypeProfiledRow, ProfilerValidatorSnapshot, TelemetryRow
+from libs.io.schemas.profiling import PARAMETER_BEHAVIOR_PRIMITIVE_PROFILE_COLUMNS
 
 
 def _row_ts(row: TelemetryRow | DatatypeLabelRow | DatatypeProfiledRow, *, field: str = "timestamp_utc") -> datetime:
@@ -149,7 +150,26 @@ def build_profile_validation_summary(
     raw_telemetry_df: pd.DataFrame,
     parameter_datatype_profile_df: pd.DataFrame,
     parameter_behavior_profile_df: pd.DataFrame,
+    parameter_behavior_primitive_profile_df: pd.DataFrame | None = None,
 ) -> dict[str, Any]:
+    primitive_columns = tuple(
+        column
+        for column in PARAMETER_BEHAVIOR_PRIMITIVE_PROFILE_COLUMNS
+        if column
+        not in {
+            "parameter_name",
+            "parameter_datatype_profiled",
+            "sample_count",
+            "profile_window_start_utc",
+            "profile_window_end_utc",
+            "sign_flip_rate_profiled",
+            "discrete_low_cardinality_score_profiled",
+            "discrete_low_transition_score_profiled",
+            "discrete_dwell_score_profiled",
+            "transition_balance_score_profiled",
+        }
+    )
+
     def _first_nonempty_string(values: pd.Series) -> str:
         for value in values:
             if pd.notna(value):
@@ -240,6 +260,7 @@ def build_profile_validation_summary(
                 "prediction_counts": [],
                 "confidence_by_predicted_family": [],
                 "mismatch_examples": [],
+                "primitive_evidence_by_label": [],
             },
         }
 
@@ -269,12 +290,23 @@ def build_profile_validation_summary(
         )
     if parameter_behavior_profile_df is not None and not parameter_behavior_profile_df.empty:
         behavior_profile_df = parameter_behavior_profile_df[
-            ["parameter_name", "behavior_family_profiled", "behavior_profile_confidence"]
+            [
+                "parameter_name",
+                "behavior_family_profiled",
+                "behavior_profile_confidence",
+                *[column for column in primitive_columns if column in parameter_behavior_profile_df.columns],
+            ]
         ]
     else:
         behavior_profile_df = pd.DataFrame(
             columns=["parameter_name", "behavior_family_profiled", "behavior_profile_confidence"]
         )
+    if parameter_behavior_primitive_profile_df is not None and not parameter_behavior_primitive_profile_df.empty:
+        primitive_profile_df = parameter_behavior_primitive_profile_df[
+            ["parameter_name", *[column for column in primitive_columns if column in parameter_behavior_primitive_profile_df.columns]]
+        ]
+    else:
+        primitive_profile_df = pd.DataFrame(columns=["parameter_name", *primitive_columns])
 
     merged = label_df.merge(
         datatype_profile_df,
@@ -284,6 +316,11 @@ def build_profile_validation_summary(
         behavior_profile_df,
         on="parameter_name",
         how="left",
+    ).merge(
+        primitive_profile_df,
+        on="parameter_name",
+        how="left",
+        suffixes=("", "_primitive"),
     )
 
     datatype_mask = merged["parameter_datatype_label"].fillna("").astype(str) != ""
@@ -327,8 +364,30 @@ def build_profile_validation_summary(
             "behavior_family_label",
             "behavior_family_profiled",
             "behavior_profile_confidence",
+            *[column for column in primitive_columns if column in merged.columns],
         ],
     ].copy()
+
+    primitive_by_label: list[dict[str, Any]] = []
+    available_primitive_columns = [column for column in primitive_columns if column in behavior_detail_df.columns]
+    if available_primitive_columns:
+        primitive_by_label = (
+            behavior_detail_df.loc[behavior_mask]
+            .groupby("behavior_family_label", dropna=False)[available_primitive_columns]
+            .mean(numeric_only=True)
+            .reset_index()
+            .sort_values(["behavior_family_label"], kind="stable")
+            .to_dict(orient="records")
+        )
+
+    behavior_details = _build_match_details(
+        merged_df=behavior_detail_df,
+        label_column="behavior_family_label",
+        predicted_column="behavior_family_profiled",
+        confidence_column="behavior_profile_confidence",
+        extra_columns=("parameter_datatype_label", "sampling_rate_profiled_hz", "system_id", "subsystem_id", "module_id", *available_primitive_columns),
+    )
+    behavior_details["primitive_evidence_by_label"] = primitive_by_label
 
     return {
         "status": "ok",
@@ -367,11 +426,5 @@ def build_profile_validation_summary(
             predicted_column="parameter_datatype_profiled",
             extra_columns=("sampling_rate_profiled_hz", "system_id", "subsystem_id", "module_id"),
         ),
-        "behavior_details": _build_match_details(
-            merged_df=behavior_detail_df,
-            label_column="behavior_family_label",
-            predicted_column="behavior_family_profiled",
-            confidence_column="behavior_profile_confidence",
-            extra_columns=("parameter_datatype_label", "sampling_rate_profiled_hz", "system_id", "subsystem_id", "module_id"),
-        ),
+        "behavior_details": behavior_details,
     }
