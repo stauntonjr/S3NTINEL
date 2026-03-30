@@ -69,6 +69,45 @@ def test_build_categorical_events_emits_transition_and_related_dwell_events(spar
     assert {"state_enter", "state_exit", "transition", "dwell_bucket"}.issubset(event_types)
 
 
+def test_build_categorical_events_can_disable_state_enter_exit_and_dwell_bucket(spark):
+    rows = [
+        {
+            "tail_id": "T1",
+            "flight_id": "F1",
+            "timestamp_utc": datetime(2026, 3, 1, 0, 0, 0, tzinfo=timezone.utc),
+            "sensor": "CAT_SENSOR",
+            "parameter_datatype_profiled": "categorical",
+            "parameter_value": "OFF",
+            "date_utc": "2026-03-01",
+        },
+        {
+            "tail_id": "T1",
+            "flight_id": "F1",
+            "timestamp_utc": datetime(2026, 3, 1, 0, 0, 1, tzinfo=timezone.utc),
+            "sensor": "CAT_SENSOR",
+            "parameter_datatype_profiled": "categorical",
+            "parameter_value": "ON",
+            "date_utc": "2026-03-01",
+        },
+    ]
+
+    raw_df = spark.createDataFrame(rows)
+    events_df = build_categorical_events(
+        raw_df,
+        config=CategoricalDetectorConfig(
+            emit_state_enter=False,
+            emit_state_exit=False,
+            emit_dwell_bucket=False,
+        ),
+    )
+    event_types = {row["event_type_detected"] for row in events_df.select("event_type_detected").collect()}
+
+    assert "transition" in event_types
+    assert "state_enter" not in event_types
+    assert "state_exit" not in event_types
+    assert "dwell_bucket" not in event_types
+
+
 def test_build_categorical_events_segmented_preserves_dwell_guard_across_segments(spark):
     rows = [
         {

@@ -9,8 +9,9 @@ from libs.events.pipeline import (
     EventDetectionPlan,
     EventOrderingPolicy,
     EventSourceFrame,
-    build_events_table,
 )
+from libs.events.profiling import EventProfileConfig, ParameterEventProfile
+from libs.events.tables import EventsTable
 from libs.events.types import (
     CategoricalEvent,
     CategoricalDwellGuardEvent,
@@ -58,7 +59,9 @@ __all__ = [
     "EventSourceFrame",
     "EventDetectionPlan",
     "EventArtifactSet",
-    "build_events_table",
+    "EventsTable",
+    "EventProfileConfig",
+    "ParameterEventProfile",
     "ContinuousEventCalibrationSpec",
     "build_continuous_event_calibration_report_spark",
     "build_event_validation_summary",

@@ -52,11 +52,65 @@ def test_load_pipeline_context_settings_parses_event_slope_threshold(monkeypatch
     monkeypatch.setenv("S3NTINEL_EVENT_SLOPE_ABS_THRESHOLD", "1.5")
     monkeypatch.setenv("S3NTINEL_EVENT_SLOPE_MIN_PERSISTENCE_SAMPLES", "3")
     monkeypatch.setenv("S3NTINEL_EVENT_SLOPE_REEMIT_RATIO", "2.0")
+    monkeypatch.setenv("S3NTINEL_EVENT_SLOPE_THRESHOLD_MODE", "adaptive_run")
+    monkeypatch.setenv("S3NTINEL_EVENT_SLOPE_THRESHOLD_QUANTILE", "0.8")
+    monkeypatch.setenv("S3NTINEL_EVENT_SLOPE_THRESHOLD_SCALE", "0.6")
+    monkeypatch.setenv("S3NTINEL_EVENT_SLOPE_THRESHOLD_MIN", "0.01")
+    monkeypatch.setenv("S3NTINEL_EVENT_WARMUP_POINTS", "1")
+    monkeypatch.setenv("S3NTINEL_EVENT_LOW_SCALE_RESPONSIVENESS", "1.1")
+    monkeypatch.setenv("S3NTINEL_EVENT_REPEATABILITY_AGGRESSIVENESS", "0.9")
+    monkeypatch.setenv("S3NTINEL_EVENT_DRIFT_CONSERVATISM", "1.2")
+    monkeypatch.setenv("S3NTINEL_EVENT_CHATTER_SUPPRESSION", "1.15")
     monkeypatch.setenv("S3NTINEL_BACKBONE_EVENT_PRIOR_ALPHA", "0.5")
 
     settings = load_pipeline_context_settings({"events": {"delta_threshold": 0.0, "slope_source": "ema", "ema_alpha": 0.2}})
 
+    assert settings.events.slope_threshold_mode == "adaptive_run"
+    assert settings.events.slope_threshold_quantile == 0.8
+    assert settings.events.slope_threshold_scale == 0.6
+    assert settings.events.slope_threshold_min == 0.01
     assert settings.events.slope_abs_threshold == 1.5
     assert settings.events.slope_min_persistence_samples == 3
     assert settings.events.slope_reemit_ratio == 2.0
+    assert settings.events.warmup_points == 1
+    assert settings.events.low_scale_responsiveness == 1.1
+    assert settings.events.repeatability_aggressiveness == 0.9
+    assert settings.events.drift_conservatism == 1.2
+    assert settings.events.chatter_suppression == 1.15
     assert settings.backbone.event_prior_alpha == 0.5
+
+
+def test_load_pipeline_context_settings_uses_promoted_event_baseline_by_default(monkeypatch):
+    for env_name in (
+        "S3NTINEL_EVENT_SLOPE_SOURCE",
+        "S3NTINEL_EVENT_EMA_ALPHA",
+        "S3NTINEL_EVENT_SLOPE_THRESHOLD_MODE",
+        "S3NTINEL_EVENT_SLOPE_THRESHOLD_QUANTILE",
+        "S3NTINEL_EVENT_SLOPE_THRESHOLD_SCALE",
+        "S3NTINEL_EVENT_SLOPE_THRESHOLD_MIN",
+        "S3NTINEL_EVENT_SLOPE_ABS_THRESHOLD",
+        "S3NTINEL_EVENT_SLOPE_MIN_PERSISTENCE_SAMPLES",
+        "S3NTINEL_EVENT_SLOPE_REEMIT_RATIO",
+        "S3NTINEL_EVENT_WARMUP_POINTS",
+        "S3NTINEL_EVENT_LOW_SCALE_RESPONSIVENESS",
+        "S3NTINEL_EVENT_REPEATABILITY_AGGRESSIVENESS",
+        "S3NTINEL_EVENT_DRIFT_CONSERVATISM",
+        "S3NTINEL_EVENT_CHATTER_SUPPRESSION",
+    ):
+        monkeypatch.delenv(env_name, raising=False)
+
+    settings = load_pipeline_context_settings({})
+
+    assert settings.events.slope_source == "ema"
+    assert settings.events.ema_alpha == 0.35
+    assert settings.events.slope_threshold_mode == "fixed"
+    assert settings.events.slope_threshold_quantile == 0.75
+    assert settings.events.slope_threshold_scale == 0.35
+    assert settings.events.slope_abs_threshold == 2.0
+    assert settings.events.slope_min_persistence_samples == 2
+    assert settings.events.slope_reemit_ratio == 1.5
+    assert settings.events.warmup_points == 4
+    assert settings.events.low_scale_responsiveness == 1.0
+    assert settings.events.repeatability_aggressiveness == 1.0
+    assert settings.events.drift_conservatism == 1.0
+    assert settings.events.chatter_suppression == 1.0

@@ -55,15 +55,123 @@ Incremental patches:
       - phase segments: `10000` rows / `3600000` ms
 - Profile semantics-preserving performance variants of the canonical simulation pipeline:
   - `python -m scripts.profile_pipeline_performance --flight-name power_pressurization_hierarchy_composite --mode full --base-dir data/performance_profiles`
+  - replay-aware late-stage benchmarking is also available when you already have a source run bundle:
+    - `python -m scripts.profile_pipeline_performance --flight-name power_pressurization_hierarchy_composite --mode full --base-dir data/performance_profiles --replay-source-run-dir data/simulation_runs/<run_dir> --replay-target-stage 50_build_graph.py`
+    - this clones the source run into each benchmark repeat directory, asks the replay planner for the cheapest valid boundary to the target stage, and resumes from there instead of launching a fresh full run
+    - you can also specify the minimal downstream closure you want to evaluate:
+      - `python -m scripts.profile_pipeline_performance --flight-name power_pressurization_hierarchy_composite --mode full --base-dir data/performance_profiles --replay-source-run-dir data/simulation_runs/<run_dir> --evaluation-tier structural`
+      - supported tiers: `profile`, `event`, `structural`, `phase`, `scoring`, `anomaly`, `full`
+      - if `--replay-target-stage` is omitted, the script infers the earliest impacted stage from the changed knobs and then extends the run only as far as the requested evaluation tier requires
+    - or drive replay closure from the exact tuning objective instead of a manual tier:
+      - `python -m scripts.profile_pipeline_performance --flight-name power_pressurization_hierarchy_composite --mode full --base-dir data/performance_profiles --replay-source-run-dir data/simulation_runs/<run_dir> --objective-name sim_structural_default_v1`
+      - supported objective names currently mirror the built-in default simulation objectives:
+        - `sim_profile_default_v1`
+        - `sim_event_default_v1`
+        - `sim_structural_default_v1`
+        - `sim_full_default_v1`
+      - when both `--objective-name` and `--evaluation-tier` are provided, they must agree
+    - or choose a named repo-level objective preset:
+      - `python -m scripts.profile_pipeline_performance --flight-name power_pressurization_hierarchy_composite --mode full --base-dir data/performance_profiles --replay-source-run-dir data/simulation_runs/<run_dir> --objective-preset event_recall_heavy`
+      - current presets are defined in `libs/tuning/presets.py`
+      - `--objective-preset` is mutually exclusive with `--objective-name` and `--objective-spec-path`
+    - you can also load a custom objective definition from disk:
+      - `python -m scripts.profile_pipeline_performance --flight-name power_pressurization_hierarchy_composite --mode full --base-dir data/performance_profiles --replay-source-run-dir data/simulation_runs/<run_dir> --objective-spec-path reports/custom_objective.json`
+      - accepted payloads:
+        - a raw `ObjectiveSpec.to_payload()` JSON object
+        - an `objective_evaluation_report.json` whose `evaluation.objective_spec` should be reused
+      - `--objective-name` and `--objective-spec-path` are mutually exclusive
+    - you can also mutate the resolved objective directly from the benchmark CLI and have the exact variant persisted into each repeat bundle:
+      - `python -m scripts.profile_pipeline_performance --flight-name power_pressurization_hierarchy_composite --mode full --base-dir data/performance_profiles --replay-source-run-dir data/simulation_runs/<run_dir> --objective-name sim_event_default_v1 --objective-override name=\"sim_event_recall_heavy_v1\" --objective-override primary_terms.3.weight=2.0`
+      - override paths use dot segments over the serialized objective payload, with list indices as numeric segments
+      - override values are parsed as JSON scalars when possible, otherwise left as strings
+      - the resolved objective variant is written to `reports/resolved_objective_spec.json` inside each benchmark repeat directory
+      - objective overrides can now also live on individual benchmark variants in the script, so one sweep can compare different objective policies instead of sharing a single global objective mutation
   - run a single named variant when you want a targeted check instead of the whole quick sweep:
     - `python -m scripts.profile_pipeline_performance --flight-name power_pressurization_hierarchy_composite --mode full --variant baseline --variant all_small_segments`
+  - run the broad one-at-a-time full-parameter sweep against the full power/pressurization simulation:
+    - `python -m scripts.profile_pipeline_performance --flight-name power_pressurization_hierarchy_composite --mode full --variant-set full_parameter_sweep --base-dir data/performance_profiles`
+    - this variant set keeps the canonical workload fixed and sweeps each benchmark CLI tuning knob individually around the baseline, including event, window, phase, conformal warmup, and backbone settings
+  - run a stage-local combinatorial search, starting with the earliest surfaced stage:
+    - `python -m scripts.profile_pipeline_performance --flight-name power_chain --mode profile --search-stage profile --search-strategy grid --base-dir data/performance_profiles`
+    - current supported search stages:
+      - `profile`
+      - `event`
+      - `windowing`
+      - `structure`
+      - `phase`
+      - `anomaly`
+    - current supported strategies:
+      - `grid`
+      - `random`
+    - `profile` search currently sweeps:
+      - `profile_numeric_ratio_threshold`
+      - `profile_categorical_cardinality_max`
+    - `event` search currently sweeps:
+      - a narrow detector neighborhood:
+        - `slope_threshold_scale`
+        - `slope_abs_threshold`
+        - `slope_min_persistence_samples`
+        - `slope_reemit_ratio`
+        - `event_warmup_points`
+      - generic morphology-policy gains:
+        - `event_low_scale_responsiveness`
+        - `event_repeatability_aggressiveness`
+        - `event_drift_conservatism`
+        - `event_chatter_suppression`
+    - `windowing` search currently sweeps:
+      - `window_max_ms`
+      - `window_event_threshold`
+      - `window_min_ms`
+      - `window_inactivity_timeout_ms`
+    - `windowing` search runs under `--mode structural` because that is the earliest grouped runner mode that includes the window stages
+    - `structure` search currently sweeps:
+      - args:
+        - `backbone_parameter_count`
+        - `backbone_ridge_lambda`
+        - `backbone_event_prior_alpha`
+      - env-backed graph and hierarchy controls:
+        - `S3NTINEL_V2_MIN_ABS_PARTIAL_CORR`
+        - `S3NTINEL_V2_GRAPH_MIN_FUSED_EDGE_WEIGHT`
+        - `S3NTINEL_V2_HIERARCHY_TOP_K_PER_SENSOR`
+    - `structure` search also runs under `--mode structural`
+    - `phase` search currently sweeps:
+      - args:
+        - `phase_count`
+      - env-backed phase controls:
+        - `S3NTINEL_PHASE_DETECT_SENSOR_COUNT`
+        - `S3NTINEL_PHASE_DETECT_EVENT_TYPE_COUNT`
+        - `S3NTINEL_PHASE_DETECT_CATEGORICAL_STATE_COUNT`
+        - `S3NTINEL_PHASE_STABLE_DRIFT_QUANTILE`
+        - `S3NTINEL_PHASE_SMOOTHING_RADIUS`
+        - `S3NTINEL_PHASE_TRANSITION_PENALTY`
+        - `S3NTINEL_PHASE_MIN_DWELL_WINDOWS`
+    - `phase` search runs under `--mode full` because that is the earliest grouped runner mode that includes `70_phase_fit.py`
+    - `anomaly` search currently sweeps:
+      - args:
+        - `min_warm`
+      - env-backed scoring and attribution controls:
+        - `S3NTINEL_MAX_BRIDGE_REFERENCE_ROWS`
+        - `S3NTINEL_SUBSYSTEM_TOP_SENSORS_K`
+    - `anomaly` search also runs under `--mode full`
+    - use `--search-budget N` to cap the number of non-baseline combinations and `--search-seed` when using `--search-strategy random`
   - the benchmark runner executes the canonical simulation pipeline repeatedly with different sequence-segmentation overrides and writes:
+    - a pre-run resolved benchmark plan:
+      - `reports/performance_profile_plan.json`
+      - `reports/performance_profile_plan.md`
+      - includes per-variant replay target, resolved end stage, and the cheapest inferred replay start stage when the source run bundle is replayable
     - per-variant child run bundles under `runs/`
     - `reports/performance_profile_summary.json`
     - `reports/performance_profile_summary.md`
   - variant failures are recorded in the summary by default; the run only exits non-zero if every variant fails
   - pass `--fail-on-variant-error` if you want any failed variant to make the benchmark command fail
   - TODO: this profiler still compares tuning variants on fixed workloads; dataset-size scale sweep is a planned follow-up
+ - Inspect an existing simulation run and list replayable stage boundaries:
+   - `python -m scripts.report_sim_replay --latest --base-dir data/simulation_runs`
+   - or inspect a specific run:
+     - `python -m scripts.report_sim_replay --run-dir data/simulation_runs/<run_dir>`
+   - ask for the cheapest valid resume path to a target stage:
+     - `python -m scripts.report_sim_replay --run-dir data/simulation_runs/<run_dir> --target-stage 50_build_graph.py`
+   - use `--json` for machine-readable output
   - the built-in quick sweep compares:
     - baseline
     - moderately smaller event/window/phase segments

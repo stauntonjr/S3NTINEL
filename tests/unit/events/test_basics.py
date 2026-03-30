@@ -125,6 +125,32 @@ def test_build_continuous_events_reemits_when_run_strengthens(spark):
     assert slope_events[1]["payload"]["emission_reason"] == "run_strengthen"
 
 
+def test_build_continuous_events_adaptive_run_threshold_matches_low_amplitude_runs(spark):
+    raw_df = spark.createDataFrame(_build_numeric_rows([0.0, 0.3, 0.6, 0.9, 1.2]))
+    cfg = ContinuousDetectorConfig(
+        slope_source="raw",
+        slope_threshold_mode="adaptive_run",
+        slope_min_persistence_samples=2,
+        slope_reemit_ratio=10.0,
+        residual_z_threshold=1e9,
+        switch_z_threshold=1e9,
+        switch_delta_z_threshold=1e9,
+        switch_min_abs_delta=1e9,
+        warmup_points=1,
+    )
+
+    slope_events = (
+        build_continuous_events(raw_df, config=cfg)
+        .where("event_type_detected in ('slope_pos', 'slope_neg')")
+        .select("payload")
+        .collect()
+    )
+
+    assert len(slope_events) == 1
+    assert float(slope_events[0]["payload"]["effective_threshold"]) > 0.0
+    assert float(slope_events[0]["payload"]["effective_threshold"]) < 0.3
+
+
 def test_build_continuous_events_emits_switch_from_segmented_source(spark):
     t0 = datetime(2026, 3, 1, tzinfo=timezone.utc)
     rows = [

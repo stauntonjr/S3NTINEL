@@ -35,6 +35,7 @@ def _default_event_segment_policy():
 class CategoricalDetectorConfig:
     min_dwell_seconds: float = 0.0
     max_dwell_seconds: float = 0.0
+    emit_state_enter: bool = True
     emit_state_exit: bool = True
     emit_dwell_bucket: bool = True
     illegal_transitions: frozenset[tuple[str, str]] = frozenset()
@@ -64,6 +65,7 @@ class CategoricalSequenceStateLayout:
         *,
         acc: "Column",
         step: "Column",
+        emit_state_enter: "Column",
         emit_state_exit: "Column",
         emit_dwell_bucket: "Column",
         min_dwell_seconds: "Column",
@@ -111,7 +113,7 @@ class CategoricalSequenceStateLayout:
         )
 
         state_enter_event = StateEnterEvent().optional_from_step(
-            condition=enter_condition,
+            condition=enter_condition & emit_state_enter,
             step=step,
             from_state=F.lit("none"),
             to_state=current_state,
@@ -337,6 +339,7 @@ class CategoricalEventDetector:
                     lambda acc, step: self.state_layout.state_after_step_column(
                         acc=acc,
                         step=step,
+                        emit_state_enter=F.lit(bool(active.emit_state_enter)),
                         emit_state_exit=F.lit(bool(active.emit_state_exit)),
                         emit_dwell_bucket=F.lit(bool(active.emit_dwell_bucket)),
                         min_dwell_seconds=F.lit(float(active.min_dwell_seconds)),

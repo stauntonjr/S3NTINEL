@@ -33,10 +33,14 @@ def _default_event_segment_policy():
 @dataclass(frozen=True)
 class ContinuousDetectorConfig:
     delta_threshold: float = 0.0
-    ema_alpha: float = 0.2
+    ema_alpha: float = 0.35
     slope_source: str = "ema"
+    slope_threshold_mode: str = "fixed"
+    slope_threshold_quantile: float = 0.75
+    slope_threshold_scale: float = 0.35
+    slope_threshold_min: float = 1e-6
     residual_z_threshold: float = 3.0
-    slope_abs_threshold: float = 1.0
+    slope_abs_threshold: float = 2.0
     slope_min_persistence_samples: int = 2
     slope_reemit_ratio: float = 1.5
     switch_z_threshold: float = 4.0
@@ -45,6 +49,9 @@ class ContinuousDetectorConfig:
     switch_delta_scale: float = 6.0
     switch_residual_z_min: float = 0.75
     switch_refractory_samples: int = 20
+    emit_switch_events: bool = True
+    emit_oscillation_events: bool = True
+    emit_threshold_events: bool = True
     min_sigma: float = 1e-3
     oscillation_window: int = 8
     oscillation_amplitude_window: int = 200
@@ -61,7 +68,7 @@ class ContinuousDetectorConfig:
     drift_guard_abs_change: float = 0.0
     drift_guard_max_gap_samples: int = 0
     emit_extrema_events: bool = False
-    warmup_points: int = 5
+    warmup_points: int = 4
 
 
 @dataclass(frozen=True)
@@ -111,7 +118,7 @@ class ContinuousSequenceStateLayout:
         from pyspark.sql import functions as F
 
         cum_abs = acc[self.drift_guard_cum_abs] + F.abs(F.coalesce(step["delta_raw"], F.lit(0.0)))
-        switch_emit = step["switch_candidate"] & (
+        switch_emit = step["resolved_emit_switch_events"] & step["switch_candidate"] & (
             (step["sample_index"] - acc[self.last_switch_index]) >= switch_refractory_samples
         )
         drift_change_emit = (drift_guard_abs_change > F.lit(0.0)) & (cum_abs >= drift_guard_abs_change)
@@ -120,7 +127,7 @@ class ContinuousSequenceStateLayout:
         )
         drift_emit = drift_change_emit | drift_gap_emit
         extrema_emit = emit_extrema_events & step["extrema_kind"].isNotNull()
-        oscillation_emit = step["oscillation_candidate"] & (
+        oscillation_emit = step["resolved_emit_oscillation_events"] & step["oscillation_candidate"] & (
             (step["sample_index"] - acc[self.last_oscillation_index]) >= oscillation_refractory_samples
         )
         slope_candidate_sign = step["slope_candidate_sign"]
@@ -145,11 +152,14 @@ class ContinuousSequenceStateLayout:
             F.when(slope_run_reset | slope_run_started, F.lit(0.0))
             .otherwise(acc[self.slope_run_last_emitted_peak_abs_delta])
         )
-        effective_reemit_ratio = F.greatest(slope_reemit_ratio, F.lit(1.0))
-        slope_run_ready = (slope_candidate_sign != F.lit(0)) & (slope_run_length >= slope_min_persistence_samples)
-        slope_strengthened = slope_run_emitted_before & (
+        effective_reemit_ratio = F.greatest(step["resolved_slope_reemit_ratio"], F.lit(1.0))
+        slope_run_ready = (slope_candidate_sign != F.lit(0)) & (
+            slope_run_length >= step["resolved_slope_min_persistence_samples"]
+        )
+        standard_strengthened = slope_run_emitted_before & (
             slope_run_peak_abs_delta >= slope_last_emitted_peak_abs_delta * effective_reemit_ratio
         )
+        slope_strengthened = standard_strengthened
         slope_emit = slope_run_ready & (~slope_run_emitted_before | slope_strengthened)
         slope_emission_reason = (
             F.when(slope_run_emitted_before, F.lit("run_strengthen")).otherwise(F.lit("run_start"))
@@ -164,7 +174,7 @@ class ContinuousSequenceStateLayout:
             delta=step["delta"],
             delta_raw=step["delta_raw"],
             value=step["val"],
-            slope_source=slope_source,
+            slope_source=step["resolved_slope_source"],
             effective_threshold=step["effective_slope_threshold"],
             run_length=slope_run_length,
             run_peak_delta=slope_run_peak_abs_delta,
@@ -180,7 +190,7 @@ class ContinuousSequenceStateLayout:
             delta=step["delta"],
             delta_raw=step["delta_raw"],
             value=step["val"],
-            slope_source=slope_source,
+            slope_source=step["resolved_slope_source"],
             effective_threshold=step["effective_slope_threshold"],
             run_length=slope_run_length,
             run_peak_delta=slope_run_peak_abs_delta,
@@ -300,7 +310,8 @@ class ContinuousEventDetector:
         from pyspark.sql.window import Window
 
         active = self.config
-        slope_mode = _normalize_slope_source(active.slope_source)
+        _normalize_slope_source(active.slope_source)
+        _normalize_slope_threshold_mode(active.slope_threshold_mode)
         alpha = float(active.ema_alpha)
         if not (0.0 < alpha <= 1.0):
             raise ValueError(f"ema_alpha must be in (0, 1], got {active.ema_alpha}")
@@ -343,7 +354,7 @@ class ContinuousEventDetector:
         oscillation_smoothing_window = order_window.rowsBetween(-(oscillation_smoothing_span - 1), 0)
         period_band_ratio = abs(float(active.oscillation_period_band_ratio))
 
-        return (
+        feature_df = (
             source_df.withColumn(
                 "sample_index",
                 (
@@ -356,8 +367,114 @@ class ContinuousEventDetector:
             .withColumn("smoothed_val", F.avg("val").over(smoothing_window))
             .withColumn("ema_prev", F.lag("smoothed_val").over(order_window))
             .withColumn("delta_raw", F.col("val") - F.col("prev_val"))
-            .withColumn("delta", (F.col("smoothed_val") - F.col("ema_prev")) if slope_mode == "ema" else F.col("delta_raw"))
-            .withColumn("effective_slope_threshold", F.lit(float(active.slope_abs_threshold)))
+            .withColumn("abs_delta_raw", F.abs(F.col("delta_raw")))
+            .withColumn(
+                "resolved_slope_source",
+                _resolved_string_column(source_df, "recommended_slope_source", active.slope_source),
+            )
+            .withColumn(
+                "resolved_slope_threshold_mode",
+                _resolved_string_column(source_df, "recommended_slope_threshold_mode", active.slope_threshold_mode),
+            )
+            .withColumn(
+                "resolved_slope_threshold_quantile",
+                _resolved_double_column(source_df, "recommended_slope_threshold_quantile", active.slope_threshold_quantile),
+            )
+            .withColumn(
+                "resolved_slope_threshold_scale",
+                _resolved_double_column(source_df, "recommended_slope_threshold_scale", active.slope_threshold_scale),
+            )
+            .withColumn(
+                "resolved_slope_threshold_min",
+                _resolved_double_column(source_df, "recommended_slope_threshold_min", active.slope_threshold_min),
+            )
+            .withColumn(
+                "resolved_slope_abs_threshold",
+                _resolved_double_column(source_df, "recommended_slope_threshold", active.slope_abs_threshold),
+            )
+            .withColumn(
+                "resolved_slope_min_persistence_samples",
+                _resolved_int_column(
+                    source_df,
+                    "recommended_slope_min_persistence_samples",
+                    max(active.slope_min_persistence_samples, 1),
+                ),
+            )
+            .withColumn(
+                "resolved_slope_reemit_ratio",
+                _resolved_double_column(source_df, "recommended_slope_reemit_ratio", active.slope_reemit_ratio),
+            )
+            .withColumn(
+                "resolved_warmup_points",
+                _resolved_int_column(source_df, "recommended_warmup_points", active.warmup_points),
+            )
+            .withColumn(
+                "resolved_emit_switch_events",
+                _resolved_bool_column(source_df, "recommended_emit_switch", active.emit_switch_events),
+            )
+            .withColumn(
+                "resolved_emit_oscillation_events",
+                _resolved_bool_column(source_df, "recommended_emit_oscillation", active.emit_oscillation_events),
+            )
+            .withColumn(
+                "resolved_emit_threshold_events",
+                _resolved_bool_column(source_df, "recommended_emit_threshold", active.emit_threshold_events),
+            )
+            .withColumn(
+                "delta",
+                F.when(
+                    F.col("resolved_slope_source") == F.lit("ema"),
+                    F.col("smoothed_val") - F.col("ema_prev"),
+                ).otherwise(F.col("delta_raw")),
+            )
+        )
+
+        if not (0.0 <= float(active.slope_threshold_quantile) <= 1.0):
+            raise ValueError(
+                "slope_threshold_quantile must be in [0, 1], "
+                f"got {active.slope_threshold_quantile}"
+            )
+        if float(active.slope_threshold_scale) < 0.0:
+            raise ValueError(f"slope_threshold_scale must be >= 0, got {active.slope_threshold_scale}")
+        if float(active.slope_threshold_min) < 0.0:
+            raise ValueError(f"slope_threshold_min must be >= 0, got {active.slope_threshold_min}")
+        if int(active.warmup_points) < 1:
+            raise ValueError(f"warmup_points must be >= 1, got {active.warmup_points}")
+
+        key_columns = ("tail_id", "flight_id", parameter_col)
+        threshold_stats_df = feature_df.groupBy(*key_columns).agg(
+            F.percentile_approx("abs_delta_raw", F.lit(float(active.slope_threshold_quantile)), 1000).alias(
+                "_adaptive_slope_quantile"
+            ),
+            F.first("resolved_slope_threshold_mode", ignorenulls=True).alias("_resolved_slope_threshold_mode"),
+            F.first("resolved_slope_threshold_scale", ignorenulls=True).alias("_resolved_slope_threshold_scale"),
+            F.first("resolved_slope_threshold_min", ignorenulls=True).alias("_resolved_slope_threshold_min"),
+            F.first("resolved_slope_abs_threshold", ignorenulls=True).alias("_resolved_slope_abs_threshold"),
+        )
+        feature_df = (
+            feature_df.join(F.broadcast(threshold_stats_df), on=list(key_columns), how="left")
+            .withColumn(
+                "effective_slope_threshold",
+                F.when(
+                    F.col("_resolved_slope_threshold_mode") == F.lit("adaptive_run"),
+                    F.greatest(
+                        F.coalesce(F.col("_adaptive_slope_quantile"), F.lit(0.0))
+                        * F.coalesce(F.col("_resolved_slope_threshold_scale"), F.lit(float(active.slope_threshold_scale))),
+                        F.coalesce(F.col("_resolved_slope_threshold_min"), F.lit(float(active.slope_threshold_min))),
+                    ),
+                ).otherwise(F.coalesce(F.col("_resolved_slope_abs_threshold"), F.lit(float(active.slope_abs_threshold)))),
+            )
+            .drop(
+                "_adaptive_slope_quantile",
+                "_resolved_slope_threshold_mode",
+                "_resolved_slope_threshold_scale",
+                "_resolved_slope_threshold_min",
+                "_resolved_slope_abs_threshold",
+            )
+        )
+
+        return (
+            feature_df
             .withColumn(
                 "slope_candidate_sign",
                 F.when(F.col("delta") > F.col("effective_slope_threshold"), F.lit(1))
@@ -376,7 +493,7 @@ class ContinuousEventDetector:
                     F.lit(float(active.min_sigma)),
                 ),
             )
-            .withColumn("warmup_ready", F.col("sample_index") >= F.lit(int(active.warmup_points)))
+            .withColumn("warmup_ready", F.col("sample_index") >= F.col("resolved_warmup_points"))
             .withColumn("delta_abs_avg", F.avg(F.abs(F.coalesce(F.col("delta_raw"), F.lit(0.0)))).over(smoothing_window))
             .withColumn("osc_value", F.avg("val").over(oscillation_smoothing_window))
             .withColumn("osc_prev", F.lag("osc_value").over(order_window))
@@ -482,7 +599,6 @@ class ContinuousEventDetector:
         from pyspark.sql import functions as F
 
         active = self.config
-        slope_mode = _normalize_slope_source(active.slope_source)
         segment_id_column = self.sequence_plan.ordering.segment_id_column
         key_columns = self.sequence_plan.ordering.key_columns
         switch_scale_candidate = (
@@ -529,6 +645,11 @@ class ContinuousEventDetector:
                 "sigma",
                 "effective_slope_threshold",
                 "slope_candidate_sign",
+                "resolved_slope_source",
+                "resolved_slope_min_persistence_samples",
+                "resolved_slope_reemit_ratio",
+                "resolved_emit_switch_events",
+                "resolved_emit_oscillation_events",
                 "extrema_kind",
                 "osc_value",
                 "sign_changes",
@@ -569,7 +690,7 @@ class ContinuousEventDetector:
                         drift_guard_max_gap_samples=F.lit(int(active.drift_guard_max_gap_samples)),
                         slope_min_persistence_samples=F.lit(int(max(active.slope_min_persistence_samples, 1))),
                         slope_reemit_ratio=F.lit(float(active.slope_reemit_ratio)),
-                        slope_source=F.lit(slope_mode),
+                        slope_source=F.lit(str(active.slope_source)),
                     ),
                 ).alias("state_after"),
             )
@@ -608,6 +729,7 @@ class ContinuousEventDetector:
             feature_df.where(
                 F.col("warmup_ready")
                 & F.col("ema_prev").isNotNull()
+                & F.col("resolved_emit_threshold_events")
                 & (
                     (F.abs(F.col("residual")) >= F.lit(float(active.residual_z_threshold)) * F.col("sigma"))
                     | threshold_by_delta
@@ -644,6 +766,48 @@ def _normalize_slope_source(slope_source: str) -> str:
     if source not in {"raw", "ema"}:
         raise ValueError(f"Unsupported slope_source '{slope_source}'. Expected one of: raw, ema")
     return source
+
+
+def _normalize_slope_threshold_mode(slope_threshold_mode: str) -> str:
+    mode = str(slope_threshold_mode).strip().lower()
+    if mode not in {"fixed", "adaptive_run"}:
+        raise ValueError(
+            f"Unsupported slope_threshold_mode '{slope_threshold_mode}'. "
+            "Expected one of: fixed, adaptive_run"
+        )
+    return mode
+
+
+def _resolved_string_column(raw_df: "DataFrame", column_name: str, default_value: str) -> "Column":
+    from pyspark.sql import functions as F
+
+    if column_name in raw_df.columns:
+        return F.coalesce(F.col(column_name).cast("string"), F.lit(str(default_value)))
+    return F.lit(str(default_value))
+
+
+def _resolved_double_column(raw_df: "DataFrame", column_name: str, default_value: float) -> "Column":
+    from pyspark.sql import functions as F
+
+    if column_name in raw_df.columns:
+        return F.coalesce(F.col(column_name).cast("double"), F.lit(float(default_value)))
+    return F.lit(float(default_value))
+
+
+def _resolved_int_column(raw_df: "DataFrame", column_name: str, default_value: int) -> "Column":
+    from pyspark.sql import functions as F
+
+    if column_name in raw_df.columns:
+        return F.coalesce(F.col(column_name).cast("int"), F.lit(int(default_value)))
+    return F.lit(int(default_value))
+
+
+def _resolved_bool_column(raw_df: "DataFrame", column_name: str, default_value: bool) -> "Column":
+    from pyspark.sql import functions as F
+
+    if column_name in raw_df.columns:
+        return F.coalesce(F.col(column_name).cast("boolean"), F.lit(bool(default_value)))
+    return F.lit(bool(default_value))
 
 
 @hot_path

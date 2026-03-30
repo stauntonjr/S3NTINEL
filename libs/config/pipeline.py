@@ -92,7 +92,9 @@ class PipelineArtifactPaths:
     raw_table: str
     parameter_datatype_profile: str
     continuous_scaling_profile: str
+    parameter_behavior_primitive_profile: str
     parameter_behavior_profile: str
+    parameter_event_profile: str
     events: str
     window_policy_profile: str
     windows: str
@@ -122,9 +124,31 @@ class EventSettings:
     delta_threshold: float
     slope_source: str
     ema_alpha: float
+    slope_threshold_mode: str
+    slope_threshold_quantile: float
+    slope_threshold_scale: float
+    slope_threshold_min: float
     slope_abs_threshold: float
     slope_min_persistence_samples: int
     slope_reemit_ratio: float
+    warmup_points: int
+    low_scale_responsiveness: float = 1.0
+    repeatability_aggressiveness: float = 1.0
+    drift_conservatism: float = 1.0
+    chatter_suppression: float = 1.0
+
+
+@dataclass(frozen=True)
+class ProfilingSettings:
+    numeric_ratio_threshold: float
+    categorical_cardinality_max: int
+    behavior_significant_diff_threshold: float
+    behavior_center_band_width: float
+    behavior_soft_bound_width: float
+    behavior_hard_bound_width: float
+    behavior_mixed_unknown_low_score_threshold: float
+    behavior_mixed_unknown_ambiguous_score_threshold: float
+    behavior_mixed_unknown_ambiguous_margin_threshold: float
 
 
 @dataclass(frozen=True)
@@ -225,6 +249,7 @@ class AnomalySettings:
 
 @dataclass(frozen=True)
 class PipelineContextSettings:
+    profiling: ProfilingSettings
     events: EventSettings
     windowing: WindowingSettings
     backbone: BackboneSettings
@@ -257,9 +282,17 @@ def load_pipeline_artifact_paths() -> PipelineArtifactPaths:
             "S3NTINEL_CONTINUOUS_SCALING_PROFILE_TABLE_PATH",
             "data/delta/continuous_scaling_profile",
         ),
+        parameter_behavior_primitive_profile=_env_str(
+            "S3NTINEL_PARAMETER_BEHAVIOR_PRIMITIVE_PROFILE_TABLE_PATH",
+            "data/delta/parameter_behavior_primitive_profile",
+        ),
         parameter_behavior_profile=_env_str(
             "S3NTINEL_PARAMETER_BEHAVIOR_PROFILE_TABLE_PATH",
             "data/delta/parameter_behavior_profile",
+        ),
+        parameter_event_profile=_env_str(
+            "S3NTINEL_PARAMETER_EVENT_PROFILE_TABLE_PATH",
+            "data/delta/parameter_event_profile",
         ),
         events=_env_str("S3NTINEL_EVENTS_TABLE_PATH", "data/delta/events"),
         window_policy_profile=_env_str(
@@ -315,6 +348,44 @@ def load_pipeline_artifact_paths() -> PipelineArtifactPaths:
 
 def load_pipeline_context_settings(config: dict[str, Any]) -> PipelineContextSettings:
     return PipelineContextSettings(
+        profiling=ProfilingSettings(
+            numeric_ratio_threshold=_env_float(
+                "S3NTINEL_PROFILE_NUMERIC_RATIO_THRESHOLD",
+                _config_float(config, ["profiling", "numeric_ratio_threshold"], 0.8),
+            ),
+            categorical_cardinality_max=_env_int(
+                "S3NTINEL_PROFILE_CATEGORICAL_CARDINALITY_MAX",
+                _config_int(config, ["profiling", "categorical_cardinality_max"], 200),
+            ),
+            behavior_significant_diff_threshold=_env_float(
+                "S3NTINEL_PROFILE_BEHAVIOR_SIGNIFICANT_DIFF_THRESHOLD",
+                _config_float(config, ["profiling", "behavior_significant_diff_threshold"], 0.05),
+            ),
+            behavior_center_band_width=_env_float(
+                "S3NTINEL_PROFILE_BEHAVIOR_CENTER_BAND_WIDTH",
+                _config_float(config, ["profiling", "behavior_center_band_width"], 1.0),
+            ),
+            behavior_soft_bound_width=_env_float(
+                "S3NTINEL_PROFILE_BEHAVIOR_SOFT_BOUND_WIDTH",
+                _config_float(config, ["profiling", "behavior_soft_bound_width"], 2.5),
+            ),
+            behavior_hard_bound_width=_env_float(
+                "S3NTINEL_PROFILE_BEHAVIOR_HARD_BOUND_WIDTH",
+                _config_float(config, ["profiling", "behavior_hard_bound_width"], 2.0),
+            ),
+            behavior_mixed_unknown_low_score_threshold=_env_float(
+                "S3NTINEL_PROFILE_BEHAVIOR_MIXED_UNKNOWN_LOW_SCORE_THRESHOLD",
+                _config_float(config, ["profiling", "behavior_mixed_unknown_low_score_threshold"], 0.38),
+            ),
+            behavior_mixed_unknown_ambiguous_score_threshold=_env_float(
+                "S3NTINEL_PROFILE_BEHAVIOR_MIXED_UNKNOWN_AMBIGUOUS_SCORE_THRESHOLD",
+                _config_float(config, ["profiling", "behavior_mixed_unknown_ambiguous_score_threshold"], 0.55),
+            ),
+            behavior_mixed_unknown_ambiguous_margin_threshold=_env_float(
+                "S3NTINEL_PROFILE_BEHAVIOR_MIXED_UNKNOWN_AMBIGUOUS_MARGIN_THRESHOLD",
+                _config_float(config, ["profiling", "behavior_mixed_unknown_ambiguous_margin_threshold"], 0.03),
+            ),
+        ),
         events=EventSettings(
             delta_threshold=_env_float(
                 "S3NTINEL_EVENT_DELTA_THRESHOLD",
@@ -326,11 +397,27 @@ def load_pipeline_context_settings(config: dict[str, Any]) -> PipelineContextSet
             ),
             ema_alpha=_env_float(
                 "S3NTINEL_EVENT_EMA_ALPHA",
-                _config_float(config, ["events", "ema_alpha"], 0.2),
+                _config_float(config, ["events", "ema_alpha"], 0.35),
+            ),
+            slope_threshold_mode=_env_str(
+                "S3NTINEL_EVENT_SLOPE_THRESHOLD_MODE",
+                _config_str(config, ["events", "slope_threshold_mode"], "fixed"),
+            ),
+            slope_threshold_quantile=_env_float(
+                "S3NTINEL_EVENT_SLOPE_THRESHOLD_QUANTILE",
+                _config_float(config, ["events", "slope_threshold_quantile"], 0.75),
+            ),
+            slope_threshold_scale=_env_float(
+                "S3NTINEL_EVENT_SLOPE_THRESHOLD_SCALE",
+                _config_float(config, ["events", "slope_threshold_scale"], 0.35),
+            ),
+            slope_threshold_min=_env_float(
+                "S3NTINEL_EVENT_SLOPE_THRESHOLD_MIN",
+                _config_float(config, ["events", "slope_threshold_min"], 1e-6),
             ),
             slope_abs_threshold=_env_float(
                 "S3NTINEL_EVENT_SLOPE_ABS_THRESHOLD",
-                _config_float(config, ["events", "slope_abs_threshold"], 1.0),
+                _config_float(config, ["events", "slope_abs_threshold"], 2.0),
             ),
             slope_min_persistence_samples=_env_int(
                 "S3NTINEL_EVENT_SLOPE_MIN_PERSISTENCE_SAMPLES",
@@ -339,6 +426,26 @@ def load_pipeline_context_settings(config: dict[str, Any]) -> PipelineContextSet
             slope_reemit_ratio=_env_float(
                 "S3NTINEL_EVENT_SLOPE_REEMIT_RATIO",
                 _config_float(config, ["events", "slope_reemit_ratio"], 1.5),
+            ),
+            warmup_points=_env_int(
+                "S3NTINEL_EVENT_WARMUP_POINTS",
+                _config_int(config, ["events", "warmup_points"], 4),
+            ),
+            low_scale_responsiveness=_env_float(
+                "S3NTINEL_EVENT_LOW_SCALE_RESPONSIVENESS",
+                _config_float(config, ["events", "low_scale_responsiveness"], 1.0),
+            ),
+            repeatability_aggressiveness=_env_float(
+                "S3NTINEL_EVENT_REPEATABILITY_AGGRESSIVENESS",
+                _config_float(config, ["events", "repeatability_aggressiveness"], 1.0),
+            ),
+            drift_conservatism=_env_float(
+                "S3NTINEL_EVENT_DRIFT_CONSERVATISM",
+                _config_float(config, ["events", "drift_conservatism"], 1.0),
+            ),
+            chatter_suppression=_env_float(
+                "S3NTINEL_EVENT_CHATTER_SUPPRESSION",
+                _config_float(config, ["events", "chatter_suppression"], 1.0),
             ),
         ),
         windowing=WindowingSettings(
