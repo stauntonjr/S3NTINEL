@@ -13,30 +13,28 @@ Those belong to `libs/simulation`, `libs/scoring`, and their validators.
 
 ## How To Use
 
-- Use `build_anomaly_window_attribution_table(...)`, `build_anomaly_telemetry_attribution_table(...)`, and `build_anomaly_event_attribution_table(...)` from the package surface for the persisted stage.
+- Use `AnomalyWindowAttributionTable`, `AnomalyTelemetryAttributionTable`, and `AnomalyEventAttributionTable` from the package surface for the persisted stage.
 - Use `validate_attribution_against_misbehavior_truth(...)` as the canonical truth validator.
 - `validate_attribution_against_fault_truth(...)` remains as a deprecated compatibility wrapper.
 
 ## Contents
 
-- `artifacts.py`
-  - anomaly attribution nouns and artifact semantics
-- `subsystem_context.py`
-  - subsystem and top-sensor context
-- `panel_context.py`
-  - panel/message context extraction
+- `frames.py`
+  - reusable subsystem, panel, and combined attribution context frames
+- `tables.py`
+  - persisted anomaly attribution artifact owners
 - `pipeline.py`
-  - thin dataframe adapter over the anomaly artifacts
+  - thin orchestration over typed anomaly artifacts
 - `validator.py`
   - attribution-vs-truth evaluation
 
 ## Model / Concepts
 
 Main nouns:
-- `build_anomaly_window_attribution_table`
-- `build_anomaly_telemetry_attribution_table`
-- `build_anomaly_event_attribution_table`
-- `build_anomaly_attribution_context_table`
+- `AnomalyWindowAttributionTable`
+- `AnomalyTelemetryAttributionTable`
+- `AnomalyEventAttributionTable`
+- `AnomalyAttributionContextFrame`
 
 These represent downstream anomaly outputs, not simulation truth.
 

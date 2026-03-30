@@ -8,11 +8,10 @@ from libs.phase.pipeline import (
     PhaseClusterModel,
     PhaseDetectionPlan,
     PhaseFeatureFrame,
-    build_phase_baselines_spark_table,
-    build_phase_windows_spark_table,
     fit_phase_feature_config_from_spark,
     fit_phase_feature_config_with_diagnostics_from_spark,
 )
+from libs.phase.tables import PhaseBaselinesTable, PhaseWindowsTable
 from libs.phase.validator import (
     build_phase_validation_assignments,
     evaluate_detected_phases,
@@ -21,11 +20,11 @@ from libs.phase.validator import (
 
 __all__ = [
     "PhaseArtifactSet",
+    "PhaseBaselinesTable",
     "PhaseClusterModel",
     "PhaseDetectionPlan",
     "PhaseFeatureFrame",
-    "build_phase_baselines_spark_table",
-    "build_phase_windows_spark_table",
+    "PhaseWindowsTable",
     "analyze_phase_behavior",
     "evaluate_detected_phases",
     "PhaseFeatureConfig",

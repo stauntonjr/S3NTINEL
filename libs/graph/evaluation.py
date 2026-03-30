@@ -9,10 +9,10 @@ from libs.graph.fused import FusedGraphSpec
 from libs.graph.hierarchy_artifacts import GraphHierarchy, HierarchySpec
 from libs.graph.lag import LagBandSpec, resolve_lag_band_specs
 from libs.graph.pipeline import (
-    build_fused_graph_spark_table,
     build_graph_components_with_diagnostics_spark_table,
     collapse_lag_profile_spark_table,
 )
+from libs.graph.tables import FusedGraphTable
 from libs.graph.validator import _cluster_agreement_metrics
 from libs.io.schemas import PRECISION_GRAPH_SCHEMA
 
@@ -230,14 +230,14 @@ def _hierarchy_sensitivity_report(
             max_mean_lag_seconds=max_mean_lag_seconds,
             top_k_outgoing=lag_top_k_outgoing,
         )
-        alt_fused_sdf = build_fused_graph_spark_table(
+        alt_fused_sdf = FusedGraphTable.from_component_tables(
             precision_sdf,
             event_sdf,
             alt_lag_sdf,
             alpha=fusion_spec.alpha,
             beta=fusion_spec.beta,
             gamma=fusion_spec.gamma,
-        )
+        ).to_dataframe()
         alt_hierarchy = GraphHierarchy.from_fused_spark(
             alt_fused_sdf,
             parameter_names=parameter_names,

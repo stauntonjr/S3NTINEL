@@ -1,13 +1,11 @@
 from datetime import date, datetime
 
-from libs.anomaly.artifacts import (
-    build_anomaly_attribution_context_table,
-    build_anomaly_event_attribution_table,
-    build_anomaly_telemetry_attribution_table,
-    build_anomaly_window_attribution_from_context_table,
+from libs.anomaly import (
+    AnomalyAttributionContextFrame,
+    AnomalyAttributionPlan,
+    AnomalyPanelContextFrame,
+    AnomalySubsystemContextFrame,
 )
-from libs.anomaly.panel_context import build_window_panel_context_table
-from libs.anomaly.subsystem_context import build_window_subsystem_context_table
 from libs.testing.data import (
     create_sample_calibrated_df,
     create_sample_events_df,
@@ -26,12 +24,12 @@ def _hierarchy_sensor_map_df(spark):
 
 
 def test_anomaly_subsystem_context_builds_top_sensors_and_scores(spark):
-    context_df = build_window_subsystem_context_table(
+    context_df = AnomalySubsystemContextFrame.from_events_and_windows(
         events_df=create_sample_events_df(spark),
         windows_df=create_sample_windows_df(spark),
         hierarchy_sensor_map_df=_hierarchy_sensor_map_df(spark),
         top_k_per_subsystem=3,
-    )
+    ).to_dataframe()
 
     row = context_df.where("win_id = 1").collect()[0]
     assert row["top_sensors_by_subsystem"]
@@ -61,7 +59,7 @@ def test_anomaly_panel_context_extracts_text_message_codes_and_sources(spark):
         ]
     )
 
-    panel_df = build_window_panel_context_table(raw_df=raw_df, windows_df=windows_df)
+    panel_df = AnomalyPanelContextFrame.from_raw_and_windows(raw_df=raw_df, windows_df=windows_df).to_dataframe()
     row = panel_df.where("win_id = 1").collect()[0]
     assert "HYD_PRESS_LOW" in list(row["panel_context"]["text"])
     assert "HYD_PRESS_LOW" in list(row["panel_context"]["message_codes"])
@@ -90,34 +88,36 @@ def test_anomaly_models_build_expected_dataframes(spark):
             }
         ]
     )
-    attribution_context_df = build_anomaly_attribution_context_table(
-        subsystem_context_df=build_window_subsystem_context_table(
+    attribution_context_df = AnomalyAttributionContextFrame.from_context_frames(
+        subsystem_context=AnomalySubsystemContextFrame.from_events_and_windows(
             events_df=events_df,
             windows_df=windows_df,
             hierarchy_sensor_map_df=hierarchy_sensor_map_df,
             top_k_per_subsystem=3,
         ),
-        panel_context_df=build_window_panel_context_table(raw_df=raw_df, windows_df=windows_df),
-    )
+        panel_context=AnomalyPanelContextFrame.from_raw_and_windows(raw_df=raw_df, windows_df=windows_df),
+    ).to_dataframe()
 
-    telemetry_df = build_anomaly_telemetry_attribution_table(
+    telemetry_df = AnomalyAttributionPlan(top_k_per_subsystem=3).build_telemetry_attribution(
         calibrated_df=calibrated_df,
         windows_df=windows_df,
         raw_df=raw_df,
         hierarchy_sensor_map_df=hierarchy_sensor_map_df,
-    )
-    event_df = build_anomaly_event_attribution_table(
+    ).to_dataframe()
+    event_df = AnomalyAttributionPlan(top_k_per_subsystem=3).build_event_attribution(
         calibrated_df=calibrated_df,
         windows_df=windows_df,
         events_df=events_df,
         hierarchy_sensor_map_df=hierarchy_sensor_map_df,
-    )
-    window_df = build_anomaly_window_attribution_from_context_table(
+    ).to_dataframe()
+    window_df = AnomalyAttributionPlan(top_k_per_subsystem=3).build_window_attribution(
         calibrated_df=calibrated_df,
         phase_windows_df=phase_windows_df,
         windows_df=windows_df,
-        attribution_context_df=attribution_context_df,
-    )
+        events_df=events_df,
+        hierarchy_sensor_map_df=hierarchy_sensor_map_df,
+        raw_df=raw_df,
+    ).to_dataframe()
 
     assert telemetry_df.count() > 0
     assert event_df.count() > 0

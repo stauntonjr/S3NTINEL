@@ -3,9 +3,20 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+
+from libs.io.pandas_spark import coerce_spark_map_like
+
+if TYPE_CHECKING:
+    from pyspark.sql import DataFrame
+
+
+def _spark_functions():
+    from pyspark.sql import functions as F
+
+    return F
 
 
 def select_backbone_sensors_by_energy(
@@ -29,6 +40,24 @@ def select_backbone_sensors_by_energy(
     ][:limit]
 
 
+def select_backbone_sensors_by_energy_spark(energy_df: DataFrame, *, k: int) -> list[str]:
+    """Select the top-k backbone sensors from distributed energy rows."""
+    F = _spark_functions()
+
+    ordering = (
+        [F.col("selection_score").desc(), F.col("energy").desc(), F.col("parameter_name").asc()]
+        if "selection_score" in energy_df.columns
+        else [F.col("energy").desc(), F.col("parameter_name").asc()]
+    )
+    rows = (
+        energy_df.orderBy(*ordering)
+        .limit(max(int(k), 1))
+        .select("parameter_name")
+        .collect()
+    )
+    return [str(row["parameter_name"]) for row in rows if str(row["parameter_name"])]
+
+
 def compute_backbone_gh_by_flight(
     windows: list[dict[str, Any]],
     *,
@@ -40,8 +69,8 @@ def compute_backbone_gh_by_flight(
     if all_sensors is None:
         sensor_union: set[str] = set()
         for item in windows:
-            vector = item.get("continuous_vector_t_end_scaled")
-            if isinstance(vector, dict):
+            vector = coerce_spark_map_like(item.get("continuous_vector_t_end_scaled"))
+            if vector is not None:
                 sensor_union.update(str(sensor) for sensor in vector.keys() if str(sensor))
         all_sensor_order = sorted(sensor_union)
     else:
@@ -58,8 +87,8 @@ def compute_backbone_gh_by_flight(
         h = np.zeros((len(backbone_sensors), len(all_sensor_order)), dtype=float)
         window_count = 0
         for item in items:
-            vector = item.get("continuous_vector_t_end_scaled")
-            if not isinstance(vector, dict):
+            vector = coerce_spark_map_like(item.get("continuous_vector_t_end_scaled"))
+            if vector is None:
                 continue
             x_c = np.asarray([float(vector.get(sensor, 0.0) or 0.0) for sensor in backbone_sensors], dtype=float)
             x_all = np.asarray([float(vector.get(sensor, 0.0) or 0.0) for sensor in all_sensor_order], dtype=float)

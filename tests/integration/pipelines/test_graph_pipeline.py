@@ -1,33 +1,36 @@
 from datetime import datetime, timedelta, timezone
 
+import pandas as pd
 import pytest
 
 from libs.io.pandas_spark import pandas_records_for_spark
 from libs.io.schemas import WINDOW_X_SCHEMA
 from libs.graph import (
-    build_event_graph_spark_table,
-    build_fused_graph_spark_table,
     build_graph_components_with_diagnostics_spark_table,
-    build_hierarchy_from_fused_spark_table,
-    build_lag_candidate_pairs_spark_table,
-    build_lag_graph_spark_table,
-    build_lag_profile_spark_table,
-    build_precision_graph_from_window_features_spark_table,
-    build_transition_graph_spark_table,
     collapse_lag_profile_spark_table,
+    EventGraphTable,
+    FusedGraphTable,
+    GraphParameterUniverseTable,
+    HierarchySensorMapTable,
     LagBandSpec,
+    LagCandidatePairsFrame,
+    LagGraphTable,
+    LagProfileTable,
+    PrecisionGraphTable,
+    TransitionGraphTable,
 )
+from libs.graph.precision import PrecisionGraph, PrecisionGraphSpec
 from libs.graph.evaluation import build_graph_stage_evaluation_report_spark
 from libs.graph.hierarchy_artifacts import HierarchySpec
 from libs.testing.data import create_sample_events_df, create_sample_raw_table_df, create_sample_windows_df
-from libs.windows import build_window_features_spark_table
+from libs.windows import WindowFeaturesTable
 
 
 def _build_window_features_pdf_with_events(spark):
     raw_df = create_sample_raw_table_df(spark)
     events_sdf = create_sample_events_df(spark)
     windows_sdf = create_sample_windows_df(spark)
-    window_features_pdf = build_window_features_spark_table(raw_df, events_sdf, windows_sdf).toPandas()
+    window_features_pdf = WindowFeaturesTable.from_raw_events_and_windows(raw_df, events_sdf, windows_sdf).to_dataframe().toPandas()
     return raw_df, events_sdf, windows_sdf, window_features_pdf
 
 
@@ -68,7 +71,7 @@ def test_spark_graph_tables_produce_graph_families_and_hierarchy(spark):
             }
         ]
     )
-    window_features_sdf = spark.createDataFrame(pandas_records_for_spark(window_features_df), schema=WINDOW_X_SCHEMA)
+    window_features_sdf = spark.createDataFrame(pandas_records_for_spark(window_features_df), schema=WINDOW_X_SCHEMA())
 
     precision_sdf, event_sdf, lag_sdf, transition_sdf, fused_sdf, parameter_universe_sdf, _ = (
         build_graph_components_with_diagnostics_spark_table(
@@ -81,12 +84,12 @@ def test_spark_graph_tables_produce_graph_families_and_hierarchy(spark):
             min_lag_count=1,
         )
     )
-    hierarchy_df = build_hierarchy_from_fused_spark_table(
+    hierarchy_df = HierarchySensorMapTable.from_fused_graph(
         fused_sdf,
         parameter_names=[row["parameter_name"] for row in parameter_universe_sdf.collect()],
         min_fused_edge_weight=0.0,
         hierarchy_top_k_per_parameter_name=3,
-    )
+    ).to_dataframe().toPandas()
 
     assert set(["parameter_name_u", "parameter_name_v", "edge_family"]).issubset(event_sdf.columns)
     assert set(["parameter_name_u", "parameter_name_v", "mean_lag_seconds", "edge_family"]).issubset(lag_sdf.columns)
@@ -98,7 +101,7 @@ def test_spark_graph_tables_produce_graph_families_and_hierarchy(spark):
 
 def test_build_graph_components_with_diagnostics_spark_table_reports_component_details(spark):
     _, events_sdf, windows_sdf, window_features_pdf = _build_window_features_pdf_with_events(spark)
-    window_features_sdf = spark.createDataFrame(pandas_records_for_spark(window_features_pdf), schema=WINDOW_X_SCHEMA)
+    window_features_sdf = spark.createDataFrame(pandas_records_for_spark(window_features_pdf), schema=WINDOW_X_SCHEMA())
     backbone_sdf = spark.createDataFrame(
         [
             {
@@ -138,7 +141,7 @@ def test_build_graph_components_with_diagnostics_spark_table_reports_component_d
 
 def test_build_graph_stage_evaluation_report_spark_reports_band_skew_and_sensitivity(spark):
     _, events_sdf, windows_sdf, window_features_pdf = _build_window_features_pdf_with_events(spark)
-    window_features_sdf = spark.createDataFrame(pandas_records_for_spark(window_features_pdf), schema=WINDOW_X_SCHEMA)
+    window_features_sdf = spark.createDataFrame(pandas_records_for_spark(window_features_pdf), schema=WINDOW_X_SCHEMA())
     backbone_sdf = spark.createDataFrame(
         [
             {
@@ -166,15 +169,15 @@ def test_build_graph_stage_evaluation_report_spark_reports_band_skew_and_sensiti
             ),
         )
     )
-    lag_profile_sdf = build_lag_profile_spark_table(
+    lag_profile_sdf = LagProfileTable.from_events(
         events_sdf,
         tau_max_seconds=30.0,
         bands=(
             LagBandSpec(name="quick", lower_seconds=0.0, upper_seconds=2.0, combine_weight=1.0),
             LagBandSpec(name="slow", lower_seconds=2.0, upper_seconds=30.0, combine_weight=0.5),
         ),
-        candidate_pairs_df=build_lag_candidate_pairs_spark_table(event_sdf, transition_sdf),
-    )
+        candidate_pairs_df=LagCandidatePairsFrame.from_graphs(event_sdf, transition_sdf).to_dataframe(),
+    ).to_dataframe()
 
     report = build_graph_stage_evaluation_report_spark(
         spark=spark,
@@ -239,35 +242,42 @@ def test_spark_graph_tables_feed_fusion_helper(spark):
         ]
     )
 
-    event_sdf = build_event_graph_spark_table(events_sdf, windows_sdf, min_count=1, min_npmi=0.0, top_k_per_parameter_name=8)
-    lag_sdf = build_lag_graph_spark_table(
+    event_sdf = EventGraphTable.from_events_and_windows(
         events_sdf,
+        windows_sdf,
+        min_count=1,
+        min_npmi=0.0,
+        top_k_per_parameter_name=8,
+    ).to_dataframe()
+    lag_sdf = LagGraphTable.from_profile(
+        LagProfileTable.from_events(events_sdf, tau_max_seconds=30.0).to_dataframe(),
         tau_max_seconds=30.0,
+        bands=None,
         min_count=1,
         max_mean_lag_seconds=None,
         top_k_outgoing=8,
-    )
-    transition_pdf = build_transition_graph_spark_table(events_sdf, min_count=1).toPandas()
-    precision_df = build_precision_graph_from_window_features_spark_table(
-        spark.createDataFrame(pandas_records_for_spark(window_features_df), schema=WINDOW_X_SCHEMA),
+    ).to_dataframe()
+    transition_pdf = TransitionGraphTable.from_events(events_sdf, min_count=1).to_dataframe().toPandas()
+    precision_df = PrecisionGraphTable.from_window_features(
+        spark.createDataFrame(pandas_records_for_spark(window_features_df), schema=WINDOW_X_SCHEMA()),
         selected_sensors=["ENG_TEMP_1"],
         ridge_lambda=1.0,
         min_abs_partial_corr=0.0,
-    )
-    fused_sdf = build_fused_graph_spark_table(
-        _precision_pandas_to_spark_table(spark, precision_df),
+    ).to_dataframe()
+    fused_sdf = FusedGraphTable.from_component_tables(
+        precision_df,
         event_sdf,
         lag_sdf,
         alpha=1.0,
         beta=1.0,
         gamma=1.0,
-    )
-    hierarchy_df = build_hierarchy_from_fused_spark_table(
+    ).to_dataframe()
+    hierarchy_df = HierarchySensorMapTable.from_fused_graph(
         fused_sdf,
         parameter_names=["ENG_TEMP_1", "HYD_PRESS_1", "PUMP_STATE"],
         min_fused_edge_weight=0.0,
         hierarchy_top_k_per_parameter_name=3,
-    )
+    ).to_dataframe().toPandas()
     event_pdf = event_sdf.toPandas()
     lag_pdf = lag_sdf.toPandas()
     fused_df = fused_sdf.toPandas()
@@ -284,12 +294,12 @@ def test_spark_graph_tables_feed_fusion_helper(spark):
 def test_build_precision_graph_from_window_features_spark_table_produces_expected_columns(spark):
     _, events_sdf, windows_df, window_features_df = _build_window_features_pdf_with_events(spark)
 
-    spark_precision_df = build_precision_graph_from_window_features_spark_table(
-        spark.createDataFrame(pandas_records_for_spark(window_features_df), schema=WINDOW_X_SCHEMA),
+    spark_precision_df = PrecisionGraphTable.from_window_features(
+        spark.createDataFrame(pandas_records_for_spark(window_features_df), schema=WINDOW_X_SCHEMA()),
         selected_sensors=["ENG_TEMP_1"],
         ridge_lambda=1.0,
         min_abs_partial_corr=0.0,
-    )
+    ).to_dataframe()
     assert set(spark_precision_df.columns) == {
         "parameter_name_u",
         "parameter_name_v",
@@ -297,7 +307,101 @@ def test_build_precision_graph_from_window_features_spark_table_produces_expecte
         "precision_weight",
         "edge_family",
     }
-    assert len(spark_precision_df) >= 0
+    assert spark_precision_df.count() >= 0
+
+
+def test_build_precision_graph_accepts_parquet_style_map_values(spark):
+    rows = [
+        {
+            "tail_id": "T001",
+            "flight_id": "F001",
+            "win_id": 1,
+            "t_start": datetime(2026, 3, 1, 0, 0, 0, tzinfo=timezone.utc),
+            "t_end": datetime(2026, 3, 1, 0, 0, 5, tzinfo=timezone.utc),
+            "duration_ms": 5000,
+            "sensor_count": 2,
+            "continuous_vector_t_end": [("s1", 1.0), ("s2", 2.0)],
+            "continuous_vector_t_end_scaled": [("s1", 1.0), ("s2", 2.0)],
+            "categorical_state_t_end": [],
+            "event_type_counts": [],
+            "continuous_event_summary": {
+                "slope_abs_impulse_by_parameter": {},
+                "switch_count_by_parameter": {},
+                "threshold_count_by_parameter": {},
+                "oscillation_count_by_parameter": {},
+                "drift_guard_count_by_parameter": {},
+                "slope_reinforcement_count_by_parameter": {},
+            },
+            "drift_magnitude_profiled": 0.0,
+            "zoh_snapshot": [],
+            "zoh_version": 1,
+            "date_utc": datetime(2026, 3, 1, tzinfo=timezone.utc).date(),
+        },
+        {
+            "tail_id": "T001",
+            "flight_id": "F001",
+            "win_id": 2,
+            "t_start": datetime(2026, 3, 1, 0, 0, 5, tzinfo=timezone.utc),
+            "t_end": datetime(2026, 3, 1, 0, 0, 10, tzinfo=timezone.utc),
+            "duration_ms": 5000,
+            "sensor_count": 2,
+            "continuous_vector_t_end": [("s1", 2.0), ("s2", 1.0)],
+            "continuous_vector_t_end_scaled": [("s1", 2.0), ("s2", 1.0)],
+            "categorical_state_t_end": [],
+            "event_type_counts": [],
+            "continuous_event_summary": {
+                "slope_abs_impulse_by_parameter": {},
+                "switch_count_by_parameter": {},
+                "threshold_count_by_parameter": {},
+                "oscillation_count_by_parameter": {},
+                "drift_guard_count_by_parameter": {},
+                "slope_reinforcement_count_by_parameter": {},
+            },
+            "drift_magnitude_profiled": 0.0,
+            "zoh_snapshot": [],
+            "zoh_version": 1,
+            "date_utc": datetime(2026, 3, 1, tzinfo=timezone.utc).date(),
+        },
+    ]
+
+    spark_precision_df = PrecisionGraphTable.from_window_features(
+        spark.createDataFrame(pandas_records_for_spark(rows), schema=WINDOW_X_SCHEMA()),
+        selected_sensors=["s1", "s2"],
+        ridge_lambda=1.0,
+        min_abs_partial_corr=0.0,
+    ).to_dataframe()
+
+    assert spark_precision_df.count() == 1
+
+
+def test_precision_graph_pandas_builder_accepts_list_tuple_maps():
+    window_features_df = pd.DataFrame(
+        pandas_records_for_spark(
+            [
+                {
+                    "tail_id": "T001",
+                    "flight_id": "F001",
+                    "win_id": 1,
+                    "t_end": datetime(2026, 3, 1, 0, 0, 5, tzinfo=timezone.utc),
+                    "continuous_vector_t_end_scaled": [("s1", 1.0), ("s2", 2.0)],
+                },
+                {
+                    "tail_id": "T001",
+                    "flight_id": "F001",
+                    "win_id": 2,
+                    "t_end": datetime(2026, 3, 1, 0, 0, 10, tzinfo=timezone.utc),
+                    "continuous_vector_t_end_scaled": [("s1", 2.0), ("s2", 1.0)],
+                },
+            ]
+        )
+    )
+
+    graph = PrecisionGraph.from_window_features(
+        window_features_df,
+        spec=PrecisionGraphSpec(selected_sensors=("s1", "s2"), ridge_lambda=1.0, min_abs_partial_corr=0.0),
+    )
+
+    assert len(graph.edges) == 1
 
 
 def test_graph_window_features_fixture_keeps_event_type_counts(spark):
@@ -313,17 +417,24 @@ def test_graph_builders_require_event_seq_id(spark):
     windows_sdf = create_sample_windows_df(spark)
 
     with pytest.raises(ValueError, match="event_seq_id"):
-        build_event_graph_spark_table(events_sdf, windows_sdf, min_count=1, min_npmi=0.0, top_k_per_parameter_name=8).count()
-    with pytest.raises(ValueError, match="event_seq_id"):
-        build_lag_graph_spark_table(
+        EventGraphTable.from_events_and_windows(
             events_sdf,
+            windows_sdf,
+            min_count=1,
+            min_npmi=0.0,
+            top_k_per_parameter_name=8,
+        ).to_dataframe().count()
+    with pytest.raises(ValueError, match="event_seq_id"):
+        LagGraphTable.from_profile(
+            LagProfileTable.from_events(events_sdf, tau_max_seconds=30.0).to_dataframe(),
             tau_max_seconds=30.0,
+            bands=None,
             min_count=1,
             max_mean_lag_seconds=None,
             top_k_outgoing=8,
-        ).count()
+        ).to_dataframe().count()
     with pytest.raises(ValueError, match="event_seq_id"):
-        build_transition_graph_spark_table(events_sdf, min_count=1).count()
+        TransitionGraphTable.from_events(events_sdf, min_count=1).to_dataframe().count()
 
 
 def test_lag_graph_spark_table_keeps_nearest_prior_per_parameter_and_same_timestamp_order(spark):
@@ -353,13 +464,14 @@ date_utc date
     ]
     events_sdf = spark.createDataFrame(rows, schema=event_schema)
 
-    lag_pdf = build_lag_graph_spark_table(
-        events_sdf,
+    lag_pdf = LagGraphTable.from_profile(
+        LagProfileTable.from_events(events_sdf, tau_max_seconds=10.0).to_dataframe(),
         tau_max_seconds=10.0,
+        bands=None,
         min_count=1,
         max_mean_lag_seconds=None,
         top_k_outgoing=0,
-    ).toPandas()
+    ).to_dataframe().toPandas()
 
     actual = lag_pdf.sort_values(["parameter_name_u", "parameter_name_v"], kind="stable").reset_index(drop=True)
     expected = [
@@ -404,31 +516,34 @@ date_utc date
     ]
     events_sdf = spark.createDataFrame(rows, schema=event_schema)
 
-    min_count_pdf = build_lag_graph_spark_table(
-        events_sdf,
+    min_count_pdf = LagGraphTable.from_profile(
+        LagProfileTable.from_events(events_sdf, tau_max_seconds=10.0).to_dataframe(),
         tau_max_seconds=10.0,
+        bands=None,
         min_count=2,
         max_mean_lag_seconds=None,
         top_k_outgoing=0,
-    ).toPandas()
+    ).to_dataframe().toPandas()
     assert set(zip(min_count_pdf["parameter_name_u"], min_count_pdf["parameter_name_v"])) == {("A", "C"), ("B", "C")}
 
-    top_k_pdf = build_lag_graph_spark_table(
-        events_sdf,
+    top_k_pdf = LagGraphTable.from_profile(
+        LagProfileTable.from_events(events_sdf, tau_max_seconds=10.0).to_dataframe(),
         tau_max_seconds=10.0,
+        bands=None,
         min_count=1,
         max_mean_lag_seconds=None,
         top_k_outgoing=1,
-    ).toPandas()
+    ).to_dataframe().toPandas()
     assert top_k_pdf["parameter_name_u"].value_counts().max() == 1
 
-    max_mean_pdf = build_lag_graph_spark_table(
-        events_sdf,
+    max_mean_pdf = LagGraphTable.from_profile(
+        LagProfileTable.from_events(events_sdf, tau_max_seconds=10.0).to_dataframe(),
         tau_max_seconds=10.0,
+        bands=None,
         min_count=1,
         max_mean_lag_seconds=1.5,
         top_k_outgoing=0,
-    ).toPandas()
+    ).to_dataframe().toPandas()
     assert all(float(value) <= 1.5 for value in max_mean_pdf["mean_lag_seconds"].tolist())
 
 
@@ -464,11 +579,11 @@ date_utc date
         LagBandSpec(name="slow", lower_seconds=10.0, upper_seconds=30.0, combine_weight=0.5),
     )
 
-    profile_pdf = build_lag_profile_spark_table(
+    profile_pdf = LagProfileTable.from_events(
         events_sdf,
         tau_max_seconds=30.0,
         bands=band_specs,
-    ).toPandas()
+    ).to_dataframe().toPandas()
     collapsed_pdf = collapse_lag_profile_spark_table(
         spark.createDataFrame(profile_pdf),
         tau_max_seconds=30.0,
@@ -546,14 +661,20 @@ date_utc date
     events_sdf = spark.createDataFrame(events_rows, schema=event_schema)
     windows_sdf = spark.createDataFrame(window_rows, schema=window_schema)
 
-    event_sdf = build_event_graph_spark_table(events_sdf, windows_sdf, min_count=1, min_npmi=0.0, top_k_per_parameter_name=8)
-    transition_sdf = build_transition_graph_spark_table(events_sdf, min_count=1)
-    candidate_pairs_sdf = build_lag_candidate_pairs_spark_table(event_sdf, transition_sdf)
-    lag_profile_pdf = build_lag_profile_spark_table(
+    event_sdf = EventGraphTable.from_events_and_windows(
+        events_sdf,
+        windows_sdf,
+        min_count=1,
+        min_npmi=0.0,
+        top_k_per_parameter_name=8,
+    ).to_dataframe()
+    transition_sdf = TransitionGraphTable.from_events(events_sdf, min_count=1).to_dataframe()
+    candidate_pairs_sdf = LagCandidatePairsFrame.from_graphs(event_sdf, transition_sdf).to_dataframe()
+    lag_profile_pdf = LagProfileTable.from_events(
         events_sdf,
         tau_max_seconds=10.0,
         candidate_pairs_df=candidate_pairs_sdf,
-    ).toPandas()
+    ).to_dataframe().toPandas()
 
     actual_pairs = set(zip(lag_profile_pdf["parameter_name_u"], lag_profile_pdf["parameter_name_v"]))
     assert ("A", "B") in actual_pairs
@@ -584,7 +705,7 @@ date_utc date
     ]
     events_sdf = spark.createDataFrame(rows, schema=event_schema)
 
-    transition_pdf = build_transition_graph_spark_table(events_sdf, min_count=1).toPandas()
+    transition_pdf = TransitionGraphTable.from_events(events_sdf, min_count=1).to_dataframe().toPandas()
     actual_rows = sorted(
         [{key: _round_nested(value) for key, value in row.items()} for row in transition_pdf.to_dict(orient="records")],
         key=lambda row: (row["parameter_name_u"], row["parameter_name_v"]),

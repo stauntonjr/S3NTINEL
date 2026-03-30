@@ -1,12 +1,15 @@
 """Anomaly attribution package."""
 
-from libs.anomaly.artifacts import (
-    build_anomaly_attribution_context_table,
-    build_anomaly_event_attribution_table,
-    build_anomaly_telemetry_attribution_table,
+from libs.anomaly.frames import (
+    AnomalyAttributionContextFrame,
+    AnomalyPanelContextFrame,
+    AnomalySubsystemContextFrame,
 )
-from libs.anomaly.pipeline import (
-    build_anomaly_window_attribution_table,
+from libs.anomaly.pipeline import AnomalyArtifactSet, AnomalyAttributionPlan
+from libs.anomaly.tables import (
+    AnomalyEventAttributionTable,
+    AnomalyTelemetryAttributionTable,
+    AnomalyWindowAttributionTable,
 )
 from libs.anomaly.validator import (
     validate_attribution_against_fault_truth,
@@ -14,10 +17,14 @@ from libs.anomaly.validator import (
 )
 
 __all__ = [
-    "build_anomaly_attribution_context_table",
-    "build_anomaly_window_attribution_table",
-    "build_anomaly_telemetry_attribution_table",
-    "build_anomaly_event_attribution_table",
+    "AnomalyArtifactSet",
+    "AnomalyAttributionPlan",
+    "AnomalyAttributionContextFrame",
+    "AnomalyEventAttributionTable",
+    "AnomalyPanelContextFrame",
+    "AnomalySubsystemContextFrame",
+    "AnomalyTelemetryAttributionTable",
+    "AnomalyWindowAttributionTable",
     "validate_attribution_against_fault_truth",
     "validate_attribution_against_misbehavior_truth",
 ]

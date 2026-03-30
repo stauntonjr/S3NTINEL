@@ -5,6 +5,8 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from libs.io.pandas_spark import coerce_spark_map_like
+
 
 @dataclass(frozen=True)
 class PrecisionGraphSpec:
@@ -25,8 +27,8 @@ class PrecisionGraph:
 
         rows: list[list[float]] = []
         for _, row in window_feature_df.sort_values(["tail_id", "flight_id", "t_end", "win_id"], kind="mergesort").iterrows():
-            scaled = row.get("continuous_vector_t_end_scaled")
-            if not isinstance(scaled, dict):
+            scaled = coerce_spark_map_like(row.get("continuous_vector_t_end_scaled"))
+            if scaled is None:
                 continue
             rows.append([float(scaled.get(parameter_name, 0.0) or 0.0) for parameter_name in spec.selected_sensors])
 

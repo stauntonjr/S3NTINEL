@@ -9,11 +9,11 @@ from libs.common import empty_array
 from libs.common.event_types import CATEGORICAL_EVENT_TYPES, CONTINUOUS_EVENT_TYPES
 from libs.phase.feature_config import PhaseFeatureConfig
 from libs.phase.utils import double_matrix_literal, string_array_literal
+from libs.pyspark import Frame
 
 
 @dataclass(frozen=True)
-class PhaseFeatureFrame:
-    dataframe: "DataFrame"
+class PhaseFeatureFrame(Frame):
     feature_names: list[str]
 
     @staticmethod
@@ -282,8 +282,7 @@ class PhaseFeatureFrame:
 
 
 @dataclass(frozen=True)
-class PhaseObservationFrame:
-    dataframe: "DataFrame"
+class PhaseObservationFrame(Frame):
 
     @classmethod
     def from_feature_frame(cls, feature_frame: PhaseFeatureFrame) -> "PhaseObservationFrame":

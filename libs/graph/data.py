@@ -7,6 +7,8 @@ from typing import Any
 
 import pandas as pd
 
+from libs.io.pandas_spark import coerce_spark_map_like
+
 
 def prepare_events_df(events_df: pd.DataFrame) -> pd.DataFrame:
     rows = events_df.copy()
@@ -100,7 +102,7 @@ def parameter_name_union_from_window_features(
     return sorted(
         set(
             window_features_df.get("continuous_vector_t_end_scaled", pd.Series(dtype=object))
-            .apply(lambda item: list(item.keys()) if isinstance(item, dict) else [])
+            .apply(lambda item: list((coerce_spark_map_like(item) or {}).keys()))
             .explode()
             .dropna()
             .astype(str)

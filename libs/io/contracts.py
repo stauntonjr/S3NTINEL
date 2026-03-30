@@ -34,6 +34,7 @@ class TelemetryRow(TypedDict, total=False):
     misbehavior_window_id: str | None
     coupling_id_label: str | None
     event_type_label: str | None
+    event_misbehavior_label: str | None
     anomaly_type_label: str | None
     anomaly_score_label: float | None
     fault_active: bool

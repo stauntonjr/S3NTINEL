@@ -12,6 +12,8 @@ from libs.common import (
 )
 from libs.events.categorical import CategoricalEventDetector
 from libs.events.continuous import ContinuousDetectorConfig, ContinuousEventDetector
+from libs.events.tables import EventsTable
+from libs.pyspark import Frame
 from libs.spark_sequence import (
     SegmentedSequencePlan,
     SequenceOrderingPolicy,
@@ -40,8 +42,7 @@ class EventOrderingPolicy:
 
 
 @dataclass(frozen=True)
-class EventSourceFrame:
-    dataframe: "DataFrame"
+class EventSourceFrame(Frame):
     numeric_df: "DataFrame"
     categorical_df: "DataFrame"
     ordering: EventOrderingPolicy = field(default_factory=EventOrderingPolicy)
@@ -52,6 +53,7 @@ class EventSourceFrame:
         raw_df: "DataFrame",
         *,
         datatype_profile_df: "DataFrame | None" = None,
+        event_profile_df: "DataFrame | None" = None,
         ordering: EventOrderingPolicy | None = None,
     ) -> "EventSourceFrame":
         from pyspark.sql import functions as F
@@ -109,6 +111,22 @@ class EventSourceFrame:
         else:
             base_df = base_df.select("*", F.lit(None).cast("string").alias("_profile_parameter_datatype"))
 
+        if event_profile_df is not None:
+            profile_columns = [
+                column_name
+                for column_name in event_profile_df.columns
+                if column_name.startswith("recommended_")
+            ]
+            event_profile_lookup_df = event_profile_df.select(
+                F.col("parameter_name").cast("string").alias("_event_profile_parameter_name"),
+                *[F.col(column_name).alias(column_name) for column_name in profile_columns],
+            )
+            base_df = base_df.join(
+                F.broadcast(event_profile_lookup_df),
+                on=base_df["parameter_name"] == event_profile_lookup_df["_event_profile_parameter_name"],
+                how="left",
+            ).drop("_event_profile_parameter_name")
+
         prepared_df = base_df.select(
             "*",
             F.coalesce(F.col("_datatype_inline"), F.col("_profile_parameter_datatype")).alias("parameter_datatype_profiled"),
@@ -142,7 +160,7 @@ class EventSourceFrame:
 @dataclass(frozen=True)
 class EventArtifactSet:
     source_frame: EventSourceFrame
-    events_df: "DataFrame"
+    events: EventsTable
 
 
 @dataclass(frozen=True)
@@ -214,43 +232,19 @@ class EventDetectionPlan:
         raw_df: "DataFrame",
         *,
         datatype_profile_df: "DataFrame | None" = None,
+        event_profile_df: "DataFrame | None" = None,
     ) -> EventArtifactSet:
         self._validate_raw_input(raw_df)
         source_frame = EventSourceFrame.from_raw(
             raw_df,
             datatype_profile_df=datatype_profile_df,
+            event_profile_df=event_profile_df,
             ordering=self.ordering,
         )
         continuous_events = self.continuous_detector.build(source_frame.numeric_df)
         categorical_events = self.categorical_detector.build(source_frame.categorical_df)
         events_df = self._canonicalize_events(continuous_events.unionByName(categorical_events, allowMissingColumns=True))
-        return EventArtifactSet(source_frame=source_frame, events_df=events_df)
-
-
-def build_events_table(
-    raw_df: "DataFrame",
-    *,
-    datatype_profile_df: "DataFrame | None" = None,
-    delta_threshold: float = 0.0,
-    slope_source: str = "ema",
-    ema_alpha: float = 0.2,
-    slope_abs_threshold: float = 1.0,
-    slope_min_persistence_samples: int = 2,
-    slope_reemit_ratio: float = 1.5,
-) -> "DataFrame":
-    """Stage adapter for the canonical Spark event detector plan."""
-    return EventDetectionPlan(
-        continuous_detector=ContinuousEventDetector(
-            config=ContinuousDetectorConfig(
-                delta_threshold=float(delta_threshold),
-                slope_source=str(slope_source),
-                ema_alpha=float(ema_alpha),
-                slope_abs_threshold=float(slope_abs_threshold),
-                slope_min_persistence_samples=int(slope_min_persistence_samples),
-                slope_reemit_ratio=float(slope_reemit_ratio),
-            ),
-        )
-    ).build(raw_df, datatype_profile_df=datatype_profile_df).events_df
+        return EventArtifactSet(source_frame=source_frame, events=EventsTable(dataframe=events_df))
 
 
 from typing import TYPE_CHECKING

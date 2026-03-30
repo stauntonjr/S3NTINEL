@@ -1,8 +1,7 @@
 # File: pipelines/85_window_scores_calibrate.py
 """Calibrate raw window scores with phase-conditioned conformal calibration."""
 
-from libs.conformal import build_calibrated_window_scores_table
-from libs.io.delta import get_spark, read_table, write_table
+from libs.io.delta import get_spark
 from libs.perf import (
     build_artifact_manifest,
     build_stage_manifest,
@@ -14,7 +13,8 @@ from libs.perf import (
     log_wall_time,
     track_mlflow_run,
 )
-from pipelines.common import build_context, context_artifacts, context_execution, context_settings
+from libs.scoring import WindowScoresCalibratedTable, WindowScoresRawTable
+from pipelines.common import build_stage_runtime
 
 
 LOGGER = get_logger(__name__)
@@ -24,28 +24,25 @@ LOGGER = get_logger(__name__)
 @log_memory_usage(logger=LOGGER, label="85_window_scores_calibrate")
 @log_wall_time(logger=LOGGER)
 def run() -> None:
-    context = build_context()
-    artifacts = context_artifacts(context)
-    execution = context_execution(context)
-    settings = context_settings(context)
-    scores_path = artifacts.window_scores_raw
-    window_scores_calibrated_path = artifacts.window_scores_calibrated
-    table_format = execution.table_format
-    write_mode = execution.write_mode
+    runtime = build_stage_runtime("85_window_scores_calibrate")
+    context = runtime.context
+    scores_path = runtime.artifacts.window_scores_raw
+    window_scores_calibrated_path = runtime.artifacts.window_scores_calibrated
+    table_format = runtime.execution.table_format
+    write_mode = runtime.execution.write_mode
 
-    min_warm = settings.scoring.min_warm
+    min_warm = runtime.settings.scoring.min_warm
 
     spark = get_spark("s3ntinel.window_scores_calibrate")
-    scores_df = read_table(spark, scores_path, fmt=table_format)
-    calibrated_df = build_calibrated_window_scores_table(scores_df=scores_df, min_warm=min_warm)
-
-    write_table(
-        calibrated_df,
+    scores = WindowScoresRawTable.read(spark, scores_path, format=table_format)
+    calibrated = WindowScoresCalibratedTable.from_scores(scores.to_dataframe(), min_warm=min_warm).bind(
         path=window_scores_calibrated_path,
-        mode=write_mode,
-        fmt=table_format,
-        partition_by=context.config["output"]["partition_by"],
+        format=table_format,
+        partition_by=tuple(context.config["output"]["partition_by"]),
     )
+    calibrated.write(mode=write_mode)
+    scores_df = scores.to_dataframe()
+    calibrated_df = calibrated.to_dataframe()
     scores_count = int(scores_df.count())
     calibrated_count = int(calibrated_df.count())
 
@@ -60,7 +57,7 @@ def run() -> None:
             "min_warm": min_warm,
             "partition_by": list(context.config["output"]["partition_by"]),
         },
-        "reports/stages/85_window_scores_calibrate_summary.json",
+        runtime.report_paths.summary_artifact_path,
     )
     stage_manifest = build_stage_manifest(
         stage_name="85_window_scores_calibrate",
@@ -81,7 +78,7 @@ def run() -> None:
         },
         replayable_from=["window_scores_raw"],
     )
-    log_stage_manifest_if_active(stage_manifest, "reports/stages/85_window_scores_calibrate_manifest.json")
+    log_stage_manifest_if_active(stage_manifest, runtime.report_paths.manifest_artifact_path)
     LOGGER.info(
         "pipeline=window_scores_calibrate format=%s write_mode=%s min_warm=%s window_scores_raw=%s window_scores_calibrated=%s",
         table_format,

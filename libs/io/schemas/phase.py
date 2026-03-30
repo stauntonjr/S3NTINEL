@@ -32,49 +32,60 @@ PHASE_BASELINES_COLUMNS = [
     "version",
 ]
 
-PHASE_WINDOWS_SCHEMA = """
-tail_id string,
-flight_id string,
-win_id int,
-t_start timestamp,
-t_end timestamp,
-duration_ms int,
-event_count int,
-phase_id_detected int,
-phase_state_detected string,
-phase_confidence_detected double,
-distance_to_centroid_detected double,
-drift_magnitude double,
-breadth double,
-backbone_reconstruction_error double,
-backbone_residual_by_parameter map<string,double>,
-x_c array<double>,
-s_w array<double>,
-date_utc date,
-feature_names array<string>,
-selected_sensors_c array<string>,
-selected_event_types array<string>,
-selected_categorical_state_pairs array<string>,
-selected_window_cooccurrence_pairs array<string>,
-backbone_all_sensors array<string>
-"""
+def PHASE_WINDOWS_SCHEMA():
+    from pyspark.sql import types as T
 
-PHASE_BASELINES_SCHEMA = """
-tail_id string,
-phase_id_detected int,
-phase_name_detected string,
-s_w_centroid array<double>,
-reconstruction_median double,
-reconstruction_mad double,
-distance_median double,
-distance_mad double,
-stable_window_count int,
-feature_names array<string>,
-selected_sensors_c array<string>,
-selected_event_types array<string>,
-selected_categorical_state_pairs array<string>,
-selected_window_cooccurrence_pairs array<string>,
-backbone_all_sensors array<string>,
-backbone_weights_b array<array<double>>,
-version int
-"""
+    return T.StructType(
+        [
+            T.StructField("tail_id", T.StringType(), True),
+            T.StructField("flight_id", T.StringType(), True),
+            T.StructField("win_id", T.IntegerType(), True),
+            T.StructField("t_start", T.TimestampType(), True),
+            T.StructField("t_end", T.TimestampType(), True),
+            T.StructField("duration_ms", T.IntegerType(), True),
+            T.StructField("event_count", T.IntegerType(), True),
+            T.StructField("phase_id_detected", T.IntegerType(), False),
+            T.StructField("phase_state_detected", T.StringType(), False),
+            T.StructField("phase_confidence_detected", T.DoubleType(), False),
+            T.StructField("distance_to_centroid_detected", T.DoubleType(), True),
+            T.StructField("drift_magnitude", T.DoubleType(), False),
+            T.StructField("breadth", T.DoubleType(), False),
+            T.StructField("backbone_reconstruction_error", T.DoubleType(), True),
+            T.StructField("backbone_residual_by_parameter", T.MapType(T.StringType(), T.DoubleType(), True), False),
+            T.StructField("x_c", T.ArrayType(T.DoubleType(), False), False),
+            T.StructField("s_w", T.ArrayType(T.DoubleType(), True), False),
+            T.StructField("date_utc", T.DateType(), True),
+            T.StructField("feature_names", T.ArrayType(T.StringType(), False), False),
+            T.StructField("selected_sensors_c", T.ArrayType(T.StringType(), False), False),
+            T.StructField("selected_event_types", T.ArrayType(T.StringType(), False), False),
+            T.StructField("selected_categorical_state_pairs", T.ArrayType(T.StringType(), True), False),
+            T.StructField("selected_window_cooccurrence_pairs", T.ArrayType(T.StringType(), True), False),
+            T.StructField("backbone_all_sensors", T.ArrayType(T.StringType(), False), False),
+        ]
+    )
+
+
+def PHASE_BASELINES_SCHEMA():
+    from pyspark.sql import types as T
+
+    return T.StructType(
+        [
+            T.StructField("tail_id", T.StringType(), True),
+            T.StructField("phase_id_detected", T.IntegerType(), False),
+            T.StructField("phase_name_detected", T.StringType(), False),
+            T.StructField("s_w_centroid", T.ArrayType(T.DoubleType(), True), False),
+            T.StructField("reconstruction_median", T.DoubleType(), True),
+            T.StructField("reconstruction_mad", T.DoubleType(), False),
+            T.StructField("distance_median", T.DoubleType(), True),
+            T.StructField("distance_mad", T.DoubleType(), False),
+            T.StructField("stable_window_count", T.IntegerType(), False),
+            T.StructField("feature_names", T.ArrayType(T.StringType(), False), False),
+            T.StructField("selected_sensors_c", T.ArrayType(T.StringType(), False), False),
+            T.StructField("selected_event_types", T.ArrayType(T.StringType(), False), False),
+            T.StructField("selected_categorical_state_pairs", T.ArrayType(T.StringType(), True), False),
+            T.StructField("selected_window_cooccurrence_pairs", T.ArrayType(T.StringType(), True), False),
+            T.StructField("backbone_all_sensors", T.ArrayType(T.StringType(), False), False),
+            T.StructField("backbone_weights_b", T.ArrayType(T.ArrayType(T.DoubleType(), False), False), False),
+            T.StructField("version", T.IntegerType(), False),
+        ]
+    )

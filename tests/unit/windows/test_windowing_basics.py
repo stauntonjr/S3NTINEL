@@ -5,11 +5,11 @@ from libs.windows import (
     WindowPolicy,
     WindowPolicyEvaluationSpec,
     WindowPolicyProfile,
+    WindowPolicyProfileTable,
     WindowPolicyProfileSpec,
+    WindowsTable,
     WindowSensorBuffer,
     build_window_policy_profile_evaluation_report_spark,
-    build_window_policy_profile_table,
-    build_windows_table,
 )
 
 
@@ -87,13 +87,14 @@ def test_build_windows_table_emits_expected_sparse_max_ms_windows(spark):
     events_df = spark.createDataFrame(events)
     observed = [
         row.asDict(recursive=True)
-        for row in build_windows_table(
+        for row in WindowsTable.from_events(
             events_df,
             max_ms=10000,
             event_threshold=20,
             min_ms=50,
             inactivity_timeout_ms=0,
         )
+        .to_dataframe()
         .orderBy("win_id")
         .collect()
     ]
@@ -128,7 +129,7 @@ def test_build_window_policy_profile_table_emits_ranked_selected_candidate(spark
         }
         for index in range(8)
     ]
-    profile_df = build_window_policy_profile_table(
+    profile_df = WindowPolicyProfileTable.from_events(
         spark.createDataFrame(events),
         spec=WindowPolicyProfileSpec(
             min_sampling_rate_hz=1.0,
@@ -140,7 +141,7 @@ def test_build_window_policy_profile_table_emits_ranked_selected_candidate(spark
             event_threshold_multipliers=(1.0,),
             max_profile_flights=1,
         ),
-    )
+    ).to_dataframe()
     rows = [row.asDict() for row in profile_df.orderBy("candidate_rank").collect()]
 
     assert rows
@@ -217,7 +218,7 @@ def test_build_window_policy_profile_evaluation_report_emits_selected_summary_an
         max_profile_flights=1,
     )
     events_df = spark.createDataFrame(events)
-    profile_df = build_window_policy_profile_table(events_df, spec=profile_spec)
+    profile_df = WindowPolicyProfileTable.from_events(events_df, spec=profile_spec).to_dataframe()
 
     report = build_window_policy_profile_evaluation_report_spark(
         events_df,

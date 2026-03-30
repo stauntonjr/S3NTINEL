@@ -16,12 +16,12 @@ from libs.perf import (
 )
 from libs.windows import (
     WindowPolicyEvaluationSpec,
+    WindowPolicyProfileTable,
     WindowPolicyProfileSpec,
     build_window_policy_profile_evaluation_report_spark,
-    build_window_policy_profile_table,
 )
 from libs.windows.window import DEFAULT_MIN_SAMPLING_RATE_HZ, WindowPolicy
-from pipelines.common import build_context, context_artifacts, context_execution, context_settings
+from pipelines.common import build_stage_runtime
 
 
 LOGGER = get_logger(__name__)
@@ -31,14 +31,12 @@ LOGGER = get_logger(__name__)
 @log_memory_usage(logger=LOGGER, label="25_window_policy_profile")
 @log_wall_time(logger=LOGGER)
 def run() -> None:
-    context = build_context()
-    artifacts = context_artifacts(context)
-    execution = context_execution(context)
-    settings = context_settings(context)
-    events_path = artifacts.events
-    output_path = artifacts.window_policy_profile
-    table_format = execution.table_format
-    write_mode = execution.fit_write_mode
+    runtime = build_stage_runtime("25_window_policy_profile")
+    settings = runtime.settings
+    events_path = runtime.artifacts.events
+    output_path = runtime.artifacts.window_policy_profile
+    table_format = runtime.execution.table_format
+    write_mode = runtime.execution.fit_write_mode
     evaluation_report_path = "reports/stages/25_window_policy_profile_evaluation.json"
 
     min_sampling_rate_hz = float(settings.windowing.min_sampling_rate_hz or DEFAULT_MIN_SAMPLING_RATE_HZ)
@@ -56,10 +54,10 @@ def run() -> None:
 
     spark = get_spark("s3ntinel.window_policy_profile")
     events_df = read_table(spark, events_path, fmt=table_format)
-    profile_df = build_window_policy_profile_table(
+    profile_df = WindowPolicyProfileTable.from_events(
         events_df,
         spec=profile_spec,
-    )
+    ).to_dataframe()
     write_table(profile_df, path=output_path, mode=write_mode, fmt=table_format)
     evaluation_report = build_window_policy_profile_evaluation_report_spark(
         events_df,
@@ -103,7 +101,7 @@ def run() -> None:
             "selected_balance_penalty": selected_payload.get("balance_penalty"),
             "evaluation_status": evaluation_report.get("status"),
         },
-        "reports/stages/25_window_policy_profile_summary.json",
+        runtime.report_paths.summary_artifact_path,
     )
     log_dict_artifact_if_active(
         evaluation_report,
@@ -138,7 +136,7 @@ def run() -> None:
             }
         },
     )
-    log_stage_manifest_if_active(stage_manifest, "reports/stages/25_window_policy_profile_manifest.json")
+    log_stage_manifest_if_active(stage_manifest, runtime.report_paths.manifest_artifact_path)
     LOGGER.info(
         "pipeline=window_policy_profile format=%s write_mode=%s events=%s candidates=%s selected_max_ms=%s selected_event_threshold=%s output=%s",
         table_format,

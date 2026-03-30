@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from libs.phase.tables import PhaseBaselinesTable, PhaseWindowsTable
 from libs.phase.utils import default_phase_segment_policy
 from libs.spark_sequence import SequenceSegmentPolicy
 
@@ -18,8 +19,8 @@ class PhaseClusterModel:
 
 @dataclass(frozen=True)
 class PhaseArtifactSet:
-    phase_windows_df: "DataFrame"
-    phase_baselines_df: "DataFrame"
+    phase_windows: PhaseWindowsTable
+    phase_baselines: PhaseBaselinesTable
     phase_config: "PhaseFeatureConfig"
     feature_frame: "PhaseFeatureFrame | None" = None
     cluster_model: PhaseClusterModel | None = None
@@ -30,7 +31,7 @@ class PhaseDetectionRun:
     phase_config: "PhaseFeatureConfig"
     feature_frame: "PhaseFeatureFrame"
     cluster_model: PhaseClusterModel
-    phase_windows_df: "DataFrame"
+    phase_windows: PhaseWindowsTable
 
 
 @dataclass(frozen=True)

@@ -7,7 +7,13 @@ from typing import Any
 
 import pandas as pd
 
-from libs.scoring.validator import extract_fault_truth_windows, extract_misbehavior_truth_windows
+from libs.scoring.validator import (
+    STRICT_MAX_EARLY_LEAD_SECONDS,
+    STRICT_TRUTH_COVERAGE_MIN_RATIO,
+    build_truth_window_overlap_table,
+    extract_fault_truth_windows,
+    extract_misbehavior_truth_windows,
+)
 
 
 @dataclass(frozen=True)
@@ -93,27 +99,40 @@ class _TruthWindowAttributionMatch:
         truth_start_field: str,
         truth_end_field: str,
     ) -> "_TruthWindowAttributionMatch":
-        overlapping_windows = windows_df[
-            (windows_df["tail_id"].astype(str) == str(truth["tail_id"]))
-            & (windows_df["flight_id"].astype(str) == str(truth["flight_id"]))
-            & (windows_df["t_end"] >= truth[truth_start_field])
-            & (windows_df["t_start"] <= truth[truth_end_field])
-        ]
-        overlapping_win_ids = {int(item) for item in overlapping_windows.get("win_id", pd.Series(dtype="int")).tolist()}
+        overlap_df = build_truth_window_overlap_table(
+            window_like_df=windows_df,
+            truth_df=pd.DataFrame.from_records([truth]),
+            start_field=truth_start_field,
+            end_field=truth_end_field,
+        )
+        qualifying_overlap_df = overlap_df[
+            (overlap_df["truth_coverage_ratio"].fillna(0.0).astype(float) >= float(STRICT_TRUTH_COVERAGE_MIN_RATIO))
+            & (overlap_df["detection_latency_seconds"].fillna(float("inf")).astype(float) >= float(-STRICT_MAX_EARLY_LEAD_SECONDS))
+        ] if not overlap_df.empty else pd.DataFrame()
+        qualifying_overlap_df = qualifying_overlap_df.sort_values(
+            ["t_start", "truth_coverage_ratio", "win_id"],
+            ascending=[True, False, True],
+            kind="mergesort",
+        )
+        primary_win_id = (
+            int(qualifying_overlap_df["win_id"].iloc[0])
+            if not qualifying_overlap_df.empty and "win_id" in qualifying_overlap_df.columns
+            else None
+        )
         window_hits = anomaly_window_attribution_df[
             (anomaly_window_attribution_df.get("tail_id", pd.Series(dtype="object")).astype(str) == str(truth["tail_id"]))
             & (anomaly_window_attribution_df.get("flight_id", pd.Series(dtype="object")).astype(str) == str(truth["flight_id"]))
-            & (anomaly_window_attribution_df.get("win_id", pd.Series(dtype="int")).isin(overlapping_win_ids))
+            & (anomaly_window_attribution_df.get("win_id", pd.Series(dtype="int")) == primary_win_id)
         ] if not anomaly_window_attribution_df.empty else pd.DataFrame()
         telemetry_hits = anomaly_telemetry_attribution_df[
             (anomaly_telemetry_attribution_df.get("tail_id", pd.Series(dtype="object")).astype(str) == str(truth["tail_id"]))
             & (anomaly_telemetry_attribution_df.get("flight_id", pd.Series(dtype="object")).astype(str) == str(truth["flight_id"]))
-            & (anomaly_telemetry_attribution_df.get("win_id", pd.Series(dtype="int")).isin(overlapping_win_ids))
+            & (anomaly_telemetry_attribution_df.get("win_id", pd.Series(dtype="int")) == primary_win_id)
         ] if not anomaly_telemetry_attribution_df.empty else pd.DataFrame()
         event_hits = anomaly_event_attribution_df[
             (anomaly_event_attribution_df.get("tail_id", pd.Series(dtype="object")).astype(str) == str(truth["tail_id"]))
             & (anomaly_event_attribution_df.get("flight_id", pd.Series(dtype="object")).astype(str) == str(truth["flight_id"]))
-            & (anomaly_event_attribution_df.get("win_id", pd.Series(dtype="int")).isin(overlapping_win_ids))
+            & (anomaly_event_attribution_df.get("win_id", pd.Series(dtype="int")) == primary_win_id)
         ] if not anomaly_event_attribution_df.empty else pd.DataFrame()
 
         truth_subsystem = str(truth["subsystem_id"])
@@ -143,7 +162,8 @@ class _TruthWindowAttributionMatch:
             truth_window_id_field: str(truth[truth_window_id_field]),
             "subsystem_id": truth_subsystem,
             "parameter_name": truth_parameter,
-            "overlapping_window_count": int(len(overlapping_win_ids)),
+            "overlapping_window_count": int(len(qualifying_overlap_df)),
+            "primary_win_id": primary_win_id,
             "dominant_subsystem_match": bool(dominant_subsystem_match),
             "dominant_subsystem_mappable": bool(dominant_subsystem_mappable),
             "dominant_subsystem_truth": dominant_subsystem_truth,
@@ -157,6 +177,8 @@ class _TruthWindowAttributionMatch:
             ),
             "telemetry_truth_subsystem_present": bool(truth_subsystem in telemetry_truth_subsystems),
             "event_truth_subsystem_present": bool(truth_subsystem in event_truth_subsystems),
+            "strict_truth_coverage_threshold": float(STRICT_TRUTH_COVERAGE_MIN_RATIO),
+            "strict_max_early_lead_seconds": float(STRICT_MAX_EARLY_LEAD_SECONDS),
         }
         if "misbehavior_family_label" in truth:
             payload["misbehavior_family_label"] = str(truth["misbehavior_family_label"])

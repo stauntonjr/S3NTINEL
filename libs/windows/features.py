@@ -127,9 +127,20 @@ class WindowFeaturesPlan:
             )
         )
 
-    def _build_scaler_frame(self, prepared_raw_df: "DataFrame") -> "DataFrame":
+    def _build_scaler_frame(
+        self,
+        prepared_raw_df: "DataFrame",
+        *,
+        scaling_profile_df: "DataFrame | None" = None,
+    ) -> "DataFrame":
         from pyspark.sql import functions as F
 
+        if scaling_profile_df is not None:
+            return scaling_profile_df.select(
+                F.col("parameter_name").cast("string").alias("parameter_name"),
+                F.col("scaling_center_median").cast("double").alias("median"),
+                F.greatest(F.coalesce(F.col("scaling_iqr").cast("double"), F.lit(0.0)), F.lit(1e-6)).alias("iqr"),
+            )
         return (
             prepared_raw_df.where(F.col(self.vector_spec.numeric_value_column).isNotNull())
             .groupBy(self.vector_spec.parameter_name_column)
@@ -569,6 +580,7 @@ class WindowFeaturesPlan:
         raw_df: "DataFrame",
         events_df: "DataFrame",
         windows_df: "DataFrame",
+        scaling_profile_df: "DataFrame | None" = None,
         *,
         materialize: "Callable[[str, Callable[[], DataFrame]], DataFrame] | None" = None,
     ) -> "DataFrame":
@@ -589,7 +601,7 @@ class WindowFeaturesPlan:
         )
         scaler_df = self._build_step(
             "scaler_frame",
-            lambda: self._build_scaler_frame(prepared_raw_df),
+            lambda: self._build_scaler_frame(prepared_raw_df, scaling_profile_df=scaling_profile_df),
             materialize=materialize,
         )
         snapshot_rows_df = self._build_step(
@@ -648,8 +660,19 @@ class WindowFeaturesPlan:
         )
 
     @hot_path
-    def build(self, raw_df: "DataFrame", events_df: "DataFrame", windows_df: "DataFrame") -> "DataFrame":
-        return self._build_feature_frame(raw_df, events_df, windows_df)
+    def build(
+        self,
+        raw_df: "DataFrame",
+        events_df: "DataFrame",
+        windows_df: "DataFrame",
+        scaling_profile_df: "DataFrame | None" = None,
+    ) -> "DataFrame":
+        return self._build_feature_frame(
+            raw_df,
+            events_df,
+            windows_df,
+            scaling_profile_df=scaling_profile_df,
+        )
 
     @hot_path
     def build_with_diagnostics(
@@ -657,6 +680,7 @@ class WindowFeaturesPlan:
         raw_df: "DataFrame",
         events_df: "DataFrame",
         windows_df: "DataFrame",
+        scaling_profile_df: "DataFrame | None" = None,
     ) -> tuple["DataFrame", WindowFeaturesDiagnostics]:
         start = time.perf_counter()
         step_diagnostics: list[WindowFeatureStepDiagnostics] = []
@@ -664,6 +688,7 @@ class WindowFeaturesPlan:
             raw_df,
             events_df,
             windows_df,
+            scaling_profile_df=scaling_profile_df,
             materialize=lambda name, build_frame: self._materialize_step(
                 name,
                 build_frame,
@@ -677,22 +702,6 @@ class WindowFeaturesPlan:
         )
         LOGGER.info("window_features_build diagnostics=%s", diagnostics.to_dict())
         return output_df, diagnostics
-
-@hot_path
-def build_window_features_spark_table(raw_df: "DataFrame", events_df: "DataFrame", windows_df: "DataFrame") -> "DataFrame":
-    """Build the canonical ``window_features`` artifact in Spark."""
-    return WindowFeaturesPlan().build(raw_df, events_df, windows_df)
-
-
-@hot_path
-def build_window_features_with_diagnostics_spark_table(
-    raw_df: "DataFrame",
-    events_df: "DataFrame",
-    windows_df: "DataFrame",
-) -> tuple["DataFrame", WindowFeaturesDiagnostics]:
-    """Build ``window_features`` and emit explicit per-step diagnostics for development tuning."""
-    return WindowFeaturesPlan().build_with_diagnostics(raw_df, events_df, windows_df)
-
 
 from typing import TYPE_CHECKING, Callable
 

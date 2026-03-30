@@ -3,14 +3,14 @@
 import numpy as np
 
 from libs.backbone import (
-    build_backbone_g_spark_table,
-    build_backbone_h_spark_table,
-    build_backbone_selected_sensor_frame,
-    build_backbone_sensor_energy_spark_table,
+    BackboneCrossTermFrame,
+    BackboneGramFrame,
+    BackboneSelectedSensorFrame,
+    BackboneSensorEnergyTable,
+    BackboneTable,
     select_backbone_sensors_by_energy_spark,
     solve_backbone_weights,
 )
-from libs.io.schemas import BACKBONE_SCHEMA
 from libs.io.delta import get_spark, read_table, write_table
 from libs.perf import (
     build_artifact_manifest,
@@ -23,8 +23,8 @@ from libs.perf import (
     log_wall_time,
     track_mlflow_run,
 )
-from libs.windows import build_window_features_spark_table
-from pipelines.common import build_context, context_artifacts, context_execution, context_settings
+from libs.windows import WindowFeaturesTable
+from pipelines.common import build_stage_runtime, require_artifact_path
 
 
 LOGGER = get_logger(__name__)
@@ -36,61 +36,73 @@ def run() -> None:
     from pyspark.sql import functions as F
     from pyspark import StorageLevel
 
-    context = build_context()
-    artifacts = context_artifacts(context)
-    execution = context_execution(context)
-    settings = context_settings(context)
-    raw_path = artifacts.raw_table
-    events_path = artifacts.events
-    windows_path = artifacts.windows
-    window_features_path = artifacts.window_features
-    backbone_path = artifacts.backbone
-    backbone_energy_path = artifacts.backbone_sensor_energy
-    table_format = execution.table_format
-    write_mode = execution.fit_write_mode
-    max_backbone_sensor_universe = settings.backbone.max_sensor_universe
+    runtime = build_stage_runtime("40_backbone_fit")
+    context = runtime.context
+    raw_path = runtime.artifacts.raw_table
+    events_path = runtime.artifacts.events
+    windows_path = runtime.artifacts.windows
+    scaling_profile_path = runtime.artifacts.continuous_scaling_profile
+    window_features_path = runtime.artifacts.window_features
+    backbone_path = runtime.artifacts.backbone
+    backbone_energy_path = runtime.artifacts.backbone_sensor_energy
+    table_format = runtime.execution.table_format
+    write_mode = runtime.execution.fit_write_mode
+    max_backbone_sensor_universe = runtime.settings.backbone.max_sensor_universe
 
-    backbone_sensor_count = settings.backbone.sensor_count
-    backbone_ridge_lambda = settings.backbone.ridge_lambda
-    backbone_event_prior_alpha = settings.backbone.event_prior_alpha
+    backbone_sensor_count = runtime.settings.backbone.sensor_count
+    backbone_ridge_lambda = runtime.settings.backbone.ridge_lambda
+    backbone_event_prior_alpha = runtime.settings.backbone.event_prior_alpha
 
     spark = get_spark("s3ntinel.backbone_fit")
     raw_df = read_table(spark, raw_path, fmt=table_format)
     events_df = read_table(spark, events_path, fmt=table_format)
     windows_df = read_table(spark, windows_path, fmt=table_format)
+    resolved_scaling_profile_path = require_artifact_path(
+        scaling_profile_path,
+        env_name="S3NTINEL_CONTINUOUS_SCALING_PROFILE_TABLE_PATH",
+        artifact_name="continuous_scaling_profile",
+    )
+    scaling_profile_df = read_table(spark, str(resolved_scaling_profile_path), fmt=table_format)
     raw_count = int(raw_df.count())
     events_count = int(events_df.count())
     windows_count = int(windows_df.count())
+    scaling_profile_count = int(scaling_profile_df.count())
 
-    window_features_df = build_window_features_spark_table(raw_df, events_df, windows_df).persist(
+    window_features_df = WindowFeaturesTable.from_raw_events_and_windows(
+        raw_df,
+        events_df,
+        windows_df,
+        scaling_profile_df=scaling_profile_df,
+    ).to_dataframe().persist(
         StorageLevel.MEMORY_AND_DISK
     )
     try:
         window_features_count = int(window_features_df.count())
 
-        energy_sdf = build_backbone_sensor_energy_spark_table(
+        energy_sdf = BackboneSensorEnergyTable.from_window_features(
             window_features_df,
             event_prior_alpha=float(backbone_event_prior_alpha),
-        ).persist(StorageLevel.MEMORY_AND_DISK)
+        ).to_dataframe().persist(StorageLevel.MEMORY_AND_DISK)
         try:
             sensor_energy_count = int(energy_sdf.count())
             selected_sensors_c = select_backbone_sensors_by_energy_spark(energy_sdf, k=max(int(backbone_sensor_count), 1))
-            selected_sensor_frame_df = build_backbone_selected_sensor_frame(
+            selected_sensor_frame_df = BackboneSelectedSensorFrame.from_window_features(
                 window_features_df,
                 selected_sensors=selected_sensors_c,
-            ).persist(StorageLevel.MEMORY_AND_DISK)
+            ).to_dataframe().persist(StorageLevel.MEMORY_AND_DISK)
             try:
-                g_row = build_backbone_g_spark_table(
+                g_row = BackboneGramFrame.from_window_features(
                     window_features_df,
                     selected_sensors=selected_sensors_c,
                     selected_sensor_frame_df=selected_sensor_frame_df,
-                ).first().asDict()
+                ).to_dataframe().first().asDict()
                 sensor_rows = (
-                    build_backbone_h_spark_table(
+                    BackboneCrossTermFrame.from_window_features(
                         window_features_df,
                         selected_sensors=selected_sensors_c,
                         selected_sensor_frame_df=selected_sensor_frame_df,
                     )
+                    .to_dataframe()
                     .limit(max_backbone_sensor_universe + 1)
                     .collect()
                 )
@@ -133,11 +145,11 @@ def run() -> None:
                 ][0]
             ]
 
-            backbone_df = (
-                spark.createDataFrame(backbone_rows)
+            backbone_df = BackboneTable(
+                dataframe=spark.createDataFrame(backbone_rows)
                 if backbone_rows
-                else spark.createDataFrame([], schema=BACKBONE_SCHEMA)
-            )
+                else spark.createDataFrame([], schema=BackboneTable.spark_schema())
+            ).to_dataframe()
             energy_df = (
                 energy_sdf.withColumn("selected_backbone", F.col("parameter_name").isin(selected_sensors_c))
                 .withColumn("backbone_version", F.lit(2).cast("int"))
@@ -183,6 +195,7 @@ def run() -> None:
             "raw_path": raw_path,
             "events_path": events_path,
             "windows_path": windows_path,
+            "continuous_scaling_profile_path": str(resolved_scaling_profile_path),
             "window_features_path": window_features_path,
             "backbone_path": backbone_path,
             "backbone_energy_path": backbone_energy_path,
@@ -192,6 +205,7 @@ def run() -> None:
             "raw_count_bounded": raw_count,
             "events_count_bounded": events_count,
             "windows_count_bounded": windows_count,
+            "continuous_scaling_profile_count": scaling_profile_count,
             "window_features_count": window_features_count,
             "backbone_sensor_count": backbone_sensor_count,
             "selected_sensor_count": selected_sensor_count,
@@ -199,7 +213,7 @@ def run() -> None:
             "backbone_ridge_lambda": backbone_ridge_lambda,
             "backbone_event_prior_alpha": backbone_event_prior_alpha,
         },
-        "reports/stages/40_backbone_fit_summary.json",
+        runtime.report_paths.summary_artifact_path,
     )
     output_artifacts = {
         "backbone": build_artifact_manifest(
@@ -236,6 +250,11 @@ def run() -> None:
             "raw_telemetry": build_artifact_manifest(path=raw_path, dataframe=raw_df, row_count=raw_count),
             "events": build_artifact_manifest(path=events_path, dataframe=events_df, row_count=events_count),
             "windows": build_artifact_manifest(path=windows_path, dataframe=windows_df, row_count=windows_count),
+            "continuous_scaling_profile": build_artifact_manifest(
+                path=str(resolved_scaling_profile_path),
+                dataframe=scaling_profile_df,
+                row_count=scaling_profile_count,
+            ),
             "window_features": build_artifact_manifest(
                 path=(window_features_path or "window_features::ephemeral"),
                 dataframe=window_features_df,
@@ -245,7 +264,7 @@ def run() -> None:
         output_artifacts=output_artifacts,
         replayable_from=["window_features", "backbone_sensor_energy"],
     )
-    log_stage_manifest_if_active(stage_manifest, "reports/stages/40_backbone_fit_manifest.json")
+    log_stage_manifest_if_active(stage_manifest, runtime.report_paths.manifest_artifact_path)
     LOGGER.info(
         "pipeline=backbone_fit format=%s write_mode=%s selected_sensor_count=%s training_window_count=%s raw=%s windows=%s backbone=%s backbone_energy=%s",
         table_format,

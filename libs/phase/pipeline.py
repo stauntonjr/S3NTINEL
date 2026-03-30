@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from libs.perf.annotations import hot_path
-from libs.phase.artifacts import build_phase_baselines, build_phase_windows_from_assignments
 from libs.phase.config_fit import (
     fit_phase_feature_config_from_window_features_spark,
     fit_phase_feature_config_with_diagnostics_from_window_features_spark,
@@ -15,6 +14,7 @@ from libs.phase.decode import build_assignment_input, enforce_min_dwell, assign_
 from libs.phase.feature_config import PhaseFeatureConfig
 from libs.phase.fit import fit_cluster_model
 from libs.phase.frames import PhaseFeatureFrame, PhaseObservationFrame
+from libs.phase.tables import PhaseBaselinesTable, PhaseWindowsTable
 from libs.phase.types import (
     PhaseArtifactSet,
     PhaseClusterModel,
@@ -110,26 +110,27 @@ class PhaseDetectionPlan(PhasePlanConfig):
         assigned_df = self._checkpoint(assigned_df)
         merged_df = enforce_min_dwell(assigned_df, config=self)
         merged_df = self._checkpoint(merged_df)
-        phase_windows_df = build_phase_windows_from_assignments(
+        phase_windows = PhaseWindowsTable.from_assignments(
             merged_df,
             feature_frame=feature_frame,
             phase_config=phase_config,
         )
-        phase_windows_df = self._checkpoint(phase_windows_df)
+        phase_windows_df = self._checkpoint(phase_windows.to_dataframe())
         return PhaseDetectionRun(
             phase_config=phase_config,
             feature_frame=feature_frame,
             cluster_model=cluster_model,
-            phase_windows_df=phase_windows_df,
+            phase_windows=PhaseWindowsTable(dataframe=phase_windows_df),
         )
 
     def build_phase_baselines(
         self,
-        phase_windows_df: "DataFrame",
+        phase_windows: "PhaseWindowsTable | DataFrame",
         *,
         phase_config: "PhaseFeatureConfig | dict[str, Any]",
-    ) -> "DataFrame":
-        return build_phase_baselines(phase_windows_df, phase_config=phase_config)
+    ) -> PhaseBaselinesTable:
+        phase_windows_df = phase_windows.to_dataframe() if isinstance(phase_windows, PhaseWindowsTable) else phase_windows
+        return PhaseBaselinesTable.from_phase_windows(phase_windows_df, phase_config=phase_config)
 
     @hot_path
     def build_phase_windows(
@@ -137,11 +138,11 @@ class PhaseDetectionPlan(PhasePlanConfig):
         window_features_df: "DataFrame",
         *,
         phase_config: "PhaseFeatureConfig | dict[str, Any]",
-    ) -> "DataFrame":
+    ) -> PhaseWindowsTable:
         return self._run_detection(
             window_features_df,
             phase_config=self._phase_config(phase_config),
-        ).phase_windows_df
+        ).phase_windows
 
     @hot_path
     def build(
@@ -155,43 +156,14 @@ class PhaseDetectionPlan(PhasePlanConfig):
             window_features_df,
             phase_config=phase_config,
         )
-        phase_baselines_df = self.build_phase_baselines(detection_run.phase_windows_df, phase_config=phase_config)
+        phase_baselines = self.build_phase_baselines(detection_run.phase_windows, phase_config=phase_config)
         return PhaseArtifactSet(
-            phase_windows_df=detection_run.phase_windows_df,
-            phase_baselines_df=phase_baselines_df,
+            phase_windows=detection_run.phase_windows,
+            phase_baselines=phase_baselines,
             phase_config=phase_config,
             feature_frame=detection_run.feature_frame,
             cluster_model=detection_run.cluster_model,
         )
-
-
-@hot_path
-def build_phase_windows_spark_table(
-    window_features_df: "DataFrame",
-    *,
-    phase_config: dict[str, object],
-    phase_count: int,
-    phase_stable_drift_quantile: float = 0.35,
-    phase_smoothing_radius: int = 2,
-    phase_transition_penalty: float = 1.5,
-    phase_min_dwell_windows: int = 8,
-) -> "DataFrame":
-    return PhaseDetectionPlan(
-        phase_count=max(int(phase_count), 1),
-        phase_stable_drift_quantile=float(phase_stable_drift_quantile),
-        phase_smoothing_radius=max(int(phase_smoothing_radius), 0),
-        phase_transition_penalty=float(phase_transition_penalty),
-        phase_min_dwell_windows=max(int(phase_min_dwell_windows), 1),
-    ).build_phase_windows(window_features_df, phase_config=phase_config)
-
-
-@hot_path
-def build_phase_baselines_spark_table(
-    phase_windows_df: "DataFrame",
-    *,
-    phase_config: dict[str, object],
-) -> "DataFrame":
-    return PhaseDetectionPlan(phase_count=1).build_phase_baselines(phase_windows_df, phase_config=phase_config)
 
 
 @hot_path

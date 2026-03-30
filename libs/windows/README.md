@@ -18,11 +18,11 @@ It does not own:
 ## How To Use
 
 - Use `WindowPolicy`, `Window`, and `AdaptiveWindowPlan` for the active runtime model.
-- Use `WindowPolicyProfileSpec` and `build_window_policy_profile_table(...)` to fit candidate window policies from detected events.
+- Use `WindowPolicyProfileSpec` and `WindowPolicyProfileTable.from_events(...)` to fit candidate window policies from detected events.
 - Use `WindowPolicyEvaluationSpec` and `build_window_policy_profile_evaluation_report_spark(...)` to evaluate the selected policy against closure mix, downstream cost proxies, and bounded flight-subset stability.
-- Use `build_windows_table(...)` for canonical window materialization.
-- Use `build_window_features_spark_table(...)` for canonical dataframe materialization.
-- Use `build_window_features_with_diagnostics_spark_table(...)` during development when you need explicit per-step timings and row counts.
+- Use `WindowsTable.from_events(...)` for canonical window materialization.
+- Use `WindowFeaturesTable.from_raw_events_and_windows(...)` for canonical dataframe materialization.
+- Use `WindowFeaturesTable.from_raw_events_windows_with_diagnostics(...)` during development when you need explicit per-step timings and row counts.
 
 ## Contents
 

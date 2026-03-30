@@ -44,49 +44,66 @@ WINDOW_POLICY_PROFILE_COLUMNS = [
     "sampled_flight_count",
 ]
 
-WINDOWS_SCHEMA = """
-tail_id string,
-flight_id string,
-win_id int,
-t_start timestamp,
-t_end timestamp,
-duration_ms int,
-event_count int,
-sensor_count int,
-event_type_counts map<string,int>,
-zoh_snapshot map<string,string>,
-close_reason string,
-zoh_version int,
-date_utc date
-"""
+def WINDOWS_SCHEMA():
+    from pyspark.sql import types as T
 
-WINDOW_X_SCHEMA = """
-tail_id string,
-flight_id string,
-win_id int,
-t_start timestamp,
-t_end timestamp,
-duration_ms int,
-event_count int,
-date_utc date,
-event_type_counts map<string,int>,
-continuous_event_summary struct<
-  slope_run_count_by_parameter:map<string,int>,
-  slope_reinforcement_count_by_parameter:map<string,int>,
-  slope_signed_impulse_by_parameter:map<string,double>,
-  slope_abs_impulse_by_parameter:map<string,double>,
-  slope_peak_abs_delta_by_parameter:map<string,double>,
-  switch_count_by_parameter:map<string,int>,
-  threshold_count_by_parameter:map<string,int>,
-  oscillation_count_by_parameter:map<string,int>,
-  drift_guard_count_by_parameter:map<string,int>
->,
-continuous_vector_t_end map<string,double>,
-continuous_vector_t_end_scaled map<string,double>,
-categorical_state_t_end map<string,string>,
-drift_magnitude_profiled double,
-phase_label string
-"""
+    return T.StructType(
+        [
+            T.StructField("tail_id", T.StringType(), True),
+            T.StructField("flight_id", T.StringType(), True),
+            T.StructField("win_id", T.LongType(), True),
+            T.StructField("t_start", T.TimestampType(), True),
+            T.StructField("t_end", T.TimestampType(), True),
+            T.StructField("duration_ms", T.IntegerType(), False),
+            T.StructField("event_count", T.IntegerType(), True),
+            T.StructField("sensor_count", T.IntegerType(), False),
+            T.StructField("event_type_counts", T.MapType(T.StringType(), T.IntegerType(), True), False),
+            T.StructField("zoh_snapshot", T.MapType(T.StringType(), T.StringType(), True), False),
+            T.StructField("close_reason", T.StringType(), True),
+            T.StructField("zoh_version", T.IntegerType(), False),
+            T.StructField("date_utc", T.DateType(), True),
+        ]
+    )
+
+
+def WINDOW_X_SCHEMA():
+    from pyspark.sql import types as T
+
+    int_map = T.MapType(T.StringType(), T.IntegerType(), True)
+    double_map = T.MapType(T.StringType(), T.DoubleType(), True)
+    string_map = T.MapType(T.StringType(), T.StringType(), True)
+    continuous_event_summary = T.StructType(
+        [
+            T.StructField("slope_run_count_by_parameter", int_map, False),
+            T.StructField("slope_reinforcement_count_by_parameter", int_map, False),
+            T.StructField("slope_signed_impulse_by_parameter", double_map, False),
+            T.StructField("slope_abs_impulse_by_parameter", double_map, False),
+            T.StructField("slope_peak_abs_delta_by_parameter", double_map, False),
+            T.StructField("switch_count_by_parameter", int_map, False),
+            T.StructField("threshold_count_by_parameter", int_map, False),
+            T.StructField("oscillation_count_by_parameter", int_map, False),
+            T.StructField("drift_guard_count_by_parameter", int_map, False),
+        ]
+    )
+    return T.StructType(
+        [
+            T.StructField("tail_id", T.StringType(), True),
+            T.StructField("flight_id", T.StringType(), True),
+            T.StructField("win_id", T.LongType(), True),
+            T.StructField("t_start", T.TimestampType(), True),
+            T.StructField("t_end", T.TimestampType(), True),
+            T.StructField("duration_ms", T.IntegerType(), False),
+            T.StructField("event_count", T.IntegerType(), True),
+            T.StructField("date_utc", T.DateType(), True),
+            T.StructField("event_type_counts", int_map, False),
+            T.StructField("continuous_event_summary", continuous_event_summary, False),
+            T.StructField("continuous_vector_t_end", double_map, False),
+            T.StructField("continuous_vector_t_end_scaled", double_map, False),
+            T.StructField("categorical_state_t_end", string_map, False),
+            T.StructField("drift_magnitude_profiled", T.DoubleType(), False),
+            T.StructField("phase_label", T.StringType(), True),
+        ]
+    )
 
 
 def WINDOW_POLICY_PROFILE_SCHEMA():

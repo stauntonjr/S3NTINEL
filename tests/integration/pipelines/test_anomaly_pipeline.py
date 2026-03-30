@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 import pytest
 
-from libs.anomaly.pipeline import build_anomaly_window_attribution_table
+from libs.anomaly import AnomalyAttributionPlan
 from libs.testing.data import (
     create_sample_calibrated_df,
     create_sample_events_df,
@@ -50,15 +50,14 @@ def test_anomaly_object_includes_panel_context_component_contrib_and_sensor_scor
         ]
     )
 
-    anomaly_window_attribution_df = build_anomaly_window_attribution_table(
+    anomaly_window_attribution_df = AnomalyAttributionPlan(top_k_per_subsystem=3).build_window_attribution(
         calibrated_df=calibrated_df,
         phase_windows_df=phase_windows_df,
         windows_df=windows_df,
         events_df=events_df,
         hierarchy_sensor_map_df=hierarchy_sensor_map_df,
         raw_df=raw_df,
-        top_k_per_subsystem=3,
-    )
+    ).to_dataframe()
 
     first = anomaly_window_attribution_df.where("win_id = 1").collect()[0]
 
@@ -104,15 +103,14 @@ def test_anomaly_window_attribution_sets_v2_version_fields(spark):
         ]
     )
 
-    anomaly_window_attribution_df = build_anomaly_window_attribution_table(
+    anomaly_window_attribution_df = AnomalyAttributionPlan(top_k_per_subsystem=3).build_window_attribution(
         calibrated_df=calibrated_df,
         phase_windows_df=phase_windows_df,
         windows_df=windows_df,
         events_df=events_df,
         hierarchy_sensor_map_df=hierarchy_sensor_map_df,
         raw_df=raw_df,
-        top_k_per_subsystem=3,
-    )
+    ).to_dataframe()
 
     row = anomaly_window_attribution_df.where("win_id = 1").collect()[0]
     assert row["artifact_versions"]["backbone"] == 1

@@ -7,6 +7,8 @@ from collections.abc import Mapping
 import math
 from typing import Any, Iterable
 
+from libs.io.pandas_spark import coerce_spark_map_like
+
 EVENT_PRIOR_DEFAULT_ALPHA = 0.35
 
 
@@ -66,8 +68,8 @@ def compute_window_sensor_energy(
     slope_reinforcement_count_by_sensor: dict[str, float] = defaultdict(float)
 
     for window in sampled_windows:
-        vector = window.get(vector_field)
-        if not isinstance(vector, dict):
+        vector = coerce_spark_map_like(window.get(vector_field))
+        if vector is None:
             continue
         summary = window.get("continuous_event_summary")
         slope_abs_impulse_map = _summary_map(summary, "slope_abs_impulse_by_parameter")

@@ -54,58 +54,115 @@ ANOMALY_EVENT_ATTRIBUTION_COLUMNS = [
     "date_utc",
 ]
 
-ANOMALY_WINDOW_ATTRIBUTION_SCHEMA = """
-tail_id string,
-flight_id string,
-win_id int,
-timestamp_utc timestamp,
-phase_state_detected string,
-phase_id_detected int,
-phase_confidence_detected double,
-distance_to_centroid_detected double,
-drift_magnitude double,
-breadth double,
-global_score double,
-p_value double,
-severity string,
-dominant_subsystem_id string,
-dominant_score_component string,
-panel_context string,
-subsystems array<string>,
-attribution_context string,
-artifact_versions string,
-date_utc date
-"""
+def ANOMALY_WINDOW_ATTRIBUTION_SCHEMA():
+    from pyspark.sql import types as T
 
-ANOMALY_TELEMETRY_ATTRIBUTION_SCHEMA = """
-tail_id string,
-flight_id string,
-win_id int,
-timestamp_utc timestamp,
-parameter_name string,
-parameter_value string,
-parameter_datatype_label string,
-system_id string,
-subsystem_id string,
-module_id string,
-window_global_score double,
-severity string,
-date_utc date
-"""
+    subsystem_score_component = T.MapType(T.StringType(), T.DoubleType(), True)
+    top_sensor = T.StructType(
+        [
+            T.StructField("parameter_name", T.StringType(), True),
+            T.StructField("sensor_score", T.DoubleType(), True),
+            T.StructField("event_score", T.DoubleType(), True),
+            T.StructField("categorical_event_score", T.DoubleType(), True),
+        ]
+    )
+    subsystem = T.StructType(
+        [
+            T.StructField("id", T.StringType(), True),
+            T.StructField("name", T.StringType(), True),
+            T.StructField("score", T.DoubleType(), True),
+            T.StructField("score_component_contrib", subsystem_score_component, True),
+            T.StructField("top_sensors", T.ArrayType(top_sensor, True), True),
+        ]
+    )
+    panel_context = T.StructType(
+        [
+            T.StructField("text", T.ArrayType(T.StringType(), True), True),
+            T.StructField("message_codes", T.ArrayType(T.StringType(), True), True),
+            T.StructField("source", T.ArrayType(T.StringType(), True), True),
+        ]
+    )
+    attribution_context = T.StructType(
+        [
+            T.StructField("score_component_scores", T.MapType(T.StringType(), T.DoubleType(), False), True),
+            T.StructField("sensor_scores", T.MapType(T.StringType(), T.DoubleType(), True), False),
+        ]
+    )
+    artifact_versions = T.StructType(
+        [
+            T.StructField("backbone", T.IntegerType(), False),
+            T.StructField("graph", T.IntegerType(), False),
+            T.StructField("phase", T.IntegerType(), False),
+            T.StructField("scoring", T.IntegerType(), False),
+            T.StructField("calibration", T.IntegerType(), False),
+        ]
+    )
+    return T.StructType(
+        [
+            T.StructField("tail_id", T.StringType(), True),
+            T.StructField("flight_id", T.StringType(), True),
+            T.StructField("win_id", T.IntegerType(), True),
+            T.StructField("timestamp_utc", T.TimestampType(), False),
+            T.StructField("phase_state_detected", T.StringType(), True),
+            T.StructField("phase_id_detected", T.IntegerType(), True),
+            T.StructField("phase_confidence_detected", T.DoubleType(), True),
+            T.StructField("distance_to_centroid_detected", T.DoubleType(), True),
+            T.StructField("drift_magnitude", T.DoubleType(), True),
+            T.StructField("breadth", T.DoubleType(), True),
+            T.StructField("global_score", T.DoubleType(), True),
+            T.StructField("p_value", T.DoubleType(), True),
+            T.StructField("severity", T.StringType(), True),
+            T.StructField("dominant_subsystem_id", T.StringType(), True),
+            T.StructField("dominant_score_component", T.StringType(), True),
+            T.StructField("panel_context", panel_context, False),
+            T.StructField("subsystems", T.ArrayType(subsystem, True), False),
+            T.StructField("attribution_context", attribution_context, False),
+            T.StructField("artifact_versions", artifact_versions, False),
+            T.StructField("date_utc", T.DateType(), True),
+        ]
+    )
 
-ANOMALY_EVENT_ATTRIBUTION_SCHEMA = """
-tail_id string,
-flight_id string,
-win_id int,
-timestamp_utc timestamp,
-parameter_name string,
-event_type_detected string,
-anomaly_type_detected string,
-anomaly_score_detected double,
-system_id string,
-subsystem_id string,
-module_id string,
-window_global_score double,
-severity string,
-date_utc date
-"""
+
+def ANOMALY_TELEMETRY_ATTRIBUTION_SCHEMA():
+    from pyspark.sql import types as T
+
+    return T.StructType(
+        [
+            T.StructField("tail_id", T.StringType(), True),
+            T.StructField("flight_id", T.StringType(), True),
+            T.StructField("win_id", T.IntegerType(), True),
+            T.StructField("timestamp_utc", T.TimestampType(), True),
+            T.StructField("parameter_name", T.StringType(), True),
+            T.StructField("parameter_value", T.StringType(), True),
+            T.StructField("parameter_datatype_label", T.StringType(), True),
+            T.StructField("system_id", T.StringType(), True),
+            T.StructField("subsystem_id", T.StringType(), True),
+            T.StructField("module_id", T.StringType(), True),
+            T.StructField("window_global_score", T.DoubleType(), True),
+            T.StructField("severity", T.StringType(), True),
+            T.StructField("date_utc", T.DateType(), True),
+        ]
+    )
+
+
+def ANOMALY_EVENT_ATTRIBUTION_SCHEMA():
+    from pyspark.sql import types as T
+
+    return T.StructType(
+        [
+            T.StructField("tail_id", T.StringType(), True),
+            T.StructField("flight_id", T.StringType(), True),
+            T.StructField("win_id", T.IntegerType(), True),
+            T.StructField("timestamp_utc", T.TimestampType(), True),
+            T.StructField("parameter_name", T.StringType(), True),
+            T.StructField("event_type_detected", T.StringType(), True),
+            T.StructField("anomaly_type_detected", T.StringType(), True),
+            T.StructField("anomaly_score_detected", T.DoubleType(), True),
+            T.StructField("system_id", T.StringType(), True),
+            T.StructField("subsystem_id", T.StringType(), True),
+            T.StructField("module_id", T.StringType(), True),
+            T.StructField("window_global_score", T.DoubleType(), True),
+            T.StructField("severity", T.StringType(), True),
+            T.StructField("date_utc", T.DateType(), True),
+        ]
+    )

@@ -2,19 +2,19 @@ import runpy
 import numpy as np
 
 from libs.backbone import (
-    build_backbone_g_spark_table,
-    build_backbone_h_spark_table,
-    build_backbone_sensor_energy_spark_table,
+    BackboneCrossTermFrame,
+    BackboneGramFrame,
+    BackboneSensorEnergyTable,
+    build_backbone_artifacts_from_window_features_table,
     select_backbone_sensors_by_energy_spark,
     solve_backbone_weights,
 )
-from libs.backbone.pipeline import build_backbone_artifacts_from_window_features_table
 from libs.io.delta import read_table
 from libs.io.pandas_spark import pandas_records_for_spark
 from libs.io.schemas import WINDOW_X_SCHEMA
 from libs.testing.seed import seed_sample_dataset
 from libs.testing.data import create_sample_events_df, create_sample_raw_table_df, create_sample_windows_df
-from libs.windows import build_window_features_spark_table
+from libs.windows import WindowFeaturesTable
 from pyspark.sql import functions as F
 
 
@@ -22,7 +22,7 @@ def _build_window_features_pdf(spark):
     raw_df = create_sample_raw_table_df(spark)
     events_df = create_sample_events_df(spark)
     windows_df = create_sample_windows_df(spark)
-    window_features_pdf = build_window_features_spark_table(raw_df, events_df, windows_df).toPandas()
+    window_features_pdf = WindowFeaturesTable.from_raw_events_and_windows(raw_df, events_df, windows_df).to_dataframe().toPandas()
     return raw_df, events_df, windows_df, window_features_pdf
 
 
@@ -55,14 +55,14 @@ def test_build_backbone_artifacts_from_window_features_table_produces_backbone_a
 
 def test_build_backbone_sensor_energy_spark_table_matches_pandas_builder(spark):
     _, _, _, window_features_pdf = _build_window_features_pdf(spark)
-    window_features_sdf = spark.createDataFrame(pandas_records_for_spark(window_features_pdf), schema=WINDOW_X_SCHEMA)
+    window_features_sdf = spark.createDataFrame(pandas_records_for_spark(window_features_pdf), schema=WINDOW_X_SCHEMA())
 
     _, energy_pdf = build_backbone_artifacts_from_window_features_table(
         window_features_pdf,
         backbone_sensor_count=2,
         backbone_ridge_lambda=0.5,
     )
-    energy_spark_pdf = build_backbone_sensor_energy_spark_table(window_features_sdf).orderBy("parameter_name").toPandas()[
+    energy_spark_pdf = BackboneSensorEnergyTable.from_window_features(window_features_sdf).to_dataframe().orderBy("parameter_name").toPandas()[
         ["parameter_name", "energy", "support_count", "event_prior", "selection_score"]
     ]
     energy_pandas_pdf = energy_pdf.sort_values("parameter_name").reset_index(drop=True)[
@@ -76,12 +76,12 @@ def test_build_backbone_sensor_energy_spark_table_matches_pandas_builder(spark):
 
 def test_build_backbone_g_and_h_spark_tables_emit_backbone_aggregates(spark):
     _, _, _, window_features_pdf = _build_window_features_pdf(spark)
-    window_features_sdf = spark.createDataFrame(pandas_records_for_spark(window_features_pdf), schema=WINDOW_X_SCHEMA)
+    window_features_sdf = spark.createDataFrame(pandas_records_for_spark(window_features_pdf), schema=WINDOW_X_SCHEMA())
 
-    energy_sdf = build_backbone_sensor_energy_spark_table(window_features_sdf)
+    energy_sdf = BackboneSensorEnergyTable.from_window_features(window_features_sdf).to_dataframe()
     selected_sensors = select_backbone_sensors_by_energy_spark(energy_sdf, k=1)
-    g_row = build_backbone_g_spark_table(window_features_sdf, selected_sensors=selected_sensors).collect()[0].asDict()
-    h_pdf = build_backbone_h_spark_table(window_features_sdf, selected_sensors=selected_sensors).toPandas()
+    g_row = BackboneGramFrame.from_window_features(window_features_sdf, selected_sensors=selected_sensors).to_dataframe().collect()[0].asDict()
+    h_pdf = BackboneCrossTermFrame.from_window_features(window_features_sdf, selected_sensors=selected_sensors).to_dataframe().toPandas()
 
     assert selected_sensors == ["ENG_TEMP_1"]
     assert g_row["window_count"] >= 1
@@ -92,7 +92,7 @@ def test_build_backbone_g_and_h_spark_tables_emit_backbone_aggregates(spark):
 
 def test_backbone_spark_aggregates_reconstruct_canonical_backbone_model(spark):
     _, _, _, window_features_pdf = _build_window_features_pdf(spark)
-    window_features_sdf = spark.createDataFrame(pandas_records_for_spark(window_features_pdf), schema=WINDOW_X_SCHEMA)
+    window_features_sdf = spark.createDataFrame(pandas_records_for_spark(window_features_pdf), schema=WINDOW_X_SCHEMA())
 
     expected_backbone_df, _ = build_backbone_artifacts_from_window_features_table(
         window_features_pdf,
@@ -101,10 +101,10 @@ def test_backbone_spark_aggregates_reconstruct_canonical_backbone_model(spark):
     )
     expected_row = expected_backbone_df.iloc[0].to_dict()
 
-    energy_sdf = build_backbone_sensor_energy_spark_table(window_features_sdf)
+    energy_sdf = BackboneSensorEnergyTable.from_window_features(window_features_sdf).to_dataframe()
     selected_sensors = select_backbone_sensors_by_energy_spark(energy_sdf, k=2)
-    g_row = build_backbone_g_spark_table(window_features_sdf, selected_sensors=selected_sensors).first().asDict()
-    h_pdf = build_backbone_h_spark_table(window_features_sdf, selected_sensors=selected_sensors).toPandas()
+    g_row = BackboneGramFrame.from_window_features(window_features_sdf, selected_sensors=selected_sensors).to_dataframe().first().asDict()
+    h_pdf = BackboneCrossTermFrame.from_window_features(window_features_sdf, selected_sensors=selected_sensors).to_dataframe().toPandas()
     all_sensors = h_pdf["parameter_name"].astype(str).tolist()
     g = [
         [float(g_row[f"g_{i}_{j}"]) for j in range(len(selected_sensors))]
@@ -218,10 +218,89 @@ def test_window_features_use_raw_snapshot_state_not_numeric_event_payload(spark)
         "cast(date_utc as date) as date_utc",
     )
 
-    row = build_window_features_spark_table(raw_df, events_df, windows_df).first().asDict(recursive=True)
+    row = WindowFeaturesTable.from_raw_events_and_windows(raw_df, events_df, windows_df).to_dataframe().first().asDict(recursive=True)
 
     assert row["continuous_vector_t_end"]["TEMP_A"] == 20.0
     assert row["continuous_event_summary"]["slope_abs_impulse_by_parameter"]["TEMP_A"] == 3.0
+
+
+def test_window_features_use_explicit_continuous_scaling_profile_when_provided(spark):
+    raw_df = spark.createDataFrame(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "timestamp_utc": "2026-01-01T00:00:00",
+                "parameter_name": "TEMP_A",
+                "parameter_value": "0.0",
+                "date_utc": "2026-01-01",
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "timestamp_utc": "2026-01-01T00:00:05",
+                "parameter_name": "TEMP_A",
+                "parameter_value": "10.0",
+                "date_utc": "2026-01-01",
+            },
+        ]
+    ).selectExpr(
+        "tail_id",
+        "flight_id",
+        "cast(timestamp_utc as timestamp) as timestamp_utc",
+        "parameter_name",
+        "parameter_value",
+        "cast(date_utc as date) as date_utc",
+    )
+    events_df = spark.createDataFrame(
+        [],
+        schema="tail_id string, flight_id string, event_seq_id long, timestamp_utc timestamp, parameter_name string, event_type_detected string, payload map<string,string>, date_utc date",
+    )
+    windows_df = spark.createDataFrame(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 1,
+                "t_start": "2026-01-01T00:00:00",
+                "t_end": "2026-01-01T00:00:05",
+                "duration_ms": 5000,
+                "event_count": 0,
+                "date_utc": "2026-01-01",
+            }
+        ]
+    ).selectExpr(
+        "tail_id",
+        "flight_id",
+        "cast(win_id as int) as win_id",
+        "cast(t_start as timestamp) as t_start",
+        "cast(t_end as timestamp) as t_end",
+        "cast(duration_ms as int) as duration_ms",
+        "cast(event_count as int) as event_count",
+        "cast(date_utc as date) as date_utc",
+    )
+    scaling_profile_df = spark.createDataFrame(
+        [
+            {
+                "parameter_name": "TEMP_A",
+                "support_count": 2,
+                "scaling_q25": 0.0,
+                "scaling_center_median": 5.0,
+                "scaling_q75": 10.0,
+                "scaling_iqr": 2.0,
+            }
+        ]
+    )
+
+    row = WindowFeaturesTable.from_raw_events_and_windows(
+        raw_df,
+        events_df,
+        windows_df,
+        scaling_profile_df=scaling_profile_df,
+    ).to_dataframe().first().asDict(recursive=True)
+
+    assert row["continuous_vector_t_end"]["TEMP_A"] == 10.0
+    assert abs(row["continuous_vector_t_end_scaled"]["TEMP_A"] - 2.5) < 1e-9
 
 
 def test_window_features_emit_continuous_event_summary_and_empty_maps(spark):
@@ -387,7 +466,7 @@ def test_window_features_emit_continuous_event_summary_and_empty_maps(spark):
 
     rows = {
         int(row["win_id"]): row.asDict(recursive=True)
-        for row in build_window_features_spark_table(raw_df, events_df, windows_df).collect()
+        for row in WindowFeaturesTable.from_raw_events_and_windows(raw_df, events_df, windows_df).to_dataframe().collect()
     }
 
     summary = rows[1]["continuous_event_summary"]
@@ -462,10 +541,10 @@ def test_backbone_sensor_energy_prefers_event_rich_sensor_when_energy_is_tied(sp
                 "phase_label": None,
             },
         ],
-        schema=WINDOW_X_SCHEMA,
+        schema=WINDOW_X_SCHEMA(),
     )
 
-    energy_df = build_backbone_sensor_energy_spark_table(window_features_sdf)
+    energy_df = BackboneSensorEnergyTable.from_window_features(window_features_sdf).to_dataframe()
     energy_rows = [row.asDict() for row in energy_df.orderBy("parameter_name").collect()]
 
     assert {row["parameter_name"] for row in energy_rows} == {"s1", "s2"}
@@ -544,13 +623,13 @@ def test_backbone_g_and_h_ignore_continuous_event_summary_when_sensors_are_fixed
         for row in base_rows
     ]
 
-    window_features_a = spark.createDataFrame(variant_a, schema=WINDOW_X_SCHEMA)
-    window_features_b = spark.createDataFrame(variant_b, schema=WINDOW_X_SCHEMA)
+    window_features_a = spark.createDataFrame(variant_a, schema=WINDOW_X_SCHEMA())
+    window_features_b = spark.createDataFrame(variant_b, schema=WINDOW_X_SCHEMA())
 
-    g_a = build_backbone_g_spark_table(window_features_a, selected_sensors=["s1"]).first().asDict()
-    g_b = build_backbone_g_spark_table(window_features_b, selected_sensors=["s1"]).first().asDict()
-    h_a = build_backbone_h_spark_table(window_features_a, selected_sensors=["s1"]).orderBy("parameter_name").collect()
-    h_b = build_backbone_h_spark_table(window_features_b, selected_sensors=["s1"]).orderBy("parameter_name").collect()
+    g_a = BackboneGramFrame.from_window_features(window_features_a, selected_sensors=["s1"]).to_dataframe().first().asDict()
+    g_b = BackboneGramFrame.from_window_features(window_features_b, selected_sensors=["s1"]).to_dataframe().first().asDict()
+    h_a = BackboneCrossTermFrame.from_window_features(window_features_a, selected_sensors=["s1"]).to_dataframe().orderBy("parameter_name").collect()
+    h_b = BackboneCrossTermFrame.from_window_features(window_features_b, selected_sensors=["s1"]).to_dataframe().orderBy("parameter_name").collect()
 
     assert g_a == g_b
     assert [row.asDict(recursive=True) for row in h_a] == [row.asDict(recursive=True) for row in h_b]
@@ -569,6 +648,10 @@ def test_run_backbone_stage_builds_backbone_tables_in_spark(spark, tmp_path, mon
     monkeypatch.setenv("S3NTINEL_RAW_TABLE_PATH", str(base_dir / "delta" / "raw_telemetry"))
     monkeypatch.setenv("S3NTINEL_EVENTS_TABLE_PATH", str(base_dir / "delta" / "events"))
     monkeypatch.setenv("S3NTINEL_WINDOWS_TABLE_PATH", str(base_dir / "delta" / "windows"))
+    monkeypatch.setenv(
+        "S3NTINEL_CONTINUOUS_SCALING_PROFILE_TABLE_PATH",
+        str(base_dir / "delta" / "continuous_scaling_profile"),
+    )
     monkeypatch.setenv("S3NTINEL_BACKBONE_TABLE_PATH", str(base_dir / "delta" / "backbone"))
     monkeypatch.setenv("S3NTINEL_BACKBONE_SENSOR_ENERGY_TABLE_PATH", str(base_dir / "delta" / "backbone_sensor_energy"))
     monkeypatch.setenv("S3NTINEL_TABLE_FORMAT", "parquet")
@@ -598,6 +681,10 @@ def test_run_backbone_stage_persisted_window_features_keep_event_type_counts(spa
     monkeypatch.setenv("S3NTINEL_RAW_TABLE_PATH", str(base_dir / "delta" / "raw_telemetry"))
     monkeypatch.setenv("S3NTINEL_EVENTS_TABLE_PATH", str(base_dir / "delta" / "events"))
     monkeypatch.setenv("S3NTINEL_WINDOWS_TABLE_PATH", str(base_dir / "delta" / "windows"))
+    monkeypatch.setenv(
+        "S3NTINEL_CONTINUOUS_SCALING_PROFILE_TABLE_PATH",
+        str(base_dir / "delta" / "continuous_scaling_profile"),
+    )
     monkeypatch.setenv("S3NTINEL_WINDOW_FEATURES_TABLE_PATH", str(base_dir / "delta" / "window_features"))
     monkeypatch.setenv("S3NTINEL_BACKBONE_TABLE_PATH", str(base_dir / "delta" / "backbone"))
     monkeypatch.setenv("S3NTINEL_BACKBONE_SENSOR_ENERGY_TABLE_PATH", str(base_dir / "delta" / "backbone_sensor_energy"))

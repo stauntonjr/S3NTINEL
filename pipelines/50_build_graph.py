@@ -1,20 +1,22 @@
 """Build graph component artifacts from backbone, events, and windows."""
 import time
+from pathlib import Path
 
 from libs.graph import (
-    build_event_graph_spark_table,
-    build_fused_graph_spark_table,
-    build_graph_parameter_universe_spark_table,
-    build_lag_candidate_pairs_spark_table,
-    build_lag_profile_spark_table,
-    build_precision_graph_from_window_features_spark_table,
-    build_transition_graph_spark_table,
+    EventGraphTable,
+    FusedGraphTable,
+    GraphParameterUniverseTable,
+    HierarchySensorMapTable,
     collapse_lag_profile_spark_table,
+    LagCandidatePairsFrame,
+    LagGraphTable,
     LagBandSpec,
+    LagProfileTable,
+    PrecisionGraphTable,
+    TransitionGraphTable,
 )
 from libs.graph.evaluation import build_graph_stage_evaluation_report_spark
 from libs.graph.hierarchy_artifacts import HierarchySpec
-from libs.io.schemas import GRAPH_PARAMETER_UNIVERSE_SCHEMA, PRECISION_GRAPH_SCHEMA
 from libs.io.delta import get_spark, read_table, write_table
 from libs.perf import (
     build_artifact_manifest,
@@ -27,7 +29,7 @@ from libs.perf import (
     log_wall_time,
     track_mlflow_run,
 )
-from pipelines.common import build_context, context_artifacts, context_execution, context_settings, require_artifact_path
+from pipelines.common import build_stage_runtime, require_artifact_path
 
 
 LOGGER = get_logger(__name__)
@@ -40,6 +42,75 @@ def _elapsed_ms(start_time: float) -> float:
 def _materialize_df(df: "DataFrame") -> None:
     """Force persistence so step timings reflect the owning builder."""
     df.count()
+
+
+def _resolve_precision_threshold(
+    spark: "SparkSession",
+    *,
+    window_policy_profile_path: str,
+    fmt: str,
+    base_threshold: float,
+    selected_sensor_count: int,
+    window_feature_count: int,
+) -> tuple[float, dict[str, object]]:
+    reference_window_count = 128.0
+    reference_sensor_count = 8.0
+    sample_scale = (reference_window_count / max(float(window_feature_count), 1.0)) ** 0.5
+    dimension_scale = max(float(selected_sensor_count), 1.0) / reference_sensor_count
+    dimension_scale = max(dimension_scale, 1.0) ** 0.5
+
+    profile_path = Path(str(window_policy_profile_path).strip()) if str(window_policy_profile_path).strip() else None
+    if profile_path is None or not profile_path.exists():
+        resolved = float(max(float(base_threshold) * sample_scale / dimension_scale, 1e-6))
+        return resolved, {
+            "source": "configured",
+            "base_min_abs_partial_corr": float(base_threshold),
+            "resolved_min_abs_partial_corr": float(resolved),
+            "window_feature_count": int(window_feature_count),
+            "selected_sensor_count": int(selected_sensor_count),
+            "sample_scale": float(sample_scale),
+            "dimension_scale": float(dimension_scale),
+        }
+
+    profile_df = read_table(spark, str(profile_path), fmt=fmt)
+    selected_row = profile_df.where("is_selected").orderBy("candidate_rank").limit(1).first()
+    if selected_row is None:
+        resolved = float(max(float(base_threshold) * sample_scale / dimension_scale, 1e-6))
+        return resolved, {
+            "source": "configured",
+            "base_min_abs_partial_corr": float(base_threshold),
+            "resolved_min_abs_partial_corr": float(resolved),
+            "profile_path": str(profile_path),
+            "reason": "no_selected_profile_row",
+            "window_feature_count": int(window_feature_count),
+            "selected_sensor_count": int(selected_sensor_count),
+            "sample_scale": float(sample_scale),
+            "dimension_scale": float(dimension_scale),
+        }
+
+    payload = selected_row.asDict()
+    mean_event_count = float(payload.get("mean_event_count") or 0.0)
+    p95_event_count = float(payload.get("p95_event_count") or 0.0)
+    event_density_scale = max(mean_event_count, p95_event_count, 1.0)
+    resolved = float(max((float(base_threshold) * sample_scale) / (float(event_density_scale) * dimension_scale), 1e-6))
+    return resolved, {
+        "source": "window_policy_profile",
+        "profile_path": str(profile_path),
+        "base_min_abs_partial_corr": float(base_threshold),
+        "resolved_min_abs_partial_corr": float(resolved),
+        "event_density_scale": float(event_density_scale),
+        "window_feature_count": int(window_feature_count),
+        "selected_sensor_count": int(selected_sensor_count),
+        "sample_scale": float(sample_scale),
+        "dimension_scale": float(dimension_scale),
+        "reference_window_count": float(reference_window_count),
+        "reference_sensor_count": float(reference_sensor_count),
+        "mean_event_count": float(mean_event_count),
+        "p95_event_count": float(p95_event_count),
+        "event_threshold": int(payload.get("event_threshold") or 0),
+        "predicted_window_count": int(payload.get("predicted_window_count") or 0),
+        "sampled_event_count": int(payload.get("sampled_event_count") or 0),
+    }
 
 
 def _prepare_graph_events(events_df: "DataFrame") -> "DataFrame":
@@ -80,27 +151,27 @@ def _prepare_graph_windows(windows_df: "DataFrame") -> "DataFrame":
 def run() -> None:
     from pyspark import StorageLevel
 
-    context = build_context()
-    artifacts = context_artifacts(context)
-    execution = context_execution(context)
-    settings = context_settings(context)
-    raw_path = artifacts.raw_table
-    events_path = artifacts.events
-    windows_path = artifacts.windows
-    window_features_path = artifacts.window_features
-    backbone_path = artifacts.backbone
-    precision_graph_path = artifacts.precision_graph
-    event_graph_path = artifacts.event_graph
-    lag_profile_path = artifacts.lag_profile
-    lag_graph_path = artifacts.lag_graph
-    transition_graph_path = artifacts.transition_graph
-    fused_graph_path = artifacts.fused_graph
-    graph_parameter_universe_path = artifacts.graph_parameter_universe
-    table_format = execution.table_format
-    write_mode = execution.fit_write_mode
+    runtime = build_stage_runtime("50_build_graph")
+    context = runtime.context
+    settings = runtime.settings
+    raw_path = runtime.artifacts.raw_table
+    events_path = runtime.artifacts.events
+    windows_path = runtime.artifacts.windows
+    window_features_path = runtime.artifacts.window_features
+    backbone_path = runtime.artifacts.backbone
+    window_policy_profile_path = runtime.artifacts.window_policy_profile
+    precision_graph_path = runtime.artifacts.precision_graph
+    event_graph_path = runtime.artifacts.event_graph
+    lag_profile_path = runtime.artifacts.lag_profile
+    lag_graph_path = runtime.artifacts.lag_graph
+    transition_graph_path = runtime.artifacts.transition_graph
+    fused_graph_path = runtime.artifacts.fused_graph
+    graph_parameter_universe_path = runtime.artifacts.graph_parameter_universe
+    table_format = runtime.execution.table_format
+    write_mode = runtime.execution.fit_write_mode
 
     precision_ridge_lambda = settings.graph.precision_ridge_lambda
-    min_abs_partial_corr = settings.graph.min_abs_partial_corr
+    base_min_abs_partial_corr = settings.graph.min_abs_partial_corr
     min_event_count = settings.graph.event.min_count
     min_event_npmi = settings.graph.event.min_npmi
     lag_band_specs = tuple(
@@ -150,85 +221,88 @@ def run() -> None:
         started = time.perf_counter()
         window_features_count = int(window_features_df.count())
         timing_ms["window_features_count"] = _elapsed_ms(started)
+        backbone_row = backbone_df.first()
+        backbone_row = backbone_row.asDict() if backbone_row is not None else {}
+        selected_sensors = list(backbone_row.get("selected_sensors_c") or [])
+        min_abs_partial_corr, precision_threshold_info = _resolve_precision_threshold(
+            spark,
+            window_policy_profile_path=window_policy_profile_path,
+            fmt=table_format,
+            base_threshold=float(base_min_abs_partial_corr),
+            selected_sensor_count=len(selected_sensors),
+            window_feature_count=window_features_count,
+        )
 
         started = time.perf_counter()
-        event_sdf = build_event_graph_spark_table(
+        event_sdf = EventGraphTable.from_events_and_windows(
             graph_events_df,
             graph_windows_df,
             min_count=min_event_count,
             min_npmi=min_event_npmi,
             top_k_per_parameter_name=settings.graph.event.top_k_per_parameter_name,
-        ).persist(StorageLevel.MEMORY_AND_DISK)
+        ).to_dataframe().persist(StorageLevel.MEMORY_AND_DISK)
         _materialize_df(event_sdf)
         timing_ms["event_graph_build"] = _elapsed_ms(started)
         started = time.perf_counter()
-        transition_sdf = build_transition_graph_spark_table(
+        transition_sdf = TransitionGraphTable.from_events(
             graph_events_df,
             min_count=min_transition_count,
-        ).persist(StorageLevel.MEMORY_AND_DISK)
+        ).to_dataframe().persist(StorageLevel.MEMORY_AND_DISK)
         _materialize_df(transition_sdf)
         timing_ms["transition_graph_build"] = _elapsed_ms(started)
         started = time.perf_counter()
-        lag_candidate_sdf = build_lag_candidate_pairs_spark_table(event_sdf, transition_sdf)
-        lag_profile_sdf = build_lag_profile_spark_table(
+        lag_candidate_sdf = LagCandidatePairsFrame.from_graphs(event_sdf, transition_sdf).to_dataframe()
+        lag_profile_sdf = LagProfileTable.from_events(
             graph_events_df,
             tau_max_seconds=lag_tau_max_seconds,
             bands=lag_band_specs,
             candidate_pairs_df=lag_candidate_sdf,
-        ).persist(StorageLevel.MEMORY_AND_DISK)
+        ).to_dataframe().persist(StorageLevel.MEMORY_AND_DISK)
         _materialize_df(lag_profile_sdf)
         timing_ms["lag_profile_build"] = _elapsed_ms(started)
         started = time.perf_counter()
-        lag_sdf = collapse_lag_profile_spark_table(
+        lag_sdf = LagGraphTable.from_profile(
             lag_profile_sdf,
             tau_max_seconds=lag_tau_max_seconds,
             bands=lag_band_specs,
             min_count=min_lag_count,
             max_mean_lag_seconds=settings.graph.lag.max_mean_lag_seconds,
             top_k_outgoing=settings.graph.lag.top_k_outgoing,
-        ).persist(StorageLevel.MEMORY_AND_DISK)
+        ).to_dataframe().persist(StorageLevel.MEMORY_AND_DISK)
         _materialize_df(lag_sdf)
         timing_ms["lag_graph_build"] = _elapsed_ms(started)
         try:
-            backbone_row = backbone_df.first()
-            backbone_row = backbone_row.asDict() if backbone_row is not None else {}
-            selected_sensors = list(backbone_row.get("selected_sensors_c") or [])
             started = time.perf_counter()
-            precision_pdf = build_precision_graph_from_window_features_spark_table(
+            precision_df = PrecisionGraphTable.from_window_features(
                 window_features_df,
                 selected_sensors=selected_sensors,
                 ridge_lambda=precision_ridge_lambda,
                 min_abs_partial_corr=min_abs_partial_corr,
-            )
+            ).to_dataframe()
+            precision_pdf = precision_df.toPandas()
             timing_ms["precision_graph_build"] = _elapsed_ms(started)
-
-            precision_df = (
-                spark.createDataFrame(precision_pdf)
-                if not precision_pdf.empty
-                else spark.createDataFrame([], schema=PRECISION_GRAPH_SCHEMA())
-            )
             started = time.perf_counter()
-            fused_df = build_fused_graph_spark_table(
+            fused_df = FusedGraphTable.from_component_tables(
                 precision_df,
                 event_sdf,
                 lag_sdf,
                 alpha=alpha,
                 beta=beta,
                 gamma=gamma,
-            ).persist(StorageLevel.MEMORY_AND_DISK)
+            ).to_dataframe().persist(StorageLevel.MEMORY_AND_DISK)
             _materialize_df(fused_df)
             timing_ms["fused_graph_build"] = _elapsed_ms(started)
 
             started = time.perf_counter()
             backbone_all_sensors = backbone_row.get("all_sensors") or []
-            parameter_universe_df, _ = build_graph_parameter_universe_spark_table(
+            parameter_universe_table, _ = GraphParameterUniverseTable.from_component_tables(
                 event_sdf,
                 lag_sdf,
                 transition_sdf,
                 backbone_all_sensors=backbone_all_sensors,
                 max_graph_sensor_universe=max_graph_sensor_universe,
             )
-            parameter_universe_df = parameter_universe_df.persist(StorageLevel.MEMORY_AND_DISK)
+            parameter_universe_df = parameter_universe_table.to_dataframe().persist(StorageLevel.MEMORY_AND_DISK)
             _materialize_df(parameter_universe_df)
             timing_ms["parameter_universe_build"] = _elapsed_ms(started)
             try:
@@ -313,6 +387,7 @@ def run() -> None:
     log_params_if_active(
         {
             "precision_ridge_lambda": precision_ridge_lambda,
+            "base_min_abs_partial_corr": base_min_abs_partial_corr,
             "min_abs_partial_corr": min_abs_partial_corr,
             "min_event_count": min_event_count,
             "min_event_npmi": min_event_npmi,
@@ -335,6 +410,7 @@ def run() -> None:
             "windows_path": windows_path,
             "window_features_path": window_features_path,
             "backbone_path": backbone_path,
+            "window_policy_profile_path": window_policy_profile_path,
             "precision_graph_path": precision_graph_path,
             "event_graph_path": event_graph_path,
             "lag_profile_path": lag_profile_path,
@@ -349,6 +425,9 @@ def run() -> None:
             "lag_edge_count": lag_count_out,
             "transition_edge_count": transition_count_out,
             "fused_edge_count": fused_count_out,
+            "base_min_abs_partial_corr": base_min_abs_partial_corr,
+            "min_abs_partial_corr": min_abs_partial_corr,
+            "precision_threshold_info": precision_threshold_info,
             "min_event_npmi": min_event_npmi,
             "max_graph_sensor_universe": max_graph_sensor_universe,
             "graph_parameter_universe_count": parameter_universe_count_out,
@@ -357,7 +436,7 @@ def run() -> None:
             "table_format": table_format,
             "write_mode": write_mode,
         },
-        "reports/stages/50_build_graph_summary.json",
+        runtime.report_paths.summary_artifact_path,
     )
     if graph_evaluation_report is not None:
         log_dict_artifact_if_active(
@@ -370,6 +449,7 @@ def run() -> None:
             "table_format": table_format,
             "write_mode": write_mode,
             "precision_ridge_lambda": precision_ridge_lambda,
+            "base_min_abs_partial_corr": base_min_abs_partial_corr,
             "min_abs_partial_corr": min_abs_partial_corr,
             "min_event_count": min_event_count,
             "min_event_npmi": min_event_npmi,
@@ -390,6 +470,7 @@ def run() -> None:
             "gamma": gamma,
             "min_fused_edge_weight": min_fused_edge_weight,
             "max_graph_sensor_universe": max_graph_sensor_universe,
+            "precision_threshold_info": precision_threshold_info,
         },
         input_artifacts={
             "events": build_artifact_manifest(path=events_path, dataframe=events_df),
@@ -428,7 +509,7 @@ def run() -> None:
             }
         },
     )
-    log_stage_manifest_if_active(stage_manifest, "reports/stages/50_build_graph_manifest.json")
+    log_stage_manifest_if_active(stage_manifest, runtime.report_paths.manifest_artifact_path)
     LOGGER.info(
         "pipeline=build_graph format=%s write_mode=%s precision_edges=%s event_edges=%s lag_profile_edges=%s lag_edges=%s transition_edges=%s fused_edges=%s parameter_universe=%s timing_ms=%s",
         table_format,

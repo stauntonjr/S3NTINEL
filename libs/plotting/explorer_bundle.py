@@ -3,13 +3,12 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
-from pyspark.sql import DataFrame
-from pyspark.sql import functions as F
 
 from libs.io.delta import write_table
+from libs.reporting import ReportFrame
 from libs.io.schemas import (
     EXPLORER_ANOMALY_MARKERS_COLUMNS,
     EXPLORER_ANOMALY_WINDOWS_COLUMNS,
@@ -46,16 +45,12 @@ def explorer_bundle_manifest_path(root_dir: str | Path) -> Path:
 
 
 def _prepare_timestamp_df(df: pd.DataFrame) -> pd.DataFrame:
-    if df.empty:
-        return df.copy()
-    out = df.copy()
-    for col in ("timestamp_utc", "timestamp_start", "timestamp_end", "t_start", "t_end"):
-        if col in out.columns:
-            out[col] = pd.to_datetime(out[col], utc=True, errors="coerce")
-    return out
+    return ReportFrame(dataframe=df).normalize_timestamps().to_pandas()
 
 
 def build_explorer_telemetry_spark_table(raw_df: DataFrame, hierarchy_df: DataFrame) -> tuple[DataFrame, DataFrame]:
+    from pyspark.sql import functions as F
+
     hierarchy_cols = ["parameter_name", "system_id", "subsystem_id", "module_id"]
     hierarchy_lookup = hierarchy_df.select(*[c for c in hierarchy_cols if c in hierarchy_df.columns]).dropDuplicates(["parameter_name"])
     value_numeric = F.coalesce(
@@ -135,6 +130,8 @@ def build_explorer_telemetry_spark_table(raw_df: DataFrame, hierarchy_df: DataFr
 
 
 def build_explorer_event_markers_spark_table(events_df: DataFrame, anomaly_event_df: DataFrame | None) -> DataFrame:
+    from pyspark.sql import functions as F
+
     base_cols = [
         "tail_id",
         "flight_id",
@@ -186,6 +183,8 @@ def build_explorer_anomaly_windows_spark_table(anomaly_window_df: DataFrame) -> 
 
 
 def build_explorer_phase_intervals_spark_table(phase_windows_df: DataFrame) -> DataFrame:
+    from pyspark.sql import functions as F
+
     return (
         phase_windows_df.select(
             "tail_id",
@@ -261,11 +260,10 @@ def load_explorer_bundle(run_dir_or_bundle: str | Path | Any) -> ExplorerBundle:
 
 def load_explorer_table(bundle: ExplorerBundle, table_name: str, *, columns: list[str] | None = None) -> pd.DataFrame:
     table_path = Path(bundle.manifest["tables"][str(table_name)])
-    df = pd.read_parquet(table_path)
+    frame = ReportFrame(dataframe=pd.read_parquet(table_path))
     if columns:
-        selected = [c for c in columns if c in df.columns]
-        df = df[selected]
-    return _prepare_timestamp_df(df)
+        frame = frame.select_available(columns)
+    return frame.normalize_timestamps().to_pandas()
 
 
 def load_explorer_filter_options(bundle: ExplorerBundle) -> dict[str, list[str]]:
@@ -331,3 +329,7 @@ def load_explorer_slice(bundle: ExplorerBundle, state: Any) -> dict[str, pd.Data
         "anomaly_window": _load_and_filter("anomaly_windows", parameter_col=None),
         "phase_intervals": _load_and_filter("phase_intervals", parameter_col=None),
     }
+
+
+if TYPE_CHECKING:
+    from pyspark.sql import DataFrame

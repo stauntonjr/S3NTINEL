@@ -15,9 +15,9 @@ from libs.perf import (
     log_wall_time,
     track_mlflow_run,
 )
-from libs.windows import WindowPolicy, WindowPolicyProfile, WindowPolicyProfileSpec, build_windows_table
+from libs.windows import WindowPolicy, WindowPolicyProfile, WindowPolicyProfileSpec, WindowsTable
 from libs.windows.window import DEFAULT_MIN_SAMPLING_RATE_HZ
-from pipelines.common import build_context, context_artifacts, context_execution, context_settings
+from pipelines.common import build_stage_runtime
 
 
 LOGGER = get_logger(__name__)
@@ -27,15 +27,14 @@ LOGGER = get_logger(__name__)
 @log_memory_usage(logger=LOGGER, label="30_windows_adaptive")
 @log_wall_time(logger=LOGGER)
 def run() -> None:
-    context = build_context()
-    artifacts = context_artifacts(context)
-    execution = context_execution(context)
-    settings = context_settings(context)
-    input_path = artifacts.events
-    window_policy_profile_path = artifacts.window_policy_profile
-    output_path = artifacts.windows
-    table_format = execution.table_format
-    write_mode = execution.write_mode
+    runtime = build_stage_runtime("30_windows_adaptive")
+    context = runtime.context
+    settings = runtime.settings
+    input_path = runtime.artifacts.events
+    window_policy_profile_path = runtime.artifacts.window_policy_profile
+    output_path = runtime.artifacts.windows
+    table_format = runtime.execution.table_format
+    write_mode = runtime.execution.write_mode
 
     min_sampling_rate_hz = float(settings.windowing.min_sampling_rate_hz or DEFAULT_MIN_SAMPLING_RATE_HZ)
     derived_max_ms = WindowPolicy.max_ms_from_min_sampling_rate(min_sampling_rate_hz)
@@ -65,14 +64,14 @@ def run() -> None:
         profile_df,
         fallback_policy=fallback_policy,
     )
-    windows_df = build_windows_table(
+    windows_df = WindowsTable.from_events(
         events_df,
         max_ms=selected_policy.max_ms,
         event_threshold=selected_policy.event_threshold,
         min_ms=selected_policy.min_ms,
         inactivity_timeout_ms=selected_policy.inactivity_timeout_ms,
         strategy=window_strategy,
-    )
+    ).to_dataframe()
     write_table(
         windows_df,
         path=output_path,
@@ -111,7 +110,7 @@ def run() -> None:
             "policy_source": policy_source,
             "partition_by": list(context.config["output"]["partition_by"]),
         },
-        "reports/stages/30_windows_adaptive_summary.json",
+        runtime.report_paths.summary_artifact_path,
     )
     input_artifacts = {
         "events": build_artifact_manifest(path=input_path, dataframe=events_df, row_count=events_count),
@@ -143,7 +142,7 @@ def run() -> None:
         },
         replayable_from=["events"],
     )
-    log_stage_manifest_if_active(stage_manifest, "reports/stages/30_windows_adaptive_manifest.json")
+    log_stage_manifest_if_active(stage_manifest, runtime.report_paths.manifest_artifact_path)
     LOGGER.info(
         "pipeline=windows_adaptive format=%s write_mode=%s strategy=%s max_ms=%s event_threshold=%s inactivity_timeout_ms=%s input=%s output=%s",
         table_format,

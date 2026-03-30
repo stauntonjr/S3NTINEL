@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import date, datetime
 from math import isnan
 from typing import Any
@@ -33,6 +34,34 @@ def _normalize_scalar(value: Any) -> Any:
     if isinstance(value, float) and isnan(value):
         return None
     return value
+
+
+def coerce_spark_map_like(value: Any) -> dict[str, Any] | None:
+    """Normalize map-like values from Spark/Pandas into a plain dict.
+
+    Parquet round-trips commonly materialize Spark map columns as either:
+    - native dict-like objects
+    - lists of ``(key, value)`` tuples
+    """
+    if hasattr(value, "asDict"):
+        try:
+            value = value.asDict(recursive=True)
+        except Exception:
+            pass
+    if isinstance(value, Mapping):
+        return {str(key): item for key, item in value.items() if str(key)}
+    if isinstance(value, list):
+        out: dict[str, Any] = {}
+        for item in value:
+            if not isinstance(item, (list, tuple)) or len(item) != 2:
+                return None
+            key, item_value = item
+            key_str = str(key)
+            if not key_str:
+                continue
+            out[key_str] = item_value
+        return out
+    return None
 
 
 def spark_safe_value(value: Any) -> Any:

@@ -12,16 +12,21 @@ EVENTS_COLUMNS = [
     "date_utc",
 ]
 
-EVENTS_SCHEMA = """
-tail_id string,
-flight_id string,
-event_seq_id long,
-win_id int,
-timestamp_utc timestamp,
-parameter_name string,
-event_type_detected string,
-anomaly_type_detected string,
-anomaly_score_detected double,
-payload map<string,string>,
-date_utc date
-"""
+def EVENTS_SCHEMA():
+    from pyspark.sql import types as T
+
+    return T.StructType(
+        [
+            T.StructField("tail_id", T.StringType(), True),
+            T.StructField("flight_id", T.StringType(), True),
+            T.StructField("event_seq_id", T.LongType(), False),
+            T.StructField("win_id", T.IntegerType(), True),
+            T.StructField("timestamp_utc", T.TimestampType(), True),
+            T.StructField("parameter_name", T.StringType(), True),
+            T.StructField("event_type_detected", T.StringType(), True),
+            T.StructField("anomaly_type_detected", T.StringType(), True),
+            T.StructField("anomaly_score_detected", T.DoubleType(), True),
+            T.StructField("payload", T.MapType(T.StringType(), T.StringType(), True), False),
+            T.StructField("date_utc", T.DateType(), True),
+        ]
+    )

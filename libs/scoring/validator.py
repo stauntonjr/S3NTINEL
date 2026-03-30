@@ -6,6 +6,9 @@ from typing import Any
 
 import pandas as pd
 
+STRICT_TRUTH_COVERAGE_MIN_RATIO = 0.5
+STRICT_MAX_EARLY_LEAD_SECONDS = 0.0
+
 
 def _to_utc(series: pd.Series) -> pd.Series:
     return pd.to_datetime(series, utc=True, errors="coerce")
@@ -77,39 +80,65 @@ def extract_fault_truth_windows(raw_telemetry_df: pd.DataFrame) -> pd.DataFrame:
     return fault_df
 
 
-def _join_truths_to_windows(
+def build_truth_window_overlap_table(
     *,
-    windows_df: pd.DataFrame,
-    calibrated_scores_df: pd.DataFrame,
+    window_like_df: pd.DataFrame,
     truth_df: pd.DataFrame,
     start_field: str,
     end_field: str,
 ) -> pd.DataFrame:
-    if windows_df.empty or calibrated_scores_df.empty or truth_df.empty:
+    if window_like_df.empty or truth_df.empty:
         return pd.DataFrame()
-    windows = windows_df.copy()
+    windows = window_like_df.copy()
     windows["t_start"] = _to_utc(windows["t_start"])
     windows["t_end"] = _to_utc(windows["t_end"])
-    scores = calibrated_scores_df.copy()
-    merged_windows = windows.merge(
-        scores,
-        on=["tail_id", "flight_id", "win_id", "date_utc"],
-        how="left",
-        suffixes=("", "_score"),
-    )
     rows: list[dict[str, Any]] = []
     for truth in truth_df.to_dict(orient="records"):
         mask = (
-            (merged_windows["tail_id"].astype(str) == str(truth["tail_id"]))
-            & (merged_windows["flight_id"].astype(str) == str(truth["flight_id"]))
-            & (merged_windows["t_end"] >= truth[start_field])
-            & (merged_windows["t_start"] <= truth[end_field])
+            (windows["tail_id"].astype(str) == str(truth["tail_id"]))
+            & (windows["flight_id"].astype(str) == str(truth["flight_id"]))
+            & (windows["t_end"] >= truth[start_field])
+            & (windows["t_start"] <= truth[end_field])
         )
-        for window in merged_windows[mask].to_dict(orient="records"):
+        truth_start = pd.to_datetime(truth[start_field], utc=True, errors="coerce")
+        truth_end = pd.to_datetime(truth[end_field], utc=True, errors="coerce")
+        truth_duration_seconds = max(float((truth_end - truth_start).total_seconds()), 0.0)
+        for window in windows[mask].to_dict(orient="records"):
+            window_start = pd.to_datetime(window["t_start"], utc=True)
+            window_end = pd.to_datetime(window["t_end"], utc=True)
+            overlap_start = max(window_start, truth_start)
+            overlap_end = min(window_end, truth_end)
+            if truth_duration_seconds <= 0.0 and window_start <= truth_start <= window_end:
+                overlap_seconds = 1.0
+            else:
+                overlap_seconds = max(float((overlap_end - overlap_start).total_seconds()), 0.0)
+            if overlap_seconds <= 0.0:
+                continue
+            window_duration_seconds = max(
+                float((window_end - window_start).total_seconds()),
+                0.0,
+            )
+            detection_latency_seconds = float((window_start - truth_start).total_seconds())
             row = dict(window)
             row.update(truth)
+            row["overlap_seconds"] = overlap_seconds
+            row["truth_duration_seconds"] = truth_duration_seconds
+            row["window_duration_seconds"] = window_duration_seconds
+            row["truth_coverage_ratio"] = (
+                float(overlap_seconds / truth_duration_seconds) if truth_duration_seconds > 0.0 else 1.0
+            )
+            row["detection_latency_seconds"] = detection_latency_seconds
             rows.append(row)
     return pd.DataFrame.from_records(rows)
+
+
+def _strict_overlap_mask(df: pd.DataFrame) -> pd.Series:
+    if df is None or df.empty:
+        return pd.Series(dtype="bool")
+    return (
+        (df["truth_coverage_ratio"].fillna(0.0).astype(float) >= float(STRICT_TRUTH_COVERAGE_MIN_RATIO))
+        & (df["detection_latency_seconds"].fillna(float("inf")).astype(float) >= float(-STRICT_MAX_EARLY_LEAD_SECONDS))
+    )
 
 
 def validate_scores_against_misbehavior_windows(
@@ -127,9 +156,17 @@ def validate_scores_against_misbehavior_windows(
             "emit_ready_misbehavior_window_count": 0,
         }
 
-    overlaps = _join_truths_to_windows(
-        windows_df=windows_df,
-        calibrated_scores_df=calibrated_scores_df,
+    merged_windows = windows_df.copy()
+    scores = calibrated_scores_df.copy()
+    merged_windows = merged_windows.merge(
+        scores,
+        on=["tail_id", "flight_id", "win_id", "date_utc"],
+        how="left",
+        suffixes=("", "_score"),
+    )
+
+    overlaps = build_truth_window_overlap_table(
+        window_like_df=merged_windows,
         truth_df=truth_df,
         start_field="misbehavior_start_timestamp_utc",
         end_field="misbehavior_end_timestamp_utc",
@@ -149,13 +186,14 @@ def validate_scores_against_misbehavior_windows(
         dropna=False,
     ):
         ordered = group.sort_values(["t_start", "win_id"], kind="mergesort")
-        detected = ordered[ordered["severity"].fillna("normal").astype(str) != "normal"]
+        strict_overlap = ordered[_strict_overlap_mask(ordered)]
+        detected = strict_overlap[strict_overlap["severity"].fillna("normal").astype(str) != "normal"]
         emit_ready_series = (
-            ordered["emit_ready"].fillna(False).astype(bool)
-            if "emit_ready" in ordered.columns
+            strict_overlap["emit_ready"].fillna(False).astype(bool)
+            if "emit_ready" in strict_overlap.columns
             else pd.Series(False, index=ordered.index, dtype="bool")
         )
-        emit_ready = ordered[emit_ready_series]
+        emit_ready = strict_overlap[emit_ready_series]
         first_detected = detected["t_start"].min() if not detected.empty else pd.NaT
         first_emit_ready = emit_ready["t_start"].min() if not emit_ready.empty else pd.NaT
         misbehavior_start = ordered["misbehavior_start_timestamp_utc"].iloc[0]
@@ -172,10 +210,14 @@ def validate_scores_against_misbehavior_windows(
                 "subsystem_id": str(ordered["subsystem_id"].iloc[0]),
                 "parameter_name": str(ordered["parameter_name"].iloc[0]),
                 "overlapping_window_count": int(len(ordered)),
+                "strict_overlapping_window_count": int(len(strict_overlap)),
                 "detected_window_count": int(len(detected)),
                 "emit_ready_window_count": int(len(emit_ready)),
                 "max_global_score": float(ordered["global_score"].fillna(0.0).max()),
                 "median_global_score": float(ordered["global_score"].fillna(0.0).median()),
+                "max_truth_coverage_ratio": float(ordered["truth_coverage_ratio"].fillna(0.0).max()),
+                "strict_truth_coverage_threshold": float(STRICT_TRUTH_COVERAGE_MIN_RATIO),
+                "strict_max_early_lead_seconds": float(STRICT_MAX_EARLY_LEAD_SECONDS),
                 "detection_latency_seconds": (
                     None if pd.isna(first_detected) else float((first_detected - misbehavior_start).total_seconds())
                 ),

@@ -1,12 +1,8 @@
 # File: pipelines/90_anomaly_attribution.py
 """Emit anomaly attribution tables for anomalous windows."""
 
-from libs.anomaly import (
-    build_anomaly_event_attribution_table,
-    build_anomaly_telemetry_attribution_table,
-    build_anomaly_window_attribution_table,
-)
-from libs.io.delta import get_spark, read_table, upsert_table, write_table
+from libs.anomaly import AnomalyAttributionPlan
+from libs.io.delta import get_spark, read_table
 from libs.perf import (
     build_artifact_manifest,
     build_stage_manifest,
@@ -18,7 +14,7 @@ from libs.perf import (
     log_wall_time,
     track_mlflow_run,
 )
-from pipelines.common import build_context, context_artifacts, context_execution, context_settings
+from pipelines.common import build_stage_runtime
 
 
 LOGGER = get_logger(__name__)
@@ -28,22 +24,20 @@ LOGGER = get_logger(__name__)
 @log_memory_usage(logger=LOGGER, label="90_anomaly_attribution")
 @log_wall_time(logger=LOGGER)
 def run() -> None:
-    context = build_context()
-    artifacts = context_artifacts(context)
-    execution = context_execution(context)
-    settings = context_settings(context)
-    window_scores_calibrated_path = artifacts.window_scores_calibrated
-    phase_windows_path = artifacts.phase_windows
-    windows_path = artifacts.windows
-    events_path = artifacts.events
-    hierarchy_sensor_map_path = artifacts.hierarchy_sensor_map
-    raw_path = artifacts.raw_table
-    anomaly_window_attribution_path = artifacts.anomaly_window_attribution
-    anomaly_telemetry_attribution_path = artifacts.anomaly_telemetry_attribution
-    anomaly_event_attribution_path = artifacts.anomaly_event_attribution
-    table_format = execution.table_format
-    write_mode = execution.write_mode
-    top_k_per_subsystem = settings.anomaly.subsystem_top_sensors_k
+    runtime = build_stage_runtime("90_anomaly_attribution")
+    context = runtime.context
+    window_scores_calibrated_path = runtime.artifacts.window_scores_calibrated
+    phase_windows_path = runtime.artifacts.phase_windows
+    windows_path = runtime.artifacts.windows
+    events_path = runtime.artifacts.events
+    hierarchy_sensor_map_path = runtime.artifacts.hierarchy_sensor_map
+    raw_path = runtime.artifacts.raw_table
+    anomaly_window_attribution_path = runtime.artifacts.anomaly_window_attribution
+    anomaly_telemetry_attribution_path = runtime.artifacts.anomaly_telemetry_attribution
+    anomaly_event_attribution_path = runtime.artifacts.anomaly_event_attribution
+    table_format = runtime.execution.table_format
+    write_mode = runtime.execution.write_mode
+    top_k_per_subsystem = runtime.settings.anomaly.subsystem_top_sensors_k
 
     spark = get_spark("s3ntinel.anomaly_attribution")
     calibrated_df = read_table(spark, window_scores_calibrated_path, fmt=table_format)
@@ -53,80 +47,48 @@ def run() -> None:
     hierarchy_sensor_map_df = read_table(spark, hierarchy_sensor_map_path, fmt=table_format)
     raw_df = read_table(spark, raw_path, fmt=table_format)
 
-    anomaly_window_attribution_df = build_anomaly_window_attribution_table(
+    artifacts = AnomalyAttributionPlan(top_k_per_subsystem=top_k_per_subsystem).build(
         calibrated_df=calibrated_df,
         phase_windows_df=phase_windows_df,
         windows_df=windows_df,
         events_df=events_df,
         hierarchy_sensor_map_df=hierarchy_sensor_map_df,
         raw_df=raw_df,
-        top_k_per_subsystem=top_k_per_subsystem,
     )
-    anomaly_telemetry_attribution_df = build_anomaly_telemetry_attribution_table(
-        calibrated_df=calibrated_df,
-        windows_df=windows_df,
-        raw_df=raw_df,
-        hierarchy_sensor_map_df=hierarchy_sensor_map_df,
+    anomaly_window_attribution = artifacts.window_attribution.bind(
+        path=anomaly_window_attribution_path,
+        format=table_format,
+        partition_by=tuple(context.config["output"]["partition_by"]),
     )
-    anomaly_event_attribution_df = build_anomaly_event_attribution_table(
-        calibrated_df=calibrated_df,
-        windows_df=windows_df,
-        events_df=events_df,
-        hierarchy_sensor_map_df=hierarchy_sensor_map_df,
+    anomaly_telemetry_attribution = artifacts.telemetry_attribution.bind(
+        path=anomaly_telemetry_attribution_path,
+        format=table_format,
+        partition_by=tuple(context.config["output"]["partition_by"]),
+    )
+    anomaly_event_attribution = artifacts.event_attribution.bind(
+        path=anomaly_event_attribution_path,
+        format=table_format,
+        partition_by=tuple(context.config["output"]["partition_by"]),
     )
     if write_mode.lower() == "merge":
-        upsert_table(
-            anomaly_window_attribution_df,
-            path=anomaly_window_attribution_path,
-            merge_keys=context.config["output"]["anomalies_merge_key"],
-            fmt=table_format,
-            partition_by=context.config["output"]["partition_by"],
-        )
-        upsert_table(
-            anomaly_telemetry_attribution_df,
-            path=anomaly_telemetry_attribution_path,
-            merge_keys=["tail_id", "flight_id", "win_id", "timestamp_utc", "parameter_name"],
-            fmt=table_format,
-            partition_by=context.config["output"]["partition_by"],
-        )
-        upsert_table(
-            anomaly_event_attribution_df,
-            path=anomaly_event_attribution_path,
-            merge_keys=["tail_id", "flight_id", "win_id", "timestamp_utc", "parameter_name", "event_type_detected"],
-            fmt=table_format,
-            partition_by=context.config["output"]["partition_by"],
+        anomaly_window_attribution.upsert(merge_keys=context.config["output"]["anomalies_merge_key"])
+        anomaly_telemetry_attribution.upsert(merge_keys=["tail_id", "flight_id", "win_id", "timestamp_utc", "parameter_name"])
+        anomaly_event_attribution.upsert(
+            merge_keys=["tail_id", "flight_id", "win_id", "timestamp_utc", "parameter_name", "event_type_detected"]
         )
     else:
-        write_table(
-            anomaly_window_attribution_df,
-            path=anomaly_window_attribution_path,
-            mode=write_mode,
-            fmt=table_format,
-            partition_by=context.config["output"]["partition_by"],
-        )
-        write_table(
-            anomaly_telemetry_attribution_df,
-            path=anomaly_telemetry_attribution_path,
-            mode=write_mode,
-            fmt=table_format,
-            partition_by=context.config["output"]["partition_by"],
-        )
-        write_table(
-            anomaly_event_attribution_df,
-            path=anomaly_event_attribution_path,
-            mode=write_mode,
-            fmt=table_format,
-            partition_by=context.config["output"]["partition_by"],
-        )
+        anomaly_window_attribution.write(mode=write_mode)
+        anomaly_telemetry_attribution.write(mode=write_mode)
+        anomaly_event_attribution.write(mode=write_mode)
     calibrated_count = int(calibrated_df.count())
     phase_windows_count = int(phase_windows_df.count())
     windows_count = int(windows_df.count())
     events_count = int(events_df.count())
     hierarchy_sensor_map_count = int(hierarchy_sensor_map_df.count())
     raw_count = int(raw_df.count())
-    anomaly_window_count = int(anomaly_window_attribution_df.count())
-    anomaly_telemetry_count = int(anomaly_telemetry_attribution_df.count())
-    anomaly_event_count = int(anomaly_event_attribution_df.count())
+    anomaly_window_count = int(anomaly_window_attribution.to_dataframe().count())
+    anomaly_telemetry_count = int(anomaly_telemetry_attribution.to_dataframe().count())
+    anomaly_event_count = int(anomaly_event_attribution.to_dataframe().count())
 
     log_params_if_active(
         {
@@ -164,7 +126,7 @@ def run() -> None:
                 raw_path,
             ],
         },
-        "reports/stages/90_anomaly_attribution_summary.json",
+        runtime.report_paths.summary_artifact_path,
     )
     stage_manifest = build_stage_manifest(
         stage_name="90_anomaly_attribution",
@@ -197,17 +159,17 @@ def run() -> None:
         output_artifacts={
             "anomaly_window_attribution": build_artifact_manifest(
                 path=anomaly_window_attribution_path,
-                dataframe=anomaly_window_attribution_df,
+                dataframe=anomaly_window_attribution.to_dataframe(),
                 row_count=anomaly_window_count,
             ),
             "anomaly_telemetry_attribution": build_artifact_manifest(
                 path=anomaly_telemetry_attribution_path,
-                dataframe=anomaly_telemetry_attribution_df,
+                dataframe=anomaly_telemetry_attribution.to_dataframe(),
                 row_count=anomaly_telemetry_count,
             ),
             "anomaly_event_attribution": build_artifact_manifest(
                 path=anomaly_event_attribution_path,
-                dataframe=anomaly_event_attribution_df,
+                dataframe=anomaly_event_attribution.to_dataframe(),
                 row_count=anomaly_event_count,
             ),
         },
@@ -220,7 +182,7 @@ def run() -> None:
             "raw_telemetry",
         ],
     )
-    log_stage_manifest_if_active(stage_manifest, "reports/stages/90_anomaly_attribution_manifest.json")
+    log_stage_manifest_if_active(stage_manifest, runtime.report_paths.manifest_artifact_path)
     LOGGER.info(
         "pipeline=anomaly_attribution merge_key=%s write_mode=%s window_scores_calibrated=%s anomaly_window_attribution=%s anomaly_telemetry_attribution=%s anomaly_event_attribution=%s",
         context.config["output"]["anomalies_merge_key"],

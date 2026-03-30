@@ -164,11 +164,15 @@ def GRAPH_PARAMETER_UNIVERSE_SCHEMA():
     )
 
 
-HIERARCHY_SENSOR_MAP_SCHEMA = """
-parameter_name string,
-system_id string,
-subsystem_id string,
-module_id string,
-hierarchy_source string,
-hierarchy_profile_id string
-"""
+def HIERARCHY_SENSOR_MAP_SCHEMA():
+    T = _types()
+    return T.StructType(
+        [
+            T.StructField("parameter_name", T.StringType(), True),
+            T.StructField("system_id", T.StringType(), True),
+            T.StructField("subsystem_id", T.StringType(), True),
+            T.StructField("module_id", T.StringType(), True),
+            T.StructField("hierarchy_source", T.StringType(), True),
+            T.StructField("hierarchy_profile_id", T.StringType(), True),
+        ]
+    )

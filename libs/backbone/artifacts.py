@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+import pandas as pd
 
 from libs.backbone.energy import EVENT_PRIOR_DEFAULT_ALPHA, compute_window_sensor_energy
 from libs.backbone.fit import (
@@ -157,3 +158,27 @@ class BackboneModel:
             "lambda_ridge": float(self.lambda_ridge),
             "training_window_count": int(self.training_window_count),
         }
+
+
+def build_backbone_artifacts_from_window_features_table(
+    window_features_df: pd.DataFrame,
+    *,
+    backbone_sensor_count: int = 8,
+    backbone_ridge_lambda: float = 1.0,
+    event_prior_alpha: float = 0.35,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    if window_features_df.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
+    window_feature_rows = window_features_df.to_dict(orient="records")
+    if not window_feature_rows:
+        return pd.DataFrame(), pd.DataFrame()
+    backbone_model, sensor_energies = BackboneModel.from_window_feature_rows(
+        window_feature_rows,
+        spec=BackboneSpec(
+            sensor_count=backbone_sensor_count,
+            ridge_lambda=backbone_ridge_lambda,
+            event_prior_alpha=event_prior_alpha,
+        ),
+    )
+    return pd.DataFrame([backbone_model.to_row()]), pd.DataFrame([item.to_row() for item in sensor_energies])

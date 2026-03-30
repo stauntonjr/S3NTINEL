@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,28 +13,16 @@ import seaborn as sns
 from plotly.subplots import make_subplots
 
 from libs.plotting.explorer_bundle import load_explorer_bundle, load_explorer_filter_options, load_explorer_slice
-
-
-DEFAULT_VALIDATION_REPORTS = (
-    "profile_validation_summary.json",
-    "event_validation_summary.json",
-    "label_contract_summary.json",
-    "phase_validation_summary.json",
-    "hierarchy_validation_summary.json",
-    "coupling_validation_summary.json",
-    "score_validation_summary.json",
-    "misbehavior_score_validation_summary.json",
-    "misbehavior_window_validation_summary.json",
-    "misbehavior_attribution_validation_summary.json",
-    "fault_window_validation_summary.json",
-    "attribution_validation_summary.json",
+from libs.simulation.run_bundle import (
+    OPTIONAL_PIPELINE_SUMMARY_FILENAMES,
+    VALIDATION_REPORT_FILENAMES,
+    load_json_if_exists,
+    load_text_if_exists,
 )
 
-DEFAULT_OPTIONAL_SUMMARIES = (
-    "profile_pipeline_run_summary.json",
-    "structural_pipeline_run_summary.json",
-    "pipeline_run_summary.json",
-)
+
+DEFAULT_VALIDATION_REPORTS = VALIDATION_REPORT_FILENAMES
+DEFAULT_OPTIONAL_SUMMARIES = OPTIONAL_PIPELINE_SUMMARY_FILENAMES
 
 LOG_LINE_PATTERN = re.compile(
     r"^(?P<timestamp>\S+)\s+\|\s+(?P<level>\S+)\s+\|\s+(?P<logger>[^|]+)\|\s+(?P<message>.*)$"
@@ -105,18 +92,6 @@ def build_run_bundle_paths(run_dir: str | Path) -> SimulationRunBundlePaths:
     )
 
 
-def _load_json_if_exists(path: Path) -> dict[str, Any] | None:
-    if not path.exists():
-        return None
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def _load_text_if_exists(path: Path) -> str | None:
-    if not path.exists():
-        return None
-    return path.read_text(encoding="utf-8")
-
-
 def _resolve_artifact_path(run_dir: Path, path_value: str) -> Path:
     path = Path(path_value)
     if path.is_absolute():
@@ -153,19 +128,19 @@ def _artifact_inventory_from_manifest(paths: SimulationRunBundlePaths, manifest:
 
 def load_simulation_run_bundle(run_dir: str | Path) -> SimulationRunBundle:
     paths = build_run_bundle_paths(run_dir)
-    manifest = _load_json_if_exists(paths.manifest_path)
-    pipeline_summary = _load_json_if_exists(paths.reports_dir / "pipeline_run_summary.json")
+    manifest = load_json_if_exists(paths.manifest_path)
     optional_summaries = {
         filename: payload
         for filename in DEFAULT_OPTIONAL_SUMMARIES
-        if (payload := _load_json_if_exists(paths.reports_dir / filename)) is not None
+        if (payload := load_json_if_exists(paths.reports_dir / filename)) is not None
     }
+    pipeline_summary = next(iter(optional_summaries.values()), None)
     validation_reports = {
-        filename: _load_json_if_exists(paths.reports_dir / filename)
+        filename: load_json_if_exists(paths.reports_dir / filename)
         for filename in DEFAULT_VALIDATION_REPORTS
     }
     artifact_inventory = _artifact_inventory_from_manifest(paths, manifest)
-    log_text = _load_text_if_exists(paths.log_path)
+    log_text = load_text_if_exists(paths.log_path)
 
     missing_files = []
     if manifest is None:
