@@ -263,11 +263,16 @@ class Module:
             step_input = step_inputs_by_parameter.get(parameter_name)
             if step_input is None or parameter.behavior is None:
                 continue
+            resolved_step_input = BehaviorStepInput(
+                dt_seconds=step_input.dt_seconds,
+                latent_state=dict(step_input.latent_state),
+                context={**dict(parameter.metadata), **dict(step_input.context)},
+            )
             fault_context = dict(resolved_fault_context_by_parameter.get(parameter_name) or {})
             for sample in iter_tick_samples(
                 parameter_name=parameter_name,
                 generator=parameter.behavior.generator,
-                step_input=step_input,
+                step_input=resolved_step_input,
                 initial_state=resolved_initial_state_by_parameter.get(parameter_name),
                 violator=parameter.behavior.violator if apply_faults else None,
                 violation_context=fault_context,
@@ -304,7 +309,9 @@ class Module:
                 metadata["misbehavior_family_label"] = str(misbehavior_family_label or "")
                 metadata["misbehavior_detail_label"] = str(misbehavior_detail_label or "")
                 metadata["misbehavior_window_id"] = str(misbehavior_window_id or "")
-                metadata["event_type_label"] = str((fault_context.get("event_type_label") or "") if misbehavior_applied else "")
+                metadata["event_misbehavior_label"] = str(
+                    (fault_context.get("event_misbehavior_label") or "") if misbehavior_applied else ""
+                )
                 metadata["anomaly_type_label"] = str((fault_context.get("anomaly_type_label") or "") if misbehavior_applied else "")
                 metadata["anomaly_score_label"] = (
                     fault_context.get("anomaly_score_label") if misbehavior_applied else 0.0
@@ -337,7 +344,9 @@ class Module:
                     metadata["misbehavior_family_label"] = str(coupling_metadata.get("misbehavior_family_label", "") or "")
                     metadata["misbehavior_detail_label"] = str(coupling_metadata.get("misbehavior_detail_label", "") or "")
                     metadata["misbehavior_window_id"] = str(coupling_metadata.get("misbehavior_window_id", "") or "")
-                    metadata["event_type_label"] = str(coupling_metadata.get("event_type_label", "") or "")
+                    metadata["event_misbehavior_label"] = str(
+                        coupling_metadata.get("event_misbehavior_label", "") or ""
+                    )
                     metadata["anomaly_type_label"] = str(coupling_metadata.get("anomaly_type_label", "") or "")
                     metadata["anomaly_score_label"] = coupling_metadata.get("anomaly_score_label", 0.0)
                     metadata["fault_active"] = bool(coupling_metadata.get("fault_active", True))

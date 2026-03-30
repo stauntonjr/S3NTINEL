@@ -21,6 +21,7 @@ from libs.simulation.port.examples import (
     build_numeric_input_port_spec,
     build_numeric_output_port_spec,
 )
+from libs.simulation.scenarios import build_power_pressurization_aircraft_spec
 from libs.simulation.subsystem.examples import build_subsystem_spec
 from libs.simulation.system.examples import build_system_spec
 
@@ -321,10 +322,10 @@ def build_pressurization_aircraft_spec() -> AircraftSpec:
             system_id="SYS_ECS",
             subsystem_id="SUB_ECS",
             module_id="MOD_PRESS_CTRL",
-            behavior_family_label="regulated",
+            behavior_family_label="tracking",
             input_port_names=("aircraft_altitude_in", "press_mode_in"),
             output_port_name="outflow_cmd_out",
-            metadata={"example_role": "outflow_valve"},
+            metadata={"example_role": "outflow_valve", "bound_min": 0.0, "bound_max": 100.0},
         ),
         input_ports=(
             build_numeric_input_port_spec(port_name="aircraft_altitude_in", unit="ft"),
@@ -693,24 +694,24 @@ def build_power_pressurization_hierarchy_composite_aircraft_spec() -> AircraftSp
                 system_id="SYS_ECS",
                 subsystem_id="SUB_ECS_CONTROL",
                 module_id="MOD_PRESS_CTRL",
-                behavior_family_label="regulated",
+                behavior_family_label="tracking",
                 unit="pct",
                 input_port_names=("aircraft_altitude_in", "press_mode_in"),
                 output_port_name="outflow_cmd_out",
                 allowed_fault_families=("offset", "saturation", "tracking_degradation", "oscillation"),
-                metadata={"example_role": "outflow_command"},
+                metadata={"example_role": "outflow_command", "bound_min": 0.0, "bound_max": 100.0},
             ),
             build_numeric_parameter_spec(
                 parameter_name="pack_flow_cmd_pct",
                 system_id="SYS_ECS",
                 subsystem_id="SUB_ECS_CONTROL",
                 module_id="MOD_PRESS_CTRL",
-                behavior_family_label="regulated",
+                behavior_family_label="tracking",
                 unit="pct",
                 input_port_names=("aircraft_altitude_in", "press_mode_in"),
                 output_port_name="pack_flow_cmd_out",
                 allowed_fault_families=("offset", "saturation", "tracking_degradation", "oscillation"),
-                metadata={"example_role": "pack_flow_command"},
+                metadata={"example_role": "pack_flow_command", "bound_min": 0.0, "bound_max": 100.0},
             ),
         ),
         input_ports=(
@@ -909,7 +910,7 @@ def build_power_pressurization_hierarchy_composite_aircraft_spec() -> AircraftSp
                 system_id="SYS_AIRFRAME",
                 subsystem_id="SUB_AIR_ENV",
                 module_id="MOD_AMBIENT",
-                behavior_family_label="regulated",
+                behavior_family_label="tracking",
                 unit="kPa",
                 input_port_names=("aircraft_altitude_in",),
                 output_port_name="ambient_pressure_out",
@@ -921,7 +922,7 @@ def build_power_pressurization_hierarchy_composite_aircraft_spec() -> AircraftSp
                 system_id="SYS_AIRFRAME",
                 subsystem_id="SUB_AIR_ENV",
                 module_id="MOD_AMBIENT",
-                behavior_family_label="regulated",
+                behavior_family_label="tracking",
                 unit="C",
                 input_port_names=("aircraft_altitude_in",),
                 output_port_name="ambient_temp_out",
@@ -1246,7 +1247,12 @@ def build_power_pressurization_hierarchy_composite_aircraft_spec() -> AircraftSp
     )
 
 
-_LEGACY_BUILD_POWER_PRESSURIZATION_HIERARCHY_COMPOSITE_AIRCRAFT_SPEC = build_power_pressurization_hierarchy_composite_aircraft_spec
+build_legacy_power_pressurization_hierarchy_reference_aircraft_spec = (
+    build_power_pressurization_hierarchy_composite_aircraft_spec
+)
+_LEGACY_BUILD_POWER_PRESSURIZATION_HIERARCHY_COMPOSITE_AIRCRAFT_SPEC = (
+    build_legacy_power_pressurization_hierarchy_reference_aircraft_spec
+)
 
 _COMPOSITE_RATE_HZ_BY_PARAMETER = {
     "master_power_state": 0.5,
@@ -1309,7 +1315,7 @@ def _scaled_parameter_spec(parameter_spec, *, branch_index: int, module_id: str,
     branch_suffix = _branch_suffix(branch_index)
     rate_hz = _COMPOSITE_RATE_HZ_BY_PARAMETER.get(str(parameter_spec.parameter_name), parameter_spec.sampling_rate_hz)
     allowed_fault_families = tuple(str(name) for name in parameter_spec.allowed_fault_families)
-    if str(parameter_spec.behavior_family_label or "") == "regulated" and "bias" not in allowed_fault_families:
+    if str(parameter_spec.behavior_family_label or "") in {"regulated", "tracking"} and "bias" not in allowed_fault_families:
         allowed_fault_families = (*allowed_fault_families, "bias")
     metadata = {
         **dict(parameter_spec.metadata),
@@ -1455,12 +1461,12 @@ def _build_scaled_composite_aircraft_spec(*, scale: str) -> AircraftSpec:
 
 
 def build_power_pressurization_hierarchy_smoke_aircraft_spec() -> AircraftSpec:
-    return _build_scaled_composite_aircraft_spec(scale="smoke")
+    return build_power_pressurization_aircraft_spec(scale="smoke")
 
 
 def build_power_pressurization_hierarchy_medium_aircraft_spec() -> AircraftSpec:
-    return _build_scaled_composite_aircraft_spec(scale="medium")
+    return build_power_pressurization_aircraft_spec(scale="medium")
 
 
 def build_power_pressurization_hierarchy_composite_aircraft_spec() -> AircraftSpec:
-    return _build_scaled_composite_aircraft_spec(scale="composite")
+    return build_power_pressurization_aircraft_spec(scale="composite")

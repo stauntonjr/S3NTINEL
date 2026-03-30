@@ -31,9 +31,10 @@ from libs.simulation.phase.spec import (
     PhaseScheduleSpec,
     PhaseSegmentSpec,
 )
+from libs.simulation.scenarios import build_power_pressurization_flight_spec
 
 
-FlightBuilder = Callable[[], FlightSpec]
+FlightBuilder = Callable[..., FlightSpec]
 
 
 def _step_inputs(*, module_id: str, parameter_name: str, contexts: tuple[dict[str, object], ...]) -> tuple[dict[str, dict[str, StepInputSpec]], ...]:
@@ -490,7 +491,12 @@ def build_power_pressurization_hierarchy_composite_flight_spec() -> FlightSpec:
     )
 
 
-_LEGACY_BUILD_POWER_PRESSURIZATION_HIERARCHY_COMPOSITE_FLIGHT_SPEC = build_power_pressurization_hierarchy_composite_flight_spec
+build_legacy_power_pressurization_hierarchy_reference_flight_spec = (
+    build_power_pressurization_hierarchy_composite_flight_spec
+)
+_LEGACY_BUILD_POWER_PRESSURIZATION_HIERARCHY_COMPOSITE_FLIGHT_SPEC = (
+    build_legacy_power_pressurization_hierarchy_reference_flight_spec
+)
 
 _REALISTIC_BRANCH_COUNT_BY_SCALE = {
     "smoke": 1,
@@ -1018,16 +1024,16 @@ def _build_realistic_power_pressurization_hierarchy_flight_spec(*, scale: str) -
     )
 
 
-def build_power_pressurization_hierarchy_smoke_flight_spec() -> FlightSpec:
-    return _build_realistic_power_pressurization_hierarchy_flight_spec(scale="smoke")
+def build_power_pressurization_hierarchy_smoke_flight_spec(*, seed: int | None = None) -> FlightSpec:
+    return build_power_pressurization_flight_spec(scale="smoke", seed=seed)
 
 
-def build_power_pressurization_hierarchy_medium_flight_spec() -> FlightSpec:
-    return _build_realistic_power_pressurization_hierarchy_flight_spec(scale="medium")
+def build_power_pressurization_hierarchy_medium_flight_spec(*, seed: int | None = None) -> FlightSpec:
+    return build_power_pressurization_flight_spec(scale="medium", seed=seed)
 
 
-def build_power_pressurization_hierarchy_composite_flight_spec() -> FlightSpec:
-    return _build_realistic_power_pressurization_hierarchy_flight_spec(scale="composite")
+def build_power_pressurization_hierarchy_composite_flight_spec(*, seed: int | None = None) -> FlightSpec:
+    return build_power_pressurization_flight_spec(scale="composite", seed=seed)
 
 
 def get_flight_builders() -> dict[str, FlightBuilder]:
@@ -1045,7 +1051,14 @@ def list_flight_names() -> tuple[str, ...]:
     return tuple(sorted(get_flight_builders()))
 
 
-def build_named_flight_spec(flight_name: str) -> FlightSpec:
+def build_named_flight_spec(flight_name: str, *, seed: int | None = None) -> FlightSpec:
+    hierarchy_builders = {
+        "power_pressurization_hierarchy_smoke": build_power_pressurization_hierarchy_smoke_flight_spec,
+        "power_pressurization_hierarchy_medium": build_power_pressurization_hierarchy_medium_flight_spec,
+        "power_pressurization_hierarchy_composite": build_power_pressurization_hierarchy_composite_flight_spec,
+    }
+    if str(flight_name) in hierarchy_builders:
+        return hierarchy_builders[str(flight_name)](seed=seed)
     builders = get_flight_builders()
     try:
         return builders[str(flight_name)]()

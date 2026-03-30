@@ -274,7 +274,7 @@ class Coupling:
                 "misbehavior_family_label": str(misbehavior_context.get("misbehavior_family_label", "") or ""),
                 "misbehavior_detail_label": str(misbehavior_context.get("misbehavior_detail_label", "") or ""),
                 "misbehavior_window_id": str(misbehavior_context.get("misbehavior_window_id", "") or ""),
-                "event_type_label": str(misbehavior_context.get("event_type_label", "") or ""),
+                "event_misbehavior_label": str(misbehavior_context.get("event_misbehavior_label", "") or ""),
                 "anomaly_type_label": str(misbehavior_context.get("anomaly_type_label", "") or ""),
                 "anomaly_score_label": misbehavior_context.get("anomaly_score_label"),
                 "fault_active": bool(misbehavior_context.get("fault_active", bool(misbehavior_context))),

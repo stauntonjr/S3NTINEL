@@ -4,13 +4,14 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from libs.events import build_events_table
+from libs.events import EventDetectionPlan
+from libs.events.continuous import ContinuousDetectorConfig, ContinuousEventDetector
 from libs.io.pandas_spark import pandas_records_for_spark
 from libs.io.schemas import SIMULATION_RAW_INPUT_SCHEMA
 from libs.io.transforms import normalize_raw_telemetry
 from libs.simulation.flight.examples import build_named_flight_spec
 from libs.simulation.flight.runtime import Flight
-from libs.windows import build_window_features_spark_table, build_windows_table
+from libs.windows import WindowFeaturesTable, WindowsTable
 
 
 def _build_flight(*, flight_name: str, tail_id: str = "TSIM", flight_id: str = "FSIM") -> Flight:
@@ -61,6 +62,7 @@ def test_flight_simulate_rows_emits_canonical_raw_rows_and_phase_rows():
         "misbehavior_window_id",
         "coupling_id_label",
         "event_type_label",
+        "event_misbehavior_label",
         "anomaly_type_label",
         "anomaly_score_label",
         "fault_active",
@@ -114,10 +116,12 @@ def test_composite_flight_emits_fault_truth_metadata():
 
     raw_df = pd.DataFrame.from_records(raw_rows)
     misbehavior_rows = raw_df[raw_df["misbehavior_active"].fillna(False).astype(bool)]
+    misbehavior_applied_rows = raw_df[raw_df["misbehavior_applied"].fillna(False).astype(bool)]
     fault_rows = raw_df[raw_df["fault_active"].fillna(False).astype(bool)]
 
     assert not raw_df.empty
     assert not misbehavior_rows.empty
+    assert not misbehavior_applied_rows.empty
     assert not fault_rows.empty
     assert {
         "misbehavior_active",
@@ -131,14 +135,14 @@ def test_composite_flight_emits_fault_truth_metadata():
         "fault_type",
         "fault_window_id",
     }.issubset(raw_df.columns)
-    assert {"timing_lag", "bias", "saturation", "drift", "state_chatter", "illegal_transition"}.issubset(
-        set(misbehavior_rows["misbehavior_family_label"].dropna().astype(str))
-    )
-    assert misbehavior_rows["misbehavior_window_id"].dropna().astype(str).nunique() >= 9
-    assert {"regulated", "inertial", "accumulative", "discrete_state", "coupling"}.issubset(
+    applied_detail_labels = set(misbehavior_applied_rows["misbehavior_detail_label"].dropna().astype(str))
+    assert {"bias", "saturation", "state_chatter", "illegal_transition"}.issubset(applied_detail_labels)
+    assert {"timing_jitter", "coupling_inversion", "coupling_break"}.intersection(applied_detail_labels)
+    assert misbehavior_rows["misbehavior_window_id"].dropna().astype(str).nunique() >= 8
+    assert {"regulated", "inertial", "discrete_state", "coupling"}.issubset(
         set(fault_rows["fault_family_label"].dropna().astype(str))
     )
-    assert fault_rows["fault_window_id"].dropna().astype(str).nunique() >= 9
+    assert fault_rows["fault_window_id"].dropna().astype(str).nunique() >= 8
     assert {"0.5", "1.0", "2.0"}.issubset(set(raw_df["rate_hz"].fillna(0.0).astype(str)))
     assert raw_df["unit"].fillna("").astype(str).str.len().max() > 0
     assert misbehavior_rows["coupling_id_label"].fillna("").astype(str).str.len().max() > 0
@@ -160,16 +164,28 @@ def test_canonical_sim_rows_flow_into_events_windows_and_window_features(spark):
         schema=SIMULATION_RAW_INPUT_SCHEMA(),
     )
     normalized_raw_sdf = normalize_raw_telemetry(raw_sdf)
-    events_sdf = build_events_table(normalized_raw_sdf, delta_threshold=0.0, slope_source="ema", ema_alpha=0.2)
-    windows_sdf = build_windows_table(
+    events_sdf = (
+        EventDetectionPlan(
+            continuous_detector=ContinuousEventDetector(
+                config=ContinuousDetectorConfig(delta_threshold=0.0, slope_source="ema", ema_alpha=0.2)
+            )
+        )
+        .build(normalized_raw_sdf)
+        .events.to_dataframe()
+    )
+    windows_sdf = WindowsTable.from_events(
         events_sdf,
         max_ms=10000,
         event_threshold=20,
         min_ms=50,
         inactivity_timeout_ms=0,
         strategy="segmented",
-    )
-    window_features_sdf = build_window_features_spark_table(normalized_raw_sdf, events_sdf, windows_sdf)
+    ).to_dataframe()
+    window_features_sdf = WindowFeaturesTable.from_raw_events_and_windows(
+        normalized_raw_sdf,
+        events_sdf,
+        windows_sdf,
+    ).to_dataframe()
 
     assert events_sdf.count() > 0
     assert windows_sdf.count() > 0

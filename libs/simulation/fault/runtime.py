@@ -8,7 +8,7 @@ from typing import Any
 from libs.simulation.fault.spec import MisbehaviorProgramSpec, MisbehaviorWindowSpec
 
 
-_EVENT_TYPE_BY_MISBEHAVIOR = {
+_EVENT_MISBEHAVIOR_BY_MISBEHAVIOR = {
     "bias": "threshold",
     "drift": "drift_guard",
     "dwell_violation": "dwell_violation",
@@ -20,8 +20,8 @@ _EVENT_TYPE_BY_MISBEHAVIOR = {
 }
 
 
-def _default_event_type_label(misbehavior_detail_label: str) -> str | None:
-    label = _EVENT_TYPE_BY_MISBEHAVIOR.get(str(misbehavior_detail_label or ""))
+def _default_event_misbehavior_label(misbehavior_detail_label: str) -> str | None:
+    label = _EVENT_MISBEHAVIOR_BY_MISBEHAVIOR.get(str(misbehavior_detail_label or ""))
     return None if not label else str(label)
 
 
@@ -73,16 +73,16 @@ def _resolved_context(window: MisbehaviorWindowSpec, *, offset: int) -> dict[str
         or context.get("fault_family_label")
         or ""
     )
-    event_type_label = metadata.get("event_type_label") or context.get("event_type_label")
-    if not event_type_label:
-        event_type_label = _default_event_type_label(misbehavior_detail_label)
+    event_misbehavior_label = metadata.get("event_misbehavior_label") or context.get("event_misbehavior_label")
+    if not event_misbehavior_label:
+        event_misbehavior_label = _default_event_misbehavior_label(misbehavior_detail_label)
     context.setdefault("misbehavior_active", True)
     context.setdefault("misbehavior_window_id", misbehavior_window_id)
     context.setdefault("misbehavior_family_label", misbehavior_family_label)
     context.setdefault("misbehavior_detail_label", misbehavior_detail_label)
     context.setdefault("misbehavior_start_step", int(window.start_step))
     context.setdefault("misbehavior_end_step_exclusive", int(window.end_step_exclusive))
-    context.setdefault("event_type_label", event_type_label)
+    context.setdefault("event_misbehavior_label", event_misbehavior_label)
     context.setdefault("anomaly_type_label", misbehavior_family_label or None)
     if context.get("anomaly_score_label") is None and misbehavior_family_label:
         context["anomaly_score_label"] = 1.0

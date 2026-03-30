@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from libs.simulation.coupling.spec import CouplingSpec
 
 
@@ -20,6 +22,7 @@ def build_drive_coupling_spec(
     target_mode_name: str | None = None,
     target_mode_gate: tuple[str, ...] = (),
     allowed_misbehavior_families: tuple[str, ...] = (),
+    metadata: dict[str, Any] | None = None,
 ) -> CouplingSpec:
     return CouplingSpec(
         source_module_id=source_module_id,
@@ -36,6 +39,7 @@ def build_drive_coupling_spec(
         target_mode_name=target_mode_name,
         target_mode_gate=tuple(target_mode_gate),
         allowed_misbehavior_families=tuple(str(name) for name in allowed_misbehavior_families),
+        metadata=dict(metadata or {}),
     )
 
 
@@ -50,6 +54,7 @@ def build_enable_coupling_spec(
     lag_seconds: float = 0.0,
     phase_gate: tuple[str, ...] = (),
     allowed_misbehavior_families: tuple[str, ...] = (),
+    metadata: dict[str, Any] | None = None,
 ) -> CouplingSpec:
     return CouplingSpec(
         source_module_id=source_module_id,
@@ -62,6 +67,7 @@ def build_enable_coupling_spec(
         lag_seconds=lag_seconds,
         phase_gate=tuple(phase_gate),
         allowed_misbehavior_families=tuple(str(name) for name in allowed_misbehavior_families),
+        metadata=dict(metadata or {}),
     )
 
 
@@ -76,6 +82,7 @@ def build_inhibit_coupling_spec(
     lag_seconds: float = 0.0,
     phase_gate: tuple[str, ...] = (),
     allowed_misbehavior_families: tuple[str, ...] = (),
+    metadata: dict[str, Any] | None = None,
 ) -> CouplingSpec:
     return CouplingSpec(
         source_module_id=source_module_id,
@@ -88,4 +95,5 @@ def build_inhibit_coupling_spec(
         lag_seconds=lag_seconds,
         phase_gate=tuple(phase_gate),
         allowed_misbehavior_families=tuple(str(name) for name in allowed_misbehavior_families),
+        metadata=dict(metadata or {}),
     )

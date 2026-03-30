@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
 from libs.behavior import BehaviorRegistry, BehaviorSample, BehaviorStepInput
+from libs.simulation.event_truth import annotate_event_type_labels
 from libs.simulation.fault.runtime import FaultProgram, MisbehaviorProgram, MisbehaviorStepContext
 from libs.simulation.flight.spec import FlightSpec, InputProgramSpec, StepInputSpec
 from libs.simulation.phase.runtime import PhaseProgram
@@ -76,6 +77,7 @@ class FlightTick:
                         "misbehavior_detail_label": metadata.get("misbehavior_detail_label", ""),
                         "misbehavior_window_id": metadata.get("misbehavior_window_id", ""),
                         "event_type_label": metadata.get("event_type_label", ""),
+                        "event_misbehavior_label": metadata.get("event_misbehavior_label", ""),
                         "anomaly_type_label": metadata.get("anomaly_type_label", ""),
                         "anomaly_score_label": metadata.get("anomaly_score_label"),
                         "coupling_id_label": metadata.get("coupling_id_label", ""),
@@ -297,4 +299,4 @@ class Flight:
         ):
             telemetry_rows.extend(tick.telemetry_rows())
             phase_rows.append(tick.phase_row())
-        return telemetry_rows, phase_rows
+        return annotate_event_type_labels(telemetry_rows), phase_rows

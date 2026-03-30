@@ -15,7 +15,7 @@ from libs.perf import (
 )
 from libs.io.delta import get_spark, read_parquet, write_table
 from libs.io.transforms import normalize_raw_telemetry
-from pipelines.common import build_context, context_artifacts, context_execution
+from pipelines.common import build_context, build_stage_runtime, context_execution
 
 
 LOGGER = get_logger(__name__)
@@ -29,13 +29,12 @@ def resolve_output_format() -> str:
 @log_memory_usage(logger=LOGGER, label="00_ingest_raw")
 @log_wall_time(logger=LOGGER)
 def run() -> None:
-    context = build_context()
-    artifacts = context_artifacts(context)
-    execution = context_execution(context)
-    input_path = artifacts.raw_input
-    output_path = artifacts.raw_table
-    output_format = execution.raw_output_format
-    write_mode = execution.write_mode
+    runtime = build_stage_runtime("00_ingest_raw")
+    context = runtime.context
+    input_path = runtime.artifacts.raw_input
+    output_path = runtime.artifacts.raw_table
+    output_format = runtime.execution.raw_output_format
+    write_mode = runtime.execution.write_mode
 
     spark = get_spark("s3ntinel.ingest_raw")
     raw_df = read_parquet(spark, input_path)
@@ -72,7 +71,7 @@ def run() -> None:
             "write_mode": write_mode,
             "partition_by": list(context.config["output"]["partition_by"]),
         },
-        "reports/stages/00_ingest_raw_summary.json",
+        runtime.report_paths.summary_artifact_path,
     )
     stage_manifest = build_stage_manifest(
         stage_name="00_ingest_raw",
@@ -92,7 +91,7 @@ def run() -> None:
         },
         replayable_from=["raw_input"],
     )
-    log_stage_manifest_if_active(stage_manifest, "reports/stages/00_ingest_raw_manifest.json")
+    log_stage_manifest_if_active(stage_manifest, runtime.report_paths.manifest_artifact_path)
     LOGGER.info(
         "pipeline=ingest_raw project=%s format=%s write_mode=%s input=%s output=%s",
         context.config["project"]["name"],
