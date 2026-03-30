@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 
 import pandas as pd
 import pytest
 
+import libs.simulation.runner as runner
 from libs.io.delta import get_spark
 from libs.simulation.flight.examples import build_named_flight_spec
-from scripts import run_sim_pipeline as runner
 
 
 def _runner_config(tmp_path):
@@ -23,8 +24,12 @@ def _runner_config(tmp_path):
         write_mode="overwrite",
         min_warm=1,
         delta_threshold=0.0,
-        slope_source="ema",
+        slope_source="raw",
         ema_alpha=0.2,
+        slope_threshold_mode="adaptive_run",
+        slope_threshold_quantile=0.75,
+        slope_threshold_scale=0.5,
+        slope_threshold_min=1e-6,
         window_max_ms=10000,
         window_event_threshold=2,
         window_min_ms=50,
@@ -33,6 +38,7 @@ def _runner_config(tmp_path):
         phase_count=3,
         backbone_parameter_count=4,
         backbone_ridge_lambda=1.0,
+        event_warmup_points=1,
     )
 
 
@@ -64,6 +70,8 @@ def test_sim_runner_uses_grouped_full_stage_scripts(monkeypatch, tmp_path):
     assert captured["stage_scripts"] == [
         "00_ingest_raw.py",
         "10_parameter_profiles_fit.py",
+        "12_behavior_profiles_fit.py",
+        "15_event_profiles_fit.py",
         "20_events_extract.py",
         "25_window_policy_profile.py",
         "30_windows_adaptive.py",
@@ -78,6 +86,89 @@ def test_sim_runner_uses_grouped_full_stage_scripts(monkeypatch, tmp_path):
     ]
     assert captured["summary_artifact_path"] == "reports/pipeline_run_summary.json"
     assert result.status == "success"
+
+
+def test_sim_runner_uses_event_stage_scripts(monkeypatch, tmp_path):
+    captured: dict[str, object] = {}
+    config = _runner_config(tmp_path)
+    config = runner.PipelineRunConfig(**{**config.__dict__, "mode": "event"})
+
+    monkeypatch.setattr(runner, "resolve_flight", lambda _flight_name: build_named_flight_spec("power_chain"))
+    monkeypatch.setattr(runner, "get_spark", lambda _app_name: object())
+    monkeypatch.setattr(
+        runner,
+        "_write_seed_tables",
+        lambda **_kwargs: {
+            "raw_input_rows": 1,
+            "phase_label_rows": 1,
+            "hierarchy_label_rows": 1,
+            "coupling_misbehavior_window_rows": 0,
+        },
+    )
+    monkeypatch.setattr(runner, "_write_validation_reports", lambda **_kwargs: {})
+
+    def fake_run_stage_group(**kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(runner, "run_stage_group", fake_run_stage_group)
+    result = runner.run_pipeline(config)
+
+    assert captured["run_name"] == "s3ntinel.sim_event"
+    assert captured["pipeline_mode"] == "sim_event:v2"
+    assert captured["stage_scripts"] == [
+        "00_ingest_raw.py",
+        "10_parameter_profiles_fit.py",
+        "12_behavior_profiles_fit.py",
+        "15_event_profiles_fit.py",
+        "20_events_extract.py",
+    ]
+    assert captured["summary_artifact_path"] == "reports/event_pipeline_run_summary.json"
+    assert result.status == "success"
+
+
+def test_sim_runner_replay_skips_seed_write_and_passes_stage_range(monkeypatch, tmp_path):
+    captured: dict[str, object] = {}
+    config = runner.PipelineRunConfig(
+        **{
+            **_runner_config(tmp_path).__dict__,
+            "mode": "full",
+            "start_stage": "20_events_extract.py",
+            "end_stage": "30_windows_adaptive.py",
+            "replay_run_dir": str(tmp_path / "existing_run"),
+        }
+    )
+    replay_run_dir = tmp_path / "existing_run"
+    (replay_run_dir / "reports").mkdir(parents=True, exist_ok=True)
+    (replay_run_dir / "reports" / "run_manifest.json").write_text(
+        json.dumps({"seed_counts": {"raw_input_rows": 11, "phase_label_rows": 7}}),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(runner, "resolve_flight", lambda _flight_name: build_named_flight_spec("power_chain"))
+    monkeypatch.setattr(runner, "get_spark", lambda _app_name: object())
+    monkeypatch.setattr(
+        runner,
+        "_write_seed_tables",
+        lambda **_kwargs: pytest.fail("seed tables should not be written for replay starting after ingest"),
+    )
+    monkeypatch.setattr(runner, "_write_validation_reports", lambda **_kwargs: {})
+
+    def fake_run_stage_group(**kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(runner, "run_stage_group", fake_run_stage_group)
+    result = runner.run_pipeline(config)
+
+    assert captured["stage_scripts"] == [
+        "20_events_extract.py",
+        "25_window_policy_profile.py",
+        "30_windows_adaptive.py",
+    ]
+    assert captured["start_stage_script"] == "20_events_extract.py"
+    assert captured["end_stage_script"] == "30_windows_adaptive.py"
+    assert captured["replay_run_dir"] == str(replay_run_dir)
+    assert result.status == "success"
+    assert result.seed_counts == {"raw_input_rows": 11, "phase_label_rows": 7}
 
 
 def test_sim_runner_writes_seed_tables(tmp_path, monkeypatch):
@@ -156,8 +247,12 @@ def test_sim_runner_full_smoke_emits_bundle(monkeypatch, tmp_path):
         write_mode="overwrite",
         min_warm=1,
         delta_threshold=0.0,
-        slope_source="ema",
+        slope_source="raw",
         ema_alpha=0.2,
+        slope_threshold_mode="adaptive_run",
+        slope_threshold_quantile=0.75,
+        slope_threshold_scale=0.5,
+        slope_threshold_min=1e-6,
         window_max_ms=10000,
         window_event_threshold=2,
         window_min_ms=50,
@@ -166,6 +261,7 @@ def test_sim_runner_full_smoke_emits_bundle(monkeypatch, tmp_path):
         phase_count=3,
         backbone_parameter_count=4,
         backbone_ridge_lambda=1.0,
+        event_warmup_points=1,
     )
     result = runner.run_pipeline(config)
     run_dir = result.paths.run_dir
@@ -184,7 +280,12 @@ def test_sim_runner_full_smoke_emits_bundle(monkeypatch, tmp_path):
     assert (run_dir / "logs" / "run.log").exists()
     assert (run_dir / "reports" / "pipeline_run_summary.json").exists()
     assert (run_dir / "reports" / "full_run_report.md").exists()
+    assert (run_dir / "reports" / "validation_harness_report.json").exists()
+    assert (run_dir / "reports" / "validation_harness_report.md").exists()
+    assert (run_dir / "reports" / "objective_evaluation_report.json").exists()
+    assert (run_dir / "reports" / "objective_evaluation_report.md").exists()
     assert (run_dir / "reports" / "stages" / "10_parameter_profiles_fit_manifest.json").exists()
+    assert (run_dir / "reports" / "stages" / "15_event_profiles_fit_manifest.json").exists()
     assert (run_dir / "reports" / "stages" / "25_window_policy_profile_manifest.json").exists()
     assert (run_dir / "reports" / "stages" / "25_window_policy_profile_evaluation.json").exists()
     assert stage25_summary["window_policy_profile_evaluation_path"] == "reports/stages/25_window_policy_profile_evaluation.json"
@@ -208,6 +309,7 @@ def test_sim_runner_full_smoke_emits_bundle(monkeypatch, tmp_path):
     assert (run_dir / "reports" / "attribution_validation_summary.json").exists()
 
     assert len(pd.read_parquet(run_dir / "delta" / "raw_telemetry")) > 0
+    assert len(pd.read_parquet(run_dir / "delta" / "parameter_event_profile")) > 0
     assert len(pd.read_parquet(run_dir / "delta" / "events")) > 0
     assert len(pd.read_parquet(run_dir / "delta" / "window_policy_profile")) > 0
     assert len(pd.read_parquet(run_dir / "delta" / "windows")) > 0
@@ -302,6 +404,358 @@ def test_full_run_report_surfaces_window_policy_profile_and_skips_when_missing(t
     assert report_with_eval["window_policy_profile"]["selected_event_threshold"] == 6
     markdown = (paths.run_dir / "reports" / "full_run_report.md").read_text(encoding="utf-8")
     assert "## Window Policy Profile" in markdown
+
+
+def test_validation_harness_report_bundles_fit_validation_and_compute(tmp_path):
+    paths = runner.RunPaths(run_dir=tmp_path / "sim_harness")
+    stages_dir = paths.run_dir / "reports" / "stages"
+    stages_dir.mkdir(parents=True, exist_ok=True)
+
+    backbone_manifest_path = stages_dir / "40_backbone_fit_manifest.json"
+    graph_manifest_path = stages_dir / "50_build_graph_manifest.json"
+    backbone_manifest_path.write_text(
+        json.dumps(
+            {
+                "config": {
+                    "backbone_sensor_count": 8,
+                    "backbone_ridge_lambda": 1.25,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    graph_manifest_path.write_text(
+        json.dumps(
+            {
+                "config": {
+                    "min_event_count": 3,
+                    "lag_bands": [
+                        {
+                            "name": "short",
+                            "upper_seconds": 2.0,
+                        }
+                    ],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    manifest = {
+        "status": "success",
+        "source": {
+            "flight_name": "power_chain",
+            "tail_id": "TSEED",
+            "flight_id": "FSEED",
+        },
+        "simulation": {
+            "n_steps": 12,
+            "dt_seconds": 1.0,
+        },
+        "pipeline": {
+            "mode": "full",
+            "backbone_ridge_lambda": 1.0,
+            "phase_count": 3,
+        },
+        "seed_counts": {
+            "raw_input_rows": 100,
+        },
+    }
+    full_run_report = {
+        "status": "success",
+        "modeling_performance": {
+            "profile_validation": {
+                "behavior_accuracy": 0.9,
+            },
+            "event_validation": {
+                "f1": 0.8,
+            },
+            "score_validation": {
+                "status": "ok",
+                "detected_fault_window_rate": 0.5,
+                "emit_ready_fault_window_rate": 0.4,
+            },
+            "hierarchy_validation": {
+                "module_exact_match": 0.8,
+            },
+            "phase_validation": {
+                "macro_f1": 0.7,
+            },
+            "attribution_validation": {
+                "dominant_subsystem_match_rate": 0.6,
+                "telemetry_parameter_match_rate": 0.8,
+                "event_parameter_match_rate": 0.5,
+            },
+        },
+        "engineering_performance": {
+            "overall": {
+                "pipeline_summary": {
+                    "total_elapsed_ms": 1000.0,
+                    "stage_count": 2,
+                },
+                "artifact_disk_bytes_total": 2048,
+            },
+            "scale_signature": {
+                "graph_counts": {
+                    "fused_edge_count": 12,
+                }
+            },
+            "stages": [
+                {
+                    "stage_script": "40_backbone_fit.py",
+                    "engineering_performance": {
+                        "elapsed_ms": 250.0,
+                        "share_of_total_elapsed": 0.25,
+                        "summary_path": str(stages_dir / "40_backbone_fit_summary.json"),
+                        "manifest_path": str(backbone_manifest_path),
+                    },
+                    "modeling_performance": {},
+                },
+                {
+                    "stage_script": "50_build_graph.py",
+                    "engineering_performance": {
+                        "elapsed_ms": 700.0,
+                        "share_of_total_elapsed": 0.7,
+                        "summary_path": str(stages_dir / "50_build_graph_summary.json"),
+                        "manifest_path": str(graph_manifest_path),
+                    },
+                    "modeling_performance": {
+                        "hierarchy_validation": {
+                            "module_exact_match": 0.8,
+                        }
+                    },
+                },
+            ],
+        },
+    }
+
+    flight = build_named_flight_spec("power_chain")
+    harness = runner._write_validation_harness_report(
+        paths=paths,
+        manifest=manifest,
+        full_run_report=full_run_report,
+        flight=flight,
+    )
+
+    assert harness["fit_parameters"]["pipeline"]["backbone_ridge_lambda"] == 1.0
+    assert harness["fit_parameters"]["by_stage"]["40_backbone_fit.py"]["backbone_ridge_lambda"] == 1.25
+    assert harness["simulation_context"]["flight"]["nominal_step_count"] == 12
+    assert harness["simulation_context"]["stochasticity"]["profile_name"] == "deterministic"
+    assert harness["workload_signature"]["stochasticity"]["seed"] == 0
+    assert harness["simulation_context"]["input_program"]["authored_step_count"] > 0
+    assert harness["simulation_context"]["parameter_catalog"]["parameter_count"] > 0
+    assert harness["simulation_context"]["hierarchy"]["system_count"] > 0
+    assert harness["simulation_context"]["phases"]["run_step_count"] == 12
+    assert harness["compute_performance"]["bottleneck_stages"][0]["stage_script"] == "50_build_graph.py"
+    assert any(
+        record["scope_name"] == "50_build_graph.py"
+        and record["parameter_path"] == "lag_bands[0].upper_seconds"
+        and record["value"] == 2.0
+        for record in harness["fit_parameters"]["parameter_records"]
+    )
+    assert any(
+        record["category"] == "validation"
+        and record["scope_name"] == "overall"
+        and record["subscope_name"] == "score_validation"
+        and record["metric_path"] == "detected_fault_window_rate"
+        and record["value"] == 0.5
+        for record in harness["validation_metrics"]["metric_records"]
+    )
+    assert any(
+        record["category"] == "compute"
+        and record["scope_name"] == "50_build_graph.py"
+        and record["metric_path"] == "elapsed_ms"
+        and record["value"] == 700.0
+        for record in harness["compute_performance"]["metric_records"]
+    )
+    objective_report = runner._write_objective_evaluation_report(
+        run_dir=paths.run_dir,
+        harness_report=harness,
+    )
+    assert objective_report["status"] == "ok"
+    assert objective_report["evaluation"]["objective_spec"]["name"] == "sim_full_default_v1"
+    assert objective_report["evaluation"]["ready_for_search"] is True
+    assert (paths.run_dir / "reports" / "validation_harness_report.json").exists()
+    assert (paths.run_dir / "reports" / "validation_harness_report.md").exists()
+    assert (paths.run_dir / "reports" / "objective_evaluation_report.json").exists()
+    assert (paths.run_dir / "reports" / "objective_evaluation_report.md").exists()
+
+
+def test_validation_harness_event_mode_uses_event_objective(tmp_path):
+    paths = runner.RunPaths(run_dir=tmp_path / "sim_event_harness")
+    stages_dir = paths.run_dir / "reports" / "stages"
+    stages_dir.mkdir(parents=True, exist_ok=True)
+
+    manifest = {
+        "status": "success",
+        "source": {
+            "flight_name": "power_chain",
+            "tail_id": "TSEED",
+            "flight_id": "FSEED",
+        },
+        "simulation": {
+            "n_steps": 12,
+            "dt_seconds": 1.0,
+        },
+        "pipeline": {
+            "mode": "event",
+            "ema_alpha": 0.2,
+        },
+        "seed_counts": {
+            "raw_input_rows": 100,
+        },
+    }
+    full_run_report = {
+        "status": "success",
+        "modeling_performance": {
+            "profile_validation": {
+                "datatype_accuracy": 1.0,
+                "behavior_accuracy": 0.8,
+            },
+            "event_validation": {
+                "precision": 0.7,
+                "recall": 0.75,
+                "f1": 0.72,
+                "detected_per_label_ratio": 1.4,
+            },
+        },
+        "engineering_performance": {
+            "overall": {
+                "pipeline_summary": {
+                    "total_elapsed_ms": 1000.0,
+                    "stage_count": 4,
+                },
+            },
+            "scale_signature": {},
+            "stages": [
+                {
+                    "stage_script": "15_event_profiles_fit.py",
+                    "engineering_performance": {
+                        "elapsed_ms": 150.0,
+                        "share_of_total_elapsed": 0.15,
+                        "summary_path": str(stages_dir / "15_event_profiles_fit_summary.json"),
+                        "manifest_path": str(stages_dir / "15_event_profiles_fit_manifest.json"),
+                    },
+                    "modeling_performance": {},
+                },
+                {
+                    "stage_script": "20_events_extract.py",
+                    "engineering_performance": {
+                        "elapsed_ms": 350.0,
+                        "share_of_total_elapsed": 0.35,
+                        "summary_path": str(stages_dir / "20_events_extract_summary.json"),
+                        "manifest_path": str(stages_dir / "20_events_extract_manifest.json"),
+                    },
+                    "modeling_performance": {
+                        "event_validation": {
+                            "precision": 0.7,
+                            "recall": 0.75,
+                            "f1": 0.72,
+                        }
+                    },
+                },
+            ],
+        },
+    }
+    (stages_dir / "15_event_profiles_fit_manifest.json").write_text(
+        json.dumps({"config": {"table_format": "parquet", "write_mode": "overwrite"}}, indent=2),
+        encoding="utf-8",
+    )
+    (stages_dir / "20_events_extract_manifest.json").write_text(
+        json.dumps(
+            {
+                "config": {
+                    "ema_alpha": 0.2,
+                    "slope_source": "raw",
+                    "slope_threshold_mode": "adaptive_run",
+                }
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    harness = runner._write_validation_harness_report(
+        paths=paths,
+        manifest=manifest,
+        full_run_report=full_run_report,
+        flight=build_named_flight_spec("power_chain"),
+    )
+    objective_report = runner._write_objective_evaluation_report(
+        run_dir=paths.run_dir,
+        harness_report=harness,
+    )
+
+    assert objective_report["status"] == "ok"
+    assert objective_report["evaluation"]["objective_spec"]["name"] == "sim_event_default_v1"
+    assert objective_report["evaluation"]["ready_for_search"] is True
+
+
+def test_manifest_and_harness_capture_seeded_scenario_signature(tmp_path):
+    paths = runner.RunPaths(run_dir=tmp_path / "sim_seeded_harness")
+    paths.run_dir.mkdir(parents=True, exist_ok=True)
+    config = runner.PipelineRunConfig(
+        flight_name="power_pressurization_hierarchy_smoke",
+        tail_id="TSEED",
+        flight_id="FSEED",
+        n_steps=0,
+        dt_seconds=0.0,
+        base_dir=str(tmp_path),
+        mode="profile",
+        table_format="parquet",
+        write_mode="overwrite",
+        min_warm=1,
+        delta_threshold=0.0,
+        slope_source="raw",
+        ema_alpha=0.2,
+        slope_threshold_mode="adaptive_run",
+        slope_threshold_quantile=0.75,
+        slope_threshold_scale=0.5,
+        slope_threshold_min=1e-6,
+        window_max_ms=10000,
+        window_event_threshold=2,
+        window_min_ms=50,
+        window_inactivity_timeout_ms=0,
+        window_strategy="segmented",
+        phase_count=3,
+        backbone_parameter_count=4,
+        backbone_ridge_lambda=1.0,
+        event_warmup_points=1,
+        sim_seed=123,
+    )
+    flight = runner.resolve_flight(config.flight_name, sim_seed=config.sim_seed)
+    config = config.with_flight_defaults(flight=flight)
+    manifest = runner._build_manifest(
+        paths=paths,
+        config=config,
+        flight=flight,
+        status="success",
+        error_message=None,
+        start_utc=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        end_utc=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        elapsed_ms=0.0,
+        seed_counts={},
+    )
+    harness = runner._write_validation_harness_report(
+        paths=paths,
+        manifest=manifest,
+        full_run_report={
+            "status": "success",
+            "modeling_performance": {},
+            "engineering_performance": {
+                "overall": {},
+                "scale_signature": {},
+                "stages": [],
+            },
+        },
+        flight=flight,
+    )
+
+    assert manifest["stochasticity"]["seed"] == 123
+    assert manifest["stochasticity"]["profile_name"] == "seeded_nominal_v1"
+    assert manifest["pipeline"]["sim_seed"] == 123
+    assert harness["workload_signature"]["stochasticity"]["seed"] == 123
+    assert harness["simulation_context"]["stochasticity"]["profile_name"] == "seeded_nominal_v1"
 
 
 def test_sim_runner_uses_library_validation_reports(monkeypatch, tmp_path):

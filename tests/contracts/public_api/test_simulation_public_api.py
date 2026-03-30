@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import libs.simulation as simulation
+import libs.simulation.runner as runner
 from libs.simulation.aircraft.examples import build_coupled_module_aircraft_spec
 from libs.simulation.flight.examples import build_named_flight_spec, list_flight_names
-from scripts import run_sim_pipeline as runner
 
 
 def _runner_config(tmp_path):
@@ -19,8 +19,12 @@ def _runner_config(tmp_path):
         write_mode="overwrite",
         min_warm=1,
         delta_threshold=0.0,
-        slope_source="ema",
+        slope_source="raw",
         ema_alpha=0.2,
+        slope_threshold_mode="adaptive_run",
+        slope_threshold_quantile=0.75,
+        slope_threshold_scale=0.5,
+        slope_threshold_min=1e-6,
         window_max_ms=10000,
         window_event_threshold=2,
         window_min_ms=50,
@@ -29,6 +33,7 @@ def _runner_config(tmp_path):
         phase_count=3,
         backbone_parameter_count=4,
         backbone_ridge_lambda=1.0,
+        event_warmup_points=1,
     )
 
 
@@ -112,6 +117,7 @@ def test_simulation_public_api_runs_end_to_end(tmp_path):
 
     assert result.status == "success"
     assert (result.paths.run_dir / "delta" / "raw_telemetry").exists()
+    assert (result.paths.run_dir / "delta" / "parameter_event_profile").exists()
     assert (result.paths.run_dir / "delta" / "events").exists()
     assert (result.paths.run_dir / "delta" / "window_policy_profile").exists()
     assert (result.paths.run_dir / "delta" / "windows").exists()

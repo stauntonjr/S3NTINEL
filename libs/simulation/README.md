@@ -280,6 +280,8 @@ This package answers:
   - `power_pressurization_hierarchy_smoke`
   - `power_pressurization_hierarchy_medium`
   - `power_pressurization_hierarchy_composite`
+- the realistic hierarchy presets are authored scenario-family builds, not clone-and-scale branches
+- those presets are seeded-stochastic by default and can be overridden with `python -m scripts.run_sim_pipeline --sim-seed <int> ...`
 - the realistic preset family uses a `28` minute authored mission on a `0.5` second internal tick across:
   - `gate_turnaround`
   - `takeoff_climb`

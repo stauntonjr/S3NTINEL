@@ -23,6 +23,13 @@ Canonical grouped entrypoints:
 - `python -m pipelines.97_run_fitting_pipeline`
 - `python -m pipelines.98_run_inference_pipeline`
 
+Grouped runners also accept stage slicing and replay:
+- `python -m pipelines.97_run_fitting_pipeline --start-stage 20_events_extract.py --end-stage 30_windows_adaptive.py --replay-run-dir <existing_run_dir>`
+- `python -m pipelines.98_run_inference_pipeline --start-stage 80_window_scores_raw.py --end-stage 90_anomaly_attribution.py --replay-run-dir <existing_run_dir>`
+- `python -m pipelines.99_run_full_pipeline --start-stage 98_run_inference_pipeline.py --replay-run-dir <existing_run_dir>`
+
+`97`, `98`, and `99` can resume later stages from an existing run directory when the first resumed stage has a manifest with valid `replayable_from` inputs.
+
 Canonical stage order:
 1. `00_ingest_raw.py`
 2. `10_parameter_profiles_fit.py`
@@ -83,11 +90,27 @@ Every stage should emit:
 Grouped runs should emit:
 - `reports/pipeline_run_summary.json`
 - `reports/full_run_report.json` and `reports/full_run_report.md`
+- `reports/validation_harness_report.json` and `reports/validation_harness_report.md`
+- `reports/objective_evaluation_report.json` and `reports/objective_evaluation_report.md`
 - per-stage manifests under `reports/stages/`
 - MLflow metrics where configured
 - wall-time logs
 
 When stage `25_window_policy_profile.py` runs, grouped/full reports should also surface the compact selected-policy summary derived from `reports/stages/25_window_policy_profile_evaluation.json`.
+
+The validation harness report is the experiment-facing bundle for iterative tuning. It joins:
+- run and stage fit parameters from the run manifest plus stage manifests
+- modeling validation payloads from the full-run report
+- engineering and stage compute metrics from the full-run report
+- simulator context from the `FlightSpec`, including parameter catalog, behavior-family mix, hierarchy shape, phase program, misbehavior program, and nominal flight length
+
+`libs/tuning` evaluates that harness with a mode-aware default `ObjectiveSpec` and emits an objective-evaluation report suitable for ranking comparable runs and grounding parameter-search loops.
+
+Simulation runner modes now map to stage-family tuning loops:
+- `profile`: `00 -> 10 -> 15`
+- `event`: `00 -> 10 -> 15 -> 20`
+- `structural`: `00 -> 10 -> 15 -> 20 -> 25 -> 30 -> 40 -> 50 -> 60`
+- `full`: end-to-end through attribution and explorer bundle
 
 ## Math / Methods
 

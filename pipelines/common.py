@@ -31,6 +31,29 @@ class PipelineContext:
     date_utc: str | None = None
 
 
+@dataclass(frozen=True)
+class StageReportPaths:
+    summary_artifact_path: str
+    manifest_artifact_path: str
+
+    @classmethod
+    def for_stage(cls, stage_name: str) -> "StageReportPaths":
+        return cls(
+            summary_artifact_path=f"reports/stages/{stage_name}_summary.json",
+            manifest_artifact_path=f"reports/stages/{stage_name}_manifest.json",
+        )
+
+
+@dataclass(frozen=True)
+class StageRuntime:
+    stage_name: str
+    context: PipelineContext
+    execution: PipelineExecutionSettings
+    artifacts: PipelineArtifactPaths
+    settings: PipelineContextSettings
+    report_paths: StageReportPaths
+
+
 @lru_cache(maxsize=1)
 def load_defaults() -> dict[str, Any]:
     config_path = Path(__file__).resolve().parent.parent / "conf" / "defaults.yaml"
@@ -51,6 +74,24 @@ def build_context(
         tail_id=tail_id,
         flight_id=flight_id,
         date_utc=date_utc,
+    )
+
+
+def build_stage_runtime(
+    stage_name: str,
+    *,
+    tail_id: str | None = None,
+    flight_id: str | None = None,
+    date_utc: str | None = None,
+) -> StageRuntime:
+    context = build_context(tail_id=tail_id, flight_id=flight_id, date_utc=date_utc)
+    return StageRuntime(
+        stage_name=stage_name,
+        context=context,
+        execution=context.execution,
+        artifacts=context.artifacts,
+        settings=context.settings,
+        report_paths=StageReportPaths.for_stage(stage_name),
     )
 
 
