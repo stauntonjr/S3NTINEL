@@ -24,6 +24,7 @@ Recommended orientation order:
 
 Useful starting points:
 - [simulation_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/simulation_architecture.md)
+- [behavior_simulation_improvements.md](/home/jrs/code/S3NTINEL/sentinel/docs/behavior_simulation_improvements.md)
 - [fitting_workflow.md](/home/jrs/code/S3NTINEL/sentinel/docs/fitting_workflow.md)
 - [computational_complexity_report.md](/home/jrs/code/S3NTINEL/sentinel/docs/computational_complexity_report.md)
 - [theory_foundations.md](/home/jrs/code/S3NTINEL/sentinel/docs/theory_foundations.md)

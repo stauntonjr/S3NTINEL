@@ -15,6 +15,7 @@ BANNED_COLUMNS = {
 
 REQUIRED_LABEL_COLUMNS = {
     "event_type_label",
+    "event_misbehavior_label",
     "anomaly_type_label",
     "anomaly_score_label",
 }

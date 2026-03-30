@@ -48,6 +48,7 @@ Run with:
 
 - `backbone`
 - `backbone_sensor_energy`
+- `parameter_behavior_primitive_profile`
 - `phase_windows`
 - `phase_baselines`
 - `window_scores_raw`
@@ -170,7 +171,16 @@ Run with:
 ## Simulation notes
 
 - `libs/simulation/experiment_setup.py` simulator outputs now return telemetry + phase labels only (`simulate_fleet_dataset`, `simulate_fleet_dataset_spark`).
-- Simulators keep explicit label metadata in telemetry: anomaly labels (`anomaly_type_label`, `anomaly_score_label`) and detector-event label (`event_type_label`).
+- Simulators keep explicit label metadata in telemetry: true event labels (`event_type_label`), a misbehavior-driven event proxy label (`event_misbehavior_label`), and anomaly labels (`anomaly_type_label`, `anomaly_score_label`).
+- Stage `10_parameter_profiles_fit.py` now emits four parameter metadata artifacts:
+	- `parameter_datatype_profile`
+	- `continuous_scaling_profile`
+	- `parameter_behavior_primitive_profile`
+	- `parameter_behavior_profile`
+- Behavior profiling is now primitive-first:
+	- Spark derives telemetry-based primitive evidence per parameter
+	- family scoring consumes that primitive artifact to emit `parameter_behavior_profile`
+- The active family taxonomy now includes `tracking` in addition to `regulated`, `inertial`, `accumulative`, `discrete_state`, and `mixed_unknown`.
 - Event rows should be derived from telemetry via detector tooling (`pipelines/20_events_extract.py`, or `libs.events` builders).
 - For system-level behavior, coupling, and dynamics priors, use [docs/avionics_simulation_guidelines.md](/home/jrs/code/S3NTINEL/sentinel/docs/avionics_simulation_guidelines.md).
 - For the next extensible simulator design, use [docs/simulation_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/simulation_architecture.md).

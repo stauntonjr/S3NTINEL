@@ -30,11 +30,12 @@ Current profiler responsibilities already include:
 See:
 - [libs/profiling/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/profiling/README.md)
 
-The next layer should infer:
+The current layer now infers:
 
 - behavior family
 - behavioral traits
 - confidence
+- primitive evidence
 
 ## 1.1 Placement in the fitting workflow
 
@@ -45,12 +46,14 @@ The intended sequence is:
 
 1. fit `parameter_datatype_profile`
 2. fit `continuous_scaling_profile`
-3. fit `parameter_behavior_profile`
-4. reuse those artifacts during backbone/graph/phase fitting and inference
+3. fit `parameter_behavior_primitive_profile`
+4. fit `parameter_behavior_profile`
+5. reuse those artifacts during backbone/graph/phase fitting and inference
 
-The active pipeline stage for this metadata is:
+The active pipeline stages for this metadata are:
 
 - `pipelines/10_parameter_profiles_fit.py`
+- `pipelines/12_behavior_profiles_fit.py`
 
 That means:
 
@@ -81,6 +84,7 @@ Runtime/profile side:
 
 Artifact name:
 
+- `parameter_behavior_primitive_profile`
 - `parameter_behavior_profile`
 
 Optional additional profiled fields:
@@ -108,10 +112,10 @@ The first taxonomy should stay small.
 Recommended primary families:
 
 - `regulated`
+- `tracking`
 - `inertial`
 - `accumulative`
 - `discrete_state`
-- `derived_response`
 - `mixed_unknown`
 
 ### regulated
@@ -124,6 +128,17 @@ Examples:
 - bus voltage
 - hydraulic pressure
 - differential pressure under nominal pressurization control
+
+### tracking
+
+A channel that follows a target or command with bounded error and visible recovery
+after target changes.
+
+Examples:
+
+- commanded valve position
+- commanded pack flow
+- target-following environmental variables in the simulator
 
 ### inertial
 
@@ -158,17 +173,6 @@ Examples:
 - pressurization mode
 - generator online/offline
 
-### derived_response
-
-A numeric channel that behaves like a derivative, error term, differential, or fast
-response signal rather than a slowly evolving state.
-
-Examples:
-
-- vertical speed
-- differential/control error terms
-- some current/load transients
-
 ### mixed_unknown
 
 A fallback family for channels that do not fit the current taxonomy cleanly.
@@ -197,15 +201,20 @@ Example:
 - a signal may be primarily `inertial` but also strongly `phase_sensitive`
 - another may be `regulated` and `bursty`
 
-## 5. Spark-friendly heuristics
+## 5. Primitive-first Spark design
 
-The profiler should start with statistics that are:
+Behavior profiling should stay Spark-only on the hot path and use a two-layer model:
+
+1. derive primitive evidence from raw telemetry and scaling metadata
+2. score behavior families from that primitive artifact
+
+The primitive layer should stay:
 
 - interpretable
 - cheap to compute
 - compatible with Spark grouped/window aggregation
 
-## 5.1 Shared precomputed statistics
+## 5.1 Shared primitive evidence
 
 Useful features to compute per parameter:
 

@@ -46,6 +46,7 @@ def set_env_paths(base_dir: str, table_format: str, write_mode: str, min_warm: i
     os.environ["S3NTINEL_RAW_TABLE_PATH"] = str(base / "delta" / "raw_telemetry")
     os.environ["S3NTINEL_PARAMETER_DATATYPE_PROFILE_TABLE_PATH"] = str(base / "delta" / "parameter_datatype_profile")
     os.environ["S3NTINEL_CONTINUOUS_SCALING_PROFILE_TABLE_PATH"] = str(base / "delta" / "continuous_scaling_profile")
+    os.environ["S3NTINEL_PARAMETER_BEHAVIOR_PRIMITIVE_PROFILE_TABLE_PATH"] = str(base / "delta" / "parameter_behavior_primitive_profile")
     os.environ["S3NTINEL_PARAMETER_BEHAVIOR_PROFILE_TABLE_PATH"] = str(base / "delta" / "parameter_behavior_profile")
     os.environ["S3NTINEL_EVENTS_TABLE_PATH"] = str(base / "delta" / "events")
     os.environ["S3NTINEL_WINDOW_POLICY_PROFILE_TABLE_PATH"] = str(base / "delta" / "window_policy_profile")
@@ -103,6 +104,7 @@ def print_row_counts(spark: "SparkSession", table_format: str) -> None:
         "raw_telemetry": os.environ["S3NTINEL_RAW_TABLE_PATH"],
         "parameter_datatype_profile": os.environ["S3NTINEL_PARAMETER_DATATYPE_PROFILE_TABLE_PATH"],
         "continuous_scaling_profile": os.environ["S3NTINEL_CONTINUOUS_SCALING_PROFILE_TABLE_PATH"],
+        "parameter_behavior_primitive_profile": os.environ["S3NTINEL_PARAMETER_BEHAVIOR_PRIMITIVE_PROFILE_TABLE_PATH"],
         "parameter_behavior_profile": os.environ["S3NTINEL_PARAMETER_BEHAVIOR_PROFILE_TABLE_PATH"],
         "events": os.environ["S3NTINEL_EVENTS_TABLE_PATH"],
         "window_policy_profile": os.environ["S3NTINEL_WINDOW_POLICY_PROFILE_TABLE_PATH"],
@@ -194,6 +196,7 @@ def assert_active_v2_table_contracts(spark: "SparkSession", table_format: str) -
         "window_policy_profile": os.environ["S3NTINEL_WINDOW_POLICY_PROFILE_TABLE_PATH"],
         "parameter_datatype_profile": os.environ["S3NTINEL_PARAMETER_DATATYPE_PROFILE_TABLE_PATH"],
         "continuous_scaling_profile": os.environ["S3NTINEL_CONTINUOUS_SCALING_PROFILE_TABLE_PATH"],
+        "parameter_behavior_primitive_profile": os.environ["S3NTINEL_PARAMETER_BEHAVIOR_PRIMITIVE_PROFILE_TABLE_PATH"],
         "parameter_behavior_profile": os.environ["S3NTINEL_PARAMETER_BEHAVIOR_PROFILE_TABLE_PATH"],
         "windows": os.environ["S3NTINEL_WINDOWS_TABLE_PATH"],
         "backbone": os.environ["S3NTINEL_BACKBONE_TABLE_PATH"],

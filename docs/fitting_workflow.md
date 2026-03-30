@@ -57,12 +57,27 @@ Purpose:
 
 ### 3.3 Behavior profile
 
-Artifact:
+Artifacts:
+- `parameter_behavior_primitive_profile`
 - `parameter_behavior_profile`
 
 Purpose:
-- infer nominal behavior-family semantics
+- derive primitive evidence from telemetry and then infer nominal behavior-family semantics
 - support validation, routing, and future richer downstream behavior-aware logic
+
+The current design is two-layer:
+
+1. Spark derives bounded primitive evidence per parameter into `parameter_behavior_primitive_profile`
+2. family scoring consumes that artifact to emit `parameter_behavior_profile`
+
+The active family taxonomy is:
+
+- `regulated`
+- `tracking`
+- `inertial`
+- `accumulative`
+- `discrete_state`
+- `mixed_unknown`
 
 ### 3.4 Window feature extraction and backbone fitting
 
@@ -87,6 +102,7 @@ Inference should normally reuse:
 
 - `parameter_datatype_profile`
 - `continuous_scaling_profile`
+- `parameter_behavior_primitive_profile`
 - `parameter_behavior_profile`
 
 and should not continuously re-fit those semantics unless a separate adaptation path is intentionally added.
@@ -95,3 +111,28 @@ and should not continuously re-fit those semantics unless a separate adaptation 
 
 - For the mathematical interpretation of robust scaling, backbone fitting, graph weights, and phase fitting, see [theory_foundations.md](/home/jrs/code/S3NTINEL/sentinel/docs/theory_foundations.md).
 - For current stage ownership and artifact flow, prefer the package READMEs over historical stage-level implementation notes.
+
+## 6. Validation Harness
+
+Grouped simulation runs now emit `reports/validation_harness_report.json` and `reports/validation_harness_report.md`.
+Grouped simulation runs also emit `reports/objective_evaluation_report.json` and `reports/objective_evaluation_report.md`.
+
+The harness is intended to be the canonical tuning bundle for iterative model improvement. It joins:
+- fitting parameters from the run manifest and per-stage manifests
+- validation metrics from the full-run modeling reports
+- compute performance from pipeline and per-stage engineering reports
+- simulation context from the selected `FlightSpec`, including parameter inventory, behavior-family counts, hierarchy size, phase structure, misbehavior windows, nominal flight length, and stochastic profile/seed metadata
+
+`libs/tuning` evaluates the harness through a mode-aware default `ObjectiveSpec`:
+- `profile` mode emphasizes datatype and behavior fidelity
+- `structural` mode emphasizes profile, event, and hierarchy quality
+- `full` mode emphasizes end-to-end score and attribution quality
+
+The objective report keeps primary terms and compute tie-breaks separate so tuning remains constrained and interpretable rather than collapsing everything into one opaque number too early.
+
+Recommended comparison protocol:
+1. Hold `flight_name`, `n_steps`, `dt_seconds`, pipeline mode, stochastic profile, and resolved sim seed constant.
+2. Change a small set of stage-local fitting parameters.
+3. Compare validation and compute together rather than optimizing them independently.
+4. Promote a change only when the validation gain is worth the compute regression, or the compute win preserves model quality.
+5. Use `scripts/profile_pipeline_performance.py` after the single-run harness identifies promising variants or bottleneck stages.

@@ -9,7 +9,10 @@ Architecture note:
 
 ## Canonical fields
 
+Current emitted simulation truth fields:
+
 - `event_type_label`
+- `event_misbehavior_label`
 - `anomaly_type_label`
 - `anomaly_score_label`
 - `event_type_detected`
@@ -28,5 +31,6 @@ Architecture note:
 
 - Simulation telemetry must emit only canonical label fields (`*_label`).
 - Event detector outputs must emit only canonical detector fields (`*_detected`).
-- Validation/evaluation must match `event_type_label` to `event_type_detected`.
+- Signal-semantic event validation should match `event_type_label` to `event_type_detected`.
+- Misbehavior-driven event-proxy evaluation may separately compare `event_misbehavior_label` to `event_type_detected`.
 - No backward-compatibility reads for legacy names.

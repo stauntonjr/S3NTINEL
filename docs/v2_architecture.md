@@ -31,11 +31,14 @@ Before structural fitting, the intended one-off metadata workflow is:
 
 1. `parameter_datatype_profile`
 2. `continuous_scaling_profile`
-3. `parameter_behavior_profile`
+3. `parameter_behavior_primitive_profile`
+4. `parameter_behavior_profile`
 
 Those artifacts establish stable parameter semantics and should normally be fit once
-and reused. The current active code already performs datatype/rate profiling and
-robust scaling; behavior profiling is the next planned metadata artifact.
+and reused. Behavior profiling is now a two-layer metadata path:
+
+- Spark derives primitive evidence from raw telemetry into `parameter_behavior_primitive_profile`
+- family scoring consumes that artifact to emit `parameter_behavior_profile`
 
 Then the active structural stages are:
 
@@ -83,8 +86,13 @@ Then the active structural stages are:
 - `continuous_scaling_profile`
   - robust scaling metadata for continuous parameters
 
+- `parameter_behavior_primitive_profile`
+  - per-parameter primitive evidence derived from raw telemetry and scaling metadata
+  - includes run persistence, reversals, center/bound occupancy, excursion returns, accumulation, oscillation, tracking, and discrete-state evidence
+
 - `parameter_behavior_profile`
   - profiled nominal behavior-family metadata
+  - active family taxonomy: `regulated`, `tracking`, `inertial`, `accumulative`, `discrete_state`, `mixed_unknown`
 
 - `backbone`
   - `selected_sensors_c`

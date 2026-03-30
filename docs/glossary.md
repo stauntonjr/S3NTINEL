@@ -83,9 +83,16 @@ Related fields:
 
 S3NTINEL uses `*_label` for simulator/source labels and `*_detected` for model outputs.
 
+### event misbehavior label
+
+Misbehavior-driven event proxy label emitted from the simulator path today.
+
+Canonical field:
+- `event_misbehavior_label`
+
 ### event label
 
-Detector-truth event label emitted from the simulator path.
+Canonical event-truth label for behavior/signal-grounded simulator event semantics.
 
 Canonical field:
 - `event_type_label`
@@ -187,9 +194,27 @@ Planned canonical fields:
 
 Optional future companion fields:
 - `regulated_score_profiled`
+- `tracking_score_profiled`
 - `inertial_score_profiled`
 - `accumulative_score_profiled`
 - `discrete_state_score_profiled`
+
+### behavior primitive profiled
+
+Primitive evidence derived from telemetry before final behavior-family scoring.
+
+Canonical artifact:
+- `parameter_behavior_primitive_profile`
+
+Typical fields:
+- `persistent_run_strength_profiled`
+- `reversal_rate_profiled`
+- `center_occupancy_profiled`
+- `excursion_return_ratio_profiled`
+- `monotone_accumulation_score_profiled`
+- `tracking_error_score_profiled`
+- `tracking_recovery_score_profiled`
+- `lagged_response_score_profiled`
 
 ### behavior profile artifact
 
@@ -197,6 +222,7 @@ The one-off fitted parameter metadata artifact that establishes nominal behavior
 family semantics before structural fitting and inference.
 
 Recommended artifact name:
+- `parameter_behavior_primitive_profile`
 - `parameter_behavior_profile`
 
 ## 5. Misbehavior taxonomy
