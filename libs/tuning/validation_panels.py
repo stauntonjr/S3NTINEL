@@ -22,10 +22,22 @@ EVENT_STAGE_VALIDATION_PANEL_PRIORITY = (
     "overall:event_validation:detected_event_count",
     "overall:event_validation:median_unmatched_label_nearest_delta_seconds",
 )
+WINDOW_STAGE_VALIDATION_PANEL_PRIORITY = (
+    "overall:window_policy_profile:edge_stability.mean_boundary_jaccard",
+    "overall:window_policy_profile:selected_balance_penalty",
+    "overall:window_policy_profile:downstream_cost_proxy.pair_cost_proxy",
+    "overall:window_policy_profile:downstream_cost_proxy.same_window_pair_expansion_proxy",
+    "overall:window_policy_profile:closure_mix.event_threshold_rate",
+    "overall:hierarchy_validation:module_exact_match",
+    "overall:hierarchy_validation:subsystem_exact_match",
+)
 
 VALIDATION_PANEL_SHORTLIST = (
     "overall:profile_validation:datatype_accuracy",
     "overall:profile_validation:behavior_accuracy",
+    "overall:window_policy_profile:edge_stability.mean_boundary_jaccard",
+    "overall:window_policy_profile:selected_balance_penalty",
+    "overall:window_policy_profile:downstream_cost_proxy.pair_cost_proxy",
     "overall:event_validation:slope_run_capture_metrics.slope_pos.run_recall",
     "overall:event_validation:slope_run_capture_metrics.slope_neg.run_recall",
     "overall:event_validation:event_family_metrics.slope_pos.f1",
@@ -83,6 +95,29 @@ def _looks_like_event_stage_results(results: list[Any]) -> bool:
     return False
 
 
+def _looks_like_window_stage_results(results: list[Any]) -> bool:
+    for result in results:
+        objective_name = getattr(result, "objective_name", None) if not isinstance(result, dict) else result.get("objective_name")
+        all_metrics = _metric_map(result, "all_validation_metrics")
+        if str(objective_name or "") == "sim_windowing_default_v1":
+            return True
+        if any(metric_name.startswith("overall:window_policy_profile:") for metric_name in all_metrics.keys()):
+            return True
+    return False
+
+
+def _select_prioritized_metric_names(
+    results: list[Any],
+    *,
+    metric_names: tuple[str, ...],
+) -> list[str]:
+    return [
+        metric_name
+        for metric_name in metric_names
+        if any(metric_name in _metric_map(result, "all_validation_metrics") for result in results)
+    ]
+
+
 def build_validation_metric_panel(
     results: list[Any],
     *,
@@ -92,12 +127,17 @@ def build_validation_metric_panel(
     normalized_mode = str(mode)
     resolved_limit = max(int(limit), 1)
     if normalized_mode == "objective_selected":
-        if _looks_like_event_stage_results(results):
-            metric_names = [
-                metric_name
-                for metric_name in EVENT_STAGE_VALIDATION_PANEL_PRIORITY
-                if any(metric_name in _metric_map(result, "all_validation_metrics") for result in results)
-            ]
+        if _looks_like_window_stage_results(results):
+            metric_names = _select_prioritized_metric_names(
+                results,
+                metric_names=WINDOW_STAGE_VALIDATION_PANEL_PRIORITY,
+            )
+            metric_value_lookup = lambda result, metric_name: _metric_map(result, "all_validation_metrics").get(metric_name)
+        elif _looks_like_event_stage_results(results):
+            metric_names = _select_prioritized_metric_names(
+                results,
+                metric_names=EVENT_STAGE_VALIDATION_PANEL_PRIORITY,
+            )
             metric_value_lookup = lambda result, metric_name: _metric_map(result, "all_validation_metrics").get(metric_name)
         else:
             metric_names = _ordered_metric_names(results, "selected_validation_metrics")

@@ -123,6 +123,16 @@ Incremental patches:
       - `window_event_threshold`
       - `window_min_ms`
       - `window_inactivity_timeout_ms`
+    - `windowing` search defaults to objective `sim_windowing_default_v1`, which prioritizes:
+      - stage-25 window boundary stability
+      - stage-25 selected balance penalty
+      - downstream pair-cost proxies
+      - downstream hierarchy exact-match metrics as secondary terms
+    - the current `windowing` search space is intentionally local to the promoted adaptive baseline:
+      - `window_max_ms` in `{5000, 7500, 10000}`
+      - `window_event_threshold` in `{8, 10, 12}`
+      - `window_min_ms` in `{25, 50}`
+      - `window_inactivity_timeout_ms` in `{0, 500}`
     - `windowing` search runs under `--mode structural` because that is the earliest grouped runner mode that includes the window stages
     - `structure` search currently sweeps:
       - args:

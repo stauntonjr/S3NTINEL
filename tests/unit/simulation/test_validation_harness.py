@@ -68,3 +68,28 @@ def test_flatten_numeric_metric_records_includes_slope_run_capture_metric_paths(
         ("slope_run_capture_metrics.slope_pos.detections_outside_truth_runs_count", 3),
         ("slope_run_capture_metrics.slope_pos.run_recall", 0.5),
     ]
+
+
+def test_flatten_numeric_metric_records_includes_window_policy_profile_metric_paths():
+    records = _flatten_numeric_metric_records(
+        {
+            "edge_stability": {
+                "mean_boundary_jaccard": 0.72,
+            },
+            "selected_balance_penalty": 0.18,
+            "downstream_cost_proxy": {
+                "pair_cost_proxy": 24.0,
+                "same_window_pair_expansion_proxy": 15.0,
+            },
+        },
+        category="validation",
+        scope_name="overall",
+        subscope_name="window_policy_profile",
+    )
+
+    assert [(record.metric_path, record.value) for record in records] == [
+        ("downstream_cost_proxy.pair_cost_proxy", 24.0),
+        ("downstream_cost_proxy.same_window_pair_expansion_proxy", 15.0),
+        ("edge_stability.mean_boundary_jaccard", 0.72),
+        ("selected_balance_penalty", 0.18),
+    ]

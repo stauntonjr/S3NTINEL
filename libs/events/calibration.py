@@ -23,9 +23,9 @@ class ContinuousEventCalibrationSpec:
     ema_alphas: tuple[float, ...] = (0.2, 0.35, 0.5)
     slope_abs_thresholds: tuple[float, ...] = (0.0, 0.5, 1.0)
     delta_threshold: float = 0.0
-    window_max_ms: int = 10000
-    window_event_threshold: int = 20
-    window_min_ms: int = 50
+    window_max_ms: int = 5000
+    window_event_threshold: int = 10
+    window_min_ms: int = 25
     window_inactivity_timeout_ms: int = 0
     window_strategy: str = "segmented"
 

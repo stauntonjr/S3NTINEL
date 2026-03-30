@@ -266,6 +266,8 @@ def _build_window_policy_profile_summary(*, paths: RunPaths) -> dict[str, Any]:
         "selected_max_ms": resolved_policy.get("max_ms"),
         "selected_event_threshold": resolved_policy.get("event_threshold"),
         "selected_candidate_rank": ((selected_policy.get("profile_row") or {}) or {}).get("candidate_rank"),
+        "selected_objective_score": ((selected_policy.get("profile_row") or {}) or {}).get("objective_score"),
+        "selected_balance_penalty": ((selected_policy.get("profile_row") or {}) or {}).get("balance_penalty"),
         "closure_mix": {
             "event_threshold_rate": closure_rates.get("event_threshold"),
             "max_ms_rate": closure_rates.get("max_ms"),

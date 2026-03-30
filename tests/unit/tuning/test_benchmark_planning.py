@@ -15,6 +15,7 @@ from libs.tuning import (
 def _args() -> argparse.Namespace:
     return argparse.Namespace(
         mode="full",
+        search_stage=None,
         objective_name=None,
         objective_preset=None,
         objective_spec_path=None,
@@ -37,19 +38,23 @@ def _args() -> argparse.Namespace:
         profile_behavior_mixed_unknown_ambiguous_margin_threshold=0.03,
         min_warm=1,
         delta_threshold=0.0,
-        slope_source="raw",
-        ema_alpha=0.2,
-        slope_threshold_mode="adaptive_run",
+        slope_source="ema",
+        ema_alpha=0.35,
+        slope_threshold_mode="fixed",
         slope_threshold_quantile=0.75,
-        slope_threshold_scale=0.5,
+        slope_threshold_scale=0.35,
         slope_threshold_min=1e-6,
-        slope_abs_threshold=1.0,
+        slope_abs_threshold=2.0,
         slope_min_persistence_samples=2,
         slope_reemit_ratio=1.5,
-        event_warmup_points=1,
-        window_max_ms=10000,
-        window_event_threshold=20,
-        window_min_ms=50,
+        event_warmup_points=4,
+        event_low_scale_responsiveness=1.0,
+        event_repeatability_aggressiveness=1.0,
+        event_drift_conservatism=1.0,
+        event_chatter_suppression=1.0,
+        window_max_ms=5000,
+        window_event_threshold=10,
+        window_min_ms=25,
         window_inactivity_timeout_ms=0,
         window_strategy="segmented",
         phase_count=3,
@@ -101,3 +106,12 @@ def test_benchmark_planning_uses_variant_arg_overrides_for_stage_inference():
 
     assert target_stage == "40_backbone_fit.py"
     assert payload["arg_overrides"] == {"backbone_ridge_lambda": 2.0}
+
+
+def test_benchmark_planning_defaults_windowing_search_to_windowing_objective():
+    args = _args()
+    args.mode = "structural"
+    args.search_stage = "windowing"
+
+    assert resolve_effective_objective_name(args) == "sim_windowing_default_v1"
+    assert resolve_effective_evaluation_tier(args) == "structural"

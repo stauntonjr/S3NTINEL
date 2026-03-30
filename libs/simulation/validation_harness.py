@@ -728,6 +728,9 @@ def write_validation_harness_report(
     parameter_records = pipeline_parameter_records + stage_parameter_records
 
     overall_validation = dict(full_run_report.get("modeling_performance") or {})
+    window_policy_profile = dict(full_run_report.get("window_policy_profile") or {})
+    if window_policy_profile:
+        overall_validation["window_policy_profile"] = window_policy_profile
     validation_metric_records = _build_validation_metric_records(
         overall_validation=overall_validation,
         stage_harness=stage_harness,

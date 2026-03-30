@@ -811,6 +811,14 @@ def test_resolve_effective_objective_name_defaults_from_mode(tmp_path):
     assert perf.resolve_effective_objective_name(args) == "sim_event_default_v1"
 
 
+def test_resolve_effective_objective_name_defaults_from_windowing_search_stage(tmp_path):
+    args = _args(tmp_path)
+    args.mode = "structural"
+    args.search_stage = "windowing"
+
+    assert perf.resolve_effective_objective_name(args) == "sim_windowing_default_v1"
+
+
 def test_resolve_effective_objective_name_from_cli_preset(tmp_path):
     args = _args(tmp_path)
     args.objective_preset = "event_recall_heavy"

@@ -450,11 +450,11 @@ def load_pipeline_context_settings(config: dict[str, Any]) -> PipelineContextSet
         ),
         windowing=WindowingSettings(
             min_sampling_rate_hz=_config_float(config, ["windowing", "min_sampling_rate_hz"], 1.0),
-            max_ms=_env_int("S3NTINEL_WINDOW_MAX_MS", _config_int(config, ["windowing", "max_ms"], 10000)),
-            min_ms=_env_int("S3NTINEL_WINDOW_MIN_MS", _config_int(config, ["windowing", "min_ms"], 50)),
+            max_ms=_env_int("S3NTINEL_WINDOW_MAX_MS", _config_int(config, ["windowing", "max_ms"], 5000)),
+            min_ms=_env_int("S3NTINEL_WINDOW_MIN_MS", _config_int(config, ["windowing", "min_ms"], 25)),
             event_threshold=_env_int(
                 "S3NTINEL_WINDOW_EVENT_THRESHOLD",
-                _config_int(config, ["windowing", "event_threshold"], 20),
+                _config_int(config, ["windowing", "event_threshold"], 10),
             ),
             inactivity_timeout_ms=_env_int(
                 "S3NTINEL_WINDOW_INACTIVITY_TIMEOUT_MS",

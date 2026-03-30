@@ -75,9 +75,9 @@ ARG_DEFAULTS = {
     "event_repeatability_aggressiveness": 1.0,
     "event_drift_conservatism": 1.0,
     "event_chatter_suppression": 1.0,
-    "window_max_ms": 10000,
-    "window_event_threshold": 20,
-    "window_min_ms": 50,
+    "window_max_ms": 5000,
+    "window_event_threshold": 10,
+    "window_min_ms": 25,
     "window_inactivity_timeout_ms": 0,
     "window_strategy": "segmented",
     "phase_count": 3,
@@ -145,6 +145,12 @@ ENV_STAGE_BY_PREFIX = {
 }
 
 
+def _default_objective_name_for_args(args: Any) -> str:
+    if str(getattr(args, "search_stage", "") or "") == "windowing":
+        return "sim_windowing_default_v1"
+    return str(resolve_default_objective_name(mode=str(args.mode)))
+
+
 def stage_order_index(stage_script: str) -> int:
     try:
         return STAGE_ORDER.index(stage_script)
@@ -192,7 +198,7 @@ def variant_objective_name(args: Any, *, variant: BenchmarkVariant | None = None
         preset = OBJECTIVE_PRESET_BY_NAME[str(args.objective_preset)]
         if preset.objective_name is not None:
             return str(preset.objective_name)
-    return str(args.objective_name or resolve_default_objective_name(mode=str(args.mode)))
+    return str(args.objective_name or _default_objective_name_for_args(args))
 
 
 def variant_objective_spec_path(args: Any, *, variant: BenchmarkVariant | None = None) -> str | None:
@@ -248,7 +254,7 @@ def resolve_effective_objective_spec(args: Any, *, variant: BenchmarkVariant | N
         ):
             return objective_spec_from_payload(resolved_objective_payload(args, variant=variant))
         return objective_spec_from_payload(base_objective_payload(args, variant=variant))
-    objective_name = str(resolve_default_objective_name(mode=str(args.mode)))
+    objective_name = _default_objective_name_for_args(args)
     return resolve_objective_spec(objective_name=objective_name)
 
 

@@ -334,6 +334,126 @@ def _profile_objective_spec() -> ObjectiveSpec:
     )
 
 
+def _windowing_objective_spec() -> ObjectiveSpec:
+    return ObjectiveSpec(
+        name="sim_windowing_default_v1",
+        evaluation_tier="structural",
+        required_end_stage_script="60_fit_hierarchy.py",
+        description="Windowing-stage default objective emphasizing stage-25 policy quality, boundary stability, bounded downstream cost, and downstream hierarchy fit.",
+        primary_terms=(
+            ObjectiveTerm(
+                metric=_metric(
+                    "validation",
+                    "overall",
+                    "window_policy_profile",
+                    "edge_stability.mean_boundary_jaccard",
+                ),
+                direction="maximize",
+                weight=1.5,
+                label="window boundary stability",
+            ),
+            ObjectiveTerm(
+                metric=_metric(
+                    "validation",
+                    "overall",
+                    "window_policy_profile",
+                    "selected_balance_penalty",
+                ),
+                direction="minimize",
+                weight=1.0,
+                label="window balance penalty",
+            ),
+            ObjectiveTerm(
+                metric=_metric(
+                    "validation",
+                    "overall",
+                    "window_policy_profile",
+                    "downstream_cost_proxy.pair_cost_proxy",
+                ),
+                direction="minimize",
+                weight=1.0,
+                label="window pair cost proxy",
+            ),
+            ObjectiveTerm(
+                metric=_metric(
+                    "validation",
+                    "overall",
+                    "window_policy_profile",
+                    "downstream_cost_proxy.same_window_pair_expansion_proxy",
+                ),
+                direction="minimize",
+                weight=0.75,
+                label="same-window pair expansion proxy",
+            ),
+            ObjectiveTerm(
+                metric=_metric(
+                    "validation",
+                    "overall",
+                    "hierarchy_validation",
+                    "module_exact_match",
+                ),
+                direction="maximize",
+                weight=0.75,
+                label="hierarchy module exact match",
+            ),
+            ObjectiveTerm(
+                metric=_metric(
+                    "validation",
+                    "overall",
+                    "hierarchy_validation",
+                    "subsystem_exact_match",
+                ),
+                direction="maximize",
+                weight=0.5,
+                label="hierarchy subsystem exact match",
+            ),
+        ),
+        constraints=(
+            ObjectiveConstraint(
+                metric=_metric(
+                    "validation",
+                    "overall",
+                    "window_policy_profile",
+                    "edge_stability.mean_boundary_jaccard",
+                ),
+                op=">=",
+                threshold=0.5,
+                label="window boundary stability",
+            ),
+        ),
+        tie_break_terms=(
+            ObjectiveTerm(
+                metric=_metric(
+                    "compute",
+                    "25_window_policy_profile.py",
+                    "engineering_performance",
+                    "elapsed_ms",
+                ),
+                direction="minimize",
+                weight=0.25,
+                label="window policy profile elapsed ms",
+            ),
+            ObjectiveTerm(
+                metric=_metric(
+                    "compute",
+                    "30_windows_adaptive.py",
+                    "engineering_performance",
+                    "elapsed_ms",
+                ),
+                direction="minimize",
+                weight=0.25,
+                label="window build elapsed ms",
+            ),
+            ObjectiveTerm(
+                metric=_metric("compute", "overall", "overall", "pipeline_summary.total_elapsed_ms"),
+                direction="minimize",
+                weight=0.25,
+                label="total elapsed ms",
+            ),
+        ),
+    )
+
+
 def _structural_objective_spec() -> ObjectiveSpec:
     return ObjectiveSpec(
         name="sim_structural_default_v1",
@@ -606,6 +726,8 @@ def resolve_objective_spec(*, objective_name: str) -> ObjectiveSpec:
         return _profile_objective_spec()
     if normalized_name == "sim_event_default_v1":
         return _event_objective_spec()
+    if normalized_name == "sim_windowing_default_v1":
+        return _windowing_objective_spec()
     if normalized_name == "sim_structural_default_v1":
         return _structural_objective_spec()
     if normalized_name == "sim_full_default_v1":
@@ -640,6 +762,7 @@ KNOWN_OBJECTIVE_SPEC_NAMES = tuple(
         (
             _profile_objective_spec().name,
             _event_objective_spec().name,
+            _windowing_objective_spec().name,
             _structural_objective_spec().name,
             _full_objective_spec().name,
         )

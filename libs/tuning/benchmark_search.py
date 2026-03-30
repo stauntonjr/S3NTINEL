@@ -105,23 +105,23 @@ SEARCH_SPEC_BY_STAGE = {
     "windowing": BenchmarkSearchSpec(
         stage="windowing",
         mode="structural",
-        description="Windowing-stage search over adaptive window sizing and event-density controls.",
+        description="Windowing-stage search over a narrow neighborhood around the promoted 5s/10-event adaptive policy.",
         dimensions=(
             BenchmarkSearchDimension(
                 name="window_max_ms",
-                values=(5000, 10000, 20000),
+                values=(5000, 7500, 10000),
             ),
             BenchmarkSearchDimension(
                 name="window_event_threshold",
-                values=(10, 20, 30),
+                values=(8, 10, 12),
             ),
             BenchmarkSearchDimension(
                 name="window_min_ms",
-                values=(25, 50, 100),
+                values=(25, 50),
             ),
             BenchmarkSearchDimension(
                 name="window_inactivity_timeout_ms",
-                values=(0, 500, 2000),
+                values=(0, 500),
             ),
         ),
     ),

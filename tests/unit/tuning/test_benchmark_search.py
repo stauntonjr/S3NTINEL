@@ -55,6 +55,10 @@ def test_windowing_search_spec_declares_structural_mode_and_expected_knobs():
         "window_min_ms",
         "window_inactivity_timeout_ms",
     )
+    assert spec.dimensions[0].values == (5000, 7500, 10000)
+    assert spec.dimensions[1].values == (8, 10, 12)
+    assert spec.dimensions[2].values == (25, 50)
+    assert spec.dimensions[3].values == (0, 500)
 
 
 def test_structure_search_spec_declares_structural_mode_and_mixed_knobs():
@@ -69,6 +73,12 @@ def test_structure_search_spec_declares_structural_mode_and_mixed_knobs():
         "S3NTINEL_V2_GRAPH_MIN_FUSED_EDGE_WEIGHT",
         "S3NTINEL_V2_HIERARCHY_TOP_K_PER_SENSOR",
     )
+    assert spec.dimensions[0].values == (6, 12)
+    assert spec.dimensions[1].values == (0.5, 2.0)
+    assert spec.dimensions[2].values == (0.2, 0.6)
+    assert spec.dimensions[3].values == ("0.03", "0.08")
+    assert spec.dimensions[4].values == ("0.03", "0.08")
+    assert spec.dimensions[5].values == ("2", "4")
     assert tuple(dimension.kind for dimension in spec.dimensions[-3:]) == ("env", "env", "env")
 
 
@@ -141,6 +151,23 @@ def test_build_search_variants_supports_env_backed_structure_dimensions():
         "S3NTINEL_V2_GRAPH_MIN_FUSED_EDGE_WEIGHT": "0.03",
         "S3NTINEL_V2_HIERARCHY_TOP_K_PER_SENSOR": "2",
     }
+
+
+def test_build_search_variants_windowing_only_mutates_window_args():
+    variants = build_search_variants(
+        search_stage="windowing",
+        search_strategy="grid",
+        search_budget=1,
+        search_seed=0,
+    )
+
+    assert variants[1].arg_overrides == {
+        "window_max_ms": 5000,
+        "window_event_threshold": 8,
+        "window_min_ms": 25,
+        "window_inactivity_timeout_ms": 0,
+    }
+    assert variants[1].env_overrides == {}
 
 
 def test_build_search_variants_supports_mixed_phase_dimensions():

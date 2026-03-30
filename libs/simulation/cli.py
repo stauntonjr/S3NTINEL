@@ -154,9 +154,9 @@ def add_event_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
 
 
 def add_window_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
-    parser.add_argument("--window-max-ms", type=int, default=10000, help="Maximum window duration in ms")
-    parser.add_argument("--window-event-threshold", type=int, default=20, help="Window event threshold")
-    parser.add_argument("--window-min-ms", type=int, default=50, help="Minimum window duration in ms")
+    parser.add_argument("--window-max-ms", type=int, default=5000, help="Maximum window duration in ms")
+    parser.add_argument("--window-event-threshold", type=int, default=10, help="Window event threshold")
+    parser.add_argument("--window-min-ms", type=int, default=25, help="Minimum window duration in ms")
     parser.add_argument("--window-inactivity-timeout-ms", type=int, default=0, help="Window inactivity timeout in ms")
     parser.add_argument("--window-strategy", default="segmented", choices=("segmented",))
     return parser

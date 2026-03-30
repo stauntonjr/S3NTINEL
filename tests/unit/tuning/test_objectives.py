@@ -168,11 +168,14 @@ def test_default_compare_by_excludes_synthetic_ids_for_comparability():
 def test_default_objective_specs_declare_their_own_execution_scope():
     structural_spec = resolve_objective_spec(objective_name="sim_structural_default_v1")
     event_spec = resolve_objective_spec(objective_name="sim_event_default_v1")
+    windowing_spec = resolve_objective_spec(objective_name="sim_windowing_default_v1")
 
     assert structural_spec.evaluation_tier == "structural"
     assert structural_spec.required_end_stage_script == "60_fit_hierarchy.py"
     assert event_spec.evaluation_tier == "event"
     assert event_spec.required_end_stage_script == "20_events_extract.py"
+    assert windowing_spec.evaluation_tier == "structural"
+    assert windowing_spec.required_end_stage_script == "60_fit_hierarchy.py"
 
 
 def test_objective_required_end_stage_is_resolved_from_spec():
@@ -212,6 +215,125 @@ def test_named_objective_presets_are_available_from_tuning_package():
     assert any(path == "primary_terms.1.weight" for path, _ in event_preset.objective_overrides)
     assert any(path == "primary_terms.4.weight" for path, _ in event_preset.objective_overrides)
     assert structural_preset.objective_name == "sim_structural_default_v1"
+
+
+def test_windowing_objective_uses_window_policy_metrics_and_is_ready_for_search():
+    harness_report = _full_harness_report()
+    harness_report["workload_signature"]["pipeline"]["mode"] = "structural"
+    harness_report["validation_metrics"]["metric_records"] = [
+        {
+            "category": "validation",
+            "scope_name": "overall",
+            "subscope_name": "window_policy_profile",
+            "metric_path": "edge_stability.mean_boundary_jaccard",
+            "value": 0.72,
+        },
+        {
+            "category": "validation",
+            "scope_name": "overall",
+            "subscope_name": "window_policy_profile",
+            "metric_path": "selected_balance_penalty",
+            "value": 0.18,
+        },
+        {
+            "category": "validation",
+            "scope_name": "overall",
+            "subscope_name": "window_policy_profile",
+            "metric_path": "downstream_cost_proxy.pair_cost_proxy",
+            "value": 28.0,
+        },
+        {
+            "category": "validation",
+            "scope_name": "overall",
+            "subscope_name": "window_policy_profile",
+            "metric_path": "downstream_cost_proxy.same_window_pair_expansion_proxy",
+            "value": 16.0,
+        },
+        {
+            "category": "validation",
+            "scope_name": "overall",
+            "subscope_name": "hierarchy_validation",
+            "metric_path": "module_exact_match",
+            "value": 0.8,
+        },
+        {
+            "category": "validation",
+            "scope_name": "overall",
+            "subscope_name": "hierarchy_validation",
+            "metric_path": "subsystem_exact_match",
+            "value": 0.9,
+        },
+    ]
+    harness_report["compute_performance"]["metric_records"] = [
+        {
+            "category": "compute",
+            "scope_name": "25_window_policy_profile.py",
+            "subscope_name": "engineering_performance",
+            "metric_path": "elapsed_ms",
+            "value": 220.0,
+        },
+        {
+            "category": "compute",
+            "scope_name": "30_windows_adaptive.py",
+            "subscope_name": "engineering_performance",
+            "metric_path": "elapsed_ms",
+            "value": 280.0,
+        },
+        {
+            "category": "compute",
+            "scope_name": "overall",
+            "subscope_name": "overall",
+            "metric_path": "pipeline_summary.total_elapsed_ms",
+            "value": 1200.0,
+        },
+    ]
+
+    spec = resolve_objective_spec(objective_name="sim_windowing_default_v1")
+    evaluation = evaluate_objective_spec(
+        harness_report=harness_report,
+        objective_spec=spec,
+    )
+
+    assert spec.name == "sim_windowing_default_v1"
+    assert evaluation.overall_status == "ok"
+    assert evaluation.constraint_pass is True
+    assert evaluation.ready_for_search is True
+    assert evaluation.objective_score is not None
+
+
+def test_validation_metric_panel_objective_selected_prioritizes_window_metrics():
+    results = [
+        {
+            "objective_name": "sim_windowing_default_v1",
+            "all_validation_metrics": {
+                "overall:window_policy_profile:edge_stability.mean_boundary_jaccard": 0.7,
+                "overall:window_policy_profile:selected_balance_penalty": 0.18,
+                "overall:window_policy_profile:downstream_cost_proxy.pair_cost_proxy": 30.0,
+                "overall:window_policy_profile:downstream_cost_proxy.same_window_pair_expansion_proxy": 18.0,
+                "overall:window_policy_profile:closure_mix.event_threshold_rate": 0.74,
+                "overall:hierarchy_validation:module_exact_match": 0.8,
+            },
+        },
+        {
+            "objective_name": "sim_windowing_default_v1",
+            "all_validation_metrics": {
+                "overall:window_policy_profile:edge_stability.mean_boundary_jaccard": 0.8,
+                "overall:window_policy_profile:selected_balance_penalty": 0.12,
+                "overall:window_policy_profile:downstream_cost_proxy.pair_cost_proxy": 24.0,
+                "overall:window_policy_profile:downstream_cost_proxy.same_window_pair_expansion_proxy": 15.0,
+                "overall:window_policy_profile:closure_mix.event_threshold_rate": 0.77,
+                "overall:hierarchy_validation:module_exact_match": 0.82,
+            },
+        },
+    ]
+
+    panel = build_validation_metric_panel(results, mode="objective_selected", limit=8)
+
+    assert [entry["metric_name"] for entry in panel[:3]] == [
+        "overall:window_policy_profile:edge_stability.mean_boundary_jaccard",
+        "overall:window_policy_profile:selected_balance_penalty",
+        "overall:window_policy_profile:downstream_cost_proxy.pair_cost_proxy",
+    ]
 
 
 def test_validation_panel_shortlist_is_exported_from_tuning_package():
