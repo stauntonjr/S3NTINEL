@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import json
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -296,6 +297,56 @@ def render_edges(modules: list[ModuleDeps], *, sort_deps: bool) -> str:
     return "\n".join(f"{src} -> {dst}" for src, dst in ordered) + ("\n" if ordered else "")
 
 
+def module_payload(
+    modules: list[ModuleDeps],
+    *,
+    include_unresolved: bool,
+    sort_deps: bool,
+) -> list[dict[str, object]]:
+    payload: list[dict[str, object]] = []
+    for mod in modules:
+        internal = [imp.resolved for imp in mod.imports if imp.resolved and imp.resolved != mod.module]
+        unresolved = [imp.raw for imp in mod.imports if imp.resolved is None]
+        if sort_deps:
+            internal = sorted(set(internal))
+            unresolved = sorted(set(unresolved))
+        entry: dict[str, object] = {
+            "module": mod.module,
+            "path": str(mod.path),
+            "internal_dependencies": internal,
+        }
+        if include_unresolved:
+            entry["external_or_unresolved_imports"] = unresolved
+        payload.append(entry)
+    return payload
+
+
+def edge_payload(modules: list[ModuleDeps], *, sort_deps: bool) -> list[dict[str, str]]:
+    edges: set[tuple[str, str]] = set()
+    for mod in modules:
+        for imp in mod.imports:
+            if imp.resolved and imp.resolved != mod.module:
+                edges.add((mod.module, imp.resolved))
+    ordered = sorted(edges) if sort_deps else list(edges)
+    return [{"source": src, "target": dst} for src, dst in ordered]
+
+
+def reverse_payload(modules: list[ModuleDeps], *, sort_deps: bool) -> list[dict[str, object]]:
+    reverse: dict[str, list[str]] = defaultdict(list)
+    for mod in modules:
+        seen: set[str] = set()
+        for imp in mod.imports:
+            if imp.resolved and imp.resolved != mod.module and imp.resolved not in seen:
+                reverse[imp.resolved].append(mod.module)
+                seen.add(imp.resolved)
+    keys = sorted(reverse) if sort_deps else list(reverse)
+    payload: list[dict[str, object]] = []
+    for target in keys:
+        users = sorted(set(reverse[target])) if sort_deps else reverse[target]
+        payload.append({"target": target, "imported_by": users})
+    return payload
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Generate a module dependency sketch for a Python repo."
@@ -354,6 +405,11 @@ def main() -> int:
         action="store_true",
         help="Do not sort dependency lists.",
     )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON instead of text.",
+    )
 
     args = parser.parse_args()
     root = Path(args.root).resolve()
@@ -376,7 +432,28 @@ def main() -> int:
 
     sort_deps = not args.no_sort
 
-    if args.edges:
+    if args.json:
+        if args.edges:
+            payload = {
+                "root": str(root),
+                "edges": edge_payload(modules, sort_deps=sort_deps),
+            }
+        elif args.reverse:
+            payload = {
+                "root": str(root),
+                "reverse_dependencies": reverse_payload(modules, sort_deps=sort_deps),
+            }
+        else:
+            payload = {
+                "root": str(root),
+                "modules": module_payload(
+                    modules,
+                    include_unresolved=args.include_unresolved and not args.only_internal,
+                    sort_deps=sort_deps,
+                ),
+            }
+        output = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    elif args.edges:
         output = render_edges(modules, sort_deps=sort_deps)
     elif args.reverse:
         output = render_reverse(modules, sort_deps=sort_deps)

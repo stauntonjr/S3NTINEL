@@ -1,0 +1,1335 @@
+libs  (libs/__init__.py)
+  -> internal:
+     - libs.perf.annotations
+
+libs.anomaly  (libs/anomaly/__init__.py)
+  -> internal:
+     - libs.anomaly.frames
+     - libs.anomaly.pipeline
+     - libs.anomaly.tables
+     - libs.anomaly.validator
+
+libs.anomaly.frames  (libs/anomaly/frames.py)
+  -> internal:
+     - libs.perf.annotations
+     - libs.pyspark
+
+libs.anomaly.pipeline  (libs/anomaly/pipeline.py)
+  -> internal:
+     - libs.anomaly.frames
+     - libs.anomaly.tables
+     - libs.perf.annotations
+
+libs.anomaly.tables  (libs/anomaly/tables.py)
+  -> internal:
+     - libs.io.schemas.anomaly
+     - libs.pyspark
+
+libs.anomaly.validator  (libs/anomaly/validator.py)
+  -> internal:
+     - libs.scoring.validator
+
+libs.architecture  (libs/architecture/__init__.py)
+  -> internal:
+     - libs.architecture.ai_review
+     - libs.architecture.annotations
+     - libs.architecture.extract
+     - libs.architecture.render
+
+libs.architecture.ai_review  (libs/architecture/ai_review.py)
+  -> internal:
+     - libs.architecture.model
+
+libs.architecture.annotations  (libs/architecture/annotations.py)
+  -> internal:
+     - libs.architecture.model
+
+libs.architecture.extract  (libs/architecture/extract.py)
+  -> internal:
+     - libs.architecture.annotations
+     - libs.architecture.model
+     - tools.module_deps
+     - tools.repo_schematic
+
+libs.architecture.model  (libs/architecture/model.py)
+  -> none
+
+libs.architecture.render  (libs/architecture/render.py)
+  -> internal:
+     - libs.architecture.model
+
+libs.backbone  (libs/backbone/__init__.py)
+  -> internal:
+     - libs.backbone.artifacts
+     - libs.backbone.energy
+     - libs.backbone.fit
+     - libs.backbone.tables
+
+libs.backbone.artifacts  (libs/backbone/artifacts.py)
+  -> internal:
+     - libs.backbone.energy
+     - libs.backbone.fit
+
+libs.backbone.energy  (libs/backbone/energy.py)
+  -> internal:
+     - libs.io.pandas_spark
+
+libs.backbone.fit  (libs/backbone/fit.py)
+  -> internal:
+     - libs.io.pandas_spark
+
+libs.backbone.tables  (libs/backbone/tables.py)
+  -> internal:
+     - libs.io.schemas.backbone
+     - libs.pyspark
+
+libs.behavior  (libs/behavior/__init__.py)
+  -> internal:
+     - libs.behavior.accumulative
+     - libs.behavior.base
+     - libs.behavior.discrete_state
+     - libs.behavior.inertial
+     - libs.behavior.primitives
+     - libs.behavior.registry
+     - libs.behavior.regulated
+     - libs.behavior.tick
+     - libs.behavior.tracking
+     - libs.behavior.utils
+     - libs.behavior.validation
+
+libs.behavior.accumulative  (libs/behavior/accumulative.py)
+  -> internal:
+     - libs.behavior.base
+     - libs.behavior.primitives
+     - libs.behavior.utils
+     - libs.behavior.validation
+
+libs.behavior.base  (libs/behavior/base.py)
+  -> none
+
+libs.behavior.discrete_state  (libs/behavior/discrete_state.py)
+  -> internal:
+     - libs.behavior.base
+     - libs.behavior.primitives
+     - libs.behavior.utils
+     - libs.behavior.validation
+
+libs.behavior.inertial  (libs/behavior/inertial.py)
+  -> internal:
+     - libs.behavior.base
+     - libs.behavior.primitives
+     - libs.behavior.utils
+     - libs.behavior.validation
+
+libs.behavior.primitives  (libs/behavior/primitives.py)
+  -> internal:
+     - libs.behavior.utils
+
+libs.behavior.registry  (libs/behavior/registry.py)
+  -> internal:
+     - libs.behavior.accumulative
+     - libs.behavior.base
+     - libs.behavior.discrete_state
+     - libs.behavior.inertial
+     - libs.behavior.regulated
+     - libs.behavior.tracking
+
+libs.behavior.regulated  (libs/behavior/regulated.py)
+  -> internal:
+     - libs.behavior.base
+     - libs.behavior.primitives
+     - libs.behavior.utils
+     - libs.behavior.validation
+
+libs.behavior.tick  (libs/behavior/tick.py)
+  -> internal:
+     - libs.behavior.base
+
+libs.behavior.tracking  (libs/behavior/tracking.py)
+  -> internal:
+     - libs.behavior.base
+     - libs.behavior.primitives
+     - libs.behavior.utils
+     - libs.behavior.validation
+
+libs.behavior.utils  (libs/behavior/utils.py)
+  -> none
+
+libs.behavior.validation  (libs/behavior/validation.py)
+  -> internal:
+     - libs.behavior.base
+     - libs.behavior.tick
+
+libs.common  (libs/common/__init__.py)
+  -> internal:
+     - libs.common.parameter_datatypes
+     - libs.common.spark_exprs
+
+libs.common.event_types  (libs/common/event_types.py)
+  -> none
+
+libs.common.parameter_datatypes  (libs/common/parameter_datatypes.py)
+  -> none
+
+libs.common.spark_exprs  (libs/common/spark_exprs.py)
+  -> none
+
+libs.config  (libs/config/__init__.py)
+  -> internal:
+     - libs.config.pipeline
+
+libs.config.pipeline  (libs/config/pipeline.py)
+  -> none
+
+libs.events  (libs/events/__init__.py)
+  -> internal:
+     - libs.events.calibration
+     - libs.events.pipeline
+     - libs.events.profiling
+     - libs.events.tables
+     - libs.events.types
+     - libs.events.validator
+
+libs.events.calibration  (libs/events/calibration.py)
+  -> internal:
+     - libs.events.continuous
+     - libs.events.pipeline
+     - libs.windows
+
+libs.events.categorical  (libs/events/categorical.py)
+  -> internal:
+     - libs.common
+     - libs.events.types
+     - libs.perf.annotations
+     - libs.spark_sequence
+
+libs.events.continuous  (libs/events/continuous.py)
+  -> internal:
+     - libs.common
+     - libs.events.types
+     - libs.perf.annotations
+     - libs.spark_sequence
+
+libs.events.pipeline  (libs/events/pipeline.py)
+  -> internal:
+     - libs.common
+     - libs.events.categorical
+     - libs.events.continuous
+     - libs.events.tables
+     - libs.pyspark
+     - libs.spark_sequence
+
+libs.events.profiling  (libs/events/profiling.py)
+  -> internal:
+     - libs.io.schemas
+     - libs.profiling.profiles
+     - libs.pyspark
+
+libs.events.tables  (libs/events/tables.py)
+  -> internal:
+     - libs.io.schemas.events
+     - libs.pyspark
+
+libs.events.types  (libs/events/types.py)
+  -> internal:
+     - libs.common.event_types
+
+libs.events.validator  (libs/events/validator.py)
+  -> internal:
+     - libs.io.contracts
+
+libs.graph  (libs/graph/__init__.py)
+  -> internal:
+     - libs.graph.event
+     - libs.graph.fused
+     - libs.graph.hierarchy_artifacts
+     - libs.graph.lag
+     - libs.graph.pipeline
+     - libs.graph.precision
+     - libs.graph.tables
+     - libs.graph.transition
+     - libs.graph.validator
+
+libs.graph.data  (libs/graph/data.py)
+  -> internal:
+     - libs.io.pandas_spark
+
+libs.graph.evaluation  (libs/graph/evaluation.py)
+  -> internal:
+     - libs.graph.fused
+     - libs.graph.hierarchy_artifacts
+     - libs.graph.lag
+     - libs.graph.pipeline
+     - libs.graph.tables
+     - libs.graph.validator
+     - libs.io.schemas
+
+libs.graph.event  (libs/graph/event.py)
+  -> none
+
+libs.graph.fused  (libs/graph/fused.py)
+  -> none
+
+libs.graph.hierarchy  (libs/graph/hierarchy.py)
+  -> none
+
+libs.graph.hierarchy_artifacts  (libs/graph/hierarchy_artifacts.py)
+  -> internal:
+     - libs.graph.hierarchy
+
+libs.graph.lag  (libs/graph/lag.py)
+  -> internal:
+     - libs.graph.event
+     - libs.io.schemas
+
+libs.graph.pipeline  (libs/graph/pipeline.py)
+  -> internal:
+     - libs.graph.data
+     - libs.graph.event
+     - libs.graph.fused
+     - libs.graph.hierarchy_artifacts
+     - libs.graph.lag
+     - libs.graph.precision
+     - libs.graph.transition
+     - libs.io.schemas
+     - libs.perf.annotations
+     - libs.perf.logger
+
+libs.graph.precision  (libs/graph/precision.py)
+  -> internal:
+     - libs.io.pandas_spark
+
+libs.graph.tables  (libs/graph/tables.py)
+  -> internal:
+     - libs.graph.lag
+     - libs.graph.pipeline
+     - libs.io.schemas.graph
+     - libs.pyspark
+
+libs.graph.transition  (libs/graph/transition.py)
+  -> internal:
+     - libs.graph.event
+
+libs.graph.validator  (libs/graph/validator.py)
+  -> none
+
+libs.io  (libs/io/__init__.py)
+  -> internal:
+     - libs.io.contracts
+
+libs.io.contracts  (libs/io/contracts.py)
+  -> none
+
+libs.io.delta  (libs/io/delta.py)
+  -> internal:
+     - libs.perf.annotations
+
+libs.io.pandas_spark  (libs/io/pandas_spark.py)
+  -> none
+
+libs.io.schemas  (libs/io/schemas/__init__.py)
+  -> internal:
+     - libs.io.schemas.anomaly
+     - libs.io.schemas.backbone
+     - libs.io.schemas.events
+     - libs.io.schemas.explorer
+     - libs.io.schemas.graph
+     - libs.io.schemas.phase
+     - libs.io.schemas.profiling
+     - libs.io.schemas.scoring
+     - libs.io.schemas.telemetry
+     - libs.io.schemas.windows
+
+libs.io.schemas.anomaly  (libs/io/schemas/anomaly.py)
+  -> none
+
+libs.io.schemas.backbone  (libs/io/schemas/backbone.py)
+  -> none
+
+libs.io.schemas.events  (libs/io/schemas/events.py)
+  -> none
+
+libs.io.schemas.explorer  (libs/io/schemas/explorer.py)
+  -> none
+
+libs.io.schemas.graph  (libs/io/schemas/graph.py)
+  -> none
+
+libs.io.schemas.phase  (libs/io/schemas/phase.py)
+  -> none
+
+libs.io.schemas.profiling  (libs/io/schemas/profiling.py)
+  -> none
+
+libs.io.schemas.scoring  (libs/io/schemas/scoring.py)
+  -> none
+
+libs.io.schemas.telemetry  (libs/io/schemas/telemetry.py)
+  -> none
+
+libs.io.schemas.windows  (libs/io/schemas/windows.py)
+  -> none
+
+libs.io.transforms  (libs/io/transforms.py)
+  -> none
+
+libs.perf  (libs/perf/__init__.py)
+  -> internal:
+     - libs.perf.annotations
+     - libs.perf.logger
+     - libs.perf.memory
+     - libs.perf.mlflow
+     - libs.perf.stage_manifest
+
+libs.perf.annotations  (libs/perf/annotations.py)
+  -> internal:
+     - libs.perf.logger
+     - libs.perf.mlflow
+
+libs.perf.logger  (libs/perf/logger.py)
+  -> none
+
+libs.perf.memory  (libs/perf/memory.py)
+  -> internal:
+     - libs.perf.logger
+     - libs.perf.mlflow
+
+libs.perf.mlflow  (libs/perf/mlflow.py)
+  -> internal:
+     - libs.perf.logger
+
+libs.perf.stage_manifest  (libs/perf/stage_manifest.py)
+  -> internal:
+     - libs.perf.mlflow
+
+libs.phase  (libs/phase/__init__.py)
+  -> internal:
+     - libs.phase.analysis
+     - libs.phase.feature_config
+     - libs.phase.pipeline
+     - libs.phase.tables
+     - libs.phase.validator
+
+libs.phase.analysis  (libs/phase/analysis.py)
+  -> none
+
+libs.phase.artifacts  (libs/phase/artifacts.py)
+  -> internal:
+     - libs.phase.feature_config
+     - libs.phase.utils
+
+libs.phase.config_fit  (libs/phase/config_fit.py)
+  -> internal:
+     - libs.perf.logger
+     - libs.phase.feature_config
+     - libs.phase.selectors
+     - libs.phase.types
+
+libs.phase.decode  (libs/phase/decode.py)
+  -> internal:
+     - libs.perf.annotations
+     - libs.phase.types
+     - libs.phase.utils
+     - libs.spark_sequence
+
+libs.phase.feature_config  (libs/phase/feature_config.py)
+  -> internal:
+     - libs.backbone
+
+libs.phase.fit  (libs/phase/fit.py)
+  -> internal:
+     - libs.perf.annotations
+     - libs.phase.frames
+     - libs.phase.types
+     - libs.phase.utils
+
+libs.phase.frames  (libs/phase/frames.py)
+  -> internal:
+     - libs.common
+     - libs.common.event_types
+     - libs.phase.feature_config
+     - libs.phase.utils
+     - libs.pyspark
+
+libs.phase.pipeline  (libs/phase/pipeline.py)
+  -> internal:
+     - libs.perf.annotations
+     - libs.phase.config_fit
+     - libs.phase.decode
+     - libs.phase.feature_config
+     - libs.phase.fit
+     - libs.phase.frames
+     - libs.phase.tables
+     - libs.phase.types
+
+libs.phase.selectors  (libs/phase/selectors.py)
+  -> internal:
+     - libs.common.event_types
+     - libs.phase.types
+
+libs.phase.tables  (libs/phase/tables.py)
+  -> internal:
+     - libs.common
+     - libs.io.schemas.phase
+     - libs.phase.artifacts
+     - libs.phase.feature_config
+     - libs.phase.frames
+     - libs.phase.utils
+     - libs.pyspark
+
+libs.phase.types  (libs/phase/types.py)
+  -> internal:
+     - libs.phase.feature_config
+     - libs.phase.frames
+     - libs.phase.tables
+     - libs.phase.utils
+     - libs.spark_sequence
+
+libs.phase.utils  (libs/phase/utils.py)
+  -> internal:
+     - libs.common
+     - libs.spark_sequence
+
+libs.phase.validator  (libs/phase/validator.py)
+  -> none
+
+libs.plotting  (libs/plotting/__init__.py)
+  -> internal:
+     - libs.plotting.explorer_bundle
+     - libs.plotting.simulation_artifacts
+
+libs.plotting.explorer_bundle  (libs/plotting/explorer_bundle.py)
+  -> internal:
+     - libs.io.delta
+     - libs.io.schemas
+     - libs.reporting
+
+libs.plotting.simulation_artifacts  (libs/plotting/simulation_artifacts.py)
+  -> internal:
+     - libs.plotting.explorer_bundle
+     - libs.simulation.run_bundle
+
+libs.profiling  (libs/profiling/__init__.py)
+  -> internal:
+     - libs.profiling.pipeline
+     - libs.profiling.profiles
+     - libs.profiling.validator
+
+libs.profiling.pipeline  (libs/profiling/pipeline.py)
+  -> internal:
+     - libs.profiling.profiles
+
+libs.profiling.profiles  (libs/profiling/profiles.py)
+  -> internal:
+     - libs.behavior.primitives
+     - libs.common
+     - libs.io.schemas
+     - libs.perf.annotations
+     - libs.pyspark
+
+libs.profiling.validator  (libs/profiling/validator.py)
+  -> internal:
+     - libs.common
+     - libs.io.contracts
+     - libs.io.schemas.profiling
+
+libs.pyspark  (libs/pyspark/__init__.py)
+  -> internal:
+     - libs.pyspark.frame
+     - libs.pyspark.table
+
+libs.pyspark.frame  (libs/pyspark/frame.py)
+  -> internal:
+     - libs.pyspark.schema
+
+libs.pyspark.schema  (libs/pyspark/schema.py)
+  -> none
+
+libs.pyspark.table  (libs/pyspark/table.py)
+  -> internal:
+     - libs.io.delta
+     - libs.pyspark.frame
+     - libs.pyspark.schema
+
+libs.reporting  (libs/reporting/__init__.py)
+  -> internal:
+     - libs.reporting.frame
+
+libs.reporting.frame  (libs/reporting/frame.py)
+  -> none
+
+libs.scoring  (libs/scoring/__init__.py)
+  -> internal:
+     - libs.scoring.artifacts
+     - libs.scoring.rules
+     - libs.scoring.tables
+     - libs.scoring.validator
+
+libs.scoring.artifacts  (libs/scoring/artifacts.py)
+  -> internal:
+     - libs.io.contracts
+     - libs.scoring.rules
+
+libs.scoring.rules  (libs/scoring/rules.py)
+  -> internal:
+     - libs.io.contracts
+
+libs.scoring.tables  (libs/scoring/tables.py)
+  -> internal:
+     - libs.graph.tables
+     - libs.io.schemas
+     - libs.io.schemas.scoring
+     - libs.phase.tables
+     - libs.pyspark
+
+libs.scoring.validator  (libs/scoring/validator.py)
+  -> none
+
+libs.simulation  (libs/simulation/__init__.py)
+  -> internal:
+     - libs.simulation.aircraft.runtime
+     - libs.simulation.aircraft.spec
+     - libs.simulation.coupling.runtime
+     - libs.simulation.coupling.spec
+     - libs.simulation.fault.runtime
+     - libs.simulation.fault.spec
+     - libs.simulation.fleet.runtime
+     - libs.simulation.flight.runtime
+     - libs.simulation.flight.spec
+     - libs.simulation.module.runtime
+     - libs.simulation.module.spec
+     - libs.simulation.parameter.runtime
+     - libs.simulation.parameter.spec
+     - libs.simulation.phase.catalog
+     - libs.simulation.phase.runtime
+     - libs.simulation.phase.spec
+     - libs.simulation.port.runtime
+     - libs.simulation.port.spec
+     - libs.simulation.subsystem.runtime
+     - libs.simulation.subsystem.spec
+     - libs.simulation.system.runtime
+     - libs.simulation.system.spec
+     - libs.simulation.tail.runtime
+
+libs.simulation.aircraft  (libs/simulation/aircraft/__init__.py)
+  -> internal:
+     - libs.simulation.aircraft.examples
+     - libs.simulation.aircraft.runtime
+     - libs.simulation.aircraft.spec
+
+libs.simulation.aircraft.examples  (libs/simulation/aircraft/examples.py)
+  -> internal:
+     - libs.simulation.aircraft.spec
+     - libs.simulation.coupling.examples
+     - libs.simulation.module.examples
+     - libs.simulation.module.spec
+     - libs.simulation.parameter.examples
+     - libs.simulation.port.examples
+     - libs.simulation.scenarios
+     - libs.simulation.subsystem.examples
+     - libs.simulation.system.examples
+
+libs.simulation.aircraft.runtime  (libs/simulation/aircraft/runtime.py)
+  -> internal:
+     - libs.behavior
+     - libs.simulation.aircraft.spec
+     - libs.simulation.coupling.runtime
+     - libs.simulation.module.runtime
+     - libs.simulation.system.runtime
+
+libs.simulation.aircraft.spec  (libs/simulation/aircraft/spec.py)
+  -> internal:
+     - libs.simulation.coupling.spec
+     - libs.simulation.system.spec
+
+libs.simulation.cli  (libs/simulation/cli.py)
+  -> internal:
+     - libs.simulation.flight.examples
+
+libs.simulation.coupling  (libs/simulation/coupling/__init__.py)
+  -> internal:
+     - libs.simulation.coupling.examples
+     - libs.simulation.coupling.runtime
+     - libs.simulation.coupling.spec
+
+libs.simulation.coupling.examples  (libs/simulation/coupling/examples.py)
+  -> internal:
+     - libs.simulation.coupling.spec
+
+libs.simulation.coupling.runtime  (libs/simulation/coupling/runtime.py)
+  -> internal:
+     - libs.simulation.coupling.spec
+     - libs.simulation.module.runtime
+
+libs.simulation.coupling.spec  (libs/simulation/coupling/spec.py)
+  -> none
+
+libs.simulation.event_truth  (libs/simulation/event_truth.py)
+  -> none
+
+libs.simulation.fault  (libs/simulation/fault/__init__.py)
+  -> internal:
+     - libs.simulation.fault.examples
+     - libs.simulation.fault.runtime
+     - libs.simulation.fault.spec
+
+libs.simulation.fault.examples  (libs/simulation/fault/examples.py)
+  -> internal:
+     - libs.simulation.fault.spec
+
+libs.simulation.fault.runtime  (libs/simulation/fault/runtime.py)
+  -> internal:
+     - libs.simulation.fault.spec
+
+libs.simulation.fault.spec  (libs/simulation/fault/spec.py)
+  -> none
+
+libs.simulation.fleet  (libs/simulation/fleet/__init__.py)
+  -> internal:
+     - libs.simulation.fleet.examples
+     - libs.simulation.fleet.runtime
+
+libs.simulation.fleet.examples  (libs/simulation/fleet/examples.py)
+  -> internal:
+     - libs.simulation.fleet.runtime
+     - libs.simulation.tail.examples
+
+libs.simulation.fleet.runtime  (libs/simulation/fleet/runtime.py)
+  -> internal:
+     - libs.simulation.flight.runtime
+     - libs.simulation.flight.spec
+     - libs.simulation.tail.runtime
+
+libs.simulation.flight  (libs/simulation/flight/__init__.py)
+  -> internal:
+     - libs.simulation.flight.examples
+     - libs.simulation.flight.runtime
+     - libs.simulation.flight.spec
+
+libs.simulation.flight.examples  (libs/simulation/flight/examples.py)
+  -> internal:
+     - libs.simulation.aircraft.examples
+     - libs.simulation.fault.examples
+     - libs.simulation.flight.spec
+     - libs.simulation.phase.examples
+     - libs.simulation.phase.spec
+     - libs.simulation.scenarios
+
+libs.simulation.flight.runtime  (libs/simulation/flight/runtime.py)
+  -> internal:
+     - libs.behavior
+     - libs.simulation.aircraft.runtime
+     - libs.simulation.event_truth
+     - libs.simulation.fault.runtime
+     - libs.simulation.flight.spec
+     - libs.simulation.phase.runtime
+     - libs.simulation.tail.runtime
+
+libs.simulation.flight.spec  (libs/simulation/flight/spec.py)
+  -> internal:
+     - libs.simulation.aircraft.spec
+     - libs.simulation.fault.spec
+     - libs.simulation.phase.spec
+
+libs.simulation.full_run_report  (libs/simulation/full_run_report.py)
+  -> internal:
+     - libs.simulation.run_bundle
+     - libs.simulation.run_context
+
+libs.simulation.module  (libs/simulation/module/__init__.py)
+  -> internal:
+     - libs.simulation.module.examples
+     - libs.simulation.module.runtime
+     - libs.simulation.module.spec
+
+libs.simulation.module.examples  (libs/simulation/module/examples.py)
+  -> internal:
+     - libs.simulation.module.spec
+     - libs.simulation.parameter.spec
+     - libs.simulation.port.spec
+
+libs.simulation.module.runtime  (libs/simulation/module/runtime.py)
+  -> internal:
+     - libs.behavior
+     - libs.simulation.coupling.runtime
+     - libs.simulation.module.spec
+     - libs.simulation.parameter.runtime
+     - libs.simulation.port.runtime
+
+libs.simulation.module.spec  (libs/simulation/module/spec.py)
+  -> internal:
+     - libs.simulation.parameter.spec
+     - libs.simulation.port.spec
+
+libs.simulation.parameter  (libs/simulation/parameter/__init__.py)
+  -> internal:
+     - libs.simulation.parameter.examples
+     - libs.simulation.parameter.runtime
+     - libs.simulation.parameter.spec
+
+libs.simulation.parameter.examples  (libs/simulation/parameter/examples.py)
+  -> internal:
+     - libs.simulation.parameter.spec
+
+libs.simulation.parameter.runtime  (libs/simulation/parameter/runtime.py)
+  -> internal:
+     - libs.behavior
+     - libs.simulation.parameter.spec
+
+libs.simulation.parameter.spec  (libs/simulation/parameter/spec.py)
+  -> none
+
+libs.simulation.phase  (libs/simulation/phase/__init__.py)
+  -> internal:
+     - libs.simulation.phase.catalog
+     - libs.simulation.phase.examples
+     - libs.simulation.phase.runtime
+     - libs.simulation.phase.spec
+
+libs.simulation.phase.catalog  (libs/simulation/phase/catalog.py)
+  -> none
+
+libs.simulation.phase.examples  (libs/simulation/phase/examples.py)
+  -> internal:
+     - libs.simulation.phase.spec
+
+libs.simulation.phase.runtime  (libs/simulation/phase/runtime.py)
+  -> internal:
+     - libs.behavior
+     - libs.simulation.aircraft.runtime
+     - libs.simulation.phase.catalog
+     - libs.simulation.phase.spec
+
+libs.simulation.phase.spec  (libs/simulation/phase/spec.py)
+  -> none
+
+libs.simulation.port  (libs/simulation/port/__init__.py)
+  -> internal:
+     - libs.simulation.port.examples
+     - libs.simulation.port.runtime
+     - libs.simulation.port.spec
+
+libs.simulation.port.examples  (libs/simulation/port/examples.py)
+  -> internal:
+     - libs.simulation.port.spec
+
+libs.simulation.port.runtime  (libs/simulation/port/runtime.py)
+  -> internal:
+     - libs.simulation.port.spec
+
+libs.simulation.port.spec  (libs/simulation/port/spec.py)
+  -> none
+
+libs.simulation.replay_report  (libs/simulation/replay_report.py)
+  -> none
+
+libs.simulation.report_tables  (libs/simulation/report_tables.py)
+  -> internal:
+     - libs.io.delta
+     - libs.reporting
+
+libs.simulation.reporting  (libs/simulation/reporting.py)
+  -> internal:
+     - libs.anomaly.validator
+     - libs.events.validator
+     - libs.graph
+     - libs.io.schemas.profiling
+     - libs.phase
+     - libs.profiling.validator
+     - libs.scoring.validator
+     - libs.simulation.report_tables
+     - libs.simulation.run_context
+     - libs.testing.assertions
+
+libs.simulation.run_bundle  (libs/simulation/run_bundle.py)
+  -> none
+
+libs.simulation.run_cli  (libs/simulation/run_cli.py)
+  -> internal:
+     - libs.simulation.cli
+     - libs.simulation.run_context
+     - libs.simulation.runner
+
+libs.simulation.run_context  (libs/simulation/run_context.py)
+  -> internal:
+     - libs.io.delta
+     - libs.simulation
+     - libs.simulation.cli
+     - pipelines.plans
+
+libs.simulation.runner  (libs/simulation/runner.py)
+  -> internal:
+     - libs.io.delta
+     - libs.perf
+     - libs.simulation.cli
+     - libs.simulation.full_run_report
+     - libs.simulation.reporting
+     - libs.simulation.run_context
+     - libs.simulation.seed_bundle
+     - libs.simulation.validation_harness
+     - libs.tuning
+     - pipelines._pipeline_runner
+
+libs.simulation.scenarios  (libs/simulation/scenarios/__init__.py)
+  -> internal:
+     - libs.simulation.scenarios.power_pressurization
+
+libs.simulation.scenarios.power_pressurization  (libs/simulation/scenarios/power_pressurization.py)
+  -> internal:
+     - libs.simulation.aircraft.spec
+     - libs.simulation.coupling.examples
+     - libs.simulation.coupling.spec
+     - libs.simulation.fault.examples
+     - libs.simulation.flight.spec
+     - libs.simulation.module.spec
+     - libs.simulation.parameter.examples
+     - libs.simulation.phase.spec
+     - libs.simulation.port.examples
+     - libs.simulation.subsystem.examples
+     - libs.simulation.system.examples
+
+libs.simulation.seed_bundle  (libs/simulation/seed_bundle.py)
+  -> internal:
+     - libs.io.delta
+     - libs.io.pandas_spark
+     - libs.io.schemas
+     - libs.simulation
+     - libs.simulation.cli
+     - libs.simulation.run_context
+
+libs.simulation.subsystem  (libs/simulation/subsystem/__init__.py)
+  -> internal:
+     - libs.simulation.subsystem.examples
+     - libs.simulation.subsystem.runtime
+     - libs.simulation.subsystem.spec
+
+libs.simulation.subsystem.examples  (libs/simulation/subsystem/examples.py)
+  -> internal:
+     - libs.simulation.module.spec
+     - libs.simulation.subsystem.spec
+
+libs.simulation.subsystem.runtime  (libs/simulation/subsystem/runtime.py)
+  -> internal:
+     - libs.behavior
+     - libs.simulation.coupling.runtime
+     - libs.simulation.module.runtime
+     - libs.simulation.subsystem.spec
+
+libs.simulation.subsystem.spec  (libs/simulation/subsystem/spec.py)
+  -> internal:
+     - libs.simulation.module.spec
+
+libs.simulation.system  (libs/simulation/system/__init__.py)
+  -> internal:
+     - libs.simulation.system.examples
+     - libs.simulation.system.runtime
+     - libs.simulation.system.spec
+
+libs.simulation.system.examples  (libs/simulation/system/examples.py)
+  -> internal:
+     - libs.simulation.subsystem.spec
+     - libs.simulation.system.spec
+
+libs.simulation.system.runtime  (libs/simulation/system/runtime.py)
+  -> internal:
+     - libs.behavior
+     - libs.simulation.coupling.runtime
+     - libs.simulation.module.runtime
+     - libs.simulation.subsystem.runtime
+     - libs.simulation.system.spec
+
+libs.simulation.system.spec  (libs/simulation/system/spec.py)
+  -> internal:
+     - libs.simulation.subsystem.spec
+
+libs.simulation.tail  (libs/simulation/tail/__init__.py)
+  -> internal:
+     - libs.simulation.tail.examples
+     - libs.simulation.tail.runtime
+
+libs.simulation.tail.examples  (libs/simulation/tail/examples.py)
+  -> internal:
+     - libs.simulation.aircraft.examples
+     - libs.simulation.tail.runtime
+
+libs.simulation.tail.runtime  (libs/simulation/tail/runtime.py)
+  -> internal:
+     - libs.behavior
+     - libs.simulation.aircraft.runtime
+     - libs.simulation.aircraft.spec
+     - libs.simulation.flight.runtime
+     - libs.simulation.flight.spec
+
+libs.simulation.validation_harness  (libs/simulation/validation_harness.py)
+  -> internal:
+     - libs.simulation
+     - libs.simulation.phase.runtime
+     - libs.simulation.run_bundle
+     - libs.simulation.run_context
+
+libs.spark_sequence  (libs/spark_sequence/__init__.py)
+  -> internal:
+     - libs.spark_sequence.plan
+
+libs.spark_sequence.plan  (libs/spark_sequence/plan.py)
+  -> none
+
+libs.testing  (libs/testing/__init__.py)
+  -> internal:
+     - libs.testing.data
+     - libs.testing.seed
+
+libs.testing.assertions  (libs/testing/assertions.py)
+  -> none
+
+libs.testing.data  (libs/testing/data.py)
+  -> none
+
+libs.testing.evaluation  (libs/testing/evaluation.py)
+  -> none
+
+libs.testing.seed  (libs/testing/seed.py)
+  -> internal:
+     - libs.events
+     - libs.profiling
+     - libs.testing.data
+
+libs.tuning  (libs/tuning/__init__.py)
+  -> internal:
+     - libs.tuning.benchmark_execution
+     - libs.tuning.benchmark_invocation
+     - libs.tuning.benchmark_planning
+     - libs.tuning.benchmark_reporting
+     - libs.tuning.benchmark_runner
+     - libs.tuning.benchmark_runtime
+     - libs.tuning.benchmark_search
+     - libs.tuning.benchmark_variants
+     - libs.tuning.objectives
+     - libs.tuning.presets
+     - libs.tuning.reporting
+     - libs.tuning.validation_panels
+
+libs.tuning.benchmark_execution  (libs/tuning/benchmark_execution.py)
+  -> internal:
+     - libs.simulation.replay_report
+
+libs.tuning.benchmark_invocation  (libs/tuning/benchmark_invocation.py)
+  -> internal:
+     - libs.tuning.benchmark_search
+
+libs.tuning.benchmark_planning  (libs/tuning/benchmark_planning.py)
+  -> internal:
+     - libs.simulation.replay_report
+     - libs.tuning.benchmark_variants
+     - libs.tuning.objectives
+     - libs.tuning.presets
+
+libs.tuning.benchmark_reporting  (libs/tuning/benchmark_reporting.py)
+  -> internal:
+     - libs.tuning.validation_panels
+
+libs.tuning.benchmark_runner  (libs/tuning/benchmark_runner.py)
+  -> internal:
+     - libs.perf
+     - libs.tuning.benchmark_execution
+     - libs.tuning.benchmark_reporting
+     - libs.tuning.benchmark_runtime
+     - libs.tuning.benchmark_variants
+
+libs.tuning.benchmark_runtime  (libs/tuning/benchmark_runtime.py)
+  -> internal:
+     - libs.tuning.benchmark_reporting
+
+libs.tuning.benchmark_search  (libs/tuning/benchmark_search.py)
+  -> internal:
+     - libs.tuning.benchmark_variants
+
+libs.tuning.benchmark_variants  (libs/tuning/benchmark_variants.py)
+  -> internal:
+     - libs.tuning.presets
+
+libs.tuning.objectives  (libs/tuning/objectives.py)
+  -> none
+
+libs.tuning.presets  (libs/tuning/presets.py)
+  -> none
+
+libs.tuning.reporting  (libs/tuning/reporting.py)
+  -> internal:
+     - libs.tuning.objectives
+
+libs.tuning.validation_panels  (libs/tuning/validation_panels.py)
+  -> none
+
+libs.windows  (libs/windows/__init__.py)
+  -> internal:
+     - libs.windows.buffer
+     - libs.windows.coverage
+     - libs.windows.features
+     - libs.windows.pipeline
+     - libs.windows.policy_profile
+     - libs.windows.tables
+     - libs.windows.window
+
+libs.windows.buffer  (libs/windows/buffer.py)
+  -> internal:
+     - libs.perf.annotations
+
+libs.windows.coverage  (libs/windows/coverage.py)
+  -> none
+
+libs.windows.features  (libs/windows/features.py)
+  -> internal:
+     - libs.common
+     - libs.perf.annotations
+     - libs.perf.logger
+
+libs.windows.pipeline  (libs/windows/pipeline.py)
+  -> internal:
+     - libs.common
+     - libs.perf.annotations
+     - libs.spark_sequence
+     - libs.windows.buffer
+     - libs.windows.window
+
+libs.windows.policy_profile  (libs/windows/policy_profile.py)
+  -> internal:
+     - libs.io.schemas
+     - libs.perf
+     - libs.windows.tables
+     - libs.windows.window
+
+libs.windows.tables  (libs/windows/tables.py)
+  -> internal:
+     - libs.io.schemas.windows
+     - libs.pyspark
+     - libs.windows.features
+     - libs.windows.pipeline
+     - libs.windows.policy_profile
+
+libs.windows.window  (libs/windows/window.py)
+  -> internal:
+     - libs.io.contracts
+     - libs.windows.buffer
+
+pipelines.00_ingest_raw  (pipelines/00_ingest_raw.py)
+  -> internal:
+     - libs.io.delta
+     - libs.io.transforms
+     - libs.perf
+     - pipelines.common
+
+pipelines.10_parameter_profiles_fit  (pipelines/10_parameter_profiles_fit.py)
+  -> internal:
+     - libs.io.delta
+     - libs.perf
+     - libs.profiling
+     - pipelines.common
+
+pipelines.12_behavior_profiles_fit  (pipelines/12_behavior_profiles_fit.py)
+  -> internal:
+     - libs.io.delta
+     - libs.perf
+     - libs.profiling
+     - pipelines.common
+
+pipelines.15_event_profiles_fit  (pipelines/15_event_profiles_fit.py)
+  -> internal:
+     - libs.events
+     - libs.io.delta
+     - libs.perf
+     - pipelines.common
+
+pipelines.20_events_extract  (pipelines/20_events_extract.py)
+  -> internal:
+     - libs.events
+     - libs.events.categorical
+     - libs.events.continuous
+     - libs.io.delta
+     - libs.perf
+     - pipelines.common
+
+pipelines.25_window_policy_profile  (pipelines/25_window_policy_profile.py)
+  -> internal:
+     - libs.io.delta
+     - libs.perf
+     - libs.windows
+     - libs.windows.window
+     - pipelines.common
+
+pipelines.30_windows_adaptive  (pipelines/30_windows_adaptive.py)
+  -> internal:
+     - libs.io.delta
+     - libs.perf
+     - libs.windows
+     - libs.windows.window
+     - pipelines.common
+
+pipelines.40_backbone_fit  (pipelines/40_backbone_fit.py)
+  -> internal:
+     - libs.backbone
+     - libs.io.delta
+     - libs.perf
+     - libs.windows
+     - pipelines.common
+
+pipelines.50_build_graph  (pipelines/50_build_graph.py)
+  -> internal:
+     - libs.graph
+     - libs.graph.evaluation
+     - libs.graph.hierarchy_artifacts
+     - libs.io.delta
+     - libs.perf
+     - pipelines.common
+
+pipelines.60_fit_hierarchy  (pipelines/60_fit_hierarchy.py)
+  -> internal:
+     - libs.graph
+     - libs.io.delta
+     - libs.perf
+     - pipelines.common
+
+pipelines.70_phase_fit  (pipelines/70_phase_fit.py)
+  -> internal:
+     - libs.io.delta
+     - libs.perf
+     - libs.phase
+     - pipelines.common
+
+pipelines.72_phase_label_centroids  (pipelines/72_phase_label_centroids.py)
+  -> internal:
+     - libs.io.delta
+     - libs.perf
+     - libs.phase
+     - pipelines.common
+
+pipelines.80_window_scores_raw  (pipelines/80_window_scores_raw.py)
+  -> internal:
+     - libs.graph.tables
+     - libs.io.delta
+     - libs.perf
+     - libs.phase
+     - libs.scoring
+     - pipelines.common
+
+pipelines.85_window_scores_calibrate  (pipelines/85_window_scores_calibrate.py)
+  -> internal:
+     - libs.io.delta
+     - libs.perf
+     - libs.scoring
+     - pipelines.common
+
+pipelines.90_anomaly_attribution  (pipelines/90_anomaly_attribution.py)
+  -> internal:
+     - libs.anomaly
+     - libs.io.delta
+     - libs.perf
+     - pipelines.common
+
+pipelines.95_emit_explorer_bundle  (pipelines/95_emit_explorer_bundle.py)
+  -> internal:
+     - libs.io.delta
+     - libs.perf
+     - libs.perf.memory
+     - libs.plotting.explorer_bundle
+     - pipelines.common
+
+pipelines.97_run_fitting_pipeline  (pipelines/97_run_fitting_pipeline.py)
+  -> internal:
+     - libs.perf
+     - pipelines._pipeline_runner
+
+pipelines.98_run_inference_pipeline  (pipelines/98_run_inference_pipeline.py)
+  -> internal:
+     - libs.perf
+     - pipelines._pipeline_runner
+
+pipelines.99_run_full_pipeline  (pipelines/99_run_full_pipeline.py)
+  -> internal:
+     - libs.perf
+     - pipelines._pipeline_runner
+
+pipelines  (pipelines/__init__.py)
+  -> none
+
+pipelines._pipeline_runner  (pipelines/_pipeline_runner.py)
+  -> internal:
+     - libs.perf
+     - pipelines.plans
+
+pipelines.common  (pipelines/common.py)
+  -> internal:
+     - libs.config
+
+pipelines.plans  (pipelines/plans.py)
+  -> none
+
+scripts  (scripts/__init__.py)
+  -> none
+
+scripts.calibrate_continuous_events  (scripts/calibrate_continuous_events.py)
+  -> internal:
+     - libs.events
+     - libs.io.delta
+     - pipelines.common
+
+scripts.evaluate_sim_event_labels  (scripts/evaluate_sim_event_labels.py)
+  -> internal:
+     - libs.common
+     - libs.events
+     - libs.testing.evaluation
+
+scripts.generate_sample_data  (scripts/generate_sample_data.py)
+  -> internal:
+     - libs.io.delta
+     - libs.testing.seed
+
+scripts.profile_pipeline_performance  (scripts/profile_pipeline_performance.py)
+  -> internal:
+     - libs.perf
+     - libs.simulation.cli
+     - libs.tuning
+
+scripts.report_sim_replay  (scripts/report_sim_replay.py)
+  -> internal:
+     - libs.simulation.replay_report
+
+scripts.run_partition_manifest_jobs  (scripts/run_partition_manifest_jobs.py)
+  -> internal:
+     - libs.io.delta
+
+scripts.run_sim_pipeline  (scripts/run_sim_pipeline.py)
+  -> internal:
+     - libs.simulation.run_cli
+
+scripts.smoke_test_pipeline  (scripts/smoke_test_pipeline.py)
+  -> internal:
+     - libs.graph
+     - libs.io.delta
+     - libs.io.schemas
+     - libs.phase
+     - libs.testing.seed
+
+scripts.sweep_smoke_graph_hierarchy  (scripts/sweep_smoke_graph_hierarchy.py)
+  -> none
+
+scripts.window_diagnostics  (scripts/window_diagnostics.py)
+  -> internal:
+     - libs.io.delta
+
+tools  (tools/__init__.py)
+  -> none
+
+tools.architecture_workflow  (tools/architecture_workflow.py)
+  -> internal:
+     - libs.architecture.ai_review
+     - libs.architecture.extract
+     - libs.architecture.render
+     - tools.module_deps
+     - tools.repo_schematic
+
+tools.module_deps  (tools/module_deps.py)
+  -> none
+
+tools.repo_schematic  (tools/repo_schematic.py)
+  -> none

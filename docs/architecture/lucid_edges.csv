@@ -1,0 +1,96 @@
+source_id,destination_id,description,technology,import_edge_count,tags
+core_libraries,pipeline_runtime,Uses,Python imports,2,internal
+pipeline_runtime,core_libraries,Uses,Python imports,63,internal
+simulation_clis,core_libraries,Uses,Python imports,16,internal
+simulation_clis,pipeline_runtime,Uses,Python imports,1,internal
+architecture_tooling.workflow,architecture_tooling.repo_maps,Uses,Python imports,4,"internal,component"
+core_libraries.anomaly,core_libraries.io,Uses,Python imports,1,"internal,component"
+core_libraries.anomaly,core_libraries.perf,Uses,Python imports,2,"internal,component"
+core_libraries.anomaly,core_libraries.pyspark,Uses,Python imports,2,"internal,component"
+core_libraries.anomaly,core_libraries.scoring,Uses,Python imports,1,"internal,component"
+core_libraries.backbone,core_libraries.io,Uses,Python imports,3,"internal,component"
+core_libraries.backbone,core_libraries.pyspark,Uses,Python imports,1,"internal,component"
+core_libraries.events,core_libraries.common,Uses,Python imports,4,"internal,component"
+core_libraries.events,core_libraries.io,Uses,Python imports,3,"internal,component"
+core_libraries.events,core_libraries.perf,Uses,Python imports,2,"internal,component"
+core_libraries.events,core_libraries.profiling,Uses,Python imports,1,"internal,component"
+core_libraries.events,core_libraries.pyspark,Uses,Python imports,3,"internal,component"
+core_libraries.events,core_libraries.spark_sequence,Uses,Python imports,3,"internal,component"
+core_libraries.events,core_libraries.windows,Uses,Python imports,1,"internal,component"
+core_libraries.graph,core_libraries.io,Uses,Python imports,6,"internal,component"
+core_libraries.graph,core_libraries.perf,Uses,Python imports,2,"internal,component"
+core_libraries.graph,core_libraries.pyspark,Uses,Python imports,1,"internal,component"
+core_libraries.io,core_libraries.perf,Uses,Python imports,1,"internal,component"
+core_libraries.phase,core_libraries.backbone,Uses,Python imports,1,"internal,component"
+core_libraries.phase,core_libraries.common,Uses,Python imports,5,"internal,component"
+core_libraries.phase,core_libraries.io,Uses,Python imports,1,"internal,component"
+core_libraries.phase,core_libraries.perf,Uses,Python imports,4,"internal,component"
+core_libraries.phase,core_libraries.pyspark,Uses,Python imports,2,"internal,component"
+core_libraries.phase,core_libraries.spark_sequence,Uses,Python imports,3,"internal,component"
+core_libraries.profiling,core_libraries.behavior,Uses,Python imports,1,"internal,component"
+core_libraries.profiling,core_libraries.common,Uses,Python imports,2,"internal,component"
+core_libraries.profiling,core_libraries.io,Uses,Python imports,3,"internal,component"
+core_libraries.profiling,core_libraries.perf,Uses,Python imports,1,"internal,component"
+core_libraries.profiling,core_libraries.pyspark,Uses,Python imports,1,"internal,component"
+core_libraries.pyspark,core_libraries.io,Uses,Python imports,1,"internal,component"
+core_libraries.scoring,core_libraries.graph,Uses,Python imports,1,"internal,component"
+core_libraries.scoring,core_libraries.io,Uses,Python imports,4,"internal,component"
+core_libraries.scoring,core_libraries.phase,Uses,Python imports,1,"internal,component"
+core_libraries.scoring,core_libraries.pyspark,Uses,Python imports,1,"internal,component"
+core_libraries.simulation,core_libraries.anomaly,Uses,Python imports,1,"internal,component"
+core_libraries.simulation,core_libraries.behavior,Uses,Python imports,8,"internal,component"
+core_libraries.simulation,core_libraries.events,Uses,Python imports,1,"internal,component"
+core_libraries.simulation,core_libraries.graph,Uses,Python imports,1,"internal,component"
+core_libraries.simulation,core_libraries.io,Uses,Python imports,7,"internal,component"
+core_libraries.simulation,core_libraries.perf,Uses,Python imports,1,"internal,component"
+core_libraries.simulation,core_libraries.phase,Uses,Python imports,1,"internal,component"
+core_libraries.simulation,core_libraries.profiling,Uses,Python imports,1,"internal,component"
+core_libraries.simulation,core_libraries.reporting,Uses,Python imports,1,"internal,component"
+core_libraries.simulation,core_libraries.scoring,Uses,Python imports,1,"internal,component"
+core_libraries.simulation,core_libraries.tuning,Uses,Python imports,1,"internal,component"
+core_libraries.simulation,pipeline_runtime.grouped_runners,Uses,Python imports,1,"internal,component"
+core_libraries.tuning,core_libraries.perf,Uses,Python imports,1,"internal,component"
+core_libraries.tuning,core_libraries.simulation,Uses,Python imports,2,"internal,component"
+core_libraries.windows,core_libraries.common,Uses,Python imports,2,"internal,component"
+core_libraries.windows,core_libraries.io,Uses,Python imports,3,"internal,component"
+core_libraries.windows,core_libraries.perf,Uses,Python imports,5,"internal,component"
+core_libraries.windows,core_libraries.pyspark,Uses,Python imports,1,"internal,component"
+core_libraries.windows,core_libraries.spark_sequence,Uses,Python imports,1,"internal,component"
+pipeline_runtime.fitting_stages,core_libraries.backbone,Uses,Python imports,1,"internal,component"
+pipeline_runtime.fitting_stages,core_libraries.events,Uses,Python imports,4,"internal,component"
+pipeline_runtime.fitting_stages,core_libraries.graph,Uses,Python imports,4,"internal,component"
+pipeline_runtime.fitting_stages,core_libraries.io,Uses,Python imports,11,"internal,component"
+pipeline_runtime.fitting_stages,core_libraries.perf,Uses,Python imports,10,"internal,component"
+pipeline_runtime.fitting_stages,core_libraries.profiling,Uses,Python imports,2,"internal,component"
+pipeline_runtime.fitting_stages,core_libraries.windows,Uses,Python imports,5,"internal,component"
+pipeline_runtime.fitting_stages,pipeline_runtime.pipeline_common,Uses,Python imports,10,"internal,component"
+pipeline_runtime.grouped_runners,core_libraries.perf,Uses,Python imports,4,"internal,component"
+pipeline_runtime.inference_stages,core_libraries.anomaly,Uses,Python imports,1,"internal,component"
+pipeline_runtime.inference_stages,core_libraries.graph,Uses,Python imports,1,"internal,component"
+pipeline_runtime.inference_stages,core_libraries.io,Uses,Python imports,6,"internal,component"
+pipeline_runtime.inference_stages,core_libraries.perf,Uses,Python imports,7,"internal,component"
+pipeline_runtime.inference_stages,core_libraries.phase,Uses,Python imports,3,"internal,component"
+pipeline_runtime.inference_stages,core_libraries.scoring,Uses,Python imports,2,"internal,component"
+pipeline_runtime.inference_stages,pipeline_runtime.pipeline_common,Uses,Python imports,6,"internal,component"
+pipeline_runtime.pipeline_common,core_libraries.config,Uses,Python imports,1,"internal,component"
+simulation_clis.performance_and_replay,core_libraries.graph,Uses,Python imports,1,"internal,component"
+simulation_clis.performance_and_replay,core_libraries.io,Uses,Python imports,2,"internal,component"
+simulation_clis.performance_and_replay,core_libraries.perf,Uses,Python imports,1,"internal,component"
+simulation_clis.performance_and_replay,core_libraries.phase,Uses,Python imports,1,"internal,component"
+simulation_clis.performance_and_replay,core_libraries.simulation,Uses,Python imports,2,"internal,component"
+simulation_clis.performance_and_replay,core_libraries.tuning,Uses,Python imports,1,"internal,component"
+simulation_clis.simulation_runner,core_libraries.simulation,Uses,Python imports,1,"internal,component"
+engineer,pipeline_runtime,Runs grouped fitting and inference workflows.,,0,
+engineer,simulation_clis,"Runs simulation, replay, and smoke workflows.",,0,
+engineer,architecture_tooling,Generates and reviews architecture artifacts.,,0,
+pipeline_runtime,raw_telemetry_inputs,Consumes canonical telemetry inputs.,,0,
+pipeline_runtime,persisted_artifacts,Reads and writes persisted stage artifacts and reports.,,0,
+pipeline_runtime,mlflow_tracking,Emits metrics and run summaries when configured.,,0,
+simulation_clis,pipeline_runtime,Invokes persisted stages as part of simulation and replay workflows.,,0,
+simulation_clis,persisted_artifacts,"Seeds run bundles, replay inputs, and local diagnostics.",,0,
+simulation_clis,raw_telemetry_inputs,Produces or prepares telemetry-shaped inputs for the active pipeline.,,0,
+pipeline_runtime,core_libraries,Delegates domain-stage logic to reusable library packages.,,0,
+simulation_clis,core_libraries,"Uses reusable simulation, replay, validation, and reporting libraries.",,0,
+architecture_tooling,pipeline_runtime,Maps persisted stage entrypoints and grouped runner structure.,,0,
+architecture_tooling,core_libraries,"Maps reusable library boundaries, dependencies, and LOC skew.",,0,
+architecture_tooling,persisted_artifacts,"Writes version-controlled DSL, reports, and export-friendly architecture assets.",,0,

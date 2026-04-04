@@ -1,0 +1,254 @@
+workspace:
+  name: S3NTINEL Architecture
+  description: Architecture view of the active pipeline, simulation, core library, and architecture-tooling surfaces.
+
+focus_paths:
+  - libs/
+  - pipelines/
+  - scripts/
+  - tools/
+
+doc_paths:
+  - README.md
+  - docs/v2_architecture.md
+  - docs/simulation_codepath_wire_diagram.md
+  - docs/simulation_architecture.md
+  - pipelines/README.md
+  - scripts/README.md
+  - libs/README.md
+  - libs/profiling/README.md
+  - libs/windows/README.md
+  - libs/graph/README.md
+  - libs/phase/README.md
+  - libs/scoring/README.md
+  - libs/anomaly/README.md
+  - libs/simulation/README.md
+  - libs/io/README.md
+  - libs/perf/README.md
+
+people:
+  - id: engineer
+    name: Engineer
+    description: Runs simulation, fitting, inference, and architecture-generation workflows.
+
+external_systems:
+  - id: raw_telemetry_inputs
+    name: Raw Telemetry Inputs
+    description: Real or simulated telemetry inputs consumed by the persisted pipeline.
+  - id: mlflow_tracking
+    name: MLflow Tracking
+    description: Optional experiment tracking and metrics sink used by pipeline and performance workflows.
+
+data_stores:
+  - id: persisted_artifacts
+    name: Persisted Artifacts
+    description: Parquet or Delta tables, reports, manifests, explorer bundles, and generated architecture docs.
+
+containers:
+  - id: pipeline_runtime
+    name: Pipeline Runtime
+    description: Persisted stage entrypoints and grouped runners for the active fitting and inference path.
+    technology: Python CLI + PySpark
+    selectors:
+      module_prefixes:
+        - pipelines
+    components:
+      - id: grouped_runners
+        name: Grouped Pipeline Runners
+        description: Coordinates grouped fitting, inference, and end-to-end pipeline execution.
+        technology: Python CLI
+        selectors:
+          module_names:
+            - pipelines.97_run_fitting_pipeline
+            - pipelines.98_run_inference_pipeline
+            - pipelines.99_run_full_pipeline
+            - pipelines._pipeline_runner
+      - id: fitting_stages
+        name: Fitting Stages
+        description: Entry points for ingest, profiling, events, windows, backbone, graph, and hierarchy fitting.
+        technology: Python CLI + PySpark
+        selectors:
+          module_names:
+            - pipelines.00_ingest_raw
+            - pipelines.10_parameter_profiles_fit
+            - pipelines.12_behavior_profiles_fit
+            - pipelines.15_event_profiles_fit
+            - pipelines.20_events_extract
+            - pipelines.25_window_policy_profile
+            - pipelines.30_windows_adaptive
+            - pipelines.40_backbone_fit
+            - pipelines.50_build_graph
+            - pipelines.60_fit_hierarchy
+      - id: inference_stages
+        name: Inference Stages
+        description: Entry points for phase fitting, scoring, calibration, attribution, and explorer output.
+        technology: Python CLI + PySpark
+        selectors:
+          module_names:
+            - pipelines.70_phase_fit
+            - pipelines.72_phase_label_centroids
+            - pipelines.80_window_scores_raw
+            - pipelines.85_window_scores_calibrate
+            - pipelines.90_anomaly_attribution
+            - pipelines.95_emit_explorer_bundle
+      - id: pipeline_common
+        name: Pipeline Shared Runtime
+        description: Shared pipeline context and configuration assembly used by persisted stage entrypoints.
+        technology: Python
+        selectors:
+          module_names:
+            - pipelines
+            - pipelines.common
+
+  - id: simulation_clis
+    name: Simulation And Utility CLIs
+    description: Canonical simulation runner plus replay, profiling, smoke, and helper scripts.
+    technology: Python CLI
+    selectors:
+      path_prefixes:
+        - scripts/
+    components:
+      - id: simulation_runner
+        name: Simulation Runner
+        description: Generates simulation telemetry bundles and runs the persisted pipeline over them.
+        technology: Python CLI
+        selectors:
+          module_names:
+            - scripts.run_sim_pipeline
+      - id: performance_and_replay
+        name: Performance And Replay Utilities
+        description: Profiles replayable runs, reports replay boundaries, and runs smoke workflows.
+        technology: Python CLI
+        selectors:
+          module_names:
+            - scripts.profile_pipeline_performance
+            - scripts.report_sim_replay
+            - scripts.smoke_test_pipeline
+
+  - id: core_libraries
+    name: Core Libraries
+    description: Reusable domain and infrastructure libraries behind the active runtime path.
+    technology: Python + PySpark
+    selectors:
+      module_prefixes:
+        - libs
+      exclude_module_prefixes:
+        - libs.architecture
+        - libs.testing
+    auto_components:
+      group_by: second_segment
+      prefix: libs.
+      include_groups:
+        - config
+        - common
+        - profiling
+        - events
+        - windows
+        - backbone
+        - graph
+        - phase
+        - scoring
+        - anomaly
+        - simulation
+        - io
+        - perf
+        - behavior
+        - spark_sequence
+        - pyspark
+        - tuning
+        - reporting
+
+  - id: architecture_tooling
+    name: Architecture Tooling
+    description: Repo map extraction, architecture normalization, C4 rendering, and AI review packaging.
+    technology: Python CLI
+    selectors:
+      module_prefixes:
+        - libs.architecture
+      path_prefixes:
+        - tools/
+    components:
+      - id: repo_maps
+        name: Repo Mapping Tools
+        description: Existing AST and import-graph tooling used as the source layer for architecture extraction.
+        technology: Python CLI
+        selectors:
+          module_names:
+            - tools.module_deps
+            - tools.repo_schematic
+      - id: workflow
+        name: Architecture Workflow
+        description: Deterministic extract, render, check, and AI draft orchestration for architecture artifacts.
+        technology: Python CLI
+        selectors:
+          module_prefixes:
+            - libs.architecture
+          module_names:
+            - tools.architecture_workflow
+
+manual_relationships:
+  - source: engineer
+    destination: pipeline_runtime
+    description: Runs grouped fitting and inference workflows.
+  - source: engineer
+    destination: simulation_clis
+    description: Runs simulation, replay, and smoke workflows.
+  - source: engineer
+    destination: architecture_tooling
+    description: Generates and reviews architecture artifacts.
+  - source: pipeline_runtime
+    destination: raw_telemetry_inputs
+    description: Consumes canonical telemetry inputs.
+  - source: pipeline_runtime
+    destination: persisted_artifacts
+    description: Reads and writes persisted stage artifacts and reports.
+  - source: pipeline_runtime
+    destination: mlflow_tracking
+    description: Emits metrics and run summaries when configured.
+  - source: simulation_clis
+    destination: pipeline_runtime
+    description: Invokes persisted stages as part of simulation and replay workflows.
+  - source: simulation_clis
+    destination: persisted_artifacts
+    description: Seeds run bundles, replay inputs, and local diagnostics.
+  - source: simulation_clis
+    destination: raw_telemetry_inputs
+    description: Produces or prepares telemetry-shaped inputs for the active pipeline.
+  - source: pipeline_runtime
+    destination: core_libraries
+    description: Delegates domain-stage logic to reusable library packages.
+  - source: simulation_clis
+    destination: core_libraries
+    description: Uses reusable simulation, replay, validation, and reporting libraries.
+  - source: architecture_tooling
+    destination: pipeline_runtime
+    description: Maps persisted stage entrypoints and grouped runner structure.
+  - source: architecture_tooling
+    destination: core_libraries
+    description: Maps reusable library boundaries, dependencies, and LOC skew.
+  - source: architecture_tooling
+    destination: persisted_artifacts
+    description: Writes version-controlled DSL, reports, and export-friendly architecture assets.
+
+views:
+  pipeline_component_include:
+    - pipeline_runtime.grouped_runners
+    - pipeline_runtime.fitting_stages
+    - pipeline_runtime.inference_stages
+    - pipeline_runtime.pipeline_common
+  core_library_component_include:
+    - core_libraries.config
+    - core_libraries.common
+    - core_libraries.profiling
+    - core_libraries.events
+    - core_libraries.windows
+    - core_libraries.backbone
+    - core_libraries.graph
+    - core_libraries.phase
+    - core_libraries.scoring
+    - core_libraries.anomaly
+    - core_libraries.simulation
+    - core_libraries.io
+    - core_libraries.perf
+    - core_libraries.behavior
+

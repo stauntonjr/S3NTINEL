@@ -23,6 +23,7 @@ Recommended orientation order:
 5. the deeper conceptual notes in this directory
 
 Useful starting points:
+- [architecture/README.md](/home/jrs/code/S3NTINEL/sentinel/docs/architecture/README.md)
 - [simulation_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/simulation_architecture.md)
 - [behavior_simulation_improvements.md](/home/jrs/code/S3NTINEL/sentinel/docs/behavior_simulation_improvements.md)
 - [fitting_workflow.md](/home/jrs/code/S3NTINEL/sentinel/docs/fitting_workflow.md)

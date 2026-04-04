@@ -74,6 +74,7 @@ Run with:
   Notebook workflow and kernel registration guidance live in [notebooks/README.md](/home/jrs/code/S3NTINEL/sentinel/notebooks/README.md).
 - `scripts/`: local-to-AVD handoff helpers (bundle/patch export-import).
 - `docs/v2_architecture.md`: architecture and contract source of truth.
+- `docs/architecture/`: generated C4 workspace, repo maps, LOC skew reports, and architecture-tooling annotations.
 - `docs/glossary.md`: active code/data taxonomy and naming conventions.
 - `docs/theory_foundations.md`: theory-to-code map for active mathematical/statistical choices.
 - `docs/avionics_simulation_guidelines.md`: domain guidance for realistic avionics simulation inputs and couplings.

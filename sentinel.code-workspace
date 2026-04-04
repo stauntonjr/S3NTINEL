@@ -1,6 +1,7 @@
 {
 	"folders": [
 		{
+			"name": "sentinel",
 			"path": "."
 		}
 	],
@@ -8,6 +9,9 @@
 		"python.defaultInterpreterPath": "/home/jrs/anaconda3/envs/sentinel-spark35/bin/python",
 		"python.terminal.activateEnvironment": true,
 		"python.condaPath": "/home/jrs/anaconda3/bin/conda",
+		"c4.languageserver.logs.enabled": true,
+		"c4.diagram.renderer": "plantuml",
+		"c4.diagram.plantuml.enabled": true,
 		"terminal.integrated.env.linux": {
 			"VIRTUAL_ENV": "",
 			"PATH": "/home/jrs/anaconda3/envs/sentinel-spark35/bin:${env:PATH}"

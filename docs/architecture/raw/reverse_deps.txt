@@ -1,0 +1,996 @@
+libs.anomaly
+  <- pipelines.90_anomaly_attribution
+
+libs.anomaly.frames
+  <- libs.anomaly
+  <- libs.anomaly.pipeline
+
+libs.anomaly.pipeline
+  <- libs.anomaly
+
+libs.anomaly.tables
+  <- libs.anomaly
+  <- libs.anomaly.pipeline
+
+libs.anomaly.validator
+  <- libs.anomaly
+  <- libs.simulation.reporting
+
+libs.architecture.ai_review
+  <- libs.architecture
+  <- tools.architecture_workflow
+
+libs.architecture.annotations
+  <- libs.architecture
+  <- libs.architecture.extract
+
+libs.architecture.extract
+  <- libs.architecture
+  <- tools.architecture_workflow
+
+libs.architecture.model
+  <- libs.architecture.ai_review
+  <- libs.architecture.annotations
+  <- libs.architecture.extract
+  <- libs.architecture.render
+
+libs.architecture.render
+  <- libs.architecture
+  <- tools.architecture_workflow
+
+libs.backbone
+  <- libs.phase.feature_config
+  <- pipelines.40_backbone_fit
+
+libs.backbone.artifacts
+  <- libs.backbone
+
+libs.backbone.energy
+  <- libs.backbone
+  <- libs.backbone.artifacts
+
+libs.backbone.fit
+  <- libs.backbone
+  <- libs.backbone.artifacts
+
+libs.backbone.tables
+  <- libs.backbone
+
+libs.behavior
+  <- libs.simulation.aircraft.runtime
+  <- libs.simulation.flight.runtime
+  <- libs.simulation.module.runtime
+  <- libs.simulation.parameter.runtime
+  <- libs.simulation.phase.runtime
+  <- libs.simulation.subsystem.runtime
+  <- libs.simulation.system.runtime
+  <- libs.simulation.tail.runtime
+
+libs.behavior.accumulative
+  <- libs.behavior
+  <- libs.behavior.registry
+
+libs.behavior.base
+  <- libs.behavior
+  <- libs.behavior.accumulative
+  <- libs.behavior.discrete_state
+  <- libs.behavior.inertial
+  <- libs.behavior.registry
+  <- libs.behavior.regulated
+  <- libs.behavior.tick
+  <- libs.behavior.tracking
+  <- libs.behavior.validation
+
+libs.behavior.discrete_state
+  <- libs.behavior
+  <- libs.behavior.registry
+
+libs.behavior.inertial
+  <- libs.behavior
+  <- libs.behavior.registry
+
+libs.behavior.primitives
+  <- libs.behavior
+  <- libs.behavior.accumulative
+  <- libs.behavior.discrete_state
+  <- libs.behavior.inertial
+  <- libs.behavior.regulated
+  <- libs.behavior.tracking
+  <- libs.profiling.profiles
+
+libs.behavior.registry
+  <- libs.behavior
+
+libs.behavior.regulated
+  <- libs.behavior
+  <- libs.behavior.registry
+
+libs.behavior.tick
+  <- libs.behavior
+  <- libs.behavior.validation
+
+libs.behavior.tracking
+  <- libs.behavior
+  <- libs.behavior.registry
+
+libs.behavior.utils
+  <- libs.behavior
+  <- libs.behavior.accumulative
+  <- libs.behavior.discrete_state
+  <- libs.behavior.inertial
+  <- libs.behavior.primitives
+  <- libs.behavior.regulated
+  <- libs.behavior.tracking
+
+libs.behavior.validation
+  <- libs.behavior
+  <- libs.behavior.accumulative
+  <- libs.behavior.discrete_state
+  <- libs.behavior.inertial
+  <- libs.behavior.regulated
+  <- libs.behavior.tracking
+
+libs.common
+  <- libs.events.categorical
+  <- libs.events.continuous
+  <- libs.events.pipeline
+  <- libs.phase.frames
+  <- libs.phase.tables
+  <- libs.phase.utils
+  <- libs.profiling.profiles
+  <- libs.profiling.validator
+  <- libs.windows.features
+  <- libs.windows.pipeline
+  <- scripts.evaluate_sim_event_labels
+
+libs.common.event_types
+  <- libs.events.types
+  <- libs.phase.frames
+  <- libs.phase.selectors
+
+libs.common.parameter_datatypes
+  <- libs.common
+
+libs.common.spark_exprs
+  <- libs.common
+
+libs.config
+  <- pipelines.common
+
+libs.config.pipeline
+  <- libs.config
+
+libs.events
+  <- libs.testing.seed
+  <- pipelines.15_event_profiles_fit
+  <- pipelines.20_events_extract
+  <- scripts.calibrate_continuous_events
+  <- scripts.evaluate_sim_event_labels
+
+libs.events.calibration
+  <- libs.events
+
+libs.events.categorical
+  <- libs.events.pipeline
+  <- pipelines.20_events_extract
+
+libs.events.continuous
+  <- libs.events.calibration
+  <- libs.events.pipeline
+  <- pipelines.20_events_extract
+
+libs.events.pipeline
+  <- libs.events
+  <- libs.events.calibration
+
+libs.events.profiling
+  <- libs.events
+
+libs.events.tables
+  <- libs.events
+  <- libs.events.pipeline
+
+libs.events.types
+  <- libs.events
+  <- libs.events.categorical
+  <- libs.events.continuous
+
+libs.events.validator
+  <- libs.events
+  <- libs.simulation.reporting
+
+libs.graph
+  <- libs.simulation.reporting
+  <- pipelines.50_build_graph
+  <- pipelines.60_fit_hierarchy
+  <- scripts.smoke_test_pipeline
+
+libs.graph.data
+  <- libs.graph.pipeline
+
+libs.graph.evaluation
+  <- pipelines.50_build_graph
+
+libs.graph.event
+  <- libs.graph
+  <- libs.graph.lag
+  <- libs.graph.pipeline
+  <- libs.graph.transition
+
+libs.graph.fused
+  <- libs.graph
+  <- libs.graph.evaluation
+  <- libs.graph.pipeline
+
+libs.graph.hierarchy
+  <- libs.graph.hierarchy_artifacts
+
+libs.graph.hierarchy_artifacts
+  <- libs.graph
+  <- libs.graph.evaluation
+  <- libs.graph.pipeline
+  <- pipelines.50_build_graph
+
+libs.graph.lag
+  <- libs.graph
+  <- libs.graph.evaluation
+  <- libs.graph.pipeline
+  <- libs.graph.tables
+
+libs.graph.pipeline
+  <- libs.graph
+  <- libs.graph.evaluation
+  <- libs.graph.tables
+
+libs.graph.precision
+  <- libs.graph
+  <- libs.graph.pipeline
+
+libs.graph.tables
+  <- libs.graph
+  <- libs.graph.evaluation
+  <- libs.scoring.tables
+  <- pipelines.80_window_scores_raw
+
+libs.graph.transition
+  <- libs.graph
+  <- libs.graph.pipeline
+
+libs.graph.validator
+  <- libs.graph
+  <- libs.graph.evaluation
+
+libs.io.contracts
+  <- libs.events.validator
+  <- libs.io
+  <- libs.profiling.validator
+  <- libs.scoring.artifacts
+  <- libs.scoring.rules
+  <- libs.windows.window
+
+libs.io.delta
+  <- libs.plotting.explorer_bundle
+  <- libs.pyspark.table
+  <- libs.simulation.report_tables
+  <- libs.simulation.run_context
+  <- libs.simulation.runner
+  <- libs.simulation.seed_bundle
+  <- pipelines.00_ingest_raw
+  <- pipelines.10_parameter_profiles_fit
+  <- pipelines.12_behavior_profiles_fit
+  <- pipelines.15_event_profiles_fit
+  <- pipelines.20_events_extract
+  <- pipelines.25_window_policy_profile
+  <- pipelines.30_windows_adaptive
+  <- pipelines.40_backbone_fit
+  <- pipelines.50_build_graph
+  <- pipelines.60_fit_hierarchy
+  <- pipelines.70_phase_fit
+  <- pipelines.72_phase_label_centroids
+  <- pipelines.80_window_scores_raw
+  <- pipelines.85_window_scores_calibrate
+  <- pipelines.90_anomaly_attribution
+  <- pipelines.95_emit_explorer_bundle
+  <- scripts.calibrate_continuous_events
+  <- scripts.generate_sample_data
+  <- scripts.run_partition_manifest_jobs
+  <- scripts.smoke_test_pipeline
+  <- scripts.window_diagnostics
+
+libs.io.pandas_spark
+  <- libs.backbone.energy
+  <- libs.backbone.fit
+  <- libs.graph.data
+  <- libs.graph.precision
+  <- libs.simulation.seed_bundle
+
+libs.io.schemas
+  <- libs.events.profiling
+  <- libs.graph.evaluation
+  <- libs.graph.lag
+  <- libs.graph.pipeline
+  <- libs.plotting.explorer_bundle
+  <- libs.profiling.profiles
+  <- libs.scoring.tables
+  <- libs.simulation.seed_bundle
+  <- libs.windows.policy_profile
+  <- scripts.smoke_test_pipeline
+
+libs.io.schemas.anomaly
+  <- libs.anomaly.tables
+  <- libs.io.schemas
+
+libs.io.schemas.backbone
+  <- libs.backbone.tables
+  <- libs.io.schemas
+
+libs.io.schemas.events
+  <- libs.events.tables
+  <- libs.io.schemas
+
+libs.io.schemas.explorer
+  <- libs.io.schemas
+
+libs.io.schemas.graph
+  <- libs.graph.tables
+  <- libs.io.schemas
+
+libs.io.schemas.phase
+  <- libs.io.schemas
+  <- libs.phase.tables
+
+libs.io.schemas.profiling
+  <- libs.io.schemas
+  <- libs.profiling.validator
+  <- libs.simulation.reporting
+
+libs.io.schemas.scoring
+  <- libs.io.schemas
+  <- libs.scoring.tables
+
+libs.io.schemas.telemetry
+  <- libs.io.schemas
+
+libs.io.schemas.windows
+  <- libs.io.schemas
+  <- libs.windows.tables
+
+libs.io.transforms
+  <- pipelines.00_ingest_raw
+
+libs.perf
+  <- libs.simulation.runner
+  <- libs.tuning.benchmark_runner
+  <- libs.windows.policy_profile
+  <- pipelines.00_ingest_raw
+  <- pipelines.10_parameter_profiles_fit
+  <- pipelines.12_behavior_profiles_fit
+  <- pipelines.15_event_profiles_fit
+  <- pipelines.20_events_extract
+  <- pipelines.25_window_policy_profile
+  <- pipelines.30_windows_adaptive
+  <- pipelines.40_backbone_fit
+  <- pipelines.50_build_graph
+  <- pipelines.60_fit_hierarchy
+  <- pipelines.70_phase_fit
+  <- pipelines.72_phase_label_centroids
+  <- pipelines.80_window_scores_raw
+  <- pipelines.85_window_scores_calibrate
+  <- pipelines.90_anomaly_attribution
+  <- pipelines.95_emit_explorer_bundle
+  <- pipelines.97_run_fitting_pipeline
+  <- pipelines.98_run_inference_pipeline
+  <- pipelines.99_run_full_pipeline
+  <- pipelines._pipeline_runner
+  <- scripts.profile_pipeline_performance
+
+libs.perf.annotations
+  <- libs
+  <- libs.anomaly.frames
+  <- libs.anomaly.pipeline
+  <- libs.events.categorical
+  <- libs.events.continuous
+  <- libs.graph.pipeline
+  <- libs.io.delta
+  <- libs.perf
+  <- libs.phase.decode
+  <- libs.phase.fit
+  <- libs.phase.pipeline
+  <- libs.profiling.profiles
+  <- libs.windows.buffer
+  <- libs.windows.features
+  <- libs.windows.pipeline
+
+libs.perf.logger
+  <- libs.graph.pipeline
+  <- libs.perf
+  <- libs.perf.annotations
+  <- libs.perf.memory
+  <- libs.perf.mlflow
+  <- libs.phase.config_fit
+  <- libs.windows.features
+
+libs.perf.memory
+  <- libs.perf
+  <- pipelines.95_emit_explorer_bundle
+
+libs.perf.mlflow
+  <- libs.perf
+  <- libs.perf.annotations
+  <- libs.perf.memory
+  <- libs.perf.stage_manifest
+
+libs.perf.stage_manifest
+  <- libs.perf
+
+libs.phase
+  <- libs.simulation.reporting
+  <- pipelines.70_phase_fit
+  <- pipelines.72_phase_label_centroids
+  <- pipelines.80_window_scores_raw
+  <- scripts.smoke_test_pipeline
+
+libs.phase.analysis
+  <- libs.phase
+
+libs.phase.artifacts
+  <- libs.phase.tables
+
+libs.phase.config_fit
+  <- libs.phase.pipeline
+
+libs.phase.decode
+  <- libs.phase.pipeline
+
+libs.phase.feature_config
+  <- libs.phase
+  <- libs.phase.artifacts
+  <- libs.phase.config_fit
+  <- libs.phase.frames
+  <- libs.phase.pipeline
+  <- libs.phase.tables
+  <- libs.phase.types
+
+libs.phase.fit
+  <- libs.phase.pipeline
+
+libs.phase.frames
+  <- libs.phase.fit
+  <- libs.phase.pipeline
+  <- libs.phase.tables
+  <- libs.phase.types
+
+libs.phase.pipeline
+  <- libs.phase
+
+libs.phase.selectors
+  <- libs.phase.config_fit
+
+libs.phase.tables
+  <- libs.phase
+  <- libs.phase.pipeline
+  <- libs.phase.types
+  <- libs.scoring.tables
+
+libs.phase.types
+  <- libs.phase.config_fit
+  <- libs.phase.decode
+  <- libs.phase.fit
+  <- libs.phase.pipeline
+  <- libs.phase.selectors
+
+libs.phase.utils
+  <- libs.phase.artifacts
+  <- libs.phase.decode
+  <- libs.phase.fit
+  <- libs.phase.frames
+  <- libs.phase.tables
+  <- libs.phase.types
+
+libs.phase.validator
+  <- libs.phase
+
+libs.plotting.explorer_bundle
+  <- libs.plotting
+  <- libs.plotting.simulation_artifacts
+  <- pipelines.95_emit_explorer_bundle
+
+libs.plotting.simulation_artifacts
+  <- libs.plotting
+
+libs.profiling
+  <- libs.testing.seed
+  <- pipelines.10_parameter_profiles_fit
+  <- pipelines.12_behavior_profiles_fit
+
+libs.profiling.pipeline
+  <- libs.profiling
+
+libs.profiling.profiles
+  <- libs.events.profiling
+  <- libs.profiling
+  <- libs.profiling.pipeline
+
+libs.profiling.validator
+  <- libs.profiling
+  <- libs.simulation.reporting
+
+libs.pyspark
+  <- libs.anomaly.frames
+  <- libs.anomaly.tables
+  <- libs.backbone.tables
+  <- libs.events.pipeline
+  <- libs.events.profiling
+  <- libs.events.tables
+  <- libs.graph.tables
+  <- libs.phase.frames
+  <- libs.phase.tables
+  <- libs.profiling.profiles
+  <- libs.scoring.tables
+  <- libs.windows.tables
+
+libs.pyspark.frame
+  <- libs.pyspark
+  <- libs.pyspark.table
+
+libs.pyspark.schema
+  <- libs.pyspark.frame
+  <- libs.pyspark.table
+
+libs.pyspark.table
+  <- libs.pyspark
+
+libs.reporting
+  <- libs.plotting.explorer_bundle
+  <- libs.simulation.report_tables
+
+libs.reporting.frame
+  <- libs.reporting
+
+libs.scoring
+  <- pipelines.80_window_scores_raw
+  <- pipelines.85_window_scores_calibrate
+
+libs.scoring.artifacts
+  <- libs.scoring
+
+libs.scoring.rules
+  <- libs.scoring
+  <- libs.scoring.artifacts
+
+libs.scoring.tables
+  <- libs.scoring
+
+libs.scoring.validator
+  <- libs.anomaly.validator
+  <- libs.scoring
+  <- libs.simulation.reporting
+
+libs.simulation
+  <- libs.simulation.run_context
+  <- libs.simulation.seed_bundle
+  <- libs.simulation.validation_harness
+
+libs.simulation.aircraft.examples
+  <- libs.simulation.aircraft
+  <- libs.simulation.flight.examples
+  <- libs.simulation.tail.examples
+
+libs.simulation.aircraft.runtime
+  <- libs.simulation
+  <- libs.simulation.aircraft
+  <- libs.simulation.flight.runtime
+  <- libs.simulation.phase.runtime
+  <- libs.simulation.tail.runtime
+
+libs.simulation.aircraft.spec
+  <- libs.simulation
+  <- libs.simulation.aircraft
+  <- libs.simulation.aircraft.examples
+  <- libs.simulation.aircraft.runtime
+  <- libs.simulation.flight.spec
+  <- libs.simulation.scenarios.power_pressurization
+  <- libs.simulation.tail.runtime
+
+libs.simulation.cli
+  <- libs.simulation.run_cli
+  <- libs.simulation.run_context
+  <- libs.simulation.runner
+  <- libs.simulation.seed_bundle
+  <- scripts.profile_pipeline_performance
+
+libs.simulation.coupling.examples
+  <- libs.simulation.aircraft.examples
+  <- libs.simulation.coupling
+  <- libs.simulation.scenarios.power_pressurization
+
+libs.simulation.coupling.runtime
+  <- libs.simulation
+  <- libs.simulation.aircraft.runtime
+  <- libs.simulation.coupling
+  <- libs.simulation.module.runtime
+  <- libs.simulation.subsystem.runtime
+  <- libs.simulation.system.runtime
+
+libs.simulation.coupling.spec
+  <- libs.simulation
+  <- libs.simulation.aircraft.spec
+  <- libs.simulation.coupling
+  <- libs.simulation.coupling.examples
+  <- libs.simulation.coupling.runtime
+  <- libs.simulation.scenarios.power_pressurization
+
+libs.simulation.event_truth
+  <- libs.simulation.flight.runtime
+
+libs.simulation.fault.examples
+  <- libs.simulation.fault
+  <- libs.simulation.flight.examples
+  <- libs.simulation.scenarios.power_pressurization
+
+libs.simulation.fault.runtime
+  <- libs.simulation
+  <- libs.simulation.fault
+  <- libs.simulation.flight.runtime
+
+libs.simulation.fault.spec
+  <- libs.simulation
+  <- libs.simulation.fault
+  <- libs.simulation.fault.examples
+  <- libs.simulation.fault.runtime
+  <- libs.simulation.flight.spec
+
+libs.simulation.fleet.examples
+  <- libs.simulation.fleet
+
+libs.simulation.fleet.runtime
+  <- libs.simulation
+  <- libs.simulation.fleet
+  <- libs.simulation.fleet.examples
+
+libs.simulation.flight.examples
+  <- libs.simulation.cli
+  <- libs.simulation.flight
+
+libs.simulation.flight.runtime
+  <- libs.simulation
+  <- libs.simulation.fleet.runtime
+  <- libs.simulation.flight
+  <- libs.simulation.tail.runtime
+
+libs.simulation.flight.spec
+  <- libs.simulation
+  <- libs.simulation.fleet.runtime
+  <- libs.simulation.flight
+  <- libs.simulation.flight.examples
+  <- libs.simulation.flight.runtime
+  <- libs.simulation.scenarios.power_pressurization
+  <- libs.simulation.tail.runtime
+
+libs.simulation.full_run_report
+  <- libs.simulation.runner
+
+libs.simulation.module.examples
+  <- libs.simulation.aircraft.examples
+  <- libs.simulation.module
+
+libs.simulation.module.runtime
+  <- libs.simulation
+  <- libs.simulation.aircraft.runtime
+  <- libs.simulation.coupling.runtime
+  <- libs.simulation.module
+  <- libs.simulation.subsystem.runtime
+  <- libs.simulation.system.runtime
+
+libs.simulation.module.spec
+  <- libs.simulation
+  <- libs.simulation.aircraft.examples
+  <- libs.simulation.module
+  <- libs.simulation.module.examples
+  <- libs.simulation.module.runtime
+  <- libs.simulation.scenarios.power_pressurization
+  <- libs.simulation.subsystem.examples
+  <- libs.simulation.subsystem.spec
+
+libs.simulation.parameter.examples
+  <- libs.simulation.aircraft.examples
+  <- libs.simulation.parameter
+  <- libs.simulation.scenarios.power_pressurization
+
+libs.simulation.parameter.runtime
+  <- libs.simulation
+  <- libs.simulation.module.runtime
+  <- libs.simulation.parameter
+
+libs.simulation.parameter.spec
+  <- libs.simulation
+  <- libs.simulation.module.examples
+  <- libs.simulation.module.spec
+  <- libs.simulation.parameter
+  <- libs.simulation.parameter.examples
+  <- libs.simulation.parameter.runtime
+
+libs.simulation.phase.catalog
+  <- libs.simulation
+  <- libs.simulation.phase
+  <- libs.simulation.phase.runtime
+
+libs.simulation.phase.examples
+  <- libs.simulation.flight.examples
+  <- libs.simulation.phase
+
+libs.simulation.phase.runtime
+  <- libs.simulation
+  <- libs.simulation.flight.runtime
+  <- libs.simulation.phase
+  <- libs.simulation.validation_harness
+
+libs.simulation.phase.spec
+  <- libs.simulation
+  <- libs.simulation.flight.examples
+  <- libs.simulation.flight.spec
+  <- libs.simulation.phase
+  <- libs.simulation.phase.examples
+  <- libs.simulation.phase.runtime
+  <- libs.simulation.scenarios.power_pressurization
+
+libs.simulation.port.examples
+  <- libs.simulation.aircraft.examples
+  <- libs.simulation.port
+  <- libs.simulation.scenarios.power_pressurization
+
+libs.simulation.port.runtime
+  <- libs.simulation
+  <- libs.simulation.module.runtime
+  <- libs.simulation.port
+
+libs.simulation.port.spec
+  <- libs.simulation
+  <- libs.simulation.module.examples
+  <- libs.simulation.module.spec
+  <- libs.simulation.port
+  <- libs.simulation.port.examples
+  <- libs.simulation.port.runtime
+
+libs.simulation.replay_report
+  <- libs.tuning.benchmark_execution
+  <- libs.tuning.benchmark_planning
+  <- scripts.report_sim_replay
+
+libs.simulation.report_tables
+  <- libs.simulation.reporting
+
+libs.simulation.reporting
+  <- libs.simulation.runner
+
+libs.simulation.run_bundle
+  <- libs.plotting.simulation_artifacts
+  <- libs.simulation.full_run_report
+  <- libs.simulation.validation_harness
+
+libs.simulation.run_cli
+  <- scripts.run_sim_pipeline
+
+libs.simulation.run_context
+  <- libs.simulation.full_run_report
+  <- libs.simulation.reporting
+  <- libs.simulation.run_cli
+  <- libs.simulation.runner
+  <- libs.simulation.seed_bundle
+  <- libs.simulation.validation_harness
+
+libs.simulation.runner
+  <- libs.simulation.run_cli
+
+libs.simulation.scenarios
+  <- libs.simulation.aircraft.examples
+  <- libs.simulation.flight.examples
+
+libs.simulation.scenarios.power_pressurization
+  <- libs.simulation.scenarios
+
+libs.simulation.seed_bundle
+  <- libs.simulation.runner
+
+libs.simulation.subsystem.examples
+  <- libs.simulation.aircraft.examples
+  <- libs.simulation.scenarios.power_pressurization
+  <- libs.simulation.subsystem
+
+libs.simulation.subsystem.runtime
+  <- libs.simulation
+  <- libs.simulation.subsystem
+  <- libs.simulation.system.runtime
+
+libs.simulation.subsystem.spec
+  <- libs.simulation
+  <- libs.simulation.subsystem
+  <- libs.simulation.subsystem.examples
+  <- libs.simulation.subsystem.runtime
+  <- libs.simulation.system.examples
+  <- libs.simulation.system.spec
+
+libs.simulation.system.examples
+  <- libs.simulation.aircraft.examples
+  <- libs.simulation.scenarios.power_pressurization
+  <- libs.simulation.system
+
+libs.simulation.system.runtime
+  <- libs.simulation
+  <- libs.simulation.aircraft.runtime
+  <- libs.simulation.system
+
+libs.simulation.system.spec
+  <- libs.simulation
+  <- libs.simulation.aircraft.spec
+  <- libs.simulation.system
+  <- libs.simulation.system.examples
+  <- libs.simulation.system.runtime
+
+libs.simulation.tail.examples
+  <- libs.simulation.fleet.examples
+  <- libs.simulation.tail
+
+libs.simulation.tail.runtime
+  <- libs.simulation
+  <- libs.simulation.fleet.runtime
+  <- libs.simulation.flight.runtime
+  <- libs.simulation.tail
+  <- libs.simulation.tail.examples
+
+libs.simulation.validation_harness
+  <- libs.simulation.runner
+
+libs.spark_sequence
+  <- libs.events.categorical
+  <- libs.events.continuous
+  <- libs.events.pipeline
+  <- libs.phase.decode
+  <- libs.phase.types
+  <- libs.phase.utils
+  <- libs.windows.pipeline
+
+libs.spark_sequence.plan
+  <- libs.spark_sequence
+
+libs.testing.assertions
+  <- libs.simulation.reporting
+
+libs.testing.data
+  <- libs.testing
+  <- libs.testing.seed
+
+libs.testing.evaluation
+  <- scripts.evaluate_sim_event_labels
+
+libs.testing.seed
+  <- libs.testing
+  <- scripts.generate_sample_data
+  <- scripts.smoke_test_pipeline
+
+libs.tuning
+  <- libs.simulation.runner
+  <- scripts.profile_pipeline_performance
+
+libs.tuning.benchmark_execution
+  <- libs.tuning
+  <- libs.tuning.benchmark_runner
+
+libs.tuning.benchmark_invocation
+  <- libs.tuning
+
+libs.tuning.benchmark_planning
+  <- libs.tuning
+
+libs.tuning.benchmark_reporting
+  <- libs.tuning
+  <- libs.tuning.benchmark_runner
+  <- libs.tuning.benchmark_runtime
+
+libs.tuning.benchmark_runner
+  <- libs.tuning
+
+libs.tuning.benchmark_runtime
+  <- libs.tuning
+  <- libs.tuning.benchmark_runner
+
+libs.tuning.benchmark_search
+  <- libs.tuning
+  <- libs.tuning.benchmark_invocation
+
+libs.tuning.benchmark_variants
+  <- libs.tuning
+  <- libs.tuning.benchmark_planning
+  <- libs.tuning.benchmark_runner
+  <- libs.tuning.benchmark_search
+
+libs.tuning.objectives
+  <- libs.tuning
+  <- libs.tuning.benchmark_planning
+  <- libs.tuning.reporting
+
+libs.tuning.presets
+  <- libs.tuning
+  <- libs.tuning.benchmark_planning
+  <- libs.tuning.benchmark_variants
+
+libs.tuning.reporting
+  <- libs.tuning
+
+libs.tuning.validation_panels
+  <- libs.tuning
+  <- libs.tuning.benchmark_reporting
+
+libs.windows
+  <- libs.events.calibration
+  <- pipelines.25_window_policy_profile
+  <- pipelines.30_windows_adaptive
+  <- pipelines.40_backbone_fit
+
+libs.windows.buffer
+  <- libs.windows
+  <- libs.windows.pipeline
+  <- libs.windows.window
+
+libs.windows.coverage
+  <- libs.windows
+
+libs.windows.features
+  <- libs.windows
+  <- libs.windows.tables
+
+libs.windows.pipeline
+  <- libs.windows
+  <- libs.windows.tables
+
+libs.windows.policy_profile
+  <- libs.windows
+  <- libs.windows.tables
+
+libs.windows.tables
+  <- libs.windows
+  <- libs.windows.policy_profile
+
+libs.windows.window
+  <- libs.windows
+  <- libs.windows.pipeline
+  <- libs.windows.policy_profile
+  <- pipelines.25_window_policy_profile
+  <- pipelines.30_windows_adaptive
+
+pipelines._pipeline_runner
+  <- libs.simulation.runner
+  <- pipelines.97_run_fitting_pipeline
+  <- pipelines.98_run_inference_pipeline
+  <- pipelines.99_run_full_pipeline
+
+pipelines.common
+  <- pipelines.00_ingest_raw
+  <- pipelines.10_parameter_profiles_fit
+  <- pipelines.12_behavior_profiles_fit
+  <- pipelines.15_event_profiles_fit
+  <- pipelines.20_events_extract
+  <- pipelines.25_window_policy_profile
+  <- pipelines.30_windows_adaptive
+  <- pipelines.40_backbone_fit
+  <- pipelines.50_build_graph
+  <- pipelines.60_fit_hierarchy
+  <- pipelines.70_phase_fit
+  <- pipelines.72_phase_label_centroids
+  <- pipelines.80_window_scores_raw
+  <- pipelines.85_window_scores_calibrate
+  <- pipelines.90_anomaly_attribution
+  <- pipelines.95_emit_explorer_bundle
+  <- scripts.calibrate_continuous_events
+
+pipelines.plans
+  <- libs.simulation.run_context
+  <- pipelines._pipeline_runner
+
+tools.module_deps
+  <- libs.architecture.extract
+  <- tools.architecture_workflow
+
+tools.repo_schematic
+  <- libs.architecture.extract
+  <- tools.architecture_workflow

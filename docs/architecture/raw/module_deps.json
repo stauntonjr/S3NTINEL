@@ -1,0 +1,2004 @@
+{
+  "modules": [
+    {
+      "internal_dependencies": [
+        "libs.perf.annotations"
+      ],
+      "module": "libs",
+      "path": "libs/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.anomaly.frames",
+        "libs.anomaly.pipeline",
+        "libs.anomaly.tables",
+        "libs.anomaly.validator"
+      ],
+      "module": "libs.anomaly",
+      "path": "libs/anomaly/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.perf.annotations",
+        "libs.pyspark"
+      ],
+      "module": "libs.anomaly.frames",
+      "path": "libs/anomaly/frames.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.anomaly.frames",
+        "libs.anomaly.tables",
+        "libs.perf.annotations"
+      ],
+      "module": "libs.anomaly.pipeline",
+      "path": "libs/anomaly/pipeline.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.schemas.anomaly",
+        "libs.pyspark"
+      ],
+      "module": "libs.anomaly.tables",
+      "path": "libs/anomaly/tables.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.scoring.validator"
+      ],
+      "module": "libs.anomaly.validator",
+      "path": "libs/anomaly/validator.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.architecture.ai_review",
+        "libs.architecture.annotations",
+        "libs.architecture.extract",
+        "libs.architecture.render"
+      ],
+      "module": "libs.architecture",
+      "path": "libs/architecture/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.architecture.model"
+      ],
+      "module": "libs.architecture.ai_review",
+      "path": "libs/architecture/ai_review.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.architecture.model"
+      ],
+      "module": "libs.architecture.annotations",
+      "path": "libs/architecture/annotations.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.architecture.annotations",
+        "libs.architecture.model",
+        "tools.module_deps",
+        "tools.repo_schematic"
+      ],
+      "module": "libs.architecture.extract",
+      "path": "libs/architecture/extract.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.architecture.model",
+      "path": "libs/architecture/model.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.architecture.model"
+      ],
+      "module": "libs.architecture.render",
+      "path": "libs/architecture/render.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.backbone.artifacts",
+        "libs.backbone.energy",
+        "libs.backbone.fit",
+        "libs.backbone.tables"
+      ],
+      "module": "libs.backbone",
+      "path": "libs/backbone/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.backbone.energy",
+        "libs.backbone.fit"
+      ],
+      "module": "libs.backbone.artifacts",
+      "path": "libs/backbone/artifacts.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.pandas_spark"
+      ],
+      "module": "libs.backbone.energy",
+      "path": "libs/backbone/energy.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.pandas_spark"
+      ],
+      "module": "libs.backbone.fit",
+      "path": "libs/backbone/fit.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.schemas.backbone",
+        "libs.pyspark"
+      ],
+      "module": "libs.backbone.tables",
+      "path": "libs/backbone/tables.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.behavior.accumulative",
+        "libs.behavior.base",
+        "libs.behavior.discrete_state",
+        "libs.behavior.inertial",
+        "libs.behavior.primitives",
+        "libs.behavior.registry",
+        "libs.behavior.regulated",
+        "libs.behavior.tick",
+        "libs.behavior.tracking",
+        "libs.behavior.utils",
+        "libs.behavior.validation"
+      ],
+      "module": "libs.behavior",
+      "path": "libs/behavior/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.behavior.base",
+        "libs.behavior.primitives",
+        "libs.behavior.utils",
+        "libs.behavior.validation"
+      ],
+      "module": "libs.behavior.accumulative",
+      "path": "libs/behavior/accumulative.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.behavior.base",
+      "path": "libs/behavior/base.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.behavior.base",
+        "libs.behavior.primitives",
+        "libs.behavior.utils",
+        "libs.behavior.validation"
+      ],
+      "module": "libs.behavior.discrete_state",
+      "path": "libs/behavior/discrete_state.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.behavior.base",
+        "libs.behavior.primitives",
+        "libs.behavior.utils",
+        "libs.behavior.validation"
+      ],
+      "module": "libs.behavior.inertial",
+      "path": "libs/behavior/inertial.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.behavior.utils"
+      ],
+      "module": "libs.behavior.primitives",
+      "path": "libs/behavior/primitives.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.behavior.accumulative",
+        "libs.behavior.base",
+        "libs.behavior.discrete_state",
+        "libs.behavior.inertial",
+        "libs.behavior.regulated",
+        "libs.behavior.tracking"
+      ],
+      "module": "libs.behavior.registry",
+      "path": "libs/behavior/registry.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.behavior.base",
+        "libs.behavior.primitives",
+        "libs.behavior.utils",
+        "libs.behavior.validation"
+      ],
+      "module": "libs.behavior.regulated",
+      "path": "libs/behavior/regulated.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.behavior.base"
+      ],
+      "module": "libs.behavior.tick",
+      "path": "libs/behavior/tick.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.behavior.base",
+        "libs.behavior.primitives",
+        "libs.behavior.utils",
+        "libs.behavior.validation"
+      ],
+      "module": "libs.behavior.tracking",
+      "path": "libs/behavior/tracking.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.behavior.utils",
+      "path": "libs/behavior/utils.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.behavior.base",
+        "libs.behavior.tick"
+      ],
+      "module": "libs.behavior.validation",
+      "path": "libs/behavior/validation.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.common.parameter_datatypes",
+        "libs.common.spark_exprs"
+      ],
+      "module": "libs.common",
+      "path": "libs/common/__init__.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.common.event_types",
+      "path": "libs/common/event_types.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.common.parameter_datatypes",
+      "path": "libs/common/parameter_datatypes.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.common.spark_exprs",
+      "path": "libs/common/spark_exprs.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.config.pipeline"
+      ],
+      "module": "libs.config",
+      "path": "libs/config/__init__.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.config.pipeline",
+      "path": "libs/config/pipeline.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.events.calibration",
+        "libs.events.pipeline",
+        "libs.events.profiling",
+        "libs.events.tables",
+        "libs.events.types",
+        "libs.events.validator"
+      ],
+      "module": "libs.events",
+      "path": "libs/events/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.events.continuous",
+        "libs.events.pipeline",
+        "libs.windows"
+      ],
+      "module": "libs.events.calibration",
+      "path": "libs/events/calibration.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.common",
+        "libs.events.types",
+        "libs.perf.annotations",
+        "libs.spark_sequence"
+      ],
+      "module": "libs.events.categorical",
+      "path": "libs/events/categorical.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.common",
+        "libs.events.types",
+        "libs.perf.annotations",
+        "libs.spark_sequence"
+      ],
+      "module": "libs.events.continuous",
+      "path": "libs/events/continuous.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.common",
+        "libs.events.categorical",
+        "libs.events.continuous",
+        "libs.events.tables",
+        "libs.pyspark",
+        "libs.spark_sequence"
+      ],
+      "module": "libs.events.pipeline",
+      "path": "libs/events/pipeline.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.schemas",
+        "libs.profiling.profiles",
+        "libs.pyspark"
+      ],
+      "module": "libs.events.profiling",
+      "path": "libs/events/profiling.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.schemas.events",
+        "libs.pyspark"
+      ],
+      "module": "libs.events.tables",
+      "path": "libs/events/tables.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.common.event_types"
+      ],
+      "module": "libs.events.types",
+      "path": "libs/events/types.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.contracts"
+      ],
+      "module": "libs.events.validator",
+      "path": "libs/events/validator.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.graph.event",
+        "libs.graph.fused",
+        "libs.graph.hierarchy_artifacts",
+        "libs.graph.lag",
+        "libs.graph.pipeline",
+        "libs.graph.precision",
+        "libs.graph.tables",
+        "libs.graph.transition",
+        "libs.graph.validator"
+      ],
+      "module": "libs.graph",
+      "path": "libs/graph/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.pandas_spark"
+      ],
+      "module": "libs.graph.data",
+      "path": "libs/graph/data.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.graph.fused",
+        "libs.graph.hierarchy_artifacts",
+        "libs.graph.lag",
+        "libs.graph.pipeline",
+        "libs.graph.tables",
+        "libs.graph.validator",
+        "libs.io.schemas"
+      ],
+      "module": "libs.graph.evaluation",
+      "path": "libs/graph/evaluation.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.graph.event",
+      "path": "libs/graph/event.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.graph.fused",
+      "path": "libs/graph/fused.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.graph.hierarchy",
+      "path": "libs/graph/hierarchy.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.graph.hierarchy"
+      ],
+      "module": "libs.graph.hierarchy_artifacts",
+      "path": "libs/graph/hierarchy_artifacts.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.graph.event",
+        "libs.io.schemas"
+      ],
+      "module": "libs.graph.lag",
+      "path": "libs/graph/lag.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.graph.data",
+        "libs.graph.event",
+        "libs.graph.fused",
+        "libs.graph.hierarchy_artifacts",
+        "libs.graph.lag",
+        "libs.graph.precision",
+        "libs.graph.transition",
+        "libs.io.schemas",
+        "libs.perf.annotations",
+        "libs.perf.logger"
+      ],
+      "module": "libs.graph.pipeline",
+      "path": "libs/graph/pipeline.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.pandas_spark"
+      ],
+      "module": "libs.graph.precision",
+      "path": "libs/graph/precision.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.graph.lag",
+        "libs.graph.pipeline",
+        "libs.io.schemas.graph",
+        "libs.pyspark"
+      ],
+      "module": "libs.graph.tables",
+      "path": "libs/graph/tables.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.graph.event"
+      ],
+      "module": "libs.graph.transition",
+      "path": "libs/graph/transition.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.graph.validator",
+      "path": "libs/graph/validator.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.contracts"
+      ],
+      "module": "libs.io",
+      "path": "libs/io/__init__.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.io.contracts",
+      "path": "libs/io/contracts.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.perf.annotations"
+      ],
+      "module": "libs.io.delta",
+      "path": "libs/io/delta.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.io.pandas_spark",
+      "path": "libs/io/pandas_spark.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.schemas.anomaly",
+        "libs.io.schemas.backbone",
+        "libs.io.schemas.events",
+        "libs.io.schemas.explorer",
+        "libs.io.schemas.graph",
+        "libs.io.schemas.phase",
+        "libs.io.schemas.profiling",
+        "libs.io.schemas.scoring",
+        "libs.io.schemas.telemetry",
+        "libs.io.schemas.windows"
+      ],
+      "module": "libs.io.schemas",
+      "path": "libs/io/schemas/__init__.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.io.schemas.anomaly",
+      "path": "libs/io/schemas/anomaly.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.io.schemas.backbone",
+      "path": "libs/io/schemas/backbone.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.io.schemas.events",
+      "path": "libs/io/schemas/events.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.io.schemas.explorer",
+      "path": "libs/io/schemas/explorer.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.io.schemas.graph",
+      "path": "libs/io/schemas/graph.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.io.schemas.phase",
+      "path": "libs/io/schemas/phase.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.io.schemas.profiling",
+      "path": "libs/io/schemas/profiling.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.io.schemas.scoring",
+      "path": "libs/io/schemas/scoring.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.io.schemas.telemetry",
+      "path": "libs/io/schemas/telemetry.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.io.schemas.windows",
+      "path": "libs/io/schemas/windows.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.io.transforms",
+      "path": "libs/io/transforms.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.perf.annotations",
+        "libs.perf.logger",
+        "libs.perf.memory",
+        "libs.perf.mlflow",
+        "libs.perf.stage_manifest"
+      ],
+      "module": "libs.perf",
+      "path": "libs/perf/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.perf.logger",
+        "libs.perf.mlflow"
+      ],
+      "module": "libs.perf.annotations",
+      "path": "libs/perf/annotations.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.perf.logger",
+      "path": "libs/perf/logger.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.perf.logger",
+        "libs.perf.mlflow"
+      ],
+      "module": "libs.perf.memory",
+      "path": "libs/perf/memory.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.perf.logger"
+      ],
+      "module": "libs.perf.mlflow",
+      "path": "libs/perf/mlflow.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.perf.mlflow"
+      ],
+      "module": "libs.perf.stage_manifest",
+      "path": "libs/perf/stage_manifest.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.phase.analysis",
+        "libs.phase.feature_config",
+        "libs.phase.pipeline",
+        "libs.phase.tables",
+        "libs.phase.validator"
+      ],
+      "module": "libs.phase",
+      "path": "libs/phase/__init__.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.phase.analysis",
+      "path": "libs/phase/analysis.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.phase.feature_config",
+        "libs.phase.utils"
+      ],
+      "module": "libs.phase.artifacts",
+      "path": "libs/phase/artifacts.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.perf.logger",
+        "libs.phase.feature_config",
+        "libs.phase.selectors",
+        "libs.phase.types"
+      ],
+      "module": "libs.phase.config_fit",
+      "path": "libs/phase/config_fit.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.perf.annotations",
+        "libs.phase.types",
+        "libs.phase.utils",
+        "libs.spark_sequence"
+      ],
+      "module": "libs.phase.decode",
+      "path": "libs/phase/decode.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.backbone"
+      ],
+      "module": "libs.phase.feature_config",
+      "path": "libs/phase/feature_config.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.perf.annotations",
+        "libs.phase.frames",
+        "libs.phase.types",
+        "libs.phase.utils"
+      ],
+      "module": "libs.phase.fit",
+      "path": "libs/phase/fit.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.common",
+        "libs.common.event_types",
+        "libs.phase.feature_config",
+        "libs.phase.utils",
+        "libs.pyspark"
+      ],
+      "module": "libs.phase.frames",
+      "path": "libs/phase/frames.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.perf.annotations",
+        "libs.phase.config_fit",
+        "libs.phase.decode",
+        "libs.phase.feature_config",
+        "libs.phase.fit",
+        "libs.phase.frames",
+        "libs.phase.tables",
+        "libs.phase.types"
+      ],
+      "module": "libs.phase.pipeline",
+      "path": "libs/phase/pipeline.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.common.event_types",
+        "libs.phase.types"
+      ],
+      "module": "libs.phase.selectors",
+      "path": "libs/phase/selectors.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.common",
+        "libs.io.schemas.phase",
+        "libs.phase.artifacts",
+        "libs.phase.feature_config",
+        "libs.phase.frames",
+        "libs.phase.utils",
+        "libs.pyspark"
+      ],
+      "module": "libs.phase.tables",
+      "path": "libs/phase/tables.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.phase.feature_config",
+        "libs.phase.frames",
+        "libs.phase.tables",
+        "libs.phase.utils",
+        "libs.spark_sequence"
+      ],
+      "module": "libs.phase.types",
+      "path": "libs/phase/types.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.common",
+        "libs.spark_sequence"
+      ],
+      "module": "libs.phase.utils",
+      "path": "libs/phase/utils.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.phase.validator",
+      "path": "libs/phase/validator.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.plotting.explorer_bundle",
+        "libs.plotting.simulation_artifacts"
+      ],
+      "module": "libs.plotting",
+      "path": "libs/plotting/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.delta",
+        "libs.io.schemas",
+        "libs.reporting"
+      ],
+      "module": "libs.plotting.explorer_bundle",
+      "path": "libs/plotting/explorer_bundle.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.plotting.explorer_bundle",
+        "libs.simulation.run_bundle"
+      ],
+      "module": "libs.plotting.simulation_artifacts",
+      "path": "libs/plotting/simulation_artifacts.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.profiling.pipeline",
+        "libs.profiling.profiles",
+        "libs.profiling.validator"
+      ],
+      "module": "libs.profiling",
+      "path": "libs/profiling/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.profiling.profiles"
+      ],
+      "module": "libs.profiling.pipeline",
+      "path": "libs/profiling/pipeline.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.behavior.primitives",
+        "libs.common",
+        "libs.io.schemas",
+        "libs.perf.annotations",
+        "libs.pyspark"
+      ],
+      "module": "libs.profiling.profiles",
+      "path": "libs/profiling/profiles.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.common",
+        "libs.io.contracts",
+        "libs.io.schemas.profiling"
+      ],
+      "module": "libs.profiling.validator",
+      "path": "libs/profiling/validator.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.pyspark.frame",
+        "libs.pyspark.table"
+      ],
+      "module": "libs.pyspark",
+      "path": "libs/pyspark/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.pyspark.schema"
+      ],
+      "module": "libs.pyspark.frame",
+      "path": "libs/pyspark/frame.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.pyspark.schema",
+      "path": "libs/pyspark/schema.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.delta",
+        "libs.pyspark.frame",
+        "libs.pyspark.schema"
+      ],
+      "module": "libs.pyspark.table",
+      "path": "libs/pyspark/table.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.reporting.frame"
+      ],
+      "module": "libs.reporting",
+      "path": "libs/reporting/__init__.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.reporting.frame",
+      "path": "libs/reporting/frame.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.scoring.artifacts",
+        "libs.scoring.rules",
+        "libs.scoring.tables",
+        "libs.scoring.validator"
+      ],
+      "module": "libs.scoring",
+      "path": "libs/scoring/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.contracts",
+        "libs.scoring.rules"
+      ],
+      "module": "libs.scoring.artifacts",
+      "path": "libs/scoring/artifacts.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.contracts"
+      ],
+      "module": "libs.scoring.rules",
+      "path": "libs/scoring/rules.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.graph.tables",
+        "libs.io.schemas",
+        "libs.io.schemas.scoring",
+        "libs.phase.tables",
+        "libs.pyspark"
+      ],
+      "module": "libs.scoring.tables",
+      "path": "libs/scoring/tables.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.scoring.validator",
+      "path": "libs/scoring/validator.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.aircraft.runtime",
+        "libs.simulation.aircraft.spec",
+        "libs.simulation.coupling.runtime",
+        "libs.simulation.coupling.spec",
+        "libs.simulation.fault.runtime",
+        "libs.simulation.fault.spec",
+        "libs.simulation.fleet.runtime",
+        "libs.simulation.flight.runtime",
+        "libs.simulation.flight.spec",
+        "libs.simulation.module.runtime",
+        "libs.simulation.module.spec",
+        "libs.simulation.parameter.runtime",
+        "libs.simulation.parameter.spec",
+        "libs.simulation.phase.catalog",
+        "libs.simulation.phase.runtime",
+        "libs.simulation.phase.spec",
+        "libs.simulation.port.runtime",
+        "libs.simulation.port.spec",
+        "libs.simulation.subsystem.runtime",
+        "libs.simulation.subsystem.spec",
+        "libs.simulation.system.runtime",
+        "libs.simulation.system.spec",
+        "libs.simulation.tail.runtime"
+      ],
+      "module": "libs.simulation",
+      "path": "libs/simulation/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.aircraft.examples",
+        "libs.simulation.aircraft.runtime",
+        "libs.simulation.aircraft.spec"
+      ],
+      "module": "libs.simulation.aircraft",
+      "path": "libs/simulation/aircraft/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.aircraft.spec",
+        "libs.simulation.coupling.examples",
+        "libs.simulation.module.examples",
+        "libs.simulation.module.spec",
+        "libs.simulation.parameter.examples",
+        "libs.simulation.port.examples",
+        "libs.simulation.scenarios",
+        "libs.simulation.subsystem.examples",
+        "libs.simulation.system.examples"
+      ],
+      "module": "libs.simulation.aircraft.examples",
+      "path": "libs/simulation/aircraft/examples.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.behavior",
+        "libs.simulation.aircraft.spec",
+        "libs.simulation.coupling.runtime",
+        "libs.simulation.module.runtime",
+        "libs.simulation.system.runtime"
+      ],
+      "module": "libs.simulation.aircraft.runtime",
+      "path": "libs/simulation/aircraft/runtime.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.coupling.spec",
+        "libs.simulation.system.spec"
+      ],
+      "module": "libs.simulation.aircraft.spec",
+      "path": "libs/simulation/aircraft/spec.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.flight.examples"
+      ],
+      "module": "libs.simulation.cli",
+      "path": "libs/simulation/cli.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.coupling.examples",
+        "libs.simulation.coupling.runtime",
+        "libs.simulation.coupling.spec"
+      ],
+      "module": "libs.simulation.coupling",
+      "path": "libs/simulation/coupling/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.coupling.spec"
+      ],
+      "module": "libs.simulation.coupling.examples",
+      "path": "libs/simulation/coupling/examples.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.coupling.spec",
+        "libs.simulation.module.runtime"
+      ],
+      "module": "libs.simulation.coupling.runtime",
+      "path": "libs/simulation/coupling/runtime.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.simulation.coupling.spec",
+      "path": "libs/simulation/coupling/spec.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.simulation.event_truth",
+      "path": "libs/simulation/event_truth.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.fault.examples",
+        "libs.simulation.fault.runtime",
+        "libs.simulation.fault.spec"
+      ],
+      "module": "libs.simulation.fault",
+      "path": "libs/simulation/fault/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.fault.spec"
+      ],
+      "module": "libs.simulation.fault.examples",
+      "path": "libs/simulation/fault/examples.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.fault.spec"
+      ],
+      "module": "libs.simulation.fault.runtime",
+      "path": "libs/simulation/fault/runtime.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.simulation.fault.spec",
+      "path": "libs/simulation/fault/spec.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.fleet.examples",
+        "libs.simulation.fleet.runtime"
+      ],
+      "module": "libs.simulation.fleet",
+      "path": "libs/simulation/fleet/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.fleet.runtime",
+        "libs.simulation.tail.examples"
+      ],
+      "module": "libs.simulation.fleet.examples",
+      "path": "libs/simulation/fleet/examples.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.flight.runtime",
+        "libs.simulation.flight.spec",
+        "libs.simulation.tail.runtime"
+      ],
+      "module": "libs.simulation.fleet.runtime",
+      "path": "libs/simulation/fleet/runtime.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.flight.examples",
+        "libs.simulation.flight.runtime",
+        "libs.simulation.flight.spec"
+      ],
+      "module": "libs.simulation.flight",
+      "path": "libs/simulation/flight/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.aircraft.examples",
+        "libs.simulation.fault.examples",
+        "libs.simulation.flight.spec",
+        "libs.simulation.phase.examples",
+        "libs.simulation.phase.spec",
+        "libs.simulation.scenarios"
+      ],
+      "module": "libs.simulation.flight.examples",
+      "path": "libs/simulation/flight/examples.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.behavior",
+        "libs.simulation.aircraft.runtime",
+        "libs.simulation.event_truth",
+        "libs.simulation.fault.runtime",
+        "libs.simulation.flight.spec",
+        "libs.simulation.phase.runtime",
+        "libs.simulation.tail.runtime"
+      ],
+      "module": "libs.simulation.flight.runtime",
+      "path": "libs/simulation/flight/runtime.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.aircraft.spec",
+        "libs.simulation.fault.spec",
+        "libs.simulation.phase.spec"
+      ],
+      "module": "libs.simulation.flight.spec",
+      "path": "libs/simulation/flight/spec.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.run_bundle",
+        "libs.simulation.run_context"
+      ],
+      "module": "libs.simulation.full_run_report",
+      "path": "libs/simulation/full_run_report.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.module.examples",
+        "libs.simulation.module.runtime",
+        "libs.simulation.module.spec"
+      ],
+      "module": "libs.simulation.module",
+      "path": "libs/simulation/module/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.module.spec",
+        "libs.simulation.parameter.spec",
+        "libs.simulation.port.spec"
+      ],
+      "module": "libs.simulation.module.examples",
+      "path": "libs/simulation/module/examples.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.behavior",
+        "libs.simulation.coupling.runtime",
+        "libs.simulation.module.spec",
+        "libs.simulation.parameter.runtime",
+        "libs.simulation.port.runtime"
+      ],
+      "module": "libs.simulation.module.runtime",
+      "path": "libs/simulation/module/runtime.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.parameter.spec",
+        "libs.simulation.port.spec"
+      ],
+      "module": "libs.simulation.module.spec",
+      "path": "libs/simulation/module/spec.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.parameter.examples",
+        "libs.simulation.parameter.runtime",
+        "libs.simulation.parameter.spec"
+      ],
+      "module": "libs.simulation.parameter",
+      "path": "libs/simulation/parameter/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.parameter.spec"
+      ],
+      "module": "libs.simulation.parameter.examples",
+      "path": "libs/simulation/parameter/examples.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.behavior",
+        "libs.simulation.parameter.spec"
+      ],
+      "module": "libs.simulation.parameter.runtime",
+      "path": "libs/simulation/parameter/runtime.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.simulation.parameter.spec",
+      "path": "libs/simulation/parameter/spec.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.phase.catalog",
+        "libs.simulation.phase.examples",
+        "libs.simulation.phase.runtime",
+        "libs.simulation.phase.spec"
+      ],
+      "module": "libs.simulation.phase",
+      "path": "libs/simulation/phase/__init__.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.simulation.phase.catalog",
+      "path": "libs/simulation/phase/catalog.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.phase.spec"
+      ],
+      "module": "libs.simulation.phase.examples",
+      "path": "libs/simulation/phase/examples.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.behavior",
+        "libs.simulation.aircraft.runtime",
+        "libs.simulation.phase.catalog",
+        "libs.simulation.phase.spec"
+      ],
+      "module": "libs.simulation.phase.runtime",
+      "path": "libs/simulation/phase/runtime.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.simulation.phase.spec",
+      "path": "libs/simulation/phase/spec.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.port.examples",
+        "libs.simulation.port.runtime",
+        "libs.simulation.port.spec"
+      ],
+      "module": "libs.simulation.port",
+      "path": "libs/simulation/port/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.port.spec"
+      ],
+      "module": "libs.simulation.port.examples",
+      "path": "libs/simulation/port/examples.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.port.spec"
+      ],
+      "module": "libs.simulation.port.runtime",
+      "path": "libs/simulation/port/runtime.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.simulation.port.spec",
+      "path": "libs/simulation/port/spec.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.simulation.replay_report",
+      "path": "libs/simulation/replay_report.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.delta",
+        "libs.reporting"
+      ],
+      "module": "libs.simulation.report_tables",
+      "path": "libs/simulation/report_tables.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.anomaly.validator",
+        "libs.events.validator",
+        "libs.graph",
+        "libs.io.schemas.profiling",
+        "libs.phase",
+        "libs.profiling.validator",
+        "libs.scoring.validator",
+        "libs.simulation.report_tables",
+        "libs.simulation.run_context",
+        "libs.testing.assertions"
+      ],
+      "module": "libs.simulation.reporting",
+      "path": "libs/simulation/reporting.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.simulation.run_bundle",
+      "path": "libs/simulation/run_bundle.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.cli",
+        "libs.simulation.run_context",
+        "libs.simulation.runner"
+      ],
+      "module": "libs.simulation.run_cli",
+      "path": "libs/simulation/run_cli.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.delta",
+        "libs.simulation",
+        "libs.simulation.cli",
+        "pipelines.plans"
+      ],
+      "module": "libs.simulation.run_context",
+      "path": "libs/simulation/run_context.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.delta",
+        "libs.perf",
+        "libs.simulation.cli",
+        "libs.simulation.full_run_report",
+        "libs.simulation.reporting",
+        "libs.simulation.run_context",
+        "libs.simulation.seed_bundle",
+        "libs.simulation.validation_harness",
+        "libs.tuning",
+        "pipelines._pipeline_runner"
+      ],
+      "module": "libs.simulation.runner",
+      "path": "libs/simulation/runner.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.scenarios.power_pressurization"
+      ],
+      "module": "libs.simulation.scenarios",
+      "path": "libs/simulation/scenarios/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.aircraft.spec",
+        "libs.simulation.coupling.examples",
+        "libs.simulation.coupling.spec",
+        "libs.simulation.fault.examples",
+        "libs.simulation.flight.spec",
+        "libs.simulation.module.spec",
+        "libs.simulation.parameter.examples",
+        "libs.simulation.phase.spec",
+        "libs.simulation.port.examples",
+        "libs.simulation.subsystem.examples",
+        "libs.simulation.system.examples"
+      ],
+      "module": "libs.simulation.scenarios.power_pressurization",
+      "path": "libs/simulation/scenarios/power_pressurization.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.delta",
+        "libs.io.pandas_spark",
+        "libs.io.schemas",
+        "libs.simulation",
+        "libs.simulation.cli",
+        "libs.simulation.run_context"
+      ],
+      "module": "libs.simulation.seed_bundle",
+      "path": "libs/simulation/seed_bundle.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.subsystem.examples",
+        "libs.simulation.subsystem.runtime",
+        "libs.simulation.subsystem.spec"
+      ],
+      "module": "libs.simulation.subsystem",
+      "path": "libs/simulation/subsystem/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.module.spec",
+        "libs.simulation.subsystem.spec"
+      ],
+      "module": "libs.simulation.subsystem.examples",
+      "path": "libs/simulation/subsystem/examples.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.behavior",
+        "libs.simulation.coupling.runtime",
+        "libs.simulation.module.runtime",
+        "libs.simulation.subsystem.spec"
+      ],
+      "module": "libs.simulation.subsystem.runtime",
+      "path": "libs/simulation/subsystem/runtime.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.module.spec"
+      ],
+      "module": "libs.simulation.subsystem.spec",
+      "path": "libs/simulation/subsystem/spec.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.system.examples",
+        "libs.simulation.system.runtime",
+        "libs.simulation.system.spec"
+      ],
+      "module": "libs.simulation.system",
+      "path": "libs/simulation/system/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.subsystem.spec",
+        "libs.simulation.system.spec"
+      ],
+      "module": "libs.simulation.system.examples",
+      "path": "libs/simulation/system/examples.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.behavior",
+        "libs.simulation.coupling.runtime",
+        "libs.simulation.module.runtime",
+        "libs.simulation.subsystem.runtime",
+        "libs.simulation.system.spec"
+      ],
+      "module": "libs.simulation.system.runtime",
+      "path": "libs/simulation/system/runtime.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.subsystem.spec"
+      ],
+      "module": "libs.simulation.system.spec",
+      "path": "libs/simulation/system/spec.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.tail.examples",
+        "libs.simulation.tail.runtime"
+      ],
+      "module": "libs.simulation.tail",
+      "path": "libs/simulation/tail/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.aircraft.examples",
+        "libs.simulation.tail.runtime"
+      ],
+      "module": "libs.simulation.tail.examples",
+      "path": "libs/simulation/tail/examples.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.behavior",
+        "libs.simulation.aircraft.runtime",
+        "libs.simulation.aircraft.spec",
+        "libs.simulation.flight.runtime",
+        "libs.simulation.flight.spec"
+      ],
+      "module": "libs.simulation.tail.runtime",
+      "path": "libs/simulation/tail/runtime.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation",
+        "libs.simulation.phase.runtime",
+        "libs.simulation.run_bundle",
+        "libs.simulation.run_context"
+      ],
+      "module": "libs.simulation.validation_harness",
+      "path": "libs/simulation/validation_harness.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.spark_sequence.plan"
+      ],
+      "module": "libs.spark_sequence",
+      "path": "libs/spark_sequence/__init__.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.spark_sequence.plan",
+      "path": "libs/spark_sequence/plan.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.testing.data",
+        "libs.testing.seed"
+      ],
+      "module": "libs.testing",
+      "path": "libs/testing/__init__.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.testing.assertions",
+      "path": "libs/testing/assertions.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.testing.data",
+      "path": "libs/testing/data.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.testing.evaluation",
+      "path": "libs/testing/evaluation.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.events",
+        "libs.profiling",
+        "libs.testing.data"
+      ],
+      "module": "libs.testing.seed",
+      "path": "libs/testing/seed.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.tuning.benchmark_execution",
+        "libs.tuning.benchmark_invocation",
+        "libs.tuning.benchmark_planning",
+        "libs.tuning.benchmark_reporting",
+        "libs.tuning.benchmark_runner",
+        "libs.tuning.benchmark_runtime",
+        "libs.tuning.benchmark_search",
+        "libs.tuning.benchmark_variants",
+        "libs.tuning.objectives",
+        "libs.tuning.presets",
+        "libs.tuning.reporting",
+        "libs.tuning.validation_panels"
+      ],
+      "module": "libs.tuning",
+      "path": "libs/tuning/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.replay_report"
+      ],
+      "module": "libs.tuning.benchmark_execution",
+      "path": "libs/tuning/benchmark_execution.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.tuning.benchmark_search"
+      ],
+      "module": "libs.tuning.benchmark_invocation",
+      "path": "libs/tuning/benchmark_invocation.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.replay_report",
+        "libs.tuning.benchmark_variants",
+        "libs.tuning.objectives",
+        "libs.tuning.presets"
+      ],
+      "module": "libs.tuning.benchmark_planning",
+      "path": "libs/tuning/benchmark_planning.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.tuning.validation_panels"
+      ],
+      "module": "libs.tuning.benchmark_reporting",
+      "path": "libs/tuning/benchmark_reporting.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.perf",
+        "libs.tuning.benchmark_execution",
+        "libs.tuning.benchmark_reporting",
+        "libs.tuning.benchmark_runtime",
+        "libs.tuning.benchmark_variants"
+      ],
+      "module": "libs.tuning.benchmark_runner",
+      "path": "libs/tuning/benchmark_runner.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.tuning.benchmark_reporting"
+      ],
+      "module": "libs.tuning.benchmark_runtime",
+      "path": "libs/tuning/benchmark_runtime.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.tuning.benchmark_variants"
+      ],
+      "module": "libs.tuning.benchmark_search",
+      "path": "libs/tuning/benchmark_search.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.tuning.presets"
+      ],
+      "module": "libs.tuning.benchmark_variants",
+      "path": "libs/tuning/benchmark_variants.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.tuning.objectives",
+      "path": "libs/tuning/objectives.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.tuning.presets",
+      "path": "libs/tuning/presets.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.tuning.objectives"
+      ],
+      "module": "libs.tuning.reporting",
+      "path": "libs/tuning/reporting.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.tuning.validation_panels",
+      "path": "libs/tuning/validation_panels.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.windows.buffer",
+        "libs.windows.coverage",
+        "libs.windows.features",
+        "libs.windows.pipeline",
+        "libs.windows.policy_profile",
+        "libs.windows.tables",
+        "libs.windows.window"
+      ],
+      "module": "libs.windows",
+      "path": "libs/windows/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.perf.annotations"
+      ],
+      "module": "libs.windows.buffer",
+      "path": "libs/windows/buffer.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "libs.windows.coverage",
+      "path": "libs/windows/coverage.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.common",
+        "libs.perf.annotations",
+        "libs.perf.logger"
+      ],
+      "module": "libs.windows.features",
+      "path": "libs/windows/features.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.common",
+        "libs.perf.annotations",
+        "libs.spark_sequence",
+        "libs.windows.buffer",
+        "libs.windows.window"
+      ],
+      "module": "libs.windows.pipeline",
+      "path": "libs/windows/pipeline.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.schemas",
+        "libs.perf",
+        "libs.windows.tables",
+        "libs.windows.window"
+      ],
+      "module": "libs.windows.policy_profile",
+      "path": "libs/windows/policy_profile.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.schemas.windows",
+        "libs.pyspark",
+        "libs.windows.features",
+        "libs.windows.pipeline",
+        "libs.windows.policy_profile"
+      ],
+      "module": "libs.windows.tables",
+      "path": "libs/windows/tables.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.contracts",
+        "libs.windows.buffer"
+      ],
+      "module": "libs.windows.window",
+      "path": "libs/windows/window.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.delta",
+        "libs.io.transforms",
+        "libs.perf",
+        "pipelines.common"
+      ],
+      "module": "pipelines.00_ingest_raw",
+      "path": "pipelines/00_ingest_raw.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.delta",
+        "libs.perf",
+        "libs.profiling",
+        "pipelines.common"
+      ],
+      "module": "pipelines.10_parameter_profiles_fit",
+      "path": "pipelines/10_parameter_profiles_fit.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.delta",
+        "libs.perf",
+        "libs.profiling",
+        "pipelines.common"
+      ],
+      "module": "pipelines.12_behavior_profiles_fit",
+      "path": "pipelines/12_behavior_profiles_fit.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.events",
+        "libs.io.delta",
+        "libs.perf",
+        "pipelines.common"
+      ],
+      "module": "pipelines.15_event_profiles_fit",
+      "path": "pipelines/15_event_profiles_fit.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.events",
+        "libs.events.categorical",
+        "libs.events.continuous",
+        "libs.io.delta",
+        "libs.perf",
+        "pipelines.common"
+      ],
+      "module": "pipelines.20_events_extract",
+      "path": "pipelines/20_events_extract.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.delta",
+        "libs.perf",
+        "libs.windows",
+        "libs.windows.window",
+        "pipelines.common"
+      ],
+      "module": "pipelines.25_window_policy_profile",
+      "path": "pipelines/25_window_policy_profile.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.delta",
+        "libs.perf",
+        "libs.windows",
+        "libs.windows.window",
+        "pipelines.common"
+      ],
+      "module": "pipelines.30_windows_adaptive",
+      "path": "pipelines/30_windows_adaptive.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.backbone",
+        "libs.io.delta",
+        "libs.perf",
+        "libs.windows",
+        "pipelines.common"
+      ],
+      "module": "pipelines.40_backbone_fit",
+      "path": "pipelines/40_backbone_fit.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.graph",
+        "libs.graph.evaluation",
+        "libs.graph.hierarchy_artifacts",
+        "libs.io.delta",
+        "libs.perf",
+        "pipelines.common"
+      ],
+      "module": "pipelines.50_build_graph",
+      "path": "pipelines/50_build_graph.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.graph",
+        "libs.io.delta",
+        "libs.perf",
+        "pipelines.common"
+      ],
+      "module": "pipelines.60_fit_hierarchy",
+      "path": "pipelines/60_fit_hierarchy.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.delta",
+        "libs.perf",
+        "libs.phase",
+        "pipelines.common"
+      ],
+      "module": "pipelines.70_phase_fit",
+      "path": "pipelines/70_phase_fit.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.delta",
+        "libs.perf",
+        "libs.phase",
+        "pipelines.common"
+      ],
+      "module": "pipelines.72_phase_label_centroids",
+      "path": "pipelines/72_phase_label_centroids.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.graph.tables",
+        "libs.io.delta",
+        "libs.perf",
+        "libs.phase",
+        "libs.scoring",
+        "pipelines.common"
+      ],
+      "module": "pipelines.80_window_scores_raw",
+      "path": "pipelines/80_window_scores_raw.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.delta",
+        "libs.perf",
+        "libs.scoring",
+        "pipelines.common"
+      ],
+      "module": "pipelines.85_window_scores_calibrate",
+      "path": "pipelines/85_window_scores_calibrate.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.anomaly",
+        "libs.io.delta",
+        "libs.perf",
+        "pipelines.common"
+      ],
+      "module": "pipelines.90_anomaly_attribution",
+      "path": "pipelines/90_anomaly_attribution.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.delta",
+        "libs.perf",
+        "libs.perf.memory",
+        "libs.plotting.explorer_bundle",
+        "pipelines.common"
+      ],
+      "module": "pipelines.95_emit_explorer_bundle",
+      "path": "pipelines/95_emit_explorer_bundle.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.perf",
+        "pipelines._pipeline_runner"
+      ],
+      "module": "pipelines.97_run_fitting_pipeline",
+      "path": "pipelines/97_run_fitting_pipeline.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.perf",
+        "pipelines._pipeline_runner"
+      ],
+      "module": "pipelines.98_run_inference_pipeline",
+      "path": "pipelines/98_run_inference_pipeline.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.perf",
+        "pipelines._pipeline_runner"
+      ],
+      "module": "pipelines.99_run_full_pipeline",
+      "path": "pipelines/99_run_full_pipeline.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "pipelines",
+      "path": "pipelines/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.perf",
+        "pipelines.plans"
+      ],
+      "module": "pipelines._pipeline_runner",
+      "path": "pipelines/_pipeline_runner.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.config"
+      ],
+      "module": "pipelines.common",
+      "path": "pipelines/common.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "pipelines.plans",
+      "path": "pipelines/plans.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "scripts",
+      "path": "scripts/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.events",
+        "libs.io.delta",
+        "pipelines.common"
+      ],
+      "module": "scripts.calibrate_continuous_events",
+      "path": "scripts/calibrate_continuous_events.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.common",
+        "libs.events",
+        "libs.testing.evaluation"
+      ],
+      "module": "scripts.evaluate_sim_event_labels",
+      "path": "scripts/evaluate_sim_event_labels.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.delta",
+        "libs.testing.seed"
+      ],
+      "module": "scripts.generate_sample_data",
+      "path": "scripts/generate_sample_data.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.perf",
+        "libs.simulation.cli",
+        "libs.tuning"
+      ],
+      "module": "scripts.profile_pipeline_performance",
+      "path": "scripts/profile_pipeline_performance.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.replay_report"
+      ],
+      "module": "scripts.report_sim_replay",
+      "path": "scripts/report_sim_replay.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.delta"
+      ],
+      "module": "scripts.run_partition_manifest_jobs",
+      "path": "scripts/run_partition_manifest_jobs.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.simulation.run_cli"
+      ],
+      "module": "scripts.run_sim_pipeline",
+      "path": "scripts/run_sim_pipeline.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.graph",
+        "libs.io.delta",
+        "libs.io.schemas",
+        "libs.phase",
+        "libs.testing.seed"
+      ],
+      "module": "scripts.smoke_test_pipeline",
+      "path": "scripts/smoke_test_pipeline.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "scripts.sweep_smoke_graph_hierarchy",
+      "path": "scripts/sweep_smoke_graph_hierarchy.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.io.delta"
+      ],
+      "module": "scripts.window_diagnostics",
+      "path": "scripts/window_diagnostics.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "tools",
+      "path": "tools/__init__.py"
+    },
+    {
+      "internal_dependencies": [
+        "libs.architecture.ai_review",
+        "libs.architecture.extract",
+        "libs.architecture.render",
+        "tools.module_deps",
+        "tools.repo_schematic"
+      ],
+      "module": "tools.architecture_workflow",
+      "path": "tools/architecture_workflow.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "tools.module_deps",
+      "path": "tools/module_deps.py"
+    },
+    {
+      "internal_dependencies": [],
+      "module": "tools.repo_schematic",
+      "path": "tools/repo_schematic.py"
+    }
+  ],
+  "root": "/home/jrs/code/S3NTINEL/sentinel"
+}

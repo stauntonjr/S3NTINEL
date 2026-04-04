@@ -1,0 +1,27 @@
+{
+  "ai_review_files": [],
+  "fact_files": [
+    "architecture_facts.json"
+  ],
+  "raw_files": [
+    "raw/module_deps.json",
+    "raw/module_deps.txt",
+    "raw/module_edges.txt",
+    "raw/repo_schematic.json",
+    "raw/repo_schematic.txt",
+    "raw/reverse_deps.txt"
+  ],
+  "rendered_files": [
+    "architecture_metrics.json",
+    "architecture_metrics.md",
+    "core_library_semantics.md",
+    "lucid_edges.csv",
+    "lucid_nodes.csv",
+    "pipeline_data_flow.md",
+    "pipeline_layered_architecture.md",
+    "pipeline_stage_catalog.md",
+    "taxonomy_diagram.md",
+    "view_index.md",
+    "workspace.dsl"
+  ]
+}

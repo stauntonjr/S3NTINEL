@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
@@ -115,8 +116,19 @@ def target_names(target: ast.AST) -> list[str]:
 @dataclass
 class FunctionInfo:
     signature: str
+    name: str
     decorators: list[str] = field(default_factory=list)
     doc: str | None = None
+    lineno: int | None = None
+    end_lineno: int | None = None
+    span_loc: int = 0
+
+
+@dataclass
+class ClassFieldInfo:
+    name: str
+    annotation: str = ""
+    default: str = ""
 
 
 @dataclass
@@ -126,7 +138,11 @@ class ClassInfo:
     bases: list[str] = field(default_factory=list)
     doc: str | None = None
     class_attributes: list[str] = field(default_factory=list)
+    fields: list[ClassFieldInfo] = field(default_factory=list)
     methods: list[FunctionInfo] = field(default_factory=list)
+    lineno: int | None = None
+    end_lineno: int | None = None
+    span_loc: int = 0
 
 
 @dataclass
@@ -138,6 +154,42 @@ class ModuleInfo:
     functions: list[FunctionInfo] = field(default_factory=list)
     classes: list[ClassInfo] = field(default_factory=list)
     parse_error: str | None = None
+    lineno: int | None = None
+    end_lineno: int | None = None
+    span_loc: int = 0
+
+
+def span_loc_for(node: ast.AST | None) -> int:
+    if node is None:
+        return 0
+    lineno = getattr(node, "lineno", None)
+    end_lineno = getattr(node, "end_lineno", None)
+    if lineno is None or end_lineno is None:
+        return 0
+    return max(0, end_lineno - lineno + 1)
+
+
+def class_field_info(node: ast.Assign | ast.AnnAssign) -> ClassFieldInfo | None:
+    if isinstance(node, ast.AnnAssign):
+        if not isinstance(node.target, ast.Name):
+            return None
+        if node.target.id.isupper():
+            return None
+        return ClassFieldInfo(
+            name=node.target.id,
+            annotation=unparse(node.annotation),
+            default=unparse(node.value) if node.value is not None else "",
+        )
+    if isinstance(node, ast.Assign):
+        if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
+            return None
+        if node.targets[0].id.isupper():
+            return None
+        return ClassFieldInfo(
+            name=node.targets[0].id,
+            default=unparse(node.value),
+        )
+    return None
 
 
 class ModuleVisitor(ast.NodeVisitor):
@@ -176,8 +228,12 @@ class ModuleVisitor(ast.NodeVisitor):
         self.info.functions.append(
             FunctionInfo(
                 signature=format_signature(node),
+                name=node.name,
                 decorators=decorator_names(node),
                 doc=get_doc_first_line(node),
+                lineno=getattr(node, "lineno", None),
+                end_lineno=getattr(node, "end_lineno", None),
+                span_loc=span_loc_for(node),
             )
         )
 
@@ -185,8 +241,12 @@ class ModuleVisitor(ast.NodeVisitor):
         self.info.functions.append(
             FunctionInfo(
                 signature=format_signature(node),
+                name=node.name,
                 decorators=decorator_names(node),
                 doc=get_doc_first_line(node),
+                lineno=getattr(node, "lineno", None),
+                end_lineno=getattr(node, "end_lineno", None),
+                span_loc=span_loc_for(node),
             )
         )
 
@@ -196,6 +256,9 @@ class ModuleVisitor(ast.NodeVisitor):
             decorators=decorator_names(node),
             bases=[unparse(b) for b in node.bases],
             doc=get_doc_first_line(node),
+            lineno=getattr(node, "lineno", None),
+            end_lineno=getattr(node, "end_lineno", None),
+            span_loc=span_loc_for(node),
         )
 
         for item in node.body:
@@ -203,17 +266,27 @@ class ModuleVisitor(ast.NodeVisitor):
                 c.methods.append(
                     FunctionInfo(
                         signature=format_signature(item),
+                        name=item.name,
                         decorators=decorator_names(item),
                         doc=get_doc_first_line(item),
+                        lineno=getattr(item, "lineno", None),
+                        end_lineno=getattr(item, "end_lineno", None),
+                        span_loc=span_loc_for(item),
                     )
                 )
             elif isinstance(item, ast.Assign):
                 for target in item.targets:
                     for name in target_names(target):
                         c.class_attributes.append(name)
+                field_info = class_field_info(item)
+                if field_info is not None:
+                    c.fields.append(field_info)
             elif isinstance(item, ast.AnnAssign):
                 if isinstance(item.target, ast.Name):
                     c.class_attributes.append(item.target.id)
+                field_info = class_field_info(item)
+                if field_info is not None:
+                    c.fields.append(field_info)
 
         self.info.classes.append(c)
 
@@ -231,11 +304,63 @@ def parse_module(path: Path, root: Path) -> ModuleInfo:
     visitor = ModuleVisitor()
     visitor.info.path = path.relative_to(root)
     visitor.info.doc = get_doc_first_line(tree)
+    visitor.info.lineno = 1 if text else None
+    visitor.info.end_lineno = len(text.splitlines()) if text else None
+    visitor.info.span_loc = visitor.info.end_lineno or 0
 
     for node in tree.body:
         visitor.visit(node)
 
     return visitor.info
+
+
+def function_payload(info: FunctionInfo) -> dict[str, object]:
+    return {
+        "name": info.name,
+        "signature": info.signature,
+        "decorators": info.decorators,
+        "doc": info.doc,
+        "lineno": info.lineno,
+        "end_lineno": info.end_lineno,
+        "span_loc": info.span_loc,
+    }
+
+
+def class_payload(info: ClassInfo) -> dict[str, object]:
+    return {
+        "name": info.name,
+        "decorators": info.decorators,
+        "bases": info.bases,
+        "doc": info.doc,
+        "class_attributes": info.class_attributes,
+        "fields": [
+            {
+                "name": field.name,
+                "annotation": field.annotation,
+                "default": field.default,
+            }
+            for field in info.fields
+        ],
+        "methods": [function_payload(method) for method in info.methods],
+        "lineno": info.lineno,
+        "end_lineno": info.end_lineno,
+        "span_loc": info.span_loc,
+    }
+
+
+def module_payload(info: ModuleInfo) -> dict[str, object]:
+    return {
+        "path": str(info.path),
+        "doc": info.doc,
+        "imports": info.imports,
+        "constants": info.constants,
+        "functions": [function_payload(fn) for fn in info.functions],
+        "classes": [class_payload(cls) for cls in info.classes],
+        "parse_error": info.parse_error,
+        "lineno": info.lineno,
+        "end_lineno": info.end_lineno,
+        "span_loc": info.span_loc,
+    }
 
 
 def should_skip(path: Path, excludes: set[str]) -> bool:
@@ -259,7 +384,10 @@ def render_module(
     show_method_docs: bool,
 ) -> str:
     lines: list[str] = []
-    lines.append(f"{info.path}")
+    header = f"{info.path}"
+    if info.span_loc:
+        header += f"  [loc={info.span_loc}]"
+    lines.append(header)
 
     if info.parse_error:
         lines.append(f"  !! {info.parse_error}")
@@ -283,7 +411,10 @@ def render_module(
         for fn in info.functions:
             for dec in fn.decorators:
                 lines.append(f"    - @{dec}")
-            lines.append(f"    - {fn.signature}")
+            span = ""
+            if fn.lineno is not None and fn.end_lineno is not None:
+                span = f"  [lines {fn.lineno}-{fn.end_lineno}, loc={fn.span_loc}]"
+            lines.append(f"    - {fn.signature}{span}")
             if show_function_docs and fn.doc:
                 lines.append(f"      doc: {fn.doc}")
 
@@ -292,22 +423,40 @@ def render_module(
         for cls in info.classes:
             dec_prefix = " ".join(f"@{d}" for d in cls.decorators)
             bases = f"({', '.join(cls.bases)})" if cls.bases else ""
+            span = ""
+            if cls.lineno is not None and cls.end_lineno is not None:
+                span = f"  [lines {cls.lineno}-{cls.end_lineno}, loc={cls.span_loc}]"
             if dec_prefix:
-                lines.append(f"    - {dec_prefix} class {cls.name}{bases}")
+                lines.append(f"    - {dec_prefix} class {cls.name}{bases}{span}")
             else:
-                lines.append(f"    - class {cls.name}{bases}")
+                lines.append(f"    - class {cls.name}{bases}{span}")
             if show_doc and cls.doc:
                 lines.append(f"      doc: {cls.doc}")
             if cls.class_attributes:
                 lines.append("      attributes:")
                 for attr in cls.class_attributes:
                     lines.append(f"        - {attr}")
+            if cls.fields:
+                lines.append("      fields:")
+                for field_info in cls.fields:
+                    detail = field_info.name
+                    if field_info.annotation:
+                        detail += f": {field_info.annotation}"
+                    if field_info.default:
+                        detail += f" = {field_info.default}"
+                    lines.append(f"        - {detail}")
             if cls.methods:
                 lines.append("      methods:")
                 for method in cls.methods:
                     for dec in method.decorators:
                         lines.append(f"        - @{dec}")
-                    lines.append(f"        - {method.signature}")
+                    span = ""
+                    if method.lineno is not None and method.end_lineno is not None:
+                        span = (
+                            f"  [lines {method.lineno}-{method.end_lineno},"
+                            f" loc={method.span_loc}]"
+                        )
+                    lines.append(f"        - {method.signature}{span}")
                     if show_method_docs and method.doc:
                         lines.append(f"          doc: {method.doc}")
 
@@ -360,24 +509,36 @@ def main() -> int:
         action="store_true",
         help="Include first docstring line for methods.",
     )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON instead of text.",
+    )
 
     args = parser.parse_args()
     root = Path(args.root).resolve()
     excludes = set(DEFAULT_EXCLUDES) | set(args.exclude)
 
     modules = [parse_module(path, root) for path in iter_python_files(root, excludes)]
-    rendered = [
-        render_module(
-            m,
-            show_doc=not args.no_doc,
-            show_imports=args.imports,
-            show_constants=args.constants,
-            show_function_docs=args.function_docs,
-            show_method_docs=args.method_docs,
-        )
-        for m in modules
-    ]
-    output = "\n\n".join(rendered).rstrip() + "\n"
+    if args.json:
+        payload = {
+            "root": str(root),
+            "modules": [module_payload(module) for module in modules],
+        }
+        output = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    else:
+        rendered = [
+            render_module(
+                m,
+                show_doc=not args.no_doc,
+                show_imports=args.imports,
+                show_constants=args.constants,
+                show_function_docs=args.function_docs,
+                show_method_docs=args.method_docs,
+            )
+            for m in modules
+        ]
+        output = "\n\n".join(rendered).rstrip() + "\n"
 
     if args.output:
         Path(args.output).write_text(output, encoding="utf-8")

@@ -43,6 +43,8 @@ Those live under [`pipelines/`](./../pipelines/README.md), [`scripts/`](./../scr
   - parameter behavior implementations and violation mechanics
 - `testing/`
   - shared test infrastructure only
+- `architecture/`
+  - architecture extraction, C4 rendering, and LOC/skew rollups for repo tooling
 - `perf/`
   - MLflow, wall-time, and stage-manifest support
 - `conformal/`
