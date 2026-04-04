@@ -126,19 +126,42 @@ def summarize_phase_candidates(distance_candidates_df: "DataFrame") -> "DataFram
         .withColumn("phase_raw_distances", F.transform("phase_candidates", lambda candidate: candidate["raw_distance"]))
         .withColumn("phase_distance_scales", F.transform("phase_candidates", lambda candidate: candidate["distance_scale"]))
         .withColumn("phase_costs", F.transform("phase_candidates", lambda candidate: candidate["phase_cost"]))
+        .withColumn("sorted_phase_costs", F.sort_array(F.col("phase_costs")))
         .withColumn(
             "raw_phase_pos",
-            F.expr("cast(array_position(phase_raw_distances, array_min(phase_raw_distances)) as int)"),
+            F.expr("cast(array_position(phase_costs, array_min(phase_costs)) as int)"),
         )
         .withColumn("raw_phase_id", (F.col("raw_phase_pos") - F.lit(1)).cast("int"))
+        .withColumn(
+            "raw_phase_best_cost",
+            F.element_at(F.col("sorted_phase_costs"), F.lit(1)).cast("double"),
+        )
+        .withColumn(
+            "raw_phase_second_best_cost",
+            F.when(
+                F.size(F.col("sorted_phase_costs")) > F.lit(1),
+                F.element_at(F.col("sorted_phase_costs"), F.lit(2)),
+            )
+            .otherwise(F.element_at(F.col("sorted_phase_costs"), F.lit(1)))
+            .cast("double"),
+        )
         .withColumn(
             "raw_phase_confidence",
             F.greatest(
                 F.lit(0.0),
-                F.lit(1.0) - F.element_at(F.col("phase_costs"), F.col("raw_phase_pos")),
+                (
+                    (F.col("raw_phase_second_best_cost") - F.col("raw_phase_best_cost"))
+                    / (F.col("raw_phase_second_best_cost") + F.lit(1e-6))
+                ),
             ),
         )
-        .drop("phase_candidates", "raw_phase_pos")
+        .drop(
+            "phase_candidates",
+            "raw_phase_pos",
+            "sorted_phase_costs",
+            "raw_phase_best_cost",
+            "raw_phase_second_best_cost",
+        )
     )
 
 

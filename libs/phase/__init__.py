@@ -11,9 +11,10 @@ from libs.phase.pipeline import (
     fit_phase_feature_config_from_spark,
     fit_phase_feature_config_with_diagnostics_from_spark,
 )
-from libs.phase.tables import PhaseBaselinesTable, PhaseWindowsTable
+from libs.phase.tables import PhaseBaselinesTable, PhaseLabelCentroidsTable, PhaseWindowsTable
 from libs.phase.validator import (
     build_phase_validation_assignments,
+    build_phase_centroid_comparison_summary_from_tables,
     evaluate_detected_phases,
     validate_detected_phases_from_tables,
 )
@@ -24,8 +25,10 @@ __all__ = [
     "PhaseClusterModel",
     "PhaseDetectionPlan",
     "PhaseFeatureFrame",
+    "PhaseLabelCentroidsTable",
     "PhaseWindowsTable",
     "analyze_phase_behavior",
+    "build_phase_centroid_comparison_summary_from_tables",
     "evaluate_detected_phases",
     "PhaseFeatureConfig",
     "fit_phase_feature_config_from_spark",

@@ -343,6 +343,52 @@ def test_anomaly_validator_compares_attribution_to_fault_truth():
     assert misbehavior_summary["dominant_subsystem_match_rate"] == 1.0
 
 
+def test_anomaly_validator_handles_truth_windows_with_no_overlapping_detected_windows():
+    raw_telemetry_df = pd.DataFrame.from_records(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "timestamp_utc": _ts(10),
+                "parameter_name": "bleed_supply_psi",
+                "system_id": "SYS_AIRFRAME",
+                "subsystem_id": "SUB_AIR_BLEED",
+                "module_id": "MOD_BLEED_SUPPLY",
+                "misbehavior_active": True,
+                "misbehavior_family_label": "saturation",
+                "misbehavior_detail_label": "saturation",
+                "misbehavior_window_id": "MBW1",
+                "fault_active": True,
+                "fault_family_label": "regulated",
+                "fault_type": "saturation",
+                "fault_window_id": "FW1",
+            },
+        ]
+    )
+    windows_df = pd.DataFrame.from_records(
+        [
+            {"tail_id": "T1", "flight_id": "F1", "win_id": 1, "t_start": _ts(1), "t_end": _ts(2)},
+        ]
+    )
+
+    summary = validate_attribution_against_misbehavior_truth(
+        raw_telemetry_df=raw_telemetry_df,
+        windows_df=windows_df,
+        anomaly_window_attribution_df=pd.DataFrame(),
+        anomaly_telemetry_attribution_df=pd.DataFrame(),
+        anomaly_event_attribution_df=pd.DataFrame(),
+    )
+
+    assert summary["status"] == "ok"
+    assert summary["misbehavior_window_count"] == 1
+    assert summary["dominant_subsystem_match_count"] == 0
+    assert summary["dominant_subsystem_match_rate"] == 0.0
+    assert summary["telemetry_parameter_match_count"] == 0
+    assert summary["event_parameter_match_count"] == 0
+    assert summary["misbehavior_windows"][0]["overlapping_window_count"] == 0
+    assert summary["misbehavior_windows"][0]["primary_win_id"] is None
+
+
 def test_score_validator_does_not_credit_early_broad_overlap():
     raw_telemetry_df = pd.DataFrame.from_records(
         [

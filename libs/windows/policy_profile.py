@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import math
 from typing import TYPE_CHECKING, Any
 
 from libs.io.schemas import WINDOW_POLICY_PROFILE_SCHEMA
+from libs.perf import get_logger
 from libs.windows.tables import WindowPolicyProfileTable, WindowProfileRowsFrame, WindowsTable
 from libs.windows.window import DEFAULT_MIN_SAMPLING_RATE_HZ, WindowPolicy
 
@@ -12,10 +12,22 @@ if TYPE_CHECKING:
     from pyspark.sql import DataFrame
 
 
+LOGGER = get_logger("libs.windows.policy_profile")
+
+
 def _spark_functions():
     from pyspark.sql import functions as F
 
     return F
+
+
+def _safe_unpersist(df: "DataFrame | None", *, label: str) -> None:
+    if df is None:
+        return
+    try:
+        df.unpersist()
+    except Exception as exc:  # pragma: no cover - defensive cleanup after Spark JVM failure
+        LOGGER.warning("window_policy_profile unpersist skipped for %s: %s", label, exc)
 
 
 @dataclass(frozen=True)
@@ -83,55 +95,6 @@ class WindowPolicyEvaluationSpec:
     warning_pair_cost_ratio: float = 1.25
     warning_p95_event_ratio: float = 1.25
     warning_min_boundary_jaccard: float = 0.5
-
-
-@dataclass(frozen=True)
-class WindowPolicyCandidateProfile:
-    values: dict[str, Any]
-    balance_penalty: float
-    objective_score: float
-
-    @classmethod
-    def from_stats_row(cls, stats_row: Any, *, spec: WindowPolicyProfileSpec) -> "WindowPolicyCandidateProfile":
-        payload = dict(stats_row.asDict())
-        balance_penalty = abs(float(payload.get("event_threshold_close_rate") or 0.0) - float(spec.target_event_threshold_close_rate)) + abs(
-            float(payload.get("max_ms_close_rate") or 0.0) - float(spec.target_max_ms_close_rate)
-        )
-        objective_score = float(
-            float(payload.get("mean_event_type_count") or 0.0)
-            - balance_penalty
-            - math.log1p(float(payload.get("pair_cost_proxy") or 0.0) / max(float(payload.get("sampled_event_count") or 0.0), 1.0))
-        )
-        return cls(
-            values=payload,
-            balance_penalty=float(balance_penalty),
-            objective_score=float(objective_score),
-        )
-
-    @property
-    def max_ms(self) -> int:
-        return int(self.values.get("max_ms") or 0)
-
-    @property
-    def event_threshold(self) -> int:
-        return int(self.values.get("event_threshold") or 0)
-
-    def ranking_key(self, *, fallback_policy: WindowPolicy) -> tuple[float, float, float, int, int]:
-        return (
-            float(self.balance_penalty),
-            float(self.values.get("pair_cost_proxy") or 0.0),
-            -float(self.values.get("mean_event_type_count") or 0.0),
-            abs(self.max_ms - int(fallback_policy.max_ms)),
-            abs(self.event_threshold - int(fallback_policy.event_threshold)),
-        )
-
-    def materialized_row(self, *, candidate_rank: int) -> dict[str, Any]:
-        payload = dict(self.values)
-        payload["balance_penalty"] = float(self.balance_penalty)
-        payload["objective_score"] = float(self.objective_score)
-        payload["candidate_rank"] = int(candidate_rank)
-        payload["is_selected"] = candidate_rank == 1
-        return payload
 
 
 @dataclass(frozen=True)
@@ -245,6 +208,90 @@ class WindowMetricsSummary:
 @dataclass(frozen=True)
 class WindowPolicyProfile:
     spec: WindowPolicyProfileSpec
+
+    def _fallback_profile_row(
+        self,
+        *,
+        sampled_event_count: int,
+        sampled_flight_count: int,
+    ) -> dict[str, Any]:
+        fallback_policy = self.spec.fallback_policy
+        return {
+            "profile_id": "WINDOW_POLICY_PROFILE_V1",
+            "profile_scope": "global",
+            "candidate_rank": 1,
+            "is_selected": True,
+            "max_ms": int(fallback_policy.max_ms),
+            "event_threshold": int(fallback_policy.event_threshold),
+            "min_ms": int(fallback_policy.min_ms),
+            "inactivity_timeout_ms": int(fallback_policy.inactivity_timeout_ms),
+            "objective_score": 0.0,
+            "balance_penalty": 0.0,
+            "predicted_window_count": 0,
+            "mean_duration_ms": 0.0,
+            "p95_duration_ms": 0.0,
+            "mean_event_count": 0.0,
+            "p95_event_count": 0.0,
+            "mean_sensor_count": 0.0,
+            "p95_sensor_count": 0.0,
+            "mean_event_type_count": 0.0,
+            "p95_event_type_count": 0.0,
+            "event_threshold_close_rate": 0.0,
+            "max_ms_close_rate": 0.0,
+            "event_threshold_plus_max_ms_close_rate": 0.0,
+            "end_of_stream_close_rate": 0.0,
+            "pair_cost_proxy": 0.0,
+            "same_window_pair_expansion_proxy": 0.0,
+            "sampled_event_count": int(sampled_event_count),
+            "sampled_flight_count": int(sampled_flight_count),
+        }
+
+    def _fallback_profile_dataframe(
+        self,
+        spark: Any,
+        *,
+        sampled_event_count: int,
+        sampled_flight_count: int,
+    ) -> "DataFrame":
+        return spark.createDataFrame(
+            [self._fallback_profile_row(sampled_event_count=sampled_event_count, sampled_flight_count=sampled_flight_count)],
+            schema=WINDOW_POLICY_PROFILE_SCHEMA(),
+        )
+
+    def _skipped_evaluation_report(
+        self,
+        *,
+        reason: str,
+        profile_df: "DataFrame | None",
+    ) -> dict[str, Any]:
+        configured_policy = self.spec.fallback_policy
+        selected_policy, policy_source = self.resolve_selected_policy(profile_df, fallback_policy=configured_policy)
+        selected_profile_row = self._selected_profile_row(profile_df)
+        return {
+            "status": "skipped",
+            "reason": str(reason),
+            "selected_policy": {
+                "policy_source": policy_source,
+                "resolved_policy": {
+                    "max_ms": int(selected_policy.max_ms),
+                    "event_threshold": int(selected_policy.event_threshold),
+                    "min_ms": int(selected_policy.min_ms),
+                    "inactivity_timeout_ms": int(selected_policy.inactivity_timeout_ms),
+                },
+                "configured_policy": {
+                    "max_ms": int(configured_policy.max_ms),
+                    "event_threshold": int(configured_policy.event_threshold),
+                    "min_ms": int(configured_policy.min_ms),
+                    "inactivity_timeout_ms": int(configured_policy.inactivity_timeout_ms),
+                },
+                "profile_row": selected_profile_row,
+            },
+            "candidate_frontier": [],
+            "selection_delta_vs_configured": {},
+            "edge_stability": {"status": "skipped", "reason": str(reason), "samples": [], "mean_boundary_jaccard": None},
+            "closure_mix": {"status": "skipped", "reason": str(reason)},
+            "downstream_cost_proxy": {"status": "skipped", "reason": str(reason)},
+        }
 
     def _sample_event_flights(self, events_df: "DataFrame") -> tuple["DataFrame", int]:
         F = _spark_functions()
@@ -558,12 +605,12 @@ class WindowPolicyProfile:
                         }
                     )
                 finally:
-                    subset_boundary_df.unpersist()
-                    baseline_subset_df.unpersist()
-                    subset_windows_df.unpersist()
-                    subset_keys_df.unpersist()
+                    _safe_unpersist(subset_boundary_df, label="subset_boundary_df")
+                    _safe_unpersist(baseline_subset_df, label="baseline_subset_df")
+                    _safe_unpersist(subset_windows_df, label="subset_windows_df")
+                    _safe_unpersist(subset_keys_df, label="subset_keys_df")
         finally:
-            full_windows_df.unpersist()
+            _safe_unpersist(full_windows_df, label="full_windows_df")
 
         usable_jaccards = [
             float(sample["boundary_jaccard"])
@@ -654,7 +701,7 @@ class WindowPolicyProfile:
                         evaluation_spec=evaluation_spec,
                     )
                 finally:
-                    selected_windows_df.unpersist()
+                    _safe_unpersist(selected_windows_df, label="selected_windows_df")
 
             selection_delta = self._selection_delta_vs_configured(
                 selected_policy=selected_policy,
@@ -711,36 +758,82 @@ class WindowPolicyProfile:
             }
         finally:
             if managed_profile_df is not None:
-                managed_profile_df.unpersist()
+                _safe_unpersist(managed_profile_df, label="managed_profile_df")
 
     def build_dataframe(self, events_df: "DataFrame") -> "DataFrame":
         spark = events_df.sparkSession
+        F = _spark_functions()
+        from pyspark.sql import Window as SparkWindow
+
         sampled_events_df, _ = self._sample_event_flights(events_df)
         sampled_events_df = sampled_events_df.persist()
+        sampled_event_count = 0
+        sampled_flight_count = 0
         try:
-            sampled_event_count = int(sampled_events_df.count())
-            sampled_flight_count = int(sampled_events_df.select("tail_id", "flight_id").distinct().count())
-            median_gap_ms, gap_quantiles = self._gap_statistics(sampled_events_df)
-            candidates = self.spec.candidate_policies(median_gap_ms=median_gap_ms, upper_gap_ms=gap_quantiles)
-            candidate_profiles: list[WindowPolicyCandidateProfile] = []
-            for policy in candidates:
-                stats_row = self._evaluate_candidate(
-                    sampled_events_df,
-                    policy=policy,
+            try:
+                sampled_event_count = int(sampled_events_df.count())
+                sampled_flight_count = int(sampled_events_df.select("tail_id", "flight_id").distinct().count())
+                median_gap_ms, gap_quantiles = self._gap_statistics(sampled_events_df)
+                candidates = self.spec.candidate_policies(median_gap_ms=median_gap_ms, upper_gap_ms=gap_quantiles)
+                candidate_rows: list[dict[str, Any]] = []
+                for policy in candidates:
+                    candidate_row = (
+                        self._evaluate_candidate(
+                            sampled_events_df,
+                            policy=policy,
+                            sampled_event_count=sampled_event_count,
+                            sampled_flight_count=sampled_flight_count,
+                        )
+                        .first()
+                    )
+                    if candidate_row is not None:
+                        candidate_rows.append(dict(candidate_row.asDict(recursive=True)))
+            except Exception as exc:  # pragma: no cover - exercised in Spark integration
+                LOGGER.warning("window policy profile falling back to configured policy after profiling failure: %s", exc)
+                return self._fallback_profile_dataframe(
+                    spark,
                     sampled_event_count=sampled_event_count,
                     sampled_flight_count=sampled_flight_count,
-                ).first()
-                if stats_row is None:
-                    continue
-                candidate_profiles.append(WindowPolicyCandidateProfile.from_stats_row(stats_row, spec=self.spec))
-            if not candidate_profiles:
-                return spark.createDataFrame([], schema=WINDOW_POLICY_PROFILE_SCHEMA())
+                )
+            if not candidate_rows:
+                return self._fallback_profile_dataframe(
+                    spark,
+                    sampled_event_count=sampled_event_count,
+                    sampled_flight_count=sampled_flight_count,
+                )
             fallback_policy = self.spec.fallback_policy
-            ranked_rows = sorted(candidate_profiles, key=lambda item: item.ranking_key(fallback_policy=fallback_policy))
-            materialized_rows = [item.materialized_row(candidate_rank=candidate_rank) for candidate_rank, item in enumerate(ranked_rows, start=1)]
-            return spark.createDataFrame(materialized_rows, schema=WINDOW_POLICY_PROFILE_SCHEMA())
+            candidate_df = spark.createDataFrame(candidate_rows)
+            ranked_df = (
+                candidate_df.withColumn(
+                    "balance_penalty",
+                    F.abs(F.col("event_threshold_close_rate") - F.lit(float(self.spec.target_event_threshold_close_rate)))
+                    + F.abs(F.col("max_ms_close_rate") - F.lit(float(self.spec.target_max_ms_close_rate))),
+                )
+                .withColumn(
+                    "objective_score",
+                    F.col("mean_event_type_count")
+                    - F.col("balance_penalty")
+                    - F.log1p(F.col("pair_cost_proxy") / F.greatest(F.col("sampled_event_count").cast("double"), F.lit(1.0))),
+                )
+                .withColumn("_max_ms_distance", F.abs(F.col("max_ms") - F.lit(int(fallback_policy.max_ms))))
+                .withColumn(
+                    "_event_threshold_distance",
+                    F.abs(F.col("event_threshold") - F.lit(int(fallback_policy.event_threshold))),
+                )
+            )
+            ranking_window = SparkWindow.orderBy(
+                F.col("balance_penalty").asc(),
+                F.col("pair_cost_proxy").asc(),
+                F.col("mean_event_type_count").desc(),
+                F.col("_max_ms_distance").asc(),
+                F.col("_event_threshold_distance").asc(),
+            )
+            return ranked_df.withColumn("candidate_rank", F.row_number().over(ranking_window)).withColumn(
+                "is_selected",
+                F.col("candidate_rank") == F.lit(1),
+            ).select(*WINDOW_POLICY_PROFILE_SCHEMA().fieldNames())
         finally:
-            sampled_events_df.unpersist()
+            _safe_unpersist(sampled_events_df, label="sampled_events_df")
 
     @classmethod
     def resolve_selected_policy(cls, profile_df: "DataFrame | None", *, fallback_policy: WindowPolicy) -> tuple[WindowPolicy, str]:
@@ -771,8 +864,16 @@ def build_window_policy_profile_evaluation_report_spark(
     profile_spec: WindowPolicyProfileSpec,
     evaluation_spec: WindowPolicyEvaluationSpec | None = None,
 ) -> dict[str, Any]:
-    return WindowPolicyProfile(spec=profile_spec).build_evaluation_report(
-        events_df,
-        profile_df=profile_df,
-        evaluation_spec=evaluation_spec,
-    )
+    profile = WindowPolicyProfile(spec=profile_spec)
+    try:
+        return profile.build_evaluation_report(
+            events_df,
+            profile_df=profile_df,
+            evaluation_spec=evaluation_spec,
+        )
+    except Exception as exc:  # pragma: no cover - exercised in Spark integration
+        LOGGER.warning("window policy evaluation skipped after profiling/evaluation failure: %s", exc)
+        return profile._skipped_evaluation_report(
+            reason=f"evaluation_failed: {exc!r}",
+            profile_df=profile_df,
+        )

@@ -119,7 +119,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--format", default="parquet", choices=("parquet", "delta"))
     parser.add_argument("--write-mode", default="overwrite", choices=("overwrite", "append", "merge"))
     parser.add_argument("--min-warm", default=1, type=int)
-    parser.add_argument("--phase-count", default=3, type=int)
+    parser.add_argument("--phase-count", default=4, type=int)
     parser.add_argument("--variant-set", default="quick", choices=tuple(sorted(VARIANT_SET_BY_NAME)))
     parser.add_argument(
         "--variant",

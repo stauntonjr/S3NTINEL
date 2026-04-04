@@ -44,6 +44,15 @@ def _materialize_df(df: "DataFrame") -> None:
     df.count()
 
 
+def _safe_unpersist(df: "DataFrame | None", *, label: str) -> None:
+    if df is None:
+        return
+    try:
+        df.unpersist()
+    except Exception as exc:  # pragma: no cover - defensive cleanup after Spark JVM failure
+        LOGGER.warning("build_graph unpersist skipped for %s: %s", label, exc)
+
+
 def _resolve_precision_threshold(
     spark: "SparkSession",
     *,
@@ -330,59 +339,62 @@ def run() -> None:
                 )
                 timing_ms["output_writes"] = _elapsed_ms(started)
                 started = time.perf_counter()
-                graph_evaluation_report = build_graph_stage_evaluation_report_spark(
-                    spark=spark,
-                    events_df=graph_events_df,
-                    windows_df=graph_windows_df,
-                    window_features_df=window_features_df,
-                    backbone_df=backbone_df,
-                    precision_df=precision_pdf,
-                    event_sdf=event_sdf,
-                    lag_profile_sdf=lag_profile_sdf,
-                    lag_sdf=lag_sdf,
-                    transition_sdf=transition_sdf,
-                    fused_sdf=fused_df,
-                    parameter_universe_df=parameter_universe_df,
-                    precision_ridge_lambda=precision_ridge_lambda,
-                    min_abs_partial_corr=min_abs_partial_corr,
-                    min_event_count=min_event_count,
-                    min_event_npmi=min_event_npmi,
-                    event_top_k_per_parameter_name=settings.graph.event.top_k_per_parameter_name,
-                    lag_tau_max_seconds=lag_tau_max_seconds,
-                    lag_bands=lag_band_specs,
-                    min_lag_count=min_lag_count,
-                    max_mean_lag_seconds=settings.graph.lag.max_mean_lag_seconds,
-                    lag_top_k_outgoing=settings.graph.lag.top_k_outgoing,
-                    min_transition_count=min_transition_count,
-                    alpha=alpha,
-                    beta=beta,
-                    gamma=gamma,
-                    max_graph_sensor_universe=max_graph_sensor_universe,
-                    hierarchy_spec=HierarchySpec(
-                        min_edge_weight=min_fused_edge_weight,
-                        top_k_per_parameter_name=settings.hierarchy.top_k_per_parameter_name,
-                        subsystem_min_edge_weight=settings.hierarchy.subsystem_min_edge_weight,
-                        system_min_edge_weight=settings.hierarchy.system_min_edge_weight,
-                    ),
-                )
-                timing_ms["graph_evaluation_report"] = _elapsed_ms(started)
+                try:
+                    graph_evaluation_report = build_graph_stage_evaluation_report_spark(
+                        spark=spark,
+                        events_df=graph_events_df,
+                        windows_df=graph_windows_df,
+                        window_features_df=window_features_df,
+                        backbone_df=backbone_df,
+                        precision_df=precision_pdf,
+                        event_sdf=event_sdf,
+                        lag_profile_sdf=lag_profile_sdf,
+                        lag_sdf=lag_sdf,
+                        transition_sdf=transition_sdf,
+                        fused_sdf=fused_df,
+                        parameter_universe_df=parameter_universe_df,
+                        precision_ridge_lambda=precision_ridge_lambda,
+                        min_abs_partial_corr=min_abs_partial_corr,
+                        min_event_count=min_event_count,
+                        min_event_npmi=min_event_npmi,
+                        event_top_k_per_parameter_name=settings.graph.event.top_k_per_parameter_name,
+                        lag_tau_max_seconds=lag_tau_max_seconds,
+                        lag_bands=lag_band_specs,
+                        min_lag_count=min_lag_count,
+                        max_mean_lag_seconds=settings.graph.lag.max_mean_lag_seconds,
+                        lag_top_k_outgoing=settings.graph.lag.top_k_outgoing,
+                        min_transition_count=min_transition_count,
+                        alpha=alpha,
+                        beta=beta,
+                        gamma=gamma,
+                        max_graph_sensor_universe=max_graph_sensor_universe,
+                        hierarchy_spec=HierarchySpec(
+                            min_edge_weight=min_fused_edge_weight,
+                            top_k_per_parameter_name=settings.hierarchy.top_k_per_parameter_name,
+                            subsystem_min_edge_weight=settings.hierarchy.subsystem_min_edge_weight,
+                            system_min_edge_weight=settings.hierarchy.system_min_edge_weight,
+                        ),
+                    )
+                    timing_ms["graph_evaluation_report"] = _elapsed_ms(started)
+                except Exception as exc:  # pragma: no cover - best-effort evaluation should not fail the stage
+                    LOGGER.warning("build_graph evaluation report skipped: %s", exc)
+                    graph_evaluation_report = {
+                        "status": "skipped",
+                        "reason": "evaluation_failed",
+                        "error": repr(exc),
+                    }
+                    timing_ms["graph_evaluation_report"] = _elapsed_ms(started)
             finally:
-                if parameter_universe_df is not None:
-                    parameter_universe_df.unpersist()
-                if fused_df is not None:
-                    fused_df.unpersist()
+                _safe_unpersist(parameter_universe_df, label="parameter_universe_df")
+                _safe_unpersist(fused_df, label="fused_df")
         finally:
-            if event_sdf is not None:
-                event_sdf.unpersist()
-            if lag_profile_sdf is not None:
-                lag_profile_sdf.unpersist()
-            if lag_sdf is not None:
-                lag_sdf.unpersist()
-            if transition_sdf is not None:
-                transition_sdf.unpersist()
+            _safe_unpersist(event_sdf, label="event_sdf")
+            _safe_unpersist(lag_profile_sdf, label="lag_profile_sdf")
+            _safe_unpersist(lag_sdf, label="lag_sdf")
+            _safe_unpersist(transition_sdf, label="transition_sdf")
     finally:
-        window_features_df.unpersist()
-        graph_events_df.unpersist()
+        _safe_unpersist(window_features_df, label="window_features_df")
+        _safe_unpersist(graph_events_df, label="graph_events_df")
 
     log_params_if_active(
         {

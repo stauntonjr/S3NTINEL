@@ -6,7 +6,9 @@ from libs.phase import (
     PhaseBaselinesTable,
     PhaseDetectionPlan,
     PhaseFeatureConfig,
+    PhaseLabelCentroidsTable,
     PhaseWindowsTable,
+    build_phase_centroid_comparison_summary_from_tables,
     fit_phase_feature_config_from_spark,
     fit_phase_feature_config_with_diagnostics_from_spark,
 )
@@ -14,6 +16,7 @@ from libs.scoring.artifacts import WindowScoreArtifacts
 from libs.scoring import WindowScoresRawTable
 from libs.testing.data import create_sample_events_df, create_sample_raw_table_df, create_sample_windows_df
 from libs.windows import WindowFeaturesTable
+from datetime import date, datetime, timezone
 import pandas as pd
 from pyspark.sql import functions as F
 
@@ -259,6 +262,7 @@ def test_build_phase_spark_tables_match_python_phase_runtime(spark):
     assert not spark_phase_baselines.empty
     assert set(spark_phase_windows["phase_state_detected"]).issubset({"stable", "transition_region"})
     assert (spark_phase_windows["phase_confidence_detected"] >= 0.0).all()
+    assert (spark_phase_baselines["baseline_window_count"] >= 1).all()
     assert (spark_phase_baselines["stable_window_count"] >= 0).all()
 
 
@@ -330,6 +334,421 @@ def test_build_phase_spark_tables_support_zero_smoothing_radius(spark):
     )
     assert (spark_phase_windows["phase_confidence_detected"] >= 0.0).all()
     assert (spark_phase_windows["phase_confidence_detected"] <= 1.0).all()
+
+
+def test_phase_baselines_fall_back_to_stable_windows_when_no_high_confidence_windows_exist(spark):
+    phase_windows_df = spark.createDataFrame(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 1,
+                "t_start": datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+                "t_end": datetime(2025, 1, 1, 0, 0, 5, tzinfo=timezone.utc),
+                "duration_ms": 5000,
+                "event_count": 2,
+                "phase_id_detected": 0,
+                "phase_state_detected": "stable",
+                "phase_confidence_detected": 0.0,
+                "distance_to_centroid_detected": 2.0,
+                "drift_magnitude": 1.0,
+                "breadth": 1.0,
+                "backbone_reconstruction_error": 0.2,
+                "backbone_residual_by_parameter": {},
+                "x_c": [0.0, 1.0],
+                "s_w": [0.0, 1.0],
+                "date_utc": date(2025, 1, 1),
+                "feature_names": ["f0", "f1"],
+                "selected_sensors_c": ["s0", "s1"],
+                "selected_event_types": ["slope_pos"],
+                "selected_categorical_state_pairs": ["press_mode_state=AUTO"],
+                "selected_window_cooccurrence_pairs": [],
+                "backbone_all_sensors": ["s0", "s1"],
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 2,
+                "t_start": datetime(2025, 1, 1, 0, 0, 5, tzinfo=timezone.utc),
+                "t_end": datetime(2025, 1, 1, 0, 0, 10, tzinfo=timezone.utc),
+                "duration_ms": 5000,
+                "event_count": 2,
+                "phase_id_detected": 0,
+                "phase_state_detected": "stable",
+                "phase_confidence_detected": 0.1,
+                "distance_to_centroid_detected": 3.0,
+                "drift_magnitude": 1.2,
+                "breadth": 1.0,
+                "backbone_reconstruction_error": 0.3,
+                "backbone_residual_by_parameter": {},
+                "x_c": [0.0, 1.0],
+                "s_w": [0.2, 1.2],
+                "date_utc": date(2025, 1, 1),
+                "feature_names": ["f0", "f1"],
+                "selected_sensors_c": ["s0", "s1"],
+                "selected_event_types": ["slope_pos"],
+                "selected_categorical_state_pairs": ["press_mode_state=AUTO"],
+                "selected_window_cooccurrence_pairs": [],
+                "backbone_all_sensors": ["s0", "s1"],
+            },
+        ],
+        schema=PHASE_WINDOWS_SCHEMA(),
+    )
+
+    baselines_df = PhaseBaselinesTable.from_phase_windows(
+        phase_windows_df,
+        phase_config={
+            "selected_sensors_c": ["s0", "s1"],
+            "all_sensors": ["s0", "s1"],
+            "weights_b": [[1.0, 0.0], [0.0, 1.0]],
+            "lambda_ridge": 1.0,
+            "training_window_count": 2,
+            "backbone_version": 2,
+            "phase_selected_sensors": ["s0", "s1"],
+            "phase_selected_event_types": ["slope_pos"],
+            "phase_selected_categorical_state_pairs": [("press_mode_state", "AUTO")],
+            "phase_selected_window_cooccurrence_pairs": [],
+        },
+    ).to_dataframe().toPandas()
+
+    assert not baselines_df.empty
+    assert baselines_df["baseline_source_mode"].iloc[0] == "stable"
+    assert baselines_df["baseline_window_count"].iloc[0] == 2
+    assert baselines_df["stable_window_count"].iloc[0] == 2
+
+
+def test_phase_baselines_fall_back_to_confident_transition_windows_per_phase(spark):
+    phase_windows_df = spark.createDataFrame(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 1,
+                "t_start": datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+                "t_end": datetime(2025, 1, 1, 0, 0, 5, tzinfo=timezone.utc),
+                "duration_ms": 5000,
+                "event_count": 2,
+                "phase_id_detected": 0,
+                "phase_state_detected": "stable",
+                "phase_confidence_detected": 0.8,
+                "distance_to_centroid_detected": 1.0,
+                "drift_magnitude": 1.0,
+                "breadth": 1.0,
+                "backbone_reconstruction_error": 0.2,
+                "backbone_residual_by_parameter": {},
+                "x_c": [0.0, 1.0],
+                "s_w": [0.0, 1.0],
+                "date_utc": date(2025, 1, 1),
+                "feature_names": ["f0", "f1"],
+                "selected_sensors_c": ["s0", "s1"],
+                "selected_event_types": ["slope_pos"],
+                "selected_categorical_state_pairs": ["press_mode_state=AUTO"],
+                "selected_window_cooccurrence_pairs": [],
+                "backbone_all_sensors": ["s0", "s1"],
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 2,
+                "t_start": datetime(2025, 1, 1, 0, 0, 5, tzinfo=timezone.utc),
+                "t_end": datetime(2025, 1, 1, 0, 0, 10, tzinfo=timezone.utc),
+                "duration_ms": 5000,
+                "event_count": 2,
+                "phase_id_detected": 1,
+                "phase_state_detected": "transition_region",
+                "phase_confidence_detected": 0.8,
+                "distance_to_centroid_detected": 0.3,
+                "drift_magnitude": 1.2,
+                "breadth": 1.0,
+                "backbone_reconstruction_error": 0.3,
+                "backbone_residual_by_parameter": {},
+                "x_c": [0.0, 1.0],
+                "s_w": [10.0, 11.0],
+                "date_utc": date(2025, 1, 1),
+                "feature_names": ["f0", "f1"],
+                "selected_sensors_c": ["s0", "s1"],
+                "selected_event_types": ["slope_pos"],
+                "selected_categorical_state_pairs": ["press_mode_state=AUTO"],
+                "selected_window_cooccurrence_pairs": [],
+                "backbone_all_sensors": ["s0", "s1"],
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 3,
+                "t_start": datetime(2025, 1, 1, 0, 0, 10, tzinfo=timezone.utc),
+                "t_end": datetime(2025, 1, 1, 0, 0, 15, tzinfo=timezone.utc),
+                "duration_ms": 5000,
+                "event_count": 2,
+                "phase_id_detected": 1,
+                "phase_state_detected": "transition_region",
+                "phase_confidence_detected": 0.7,
+                "distance_to_centroid_detected": 0.5,
+                "drift_magnitude": 1.4,
+                "breadth": 1.0,
+                "backbone_reconstruction_error": 0.4,
+                "backbone_residual_by_parameter": {},
+                "x_c": [0.0, 1.0],
+                "s_w": [12.0, 13.0],
+                "date_utc": date(2025, 1, 1),
+                "feature_names": ["f0", "f1"],
+                "selected_sensors_c": ["s0", "s1"],
+                "selected_event_types": ["slope_pos"],
+                "selected_categorical_state_pairs": ["press_mode_state=AUTO"],
+                "selected_window_cooccurrence_pairs": [],
+                "backbone_all_sensors": ["s0", "s1"],
+            },
+        ],
+        schema=PHASE_WINDOWS_SCHEMA(),
+    )
+
+    baselines_df = (
+        PhaseBaselinesTable.from_phase_windows(
+            phase_windows_df,
+            phase_config={
+                "selected_sensors_c": ["s0", "s1"],
+                "all_sensors": ["s0", "s1"],
+                "weights_b": [[1.0, 0.0], [0.0, 1.0]],
+                "lambda_ridge": 1.0,
+                "training_window_count": 3,
+                "backbone_version": 2,
+                "phase_selected_sensors": ["s0", "s1"],
+                "phase_selected_event_types": ["slope_pos"],
+                "phase_selected_categorical_state_pairs": [("press_mode_state", "AUTO")],
+                "phase_selected_window_cooccurrence_pairs": [],
+            },
+        )
+        .to_dataframe()
+        .toPandas()
+        .sort_values(["phase_id_detected"], kind="stable")
+        .reset_index(drop=True)
+    )
+
+    assert baselines_df["phase_id_detected"].tolist() == [0, 1]
+    assert baselines_df["baseline_source_mode"].tolist() == ["stable_high_confidence", "confident_transition"]
+    assert baselines_df["baseline_window_count"].tolist() == [1, 2]
+    assert baselines_df["stable_window_count"].tolist() == [1, 0]
+
+
+def test_phase_label_centroids_use_majority_overlap_truth_labels(spark):
+    phase_windows_df = spark.createDataFrame(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 1,
+                "t_start": datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+                "t_end": datetime(2025, 1, 1, 0, 0, 10, tzinfo=timezone.utc),
+                "duration_ms": 10000,
+                "event_count": 3,
+                "phase_id_detected": 0,
+                "phase_state_detected": "stable",
+                "phase_confidence_detected": 0.9,
+                "distance_to_centroid_detected": 0.1,
+                "drift_magnitude": 1.0,
+                "breadth": 0.2,
+                "backbone_reconstruction_error": 0.1,
+                "backbone_residual_by_parameter": {},
+                "x_c": [0.0, 0.0],
+                "s_w": [1.0, 3.0],
+                "date_utc": date(2025, 1, 1),
+                "feature_names": ["f0", "f1"],
+                "selected_sensors_c": ["s0", "s1"],
+                "selected_event_types": ["slope_pos"],
+                "selected_categorical_state_pairs": ["press_mode_state=AUTO"],
+                "selected_window_cooccurrence_pairs": [],
+                "backbone_all_sensors": ["s0", "s1"],
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 2,
+                "t_start": datetime(2025, 1, 1, 0, 0, 10, tzinfo=timezone.utc),
+                "t_end": datetime(2025, 1, 1, 0, 0, 20, tzinfo=timezone.utc),
+                "duration_ms": 10000,
+                "event_count": 3,
+                "phase_id_detected": 1,
+                "phase_state_detected": "stable",
+                "phase_confidence_detected": 0.8,
+                "distance_to_centroid_detected": 0.2,
+                "drift_magnitude": 1.5,
+                "breadth": 0.3,
+                "backbone_reconstruction_error": 0.2,
+                "backbone_residual_by_parameter": {},
+                "x_c": [0.0, 0.0],
+                "s_w": [3.0, 5.0],
+                "date_utc": date(2025, 1, 1),
+                "feature_names": ["f0", "f1"],
+                "selected_sensors_c": ["s0", "s1"],
+                "selected_event_types": ["slope_pos"],
+                "selected_categorical_state_pairs": ["press_mode_state=AUTO"],
+                "selected_window_cooccurrence_pairs": [],
+                "backbone_all_sensors": ["s0", "s1"],
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F2",
+                "win_id": 1,
+                "t_start": datetime(2025, 1, 2, 0, 0, 0, tzinfo=timezone.utc),
+                "t_end": datetime(2025, 1, 2, 0, 0, 10, tzinfo=timezone.utc),
+                "duration_ms": 10000,
+                "event_count": 2,
+                "phase_id_detected": 2,
+                "phase_state_detected": "transition_region",
+                "phase_confidence_detected": 0.4,
+                "distance_to_centroid_detected": 0.5,
+                "drift_magnitude": 2.0,
+                "breadth": 0.4,
+                "backbone_reconstruction_error": 0.3,
+                "backbone_residual_by_parameter": {},
+                "x_c": [0.0, 0.0],
+                "s_w": [10.0, 20.0],
+                "date_utc": date(2025, 1, 2),
+                "feature_names": ["f0", "f1"],
+                "selected_sensors_c": ["s0", "s1"],
+                "selected_event_types": ["transition"],
+                "selected_categorical_state_pairs": ["press_mode_state=MANUAL"],
+                "selected_window_cooccurrence_pairs": [],
+                "backbone_all_sensors": ["s0", "s1"],
+            },
+        ],
+        schema=PHASE_WINDOWS_SCHEMA(),
+    )
+    phase_labels_df = spark.createDataFrame(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "timestamp_utc": datetime(2025, 1, 1, 0, 0, 3, tzinfo=timezone.utc),
+                "phase_label": "climb",
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "timestamp_utc": datetime(2025, 1, 1, 0, 0, 7, tzinfo=timezone.utc),
+                "phase_label": "climb",
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "timestamp_utc": datetime(2025, 1, 1, 0, 0, 12, tzinfo=timezone.utc),
+                "phase_label": "climb",
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "timestamp_utc": datetime(2025, 1, 1, 0, 0, 17, tzinfo=timezone.utc),
+                "phase_label": "climb",
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F2",
+                "timestamp_utc": datetime(2025, 1, 2, 0, 0, 4, tzinfo=timezone.utc),
+                "phase_label": "cruise",
+            },
+        ]
+    )
+
+    centroids_df = (
+        PhaseLabelCentroidsTable.from_phase_windows_and_labels(
+            phase_windows_df=phase_windows_df,
+            phase_labels_df=phase_labels_df,
+        )
+        .to_dataframe()
+        .toPandas()
+        .sort_values(["tail_id", "phase_label"], kind="stable")
+        .reset_index(drop=True)
+    )
+
+    assert centroids_df["phase_label"].tolist() == ["climb", "cruise"]
+    assert centroids_df["labeled_window_count"].tolist() == [2, 1]
+    assert centroids_df["flight_count"].tolist() == [1, 1]
+    assert centroids_df["s_w_centroid"].tolist() == [[2.0, 4.0], [10.0, 20.0]]
+
+
+def test_phase_centroid_comparison_summary_reports_low_drift_nearest_labels():
+    phase_windows_df = pd.DataFrame.from_records(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 1,
+                "t_start": datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+                "t_end": datetime(2025, 1, 1, 0, 0, 10, tzinfo=timezone.utc),
+                "phase_id_detected": 0,
+                "phase_state_detected": "stable",
+                "phase_confidence_detected": 0.9,
+                "distance_to_centroid_detected": 0.1,
+                "drift_magnitude": 1.0,
+                "s_w": [1.0, 3.0],
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 2,
+                "t_start": datetime(2025, 1, 1, 0, 0, 10, tzinfo=timezone.utc),
+                "t_end": datetime(2025, 1, 1, 0, 0, 20, tzinfo=timezone.utc),
+                "phase_id_detected": 1,
+                "phase_state_detected": "stable",
+                "phase_confidence_detected": 0.8,
+                "distance_to_centroid_detected": 0.2,
+                "drift_magnitude": 3.0,
+                "s_w": [5.0, 7.0],
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 3,
+                "t_start": datetime(2025, 1, 1, 0, 0, 20, tzinfo=timezone.utc),
+                "t_end": datetime(2025, 1, 1, 0, 0, 30, tzinfo=timezone.utc),
+                "phase_id_detected": 2,
+                "phase_state_detected": "transition_region",
+                "phase_confidence_detected": 0.4,
+                "distance_to_centroid_detected": 0.4,
+                "drift_magnitude": 9.0,
+                "s_w": [10.0, 20.0],
+            },
+        ]
+    )
+    phase_labels_df = pd.DataFrame.from_records(
+        [
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": datetime(2025, 1, 1, 0, 0, 2, tzinfo=timezone.utc), "phase_label": "climb"},
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": datetime(2025, 1, 1, 0, 0, 8, tzinfo=timezone.utc), "phase_label": "climb"},
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": datetime(2025, 1, 1, 0, 0, 12, tzinfo=timezone.utc), "phase_label": "climb"},
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": datetime(2025, 1, 1, 0, 0, 18, tzinfo=timezone.utc), "phase_label": "climb"},
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": datetime(2025, 1, 1, 0, 0, 24, tzinfo=timezone.utc), "phase_label": "cruise"},
+        ]
+    )
+    phase_baselines_df = pd.DataFrame.from_records(
+        [
+            {
+                "tail_id": "T1",
+                "phase_id_detected": 0,
+                "phase_name_detected": "phase_0",
+                "stable_window_count": 2,
+                "s_w_centroid": [1.0, 3.0],
+            }
+        ]
+    )
+
+    summary = build_phase_centroid_comparison_summary_from_tables(
+        phase_windows_df=phase_windows_df,
+        phase_labels_df=phase_labels_df,
+        phase_baselines_df=phase_baselines_df,
+    )
+
+    assert summary["status"] == "ok"
+    assert summary["stable_window_label_counts"] == {"climb": 2}
+    assert summary["truth_label_window_counts"] == {"climb": 2, "cruise": 1}
+    assert any(item["window_subset"] == "low_drift_p50" for item in summary["truth_label_centroids"])
+    nearest_overall = summary["nearest_truth_centroid_by_detected"][0]
+    assert nearest_overall["phase_label"] == "climb"
+    nearest_by_subset = {
+        item["window_subset"]: item["phase_label"]
+        for item in summary["nearest_truth_centroid_by_detected_and_subset"]
+    }
+    assert nearest_by_subset["all"] == "climb"
+    assert nearest_by_subset["low_drift_p50"] == "climb"
 
 
 def test_build_phase_spark_tables_support_min_dwell_one_fast_path(spark):

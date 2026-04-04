@@ -27,6 +27,10 @@ class PhaseFeatureConfig:
             "summary::continuous_event_fraction",
             "summary::categorical_event_fraction",
             "summary::active_sensor_fraction",
+            "summary::drift_rate",
+            "summary::reconstruction_error_per_sensor",
+            "summary::slope_reinforcement_fraction",
+            "summary::slope_directionality",
         ]
 
     @property

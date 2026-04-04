@@ -23,6 +23,13 @@ from pipelines.common import build_stage_runtime
 LOGGER = get_logger(__name__)
 
 
+def _safe_unpersist(dataframe) -> None:
+    try:
+        dataframe.unpersist()
+    except Exception as exc:  # pragma: no cover - defensive cleanup on dead Spark gateway
+        LOGGER.warning("parameter_profiles_fit unpersist skipped: %s", exc)
+
+
 @track_mlflow_run(stage_name="10_parameter_profiles_fit", logger=LOGGER)
 @log_memory_usage(logger=LOGGER, label="10_parameter_profiles_fit")
 @log_wall_time(logger=LOGGER)
@@ -50,17 +57,16 @@ def run() -> None:
     datatype_profile_df = profiling_plan.build_datatype_profile().to_dataframe().persist(StorageLevel.MEMORY_AND_DISK)
     scaling_profile_df = profiling_plan.build_scaling_profile(datatype_profile_df).to_dataframe().persist(StorageLevel.MEMORY_AND_DISK)
 
+    raw_count = None
+    datatype_count = None
+    scaling_count = None
     try:
-        raw_count = int(raw_df.count())
-        datatype_count = int(datatype_profile_df.count())
-        scaling_count = int(scaling_profile_df.count())
-
         write_table(datatype_profile_df, path=datatype_profile_path, mode=write_mode, fmt=table_format)
         write_table(scaling_profile_df, path=scaling_profile_path, mode=write_mode, fmt=table_format)
     finally:
-        scaling_profile_df.unpersist()
-        datatype_profile_df.unpersist()
-        raw_df.unpersist()
+        _safe_unpersist(scaling_profile_df)
+        _safe_unpersist(datatype_profile_df)
+        _safe_unpersist(raw_df)
 
     log_params_if_active(
         {

@@ -152,6 +152,49 @@ def test_build_window_policy_profile_table_emits_ranked_selected_candidate(spark
     assert all(int(row["event_threshold"]) >= 2 for row in rows)
 
 
+def test_window_policy_profile_falls_back_to_configured_policy_when_candidate_profiling_fails(spark, monkeypatch):
+    events = [
+        {
+            "tail_id": "T1",
+            "flight_id": "F1",
+            "event_seq_id": index + 1,
+            "parameter_name": "p1",
+            "timestamp_utc": datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc) + timedelta(milliseconds=200 * index),
+            "event_type_detected": "slope_pos",
+            "payload": {"value": str(index)},
+            "date_utc": datetime(2026, 1, 1, tzinfo=timezone.utc).date(),
+        }
+        for index in range(4)
+    ]
+    profile = WindowPolicyProfile(
+        spec=WindowPolicyProfileSpec(
+            min_sampling_rate_hz=1.0,
+            configured_max_ms=2000,
+            configured_event_threshold=4,
+            min_ms=50,
+            inactivity_timeout_ms=0,
+            gap_quantiles=(0.5,),
+            event_threshold_multipliers=(1.0,),
+            max_profile_flights=1,
+        )
+    )
+    monkeypatch.setattr(
+        WindowPolicyProfile,
+        "_evaluate_candidate",
+        lambda self, *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+
+    rows = [row.asDict() for row in profile.build_dataframe(spark.createDataFrame(events)).collect()]
+
+    assert len(rows) == 1
+    assert rows[0]["candidate_rank"] == 1
+    assert rows[0]["is_selected"] is True
+    assert rows[0]["max_ms"] == 2000
+    assert rows[0]["event_threshold"] == 4
+    assert rows[0]["sampled_event_count"] == 4
+    assert rows[0]["sampled_flight_count"] == 1
+
+
 def test_window_policy_profile_resolves_selected_policy_over_fallback(spark):
     profile_df = spark.createDataFrame(
         [
@@ -190,6 +233,51 @@ def test_window_policy_profile_resolves_selected_policy_over_fallback(spark):
     assert source == "profile"
     assert resolved.max_ms == 1200
     assert resolved.event_threshold == 6
+
+
+def test_build_window_policy_profile_evaluation_report_skips_when_evaluation_fails(spark, monkeypatch):
+    events = [
+        {
+            "tail_id": "T1",
+            "flight_id": "F1",
+            "event_seq_id": event_index + 1,
+            "parameter_name": "p1",
+            "timestamp_utc": datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+            + timedelta(milliseconds=200 * event_index),
+            "event_type_detected": "slope_pos",
+            "payload": {"value": str(event_index)},
+            "date_utc": datetime(2026, 1, 1, tzinfo=timezone.utc).date(),
+        }
+        for event_index in range(4)
+    ]
+    profile_spec = WindowPolicyProfileSpec(
+        min_sampling_rate_hz=1.0,
+        configured_max_ms=1000,
+        configured_event_threshold=2,
+        min_ms=50,
+        inactivity_timeout_ms=0,
+        gap_quantiles=(0.5,),
+        event_threshold_multipliers=(1.0,),
+        max_profile_flights=1,
+    )
+    profile_df = WindowPolicyProfileTable.from_events(spark.createDataFrame(events), spec=profile_spec).to_dataframe()
+    monkeypatch.setattr(
+        WindowPolicyProfile,
+        "build_evaluation_report",
+        lambda self, *args, **kwargs: (_ for _ in ()).throw(RuntimeError("evaluation failed")),
+    )
+
+    report = build_window_policy_profile_evaluation_report_spark(
+        spark.createDataFrame(events),
+        profile_df=profile_df,
+        profile_spec=profile_spec,
+    )
+
+    assert report["status"] == "skipped"
+    assert report["selected_policy"]["resolved_policy"]["max_ms"] == 1000
+    assert report["selected_policy"]["resolved_policy"]["event_threshold"] == 2
+    assert report["selected_policy"]["policy_source"] in {"profile", "configured"}
+    assert report["closure_mix"]["status"] == "skipped"
 
 
 def test_build_window_policy_profile_evaluation_report_emits_selected_summary_and_stability(spark):

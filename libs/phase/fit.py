@@ -296,15 +296,49 @@ def build_cluster_outputs(
             F.col("fit_window_count").cast("int").alias("fit_window_count"),
         )
     )
+    flight_scale_df = fit_assignments_df.groupBy("tail_id", "flight_id").agg(
+        F.expr("percentile(phase_fit_distance, 0.75D)").cast("double").alias("flight_distance_scale")
+    )
     distance_scales_df = (
         fit_assignments_df.join(phase_order_df, on=["tail_id", "flight_id", "phase_id_detected"], how="inner")
         .groupBy("tail_id", "flight_id", "ordered_phase_id")
         .agg(F.expr("percentile(phase_fit_distance, 0.9D)").cast("double").alias("distance_scale"))
+        .withColumnRenamed("ordered_phase_id", "phase_id_detected")
+        .join(
+            phase_order_df.select(
+                "tail_id",
+                "flight_id",
+                F.col("ordered_phase_id").cast("int").alias("phase_id_detected"),
+                F.col("fit_window_count").cast("int").alias("fit_window_count"),
+            ),
+            on=["tail_id", "flight_id", "phase_id_detected"],
+            how="inner",
+        )
+        .join(flight_scale_df, on=["tail_id", "flight_id"], how="left")
+        .withColumn(
+            "flight_distance_scale",
+            F.greatest(F.coalesce(F.col("flight_distance_scale"), F.lit(1.0)), F.lit(1e-3)),
+        )
+        .withColumn(
+            "distance_scale_floor",
+            F.greatest(F.col("flight_distance_scale") * F.lit(0.5), F.lit(1e-3)),
+        )
         .select(
             "tail_id",
             "flight_id",
-            F.col("ordered_phase_id").cast("int").alias("phase_id_detected"),
-            F.greatest(F.coalesce(F.col("distance_scale"), F.lit(1.0)), F.lit(1e-6)).alias("distance_scale"),
+            "phase_id_detected",
+            F.when(
+                F.col("fit_window_count") <= F.lit(1),
+                F.col("flight_distance_scale"),
+            )
+            .otherwise(
+                F.greatest(
+                    F.coalesce(F.col("distance_scale"), F.col("flight_distance_scale")),
+                    F.col("distance_scale_floor"),
+                )
+            )
+            .cast("double")
+            .alias("distance_scale"),
         )
     )
     return ordered_centroids_df, distance_scales_df

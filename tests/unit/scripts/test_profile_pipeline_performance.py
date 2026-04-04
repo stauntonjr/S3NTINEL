@@ -48,7 +48,7 @@ def _args(tmp_path: Path) -> argparse.Namespace:
         window_min_ms=50,
         window_inactivity_timeout_ms=0,
         window_strategy="segmented",
-        phase_count=3,
+        phase_count=4,
         backbone_parameter_count=4,
         backbone_ridge_lambda=1.0,
         backbone_event_prior_alpha=0.35,
@@ -766,7 +766,7 @@ def test_infer_replay_target_stage_uses_furthest_impacted_stage(tmp_path):
 
     target_stage = perf.infer_replay_target_stage(args, variant=variant)
 
-    assert target_stage == "70_phase_fit.py"
+    assert target_stage == "40_backbone_fit.py"
 
 
 def test_infer_replay_target_stage_returns_none_for_replay_unsafe_source_changes(tmp_path):

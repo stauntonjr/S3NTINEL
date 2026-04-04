@@ -87,8 +87,17 @@ def build_truth_window_overlap_table(
     start_field: str,
     end_field: str,
 ) -> pd.DataFrame:
+    expected_columns = [
+        *list(window_like_df.columns),
+        *[column for column in truth_df.columns if column not in window_like_df.columns],
+        "overlap_seconds",
+        "truth_duration_seconds",
+        "window_duration_seconds",
+        "truth_coverage_ratio",
+        "detection_latency_seconds",
+    ]
     if window_like_df.empty or truth_df.empty:
-        return pd.DataFrame()
+        return pd.DataFrame(columns=expected_columns)
     windows = window_like_df.copy()
     windows["t_start"] = _to_utc(windows["t_start"])
     windows["t_end"] = _to_utc(windows["t_end"])
@@ -129,7 +138,7 @@ def build_truth_window_overlap_table(
             )
             row["detection_latency_seconds"] = detection_latency_seconds
             rows.append(row)
-    return pd.DataFrame.from_records(rows)
+    return pd.DataFrame.from_records(rows, columns=expected_columns)
 
 
 def _strict_overlap_mask(df: pd.DataFrame) -> pd.Series:

@@ -123,7 +123,7 @@ def write_table(
     partition_by: Sequence[str] | None = None,
 ) -> None:
     # HOT PATH: table write orchestration must avoid small-file amplification and expensive per-row operations.
-    if partition_by and len(df.take(1)) == 0:
+    if partition_by and df.isEmpty():
         df.sparkSession.createDataFrame([], df.schema).write.format(fmt).mode(mode).save(path)
         return
 

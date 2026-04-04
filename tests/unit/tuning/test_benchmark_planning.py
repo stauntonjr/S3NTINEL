@@ -57,7 +57,7 @@ def _args() -> argparse.Namespace:
         window_min_ms=25,
         window_inactivity_timeout_ms=0,
         window_strategy="segmented",
-        phase_count=3,
+        phase_count=4,
         backbone_parameter_count=8,
         backbone_ridge_lambda=1.0,
         backbone_event_prior_alpha=0.35,

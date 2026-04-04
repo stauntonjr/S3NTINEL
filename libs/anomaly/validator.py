@@ -105,10 +105,17 @@ class _TruthWindowAttributionMatch:
             start_field=truth_start_field,
             end_field=truth_end_field,
         )
-        qualifying_overlap_df = overlap_df[
-            (overlap_df["truth_coverage_ratio"].fillna(0.0).astype(float) >= float(STRICT_TRUTH_COVERAGE_MIN_RATIO))
-            & (overlap_df["detection_latency_seconds"].fillna(float("inf")).astype(float) >= float(-STRICT_MAX_EARLY_LEAD_SECONDS))
-        ] if not overlap_df.empty else pd.DataFrame()
+        qualifying_overlap_df = (
+            overlap_df[
+                (overlap_df["truth_coverage_ratio"].fillna(0.0).astype(float) >= float(STRICT_TRUTH_COVERAGE_MIN_RATIO))
+                & (
+                    overlap_df["detection_latency_seconds"].fillna(float("inf")).astype(float)
+                    >= float(-STRICT_MAX_EARLY_LEAD_SECONDS)
+                )
+            ]
+            if not overlap_df.empty
+            else overlap_df.copy()
+        )
         qualifying_overlap_df = qualifying_overlap_df.sort_values(
             ["t_start", "truth_coverage_ratio", "win_id"],
             ascending=[True, False, True],
@@ -272,7 +279,9 @@ def validate_attribution_against_misbehavior_truth(
         "misbehavior_window_count": misbehavior_window_count,
         "dominant_subsystem_match_count": dominant_subsystem_match_count,
         "dominant_subsystem_mappable_count": dominant_subsystem_mappable_count,
-        "dominant_subsystem_match_rate": float(mappable["dominant_subsystem_match"].mean()) if not mappable.empty else None,
+        "dominant_subsystem_match_rate": (
+            float(mappable["dominant_subsystem_match"].mean()) if not mappable.empty else 0.0
+        ) if misbehavior_window_count > 0 else None,
         "dominant_subsystem_mappable_rate": float(per_truth_df["dominant_subsystem_mappable"].mean()) if not per_truth_df.empty else None,
         "telemetry_parameter_match_count": telemetry_parameter_match_count,
         "event_parameter_match_count": event_parameter_match_count,

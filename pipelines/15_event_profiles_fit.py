@@ -64,9 +64,9 @@ def run() -> None:
     ).to_dataframe()
     write_table(profile_df, path=output_path, mode=write_mode, fmt=table_format)
 
-    raw_count = int(raw_df.count())
-    datatype_profile_count = int(datatype_profile_df.count())
-    profile_count = int(profile_df.count())
+    raw_count = None
+    datatype_profile_count = None
+    profile_count = None
 
     log_params_if_active(
         {

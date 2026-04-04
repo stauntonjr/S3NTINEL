@@ -28,7 +28,24 @@ PHASE_BASELINES_COLUMNS = [
     "reconstruction_mad",
     "distance_median",
     "distance_mad",
+    "baseline_source_mode",
+    "baseline_window_count",
     "stable_window_count",
+    "version",
+]
+
+PHASE_LABEL_CENTROIDS_COLUMNS = [
+    "tail_id",
+    "phase_label",
+    "s_w_centroid",
+    "labeled_window_count",
+    "flight_count",
+    "feature_names",
+    "selected_sensors_c",
+    "selected_event_types",
+    "selected_categorical_state_pairs",
+    "selected_window_cooccurrence_pairs",
+    "backbone_all_sensors",
     "version",
 ]
 
@@ -78,6 +95,8 @@ def PHASE_BASELINES_SCHEMA():
             T.StructField("reconstruction_mad", T.DoubleType(), False),
             T.StructField("distance_median", T.DoubleType(), True),
             T.StructField("distance_mad", T.DoubleType(), False),
+            T.StructField("baseline_source_mode", T.StringType(), False),
+            T.StructField("baseline_window_count", T.IntegerType(), False),
             T.StructField("stable_window_count", T.IntegerType(), False),
             T.StructField("feature_names", T.ArrayType(T.StringType(), False), False),
             T.StructField("selected_sensors_c", T.ArrayType(T.StringType(), False), False),
@@ -86,6 +105,27 @@ def PHASE_BASELINES_SCHEMA():
             T.StructField("selected_window_cooccurrence_pairs", T.ArrayType(T.StringType(), True), False),
             T.StructField("backbone_all_sensors", T.ArrayType(T.StringType(), False), False),
             T.StructField("backbone_weights_b", T.ArrayType(T.ArrayType(T.DoubleType(), False), False), False),
+            T.StructField("version", T.IntegerType(), False),
+        ]
+    )
+
+
+def PHASE_LABEL_CENTROIDS_SCHEMA():
+    from pyspark.sql import types as T
+
+    return T.StructType(
+        [
+            T.StructField("tail_id", T.StringType(), True),
+            T.StructField("phase_label", T.StringType(), False),
+            T.StructField("s_w_centroid", T.ArrayType(T.DoubleType(), True), False),
+            T.StructField("labeled_window_count", T.IntegerType(), False),
+            T.StructField("flight_count", T.IntegerType(), False),
+            T.StructField("feature_names", T.ArrayType(T.StringType(), False), False),
+            T.StructField("selected_sensors_c", T.ArrayType(T.StringType(), False), False),
+            T.StructField("selected_event_types", T.ArrayType(T.StringType(), False), False),
+            T.StructField("selected_categorical_state_pairs", T.ArrayType(T.StringType(), True), False),
+            T.StructField("selected_window_cooccurrence_pairs", T.ArrayType(T.StringType(), True), False),
+            T.StructField("backbone_all_sensors", T.ArrayType(T.StringType(), False), False),
             T.StructField("version", T.IntegerType(), False),
         ]
     )

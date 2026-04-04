@@ -98,6 +98,7 @@ class PipelineArtifactPaths:
     events: str
     window_policy_profile: str
     windows: str
+    phase_labels: str
     window_features: str
     backbone: str
     backbone_sensor_energy: str
@@ -111,6 +112,7 @@ class PipelineArtifactPaths:
     hierarchy_sensor_map: str
     phase_windows: str
     phase_baselines: str
+    phase_label_centroids: str
     window_scores_raw: str
     window_scores_calibrated: str
     anomaly_window_attribution: str
@@ -300,6 +302,7 @@ def load_pipeline_artifact_paths() -> PipelineArtifactPaths:
             "data/delta/window_policy_profile",
         ),
         windows=_env_str("S3NTINEL_WINDOWS_TABLE_PATH", "data/delta/windows"),
+        phase_labels=_env_str("S3NTINEL_PHASE_LABELS_TABLE_PATH", "data/delta/phase_labels"),
         window_features=_env_str("S3NTINEL_WINDOW_FEATURES_TABLE_PATH", ""),
         backbone=_env_str("S3NTINEL_BACKBONE_TABLE_PATH", "data/delta/backbone"),
         backbone_sensor_energy=_env_str(
@@ -322,6 +325,10 @@ def load_pipeline_artifact_paths() -> PipelineArtifactPaths:
         ),
         phase_windows=_env_str("S3NTINEL_PHASE_WINDOWS_TABLE_PATH", "data/delta/phase_windows"),
         phase_baselines=_env_str("S3NTINEL_PHASE_BASELINES_TABLE_PATH", "data/delta/phase_baselines"),
+        phase_label_centroids=_env_str(
+            "S3NTINEL_PHASE_LABEL_CENTROIDS_TABLE_PATH",
+            "data/delta/phase_label_centroids",
+        ),
         window_scores_raw=_env_str("S3NTINEL_WINDOW_SCORES_RAW_TABLE_PATH", "data/delta/window_scores_raw"),
         window_scores_calibrated=_env_str(
             "S3NTINEL_WINDOW_SCORES_CALIBRATED_TABLE_PATH",

@@ -79,6 +79,7 @@ def test_sim_runner_uses_grouped_full_stage_scripts(monkeypatch, tmp_path):
         "50_build_graph.py",
         "60_fit_hierarchy.py",
         "70_phase_fit.py",
+        "72_phase_label_centroids.py",
         "80_window_scores_raw.py",
         "85_window_scores_calibrate.py",
         "90_anomaly_attribution.py",
@@ -294,6 +295,7 @@ def test_sim_runner_full_smoke_emits_bundle(monkeypatch, tmp_path):
     assert (run_dir / "reports" / "stages" / "50_build_graph_evaluation.json").exists()
     assert (run_dir / "reports" / "stages" / "60_fit_hierarchy_manifest.json").exists()
     assert (run_dir / "reports" / "stages" / "70_phase_fit_manifest.json").exists()
+    assert (run_dir / "reports" / "stages" / "72_phase_label_centroids_manifest.json").exists()
     assert (run_dir / "reports" / "stages" / "80_window_scores_raw_manifest.json").exists()
     assert (run_dir / "reports" / "stages" / "95_emit_explorer_bundle_manifest.json").exists()
     assert (run_dir / "reports" / "phase_validation_summary.json").exists()
@@ -322,6 +324,7 @@ def test_sim_runner_full_smoke_emits_bundle(monkeypatch, tmp_path):
     assert len(pd.read_parquet(run_dir / "delta" / "graph_parameter_universe")) > 0
     assert len(pd.read_parquet(run_dir / "delta" / "hierarchy_sensor_map")) > 0
     assert len(pd.read_parquet(run_dir / "delta" / "phase_windows")) > 0
+    assert len(pd.read_parquet(run_dir / "delta" / "phase_label_centroids")) > 0
     assert len(pd.read_parquet(run_dir / "delta" / "window_scores_calibrated")) > 0
     assert len(pd.read_parquet(run_dir / "delta" / "anomaly_window_attribution")) > 0
     assert (run_dir / "delta" / "explorer_bundle" / "bundle_manifest.json").exists()

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from libs.common import empty_array
+from libs.common import empty_array, empty_map
 from libs.common.event_types import CATEGORICAL_EVENT_TYPES, CONTINUOUS_EVENT_TYPES
 from libs.phase.feature_config import PhaseFeatureConfig
 from libs.phase.utils import double_matrix_literal, string_array_literal
@@ -32,6 +32,65 @@ class PhaseFeatureFrame(Frame):
         return [
             F.coalesce(F.element_at("event_type_counts", F.lit(event_type)).cast("double"), F.lit(0.0))
             for event_type in sorted(CATEGORICAL_EVENT_TYPES)
+        ]
+
+    @staticmethod
+    def _map_value_sum(column_name: str, *, value_type: str = "double") -> "Column":
+        from pyspark.sql import functions as F
+
+        return F.aggregate(
+            F.map_values(F.coalesce(F.col(column_name), empty_map("string", value_type))),
+            F.lit(0.0),
+            lambda acc, value: acc + value.cast("double"),
+        )
+
+    @classmethod
+    def _summary_feature_columns(
+        cls,
+        *,
+        active_sensor_denominator: int,
+    ) -> list["Column"]:
+        from pyspark.sql import functions as F
+
+        duration_seconds = F.greatest(F.col("duration_ms").cast("double") / F.lit(1000.0), F.lit(1e-6))
+        event_count = F.greatest(F.col("event_count").cast("double"), F.lit(1.0))
+        total_slope_runs = cls._map_value_sum(
+            "continuous_event_summary.slope_run_count_by_parameter",
+            value_type="int",
+        )
+        total_slope_reinforcements = cls._map_value_sum(
+            "continuous_event_summary.slope_reinforcement_count_by_parameter",
+            value_type="int",
+        )
+        total_signed_impulse = cls._map_value_sum(
+            "continuous_event_summary.slope_signed_impulse_by_parameter",
+            value_type="double",
+        )
+        total_abs_impulse = cls._map_value_sum(
+            "continuous_event_summary.slope_abs_impulse_by_parameter",
+            value_type="double",
+        )
+        continuous_event_count_col = sum(cls._continuous_count_columns(), F.lit(0.0))
+        categorical_event_count_col = sum(cls._categorical_count_columns(), F.lit(0.0))
+        active_sensor_fraction = (
+            F.size(F.map_keys("continuous_vector_t_end_scaled")).cast("double")
+            / F.lit(float(active_sensor_denominator))
+        )
+        return [
+            F.col("event_count").cast("double") / duration_seconds,
+            (continuous_event_count_col / event_count).cast("double"),
+            (categorical_event_count_col / event_count).cast("double"),
+            active_sensor_fraction.cast("double"),
+            (F.coalesce(F.col("drift_magnitude_profiled"), F.lit(0.0)).cast("double") / duration_seconds).cast("double"),
+            (
+                F.coalesce(F.col("backbone_reconstruction_error"), F.lit(0.0)).cast("double")
+                / F.greatest(
+                    F.size(F.map_keys("continuous_vector_t_end_scaled")).cast("double"),
+                    F.lit(1.0),
+                )
+            ).cast("double"),
+            (total_slope_reinforcements / F.greatest(total_slope_runs, F.lit(1.0))).cast("double"),
+            (F.abs(total_signed_impulse) / F.greatest(total_abs_impulse, F.lit(1e-6))).cast("double"),
         ]
 
     @staticmethod
@@ -140,8 +199,6 @@ class PhaseFeatureFrame(Frame):
     ) -> "Column":
         from pyspark.sql import functions as F
 
-        continuous_event_count_col = sum(cls._continuous_count_columns(), F.lit(0.0))
-        categorical_event_count_col = sum(cls._categorical_count_columns(), F.lit(0.0))
         return F.concat(
             F.transform(
                 phase_selected_sensors_lit,
@@ -169,14 +226,7 @@ class PhaseFeatureFrame(Frame):
             )
             if phase_selected_categorical_state_pairs
             else empty_array("double"),
-            F.array(
-                F.col("event_count").cast("double")
-                / F.greatest(F.col("duration_ms").cast("double") / F.lit(1000.0), F.lit(1e-6)),
-                (continuous_event_count_col / F.greatest(F.col("event_count").cast("double"), F.lit(1.0))).cast("double"),
-                (categorical_event_count_col / F.greatest(F.col("event_count").cast("double"), F.lit(1.0))).cast("double"),
-                F.size(F.map_keys("continuous_vector_t_end_scaled")).cast("double")
-                / F.lit(float(active_sensor_denominator)),
-            ),
+            F.array(*cls._summary_feature_columns(active_sensor_denominator=active_sensor_denominator)),
         )
 
     @classmethod

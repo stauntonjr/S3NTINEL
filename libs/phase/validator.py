@@ -74,10 +74,212 @@ def build_phase_validation_assignments(
                         if pd.isna(row.get("distance_to_centroid_detected"))
                         else float(row.get("distance_to_centroid_detected", 0.0) or 0.0)
                     ),
+                    "drift_magnitude": (
+                        None
+                        if pd.isna(row.get("drift_magnitude"))
+                        else float(row.get("drift_magnitude", 0.0) or 0.0)
+                    ),
+                    "s_w": _coerce_vector(row.get("s_w")),
                     "phase_label": phase_label,
                 }
             )
     return assignments
+
+
+def _coerce_vector(value: Any) -> list[float]:
+    if value is None:
+        return []
+    if isinstance(value, pd.Series):
+        value = value.tolist()
+    elif hasattr(value, "tolist") and not isinstance(value, (str, bytes)):
+        value = value.tolist()
+    if isinstance(value, (list, tuple)):
+        return [float(item) for item in value]
+    return []
+
+
+def _has_vector_values(value: Any) -> bool:
+    return len(_coerce_vector(value)) > 0
+
+
+def _mean_vector(vectors: list[list[float]]) -> list[float]:
+    if not vectors:
+        return []
+    width = len(vectors[0])
+    if width <= 0:
+        return []
+    return [
+        float(sum(float(vector[index]) for vector in vectors) / float(len(vectors)))
+        for index in range(width)
+    ]
+
+
+def _euclidean_distance(left: list[float], right: list[float]) -> float | None:
+    width = min(len(left), len(right))
+    if width <= 0:
+        return None
+    return float(sum((float(left[index]) - float(right[index])) ** 2 for index in range(width)) ** 0.5)
+
+
+def build_phase_centroid_comparison_summary_from_tables(
+    *,
+    phase_windows_df: pd.DataFrame,
+    phase_labels_df: pd.DataFrame,
+    phase_baselines_df: pd.DataFrame,
+    windows_df: pd.DataFrame | None = None,
+) -> dict[str, Any]:
+    assignments = build_phase_validation_assignments(
+        phase_windows_df=phase_windows_df,
+        phase_labels_df=phase_labels_df,
+        windows_df=windows_df,
+    )
+    if not assignments:
+        return {
+            "status": "skipped",
+            "reason": "no overlapping phase windows and phase labels",
+            "assignment_count": 0,
+        }
+    if phase_baselines_df is None or phase_baselines_df.empty:
+        return {
+            "status": "skipped",
+            "reason": "phase baselines are empty",
+            "assignment_count": len(assignments),
+        }
+
+    assigned_df = pd.DataFrame.from_records(assignments)
+    assigned_df["s_w"] = assigned_df["s_w"].apply(_coerce_vector)
+    assigned_df = assigned_df[
+        assigned_df["phase_label"].fillna("").astype(str).str.strip().astype(bool)
+        & assigned_df["s_w"].apply(_has_vector_values)
+    ].copy()
+    if assigned_df.empty:
+        return {
+            "status": "skipped",
+            "reason": "no labeled window vectors available",
+            "assignment_count": len(assignments),
+        }
+
+    truth_label_centroids: list[dict[str, Any]] = []
+    for (tail_id, phase_label), group in assigned_df.groupby(["tail_id", "phase_label"], dropna=False, sort=True):
+        vectors = [list(item) for item in group["s_w"].tolist()]
+        truth_label_centroids.append(
+            {
+                "tail_id": str(tail_id),
+                "phase_label": str(phase_label),
+                "window_subset": "all",
+                "window_count": int(len(group)),
+                "drift_threshold_upper": None,
+                "s_w_centroid": _mean_vector(vectors),
+            }
+        )
+        drift_series = pd.to_numeric(group["drift_magnitude"], errors="coerce")
+        if drift_series.notna().any():
+            for quantile, subset_name in ((0.5, "low_drift_p50"), (0.25, "low_drift_p25")):
+                threshold = float(drift_series.quantile(quantile))
+                subset = group[drift_series <= threshold].copy()
+                if subset.empty:
+                    continue
+                truth_label_centroids.append(
+                    {
+                        "tail_id": str(tail_id),
+                        "phase_label": str(phase_label),
+                        "window_subset": subset_name,
+                        "window_count": int(len(subset)),
+                        "drift_threshold_upper": threshold,
+                        "s_w_centroid": _mean_vector([list(item) for item in subset["s_w"].tolist()]),
+                    }
+                )
+
+    baselines = phase_baselines_df.copy()
+    baselines["s_w_centroid"] = baselines["s_w_centroid"].apply(_coerce_vector)
+    baselines = baselines[baselines["s_w_centroid"].apply(_has_vector_values)].copy()
+    detected_phase_centroids = [
+        {
+            "tail_id": str(row.get("tail_id", "")),
+            "phase_id_detected": int(row.get("phase_id_detected", 0) or 0),
+            "phase_name_detected": str(row.get("phase_name_detected", "")),
+            "stable_window_count": int(row.get("stable_window_count", 0) or 0),
+            "s_w_centroid": _coerce_vector(row.get("s_w_centroid")),
+        }
+        for row in baselines.to_dict(orient="records")
+    ]
+    if not detected_phase_centroids:
+        return {
+            "status": "skipped",
+            "reason": "no detected phase centroids available",
+            "assignment_count": len(assignments),
+            "truth_label_centroids": truth_label_centroids,
+        }
+
+    distance_matrix: list[dict[str, Any]] = []
+    for detected in detected_phase_centroids:
+        for truth in truth_label_centroids:
+            if str(detected["tail_id"]) != str(truth["tail_id"]):
+                continue
+            distance_matrix.append(
+                {
+                    "tail_id": str(detected["tail_id"]),
+                    "phase_id_detected": int(detected["phase_id_detected"]),
+                    "phase_name_detected": str(detected["phase_name_detected"]),
+                    "phase_label": str(truth["phase_label"]),
+                    "window_subset": str(truth["window_subset"]),
+                    "window_count": int(truth["window_count"]),
+                    "drift_threshold_upper": truth["drift_threshold_upper"],
+                    "distance": _euclidean_distance(
+                        list(detected["s_w_centroid"]),
+                        list(truth["s_w_centroid"]),
+                    ),
+                }
+            )
+    distance_matrix = sorted(
+        distance_matrix,
+        key=lambda item: (
+            str(item["tail_id"]),
+            int(item["phase_id_detected"]),
+            float("inf") if item["distance"] is None else float(item["distance"]),
+            str(item["phase_label"]),
+            str(item["window_subset"]),
+        ),
+    )
+    nearest_truth_centroid_by_detected: list[dict[str, Any]] = []
+    nearest_truth_centroid_by_detected_and_subset: list[dict[str, Any]] = []
+    distance_df = pd.DataFrame.from_records(distance_matrix)
+    if not distance_df.empty:
+        for (tail_id, phase_id_detected), group in distance_df.groupby(
+            ["tail_id", "phase_id_detected"],
+            dropna=False,
+            sort=True,
+        ):
+            best = group.sort_values(["distance", "phase_label", "window_subset"], kind="stable").iloc[0].to_dict()
+            nearest_truth_centroid_by_detected.append(dict(best))
+        for (tail_id, phase_id_detected, window_subset), group in distance_df.groupby(
+            ["tail_id", "phase_id_detected", "window_subset"],
+            dropna=False,
+            sort=True,
+        ):
+            best = group.sort_values(["distance", "phase_label"], kind="stable").iloc[0].to_dict()
+            nearest_truth_centroid_by_detected_and_subset.append(dict(best))
+
+    stable_window_label_counts = Counter(
+        str(item["phase_label"])
+        for item in assignments
+        if str(item.get("phase_state_detected", "")) == "stable" and str(item.get("phase_label", "")).strip()
+    )
+    truth_label_window_counts = Counter(str(item["phase_label"]) for item in assignments if str(item.get("phase_label", "")).strip())
+
+    return {
+        "status": "ok",
+        "assignment_count": len(assignments),
+        "centroid_vector_column": "s_w",
+        "label_assignment_contract": "majority_overlap_label",
+        "detected_phase_centroids": detected_phase_centroids,
+        "truth_label_centroids": truth_label_centroids,
+        "distance_matrix": distance_matrix,
+        "nearest_truth_centroid_by_detected": nearest_truth_centroid_by_detected,
+        "nearest_truth_centroid_by_detected_and_subset": nearest_truth_centroid_by_detected_and_subset,
+        "stable_window_label_counts": dict(sorted(stable_window_label_counts.items())),
+        "truth_label_window_counts": dict(sorted(truth_label_window_counts.items())),
+    }
 
 
 def validate_detected_phases_from_tables(

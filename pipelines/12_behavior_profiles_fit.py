@@ -21,6 +21,13 @@ from pipelines.common import build_stage_runtime
 LOGGER = get_logger(__name__)
 
 
+def _safe_unpersist(dataframe) -> None:
+    try:
+        dataframe.unpersist()
+    except Exception as exc:  # pragma: no cover - defensive cleanup on dead Spark gateway
+        LOGGER.warning("behavior_profiles_fit unpersist skipped: %s", exc)
+
+
 @track_mlflow_run(stage_name="12_behavior_profiles_fit", logger=LOGGER)
 @log_memory_usage(logger=LOGGER, label="12_behavior_profiles_fit")
 @log_wall_time(logger=LOGGER)
@@ -59,25 +66,27 @@ def run() -> None:
         datatype_profile_df,
         scaling_profile_df,
     ).to_dataframe().persist(StorageLevel.MEMORY_AND_DISK)
-    behavior_profile_df = profiling_plan.build_behavior_profile(
-        primitive_profile_df,
-    ).to_dataframe().persist(StorageLevel.MEMORY_AND_DISK)
 
+    raw_count = None
+    datatype_count = None
+    scaling_count = None
+    primitive_count = None
+    behavior_count = None
     try:
-        raw_count = int(raw_df.count())
-        datatype_count = int(datatype_profile_df.count())
-        scaling_count = int(scaling_profile_df.count())
-        primitive_count = int(primitive_profile_df.count())
-        behavior_count = int(behavior_profile_df.count())
-
         write_table(primitive_profile_df, path=primitive_profile_path, mode=write_mode, fmt=table_format)
+        _safe_unpersist(scaling_profile_df)
+        _safe_unpersist(datatype_profile_df)
+        _safe_unpersist(raw_df)
+
+        behavior_profile_df = profiling_plan.build_behavior_profile(
+            read_table(spark, primitive_profile_path, fmt=table_format),
+        ).to_dataframe()
         write_table(behavior_profile_df, path=behavior_profile_path, mode=write_mode, fmt=table_format)
     finally:
-        behavior_profile_df.unpersist()
-        primitive_profile_df.unpersist()
-        scaling_profile_df.unpersist()
-        datatype_profile_df.unpersist()
-        raw_df.unpersist()
+        _safe_unpersist(primitive_profile_df)
+        _safe_unpersist(scaling_profile_df)
+        _safe_unpersist(datatype_profile_df)
+        _safe_unpersist(raw_df)
 
     log_params_if_active(
         {

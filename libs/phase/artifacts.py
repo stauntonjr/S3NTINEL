@@ -36,6 +36,27 @@ def select_phase_windows(
         F.lit(1e-6),
     )
     assigned_cost_expr = F.element_at("phase_costs", F.col("phase_id_detected") + F.lit(1)).cast("double")
+    assigned_vs_alt_costs = F.zip_with(
+        F.sequence(F.lit(0), F.size("phase_costs") - F.lit(1)),
+        F.col("phase_costs"),
+        lambda pos, cost: F.when(pos != F.col("phase_id_detected"), cost.cast("double")),
+    )
+    assigned_second_best_cost_expr = F.array_min(
+        F.filter(
+            assigned_vs_alt_costs,
+            lambda cost: cost.isNotNull(),
+        )
+    ).cast("double")
+    assigned_margin_confidence_expr = F.when(
+        F.size("phase_costs") <= F.lit(1),
+        F.lit(1.0),
+    ).otherwise(
+        F.greatest(
+            F.lit(0.0),
+            (assigned_second_best_cost_expr - assigned_cost_expr)
+            / F.greatest(assigned_second_best_cost_expr, F.lit(1e-6)),
+        )
+    )
     return enriched_df.select(
         F.col("tail_id").cast("string").alias("tail_id"),
         F.col("flight_id").cast("string").alias("flight_id"),
@@ -52,7 +73,7 @@ def select_phase_windows(
         )
         .otherwise(F.lit("transition_region"))
         .alias("phase_state_detected"),
-        F.greatest(F.lit(0.0), F.lit(1.0) - assigned_cost_expr).cast("double").alias("phase_confidence_detected"),
+        assigned_margin_confidence_expr.cast("double").alias("phase_confidence_detected"),
         assigned_distance_expr.alias("distance_to_centroid_detected"),
         F.coalesce(F.col("drift_magnitude_profiled"), F.lit(0.0)).cast("double").alias("drift_magnitude"),
         F.coalesce(F.col("breadth"), F.lit(0.0)).cast("double").alias("breadth"),

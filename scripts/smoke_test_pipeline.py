@@ -63,6 +63,7 @@ def set_env_paths(base_dir: str, table_format: str, write_mode: str, min_warm: i
     os.environ["S3NTINEL_FUSED_GRAPH_TABLE_PATH"] = str(base / "delta" / "fused_graph")
     os.environ["S3NTINEL_PHASE_WINDOWS_TABLE_PATH"] = str(base / "delta" / "phase_windows")
     os.environ["S3NTINEL_PHASE_BASELINES_TABLE_PATH"] = str(base / "delta" / "phase_baselines")
+    os.environ["S3NTINEL_PHASE_LABEL_CENTROIDS_TABLE_PATH"] = str(base / "delta" / "phase_label_centroids")
     os.environ["S3NTINEL_HIERARCHY_SENSOR_MAP_TABLE_PATH"] = str(base / "delta" / "hierarchy_sensor_map")
     os.environ["S3NTINEL_WINDOW_SCORES_RAW_TABLE_PATH"] = str(base / "delta" / "window_scores_raw")
     os.environ["S3NTINEL_WINDOW_SCORES_CALIBRATED_TABLE_PATH"] = str(base / "delta" / "window_scores_calibrated")
@@ -86,6 +87,7 @@ def run_stages(stage_80_write_mode: str) -> None:
         "40_backbone_fit.py",
         "50_build_graph.py",
         "70_phase_fit.py",
+        "72_phase_label_centroids.py",
         "80_window_scores_raw.py",
         "85_window_scores_calibrate.py",
         "90_anomaly_attribution.py",
@@ -122,6 +124,7 @@ def print_row_counts(spark: "SparkSession", table_format: str) -> None:
         "hierarchy_sensor_map": os.environ["S3NTINEL_HIERARCHY_SENSOR_MAP_TABLE_PATH"],
         "phase_windows": os.environ["S3NTINEL_PHASE_WINDOWS_TABLE_PATH"],
         "phase_baselines": os.environ["S3NTINEL_PHASE_BASELINES_TABLE_PATH"],
+        "phase_label_centroids": os.environ["S3NTINEL_PHASE_LABEL_CENTROIDS_TABLE_PATH"],
         "window_scores_raw": os.environ["S3NTINEL_WINDOW_SCORES_RAW_TABLE_PATH"],
         "window_scores_calibrated": os.environ["S3NTINEL_WINDOW_SCORES_CALIBRATED_TABLE_PATH"],
         "anomaly_window_attribution": os.environ["S3NTINEL_ANOMALY_WINDOW_ATTRIBUTION_TABLE_PATH"],
@@ -210,6 +213,7 @@ def assert_active_v2_table_contracts(spark: "SparkSession", table_format: str) -
         "hierarchy_sensor_map": os.environ["S3NTINEL_HIERARCHY_SENSOR_MAP_TABLE_PATH"],
         "phase_windows": os.environ["S3NTINEL_PHASE_WINDOWS_TABLE_PATH"],
         "phase_baselines": os.environ["S3NTINEL_PHASE_BASELINES_TABLE_PATH"],
+        "phase_label_centroids": os.environ["S3NTINEL_PHASE_LABEL_CENTROIDS_TABLE_PATH"],
         "window_scores_raw": os.environ["S3NTINEL_WINDOW_SCORES_RAW_TABLE_PATH"],
         "window_scores_calibrated": os.environ["S3NTINEL_WINDOW_SCORES_CALIBRATED_TABLE_PATH"],
         "anomaly_window_attribution": os.environ["S3NTINEL_ANOMALY_WINDOW_ATTRIBUTION_TABLE_PATH"],

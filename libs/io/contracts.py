@@ -123,6 +123,8 @@ class PhaseBaselineRow(TypedDict, total=False):
     reconstruction_mad: float
     distance_median: float
     distance_mad: float
+    baseline_source_mode: str
+    baseline_window_count: int
     stable_window_count: int
     feature_names: list[str]
     selected_sensors_c: list[str]

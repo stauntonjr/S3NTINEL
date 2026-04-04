@@ -122,6 +122,7 @@ def test_simulation_public_api_runs_end_to_end(tmp_path):
     assert (result.paths.run_dir / "delta" / "window_policy_profile").exists()
     assert (result.paths.run_dir / "delta" / "windows").exists()
     assert (result.paths.run_dir / "delta" / "window_scores_calibrated").exists()
+    assert (result.paths.run_dir / "delta" / "phase_label_centroids").exists()
     assert (result.paths.run_dir / "reports" / "phase_validation_summary.json").exists()
     assert (result.paths.run_dir / "reports" / "hierarchy_validation_summary.json").exists()
     assert (result.paths.run_dir / "reports" / "coupling_validation_summary.json").exists()
