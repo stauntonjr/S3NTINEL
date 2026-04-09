@@ -160,6 +160,8 @@ PHASE_WINDOWS_VIEW = ArtifactView(
         "t_end",
         "phase_id_detected",
         "phase_state_detected",
+        "transition_from_phase_id_detected",
+        "transition_to_phase_id_detected",
         "phase_confidence_detected",
         "distance_to_centroid_detected",
     ),

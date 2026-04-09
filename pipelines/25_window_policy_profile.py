@@ -34,6 +34,7 @@ def run() -> None:
     runtime = build_stage_runtime("25_window_policy_profile")
     settings = runtime.settings
     events_path = runtime.artifacts.events
+    raw_telemetry_path = runtime.artifacts.raw_table
     output_path = runtime.artifacts.window_policy_profile
     table_format = runtime.execution.table_format
     write_mode = runtime.execution.fit_write_mode
@@ -53,6 +54,7 @@ def run() -> None:
     )
 
     spark = get_spark("s3ntinel.window_policy_profile")
+    raw_df = read_table(spark, raw_telemetry_path, fmt=table_format)
     events_df = read_table(spark, events_path, fmt=table_format)
     profile_df = WindowPolicyProfileTable.from_events(
         events_df,
@@ -87,6 +89,7 @@ def run() -> None:
         {
             "stage": "25_window_policy_profile",
             "events_path": events_path,
+            "raw_telemetry_path": raw_telemetry_path,
             "window_policy_profile_path": output_path,
             "table_format": table_format,
             "write_mode": write_mode,
@@ -119,6 +122,7 @@ def run() -> None:
             "window_strategy": str(settings.windowing.strategy),
         },
         input_artifacts={
+            "raw_telemetry": build_artifact_manifest(path=raw_telemetry_path, dataframe=raw_df),
             "events": build_artifact_manifest(path=events_path, dataframe=events_df, row_count=events_count),
         },
         output_artifacts={
@@ -129,7 +133,7 @@ def run() -> None:
                 artifact_version="WINDOW_POLICY_PROFILE_V1",
             ),
         },
-        replayable_from=["events"],
+        replayable_from=["raw_telemetry", "events"],
         cache_artifacts={
             "window_policy_profile_cache": {
                 "window_policy_profile_evaluation_path": evaluation_report_path,

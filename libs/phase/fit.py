@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 
 from libs.perf.annotations import hot_path
 from libs.phase.frames import PhaseFeatureFrame, PhaseObservationFrame
-from libs.phase.types import PhaseClusterModel, PhasePlanConfig
-from libs.phase.utils import array_distance
+from libs.phase.types import PhaseClusterModel, PhasePlanConfig, PhaseTransitionModel
+from libs.phase.utils import array_distance, with_progress_mass_coordinates
 
 
 def build_flight_stats(
@@ -82,7 +82,7 @@ def build_flight_stats(
             "effective_phase_count",
             F.least(
                 F.lit(max(int(config.phase_count), 1)),
-                F.greatest(F.col("stable_window_count_effective"), F.lit(1)),
+                F.greatest(F.col("flight_window_count"), F.lit(1)),
             ).cast("int"),
         )
         .withColumn(
@@ -101,7 +101,7 @@ def build_flight_stats(
         .withColumn(
             "can_refine_centroids",
             (F.col("effective_phase_count") > F.lit(1))
-            & (F.col("stable_window_count_effective") > F.col("effective_phase_count")),
+            & (F.col("flight_window_count") > F.col("effective_phase_count")),
         )
         .drop(*[f"phase_mad_{idx}" for idx in range(feature_count)])
     )
@@ -122,6 +122,7 @@ def build_scaled_phase_observations(
             stats_df.select(
                 "tail_id",
                 "flight_id",
+                "flight_window_count",
                 "drift_threshold",
                 "phase_feature_medians",
                 "phase_feature_scales",
@@ -157,28 +158,79 @@ def build_fit_source(scaled_df: "DataFrame") -> "DataFrame":
     from pyspark.sql.window import Window
 
     fit_window = Window.partitionBy("tail_id", "flight_id").orderBy("phase_row_number")
-    return (
-        scaled_df.where(
-            F.when(F.col("stable_window_count_raw") > F.lit(0), F.col("phase_is_stable_raw")).otherwise(F.lit(True))
-        )
+    fit_source_df = (
+        with_progress_mass_coordinates(scaled_df)
         .withColumn("fit_rank", F.row_number().over(fit_window).cast("int"))
         .withColumn(
-            "seed_phase_id",
+            "count_seed_phase_id",
             F.floor(
                 ((F.col("fit_rank") - F.lit(1)) * F.col("effective_phase_count"))
-                / F.greatest(F.col("stable_window_count_effective"), F.lit(1))
+                / F.greatest(F.col("flight_window_count"), F.lit(1))
             ).cast("int"),
+        )
+        .withColumn(
+            "progress_mass_seed_phase_id",
+            F.least(
+                F.floor(
+                    F.col("progress_mass_position") * F.col("effective_phase_count")
+                ),
+                F.col("effective_phase_count") - F.lit(1),
+            ).cast("int"),
+        )
+    )
+    progress_mass_counts_df = fit_source_df.groupBy("tail_id", "flight_id").agg(
+        F.countDistinct("progress_mass_seed_phase_id").cast("int").alias("progress_mass_seed_phase_count"),
+        F.first("effective_phase_count").cast("int").alias("effective_phase_count_check"),
+    )
+    return (
+        fit_source_df.join(progress_mass_counts_df, on=["tail_id", "flight_id"], how="inner")
+        .withColumn(
+            "seed_phase_id",
+            F.when(
+                F.col("progress_mass_seed_phase_count") == F.col("effective_phase_count_check"),
+                F.col("progress_mass_seed_phase_id"),
+            )
+            .otherwise(F.col("count_seed_phase_id"))
+            .cast("int"),
+        )
+        .drop(
+            "progress_mass_seed_phase_id",
+            "progress_mass_seed_phase_count",
+            "effective_phase_count_check",
         )
     )
 
 
-def build_seed_centroids(fit_source_df: "DataFrame") -> "DataFrame":
+def build_seed_centroids(
+    fit_source_df: "DataFrame",
+    *,
+    feature_count: int,
+) -> tuple["DataFrame", "DataFrame"]:
     from pyspark.sql import functions as F
     from pyspark.sql.window import Window
 
-    seed_pick_window = Window.partitionBy("tail_id", "flight_id", "seed_phase_id").orderBy("fit_rank")
-    return (
-        fit_source_df.withColumn("seed_pick_rank", F.row_number().over(seed_pick_window).cast("int"))
+    bucket_means_df = fit_source_df.groupBy("tail_id", "flight_id", "seed_phase_id").agg(
+        F.array(
+            *[F.avg(F.element_at("s_w_scaled", F.lit(idx + 1)).cast("double")).cast("double") for idx in range(feature_count)]
+        ).alias("seed_bucket_mean"),
+        F.count(F.lit(1)).cast("int").alias("seed_bucket_count"),
+    )
+    seed_bucket_counts_df = bucket_means_df.select(
+        "tail_id",
+        "flight_id",
+        F.col("seed_phase_id").cast("int").alias("phase_id_detected"),
+        F.col("seed_bucket_count").cast("int").alias("seed_bucket_count"),
+    )
+    seed_pick_window = Window.partitionBy("tail_id", "flight_id", "seed_phase_id").orderBy(
+        F.col("seed_bucket_distance").asc(),
+        F.coalesce(F.abs(F.col("drift_magnitude_profiled")), F.lit(1e12)).asc(),
+        F.col("phase_row_number").asc(),
+        F.col("win_id").asc(),
+    )
+    centroids_df = (
+        fit_source_df.join(bucket_means_df, on=["tail_id", "flight_id", "seed_phase_id"], how="inner")
+        .withColumn("seed_bucket_distance", array_distance(F.col("s_w_scaled"), F.col("seed_bucket_mean")))
+        .withColumn("seed_pick_rank", F.row_number().over(seed_pick_window).cast("int"))
         .where(F.col("seed_pick_rank") == F.lit(1))
         .select(
             "tail_id",
@@ -187,6 +239,7 @@ def build_seed_centroids(fit_source_df: "DataFrame") -> "DataFrame":
             F.col("s_w_scaled").alias("s_w_centroid"),
         )
     ).localCheckpoint(eager=True)
+    return centroids_df, seed_bucket_counts_df
 
 
 def build_fit_assignments(fit_source_df: "DataFrame", centroids_df: "DataFrame") -> "DataFrame":
@@ -265,33 +318,23 @@ def refine_centroids(
 
 def build_cluster_outputs(
     centroids_df: "DataFrame",
+    fit_source_df: "DataFrame",
     fit_assignments_df: "DataFrame",
-) -> tuple["DataFrame", "DataFrame"]:
+) -> tuple["DataFrame", "DataFrame", "DataFrame"]:
     from pyspark.sql import functions as F
-    from pyspark.sql.window import Window
 
-    phase_order_df = (
+    fit_window_counts_df = (
         fit_assignments_df.groupBy("tail_id", "flight_id", "phase_id_detected")
         .agg(
-            F.min("phase_row_number").cast("int").alias("first_phase_row_number"),
             F.count(F.lit(1)).cast("int").alias("fit_window_count"),
-        )
-        .withColumn(
-            "ordered_phase_id",
-            (F.row_number().over(
-                Window.partitionBy("tail_id", "flight_id").orderBy(
-                    F.col("first_phase_row_number").asc(),
-                    F.col("phase_id_detected").asc(),
-                )
-            ) - F.lit(1)).cast("int"),
         )
     )
     ordered_centroids_df = (
-        centroids_df.join(phase_order_df, on=["tail_id", "flight_id", "phase_id_detected"], how="inner")
+        centroids_df.join(fit_window_counts_df, on=["tail_id", "flight_id", "phase_id_detected"], how="inner")
         .select(
             "tail_id",
             "flight_id",
-            F.col("ordered_phase_id").cast("int").alias("phase_id_detected"),
+            F.col("phase_id_detected").cast("int").alias("phase_id_detected"),
             "s_w_centroid",
             F.col("fit_window_count").cast("int").alias("fit_window_count"),
         )
@@ -300,15 +343,13 @@ def build_cluster_outputs(
         F.expr("percentile(phase_fit_distance, 0.75D)").cast("double").alias("flight_distance_scale")
     )
     distance_scales_df = (
-        fit_assignments_df.join(phase_order_df, on=["tail_id", "flight_id", "phase_id_detected"], how="inner")
-        .groupBy("tail_id", "flight_id", "ordered_phase_id")
+        fit_assignments_df.groupBy("tail_id", "flight_id", "phase_id_detected")
         .agg(F.expr("percentile(phase_fit_distance, 0.9D)").cast("double").alias("distance_scale"))
-        .withColumnRenamed("ordered_phase_id", "phase_id_detected")
         .join(
-            phase_order_df.select(
+            fit_window_counts_df.select(
                 "tail_id",
                 "flight_id",
-                F.col("ordered_phase_id").cast("int").alias("phase_id_detected"),
+                F.col("phase_id_detected").cast("int").alias("phase_id_detected"),
                 F.col("fit_window_count").cast("int").alias("fit_window_count"),
             ),
             on=["tail_id", "flight_id", "phase_id_detected"],
@@ -341,7 +382,36 @@ def build_cluster_outputs(
             .alias("distance_scale"),
         )
     )
-    return ordered_centroids_df, distance_scales_df
+    transition_support_df = (
+        fit_source_df.groupBy("tail_id", "flight_id", "seed_phase_id")
+        .agg(
+            F.first("effective_phase_count").cast("int").alias("effective_phase_count"),
+            F.first("flight_window_count").cast("int").alias("flight_window_count"),
+            F.min("progress_mass_position").cast("double").alias("phase_progress_start"),
+            F.max("progress_mass_position").cast("double").alias("phase_progress_end"),
+        )
+        .withColumn(
+            "phase_progress_center",
+            ((F.col("phase_progress_start") + F.col("phase_progress_end")) / F.lit(2.0)).cast("double"),
+        )
+        .withColumn(
+            "phase_progress_half_width",
+            F.greatest(
+                ((F.col("phase_progress_end") - F.col("phase_progress_start")) / F.lit(2.0)).cast("double"),
+                (F.lit(1.0) / F.greatest((F.col("flight_window_count") - F.lit(1)).cast("double"), F.lit(1.0))).cast("double"),
+            ).cast("double"),
+        )
+        .select(
+            "tail_id",
+            "flight_id",
+            F.col("seed_phase_id").cast("int").alias("phase_id_detected"),
+            F.col("phase_progress_start").cast("double").alias("phase_progress_start"),
+            F.col("phase_progress_end").cast("double").alias("phase_progress_end"),
+            F.col("phase_progress_center").cast("double").alias("phase_progress_center"),
+            F.col("phase_progress_half_width").cast("double").alias("phase_progress_half_width"),
+        )
+    )
+    return ordered_centroids_df, distance_scales_df, transition_support_df
 
 
 @hot_path
@@ -350,14 +420,22 @@ def fit_cluster_model(
     *,
     config: PhasePlanConfig,
 ) -> tuple["DataFrame", PhaseClusterModel]:
+    from pyspark.sql import functions as F
+
     feature_count = len(feature_frame.feature_names)
     _, stats_df, scaled_df = build_scaled_phase_observations(
         feature_frame=feature_frame,
         feature_count=feature_count,
         config=config,
     )
-    fit_source_df = build_fit_source(scaled_df)
-    centroids_df = build_seed_centroids(fit_source_df)
+    fit_source_df = build_fit_source(scaled_df).localCheckpoint(eager=True)
+    fit_source_stats_df = fit_source_df.groupBy("tail_id", "flight_id").agg(
+        F.count(F.lit(1)).cast("int").alias("fit_source_window_count")
+    )
+    centroids_df, seed_bucket_counts_df = build_seed_centroids(
+        fit_source_df,
+        feature_count=feature_count,
+    )
     centroids_df = refine_centroids(
         stats_df=stats_df,
         fit_source_df=fit_source_df,
@@ -366,11 +444,18 @@ def fit_cluster_model(
         config=config,
     )
     fit_assignments_df = build_fit_assignments(fit_source_df, centroids_df)
-    ordered_centroids_df, distance_scales_df = build_cluster_outputs(centroids_df, fit_assignments_df)
+    ordered_centroids_df, distance_scales_df, transition_support_df = build_cluster_outputs(
+        centroids_df,
+        fit_source_df,
+        fit_assignments_df,
+    )
     return scaled_df, PhaseClusterModel(
         feature_stats_df=stats_df,
         centroids_df=ordered_centroids_df,
         distance_scales_df=distance_scales_df,
+        transition_model=PhaseTransitionModel(support_df=transition_support_df),
+        fit_source_stats_df=fit_source_stats_df,
+        seed_bucket_counts_df=seed_bucket_counts_df,
     )
 
 

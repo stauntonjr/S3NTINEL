@@ -21,6 +21,7 @@ class WindowProfileRowsFrame(Frame):
         min_ms: int,
         inactivity_timeout_ms: int = 0,
         strategy: str = "segmented",
+        coverage_timestamps_df: "DataFrame | None" = None,
     ) -> "WindowProfileRowsFrame":
         from libs.windows.pipeline import AdaptiveWindowPlan, AdaptiveWindowPolicy
         from pyspark.sql import functions as F
@@ -36,7 +37,7 @@ class WindowProfileRowsFrame(Frame):
                 inactivity_timeout_ms=int(inactivity_timeout_ms),
             )
         )
-        sequence_frame = plan._build_segment_frame(events_df)
+        sequence_frame = plan._build_segment_frame(events_df, coverage_timestamps_df=coverage_timestamps_df)
         assignment_events_df = plan._build_assignment_events(events_df)
         window_summaries_df = plan._build_window_summaries(sequence_frame=sequence_frame)
         duration_ms_col = plan.policy.to_window_policy().duration_ms_expr(t_start=F.col("t_start"), t_end=F.col("t_end"))
@@ -46,6 +47,9 @@ class WindowProfileRowsFrame(Frame):
             "win_id",
             F.greatest(duration_ms_col, F.lit(int(plan.policy.min_ms))).cast("int").alias("duration_ms"),
             F.col("event_count").cast("int").alias("event_count"),
+            F.col("real_event_count").cast("int").alias("real_event_count"),
+            F.col("quiet_credit_end").cast("double").alias("quiet_credit_end"),
+            F.col("closure_budget_end").cast("double").alias("closure_budget_end"),
             F.col("close_reason").cast("string").alias("close_reason"),
             "start_event_seq_id",
             "end_event_seq_id",
@@ -66,6 +70,9 @@ class WindowProfileRowsFrame(Frame):
                 "win_id",
                 "duration_ms",
                 "event_count",
+                "real_event_count",
+                "quiet_credit_end",
+                "closure_budget_end",
                 F.coalesce(F.col("sensor_count"), F.lit(0).cast("int")).alias("sensor_count"),
                 F.coalesce(F.col("event_type_count"), F.lit(0).cast("int")).alias("event_type_count"),
                 "close_reason",
@@ -92,6 +99,7 @@ class WindowsTable(Table):
         min_ms: int,
         inactivity_timeout_ms: int = 0,
         strategy: str = "segmented",
+        coverage_timestamps_df: "DataFrame | None" = None,
     ) -> "WindowsTable":
         from libs.windows.pipeline import AdaptiveWindowPlan, AdaptiveWindowPolicy
 
@@ -105,7 +113,10 @@ class WindowsTable(Table):
                 min_ms=int(min_ms),
                 inactivity_timeout_ms=int(inactivity_timeout_ms),
             )
-        ).build(events_df)
+        ).build_with_coverage(
+            events_df,
+            coverage_timestamps_df=coverage_timestamps_df,
+        )
         return cls(dataframe=artifact_set.windows_df)
 
 
@@ -160,10 +171,21 @@ class WindowPolicyProfileTable(Table):
         return WINDOW_POLICY_PROFILE_SCHEMA()
 
     @classmethod
-    def from_events(cls, events_df: "DataFrame", *, spec: "WindowPolicyProfileSpec") -> "WindowPolicyProfileTable":
+    def from_events(
+        cls,
+        events_df: "DataFrame",
+        *,
+        spec: "WindowPolicyProfileSpec",
+        coverage_timestamps_df: "DataFrame | None" = None,
+    ) -> "WindowPolicyProfileTable":
         from libs.windows.policy_profile import WindowPolicyProfile
 
-        return cls(dataframe=WindowPolicyProfile(spec=spec).build_dataframe(events_df))
+        return cls(
+            dataframe=WindowPolicyProfile(spec=spec).build_dataframe(
+                events_df,
+                coverage_timestamps_df=coverage_timestamps_df,
+            )
+        )
 
 
 if TYPE_CHECKING:

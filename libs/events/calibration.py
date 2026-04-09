@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 from libs.events.continuous import ContinuousDetectorConfig, ContinuousEventDetector
 from libs.events.pipeline import EventDetectionPlan
 from libs.windows import WindowProfileRowsFrame
+from libs.windows.policy_profile import compute_window_policy_penalty
 
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame
@@ -86,10 +87,9 @@ def _window_summary(profile_windows_df: "DataFrame") -> dict[str, Any]:
             F.avg(F.when(F.col("close_reason") == F.lit("event_threshold"), F.lit(1.0)).otherwise(F.lit(0.0))).alias(
                 "event_threshold_rate"
             ),
-            F.avg(F.when(F.col("close_reason") == F.lit("max_ms"), F.lit(1.0)).otherwise(F.lit(0.0))).alias("max_ms_rate"),
-            F.avg(
-                F.when(F.col("close_reason") == F.lit("event_threshold+max_ms"), F.lit(1.0)).otherwise(F.lit(0.0))
-            ).alias("event_threshold_plus_max_ms_rate"),
+            F.avg(F.when(F.col("close_reason") == F.lit("budget_threshold"), F.lit(1.0)).otherwise(F.lit(0.0))).alias(
+                "budget_threshold_rate"
+            ),
             F.avg(F.when(F.col("close_reason") == F.lit("end_of_stream"), F.lit(1.0)).otherwise(F.lit(0.0))).alias(
                 "end_of_stream_rate"
             ),
@@ -116,8 +116,7 @@ def _window_summary(profile_windows_df: "DataFrame") -> dict[str, Any]:
         "window_count": int(row["window_count"] or 0),
         "closure_mix": {
             "event_threshold": float(row["event_threshold_rate"] or 0.0),
-            "max_ms": float(row["max_ms_rate"] or 0.0),
-            "event_threshold+max_ms": float(row["event_threshold_plus_max_ms_rate"] or 0.0),
+            "budget_threshold": float(row["budget_threshold_rate"] or 0.0),
             "end_of_stream": float(row["end_of_stream_rate"] or 0.0),
         },
         "mean_event_count": float(row["mean_event_count"] or 0.0),
@@ -132,15 +131,16 @@ def _window_summary(profile_windows_df: "DataFrame") -> dict[str, Any]:
 def _candidate_score(summary: dict[str, Any]) -> float:
     closure_mix = dict(summary.get("window_summary", {}).get("closure_mix") or {})
     slope_share = float(summary.get("slope_event_share") or 0.0)
-    threshold_rate = float(closure_mix.get("event_threshold") or 0.0)
-    max_ms_rate = float(closure_mix.get("max_ms") or 0.0)
-    pair_cost_proxy = float(summary.get("window_summary", {}).get("pair_cost_proxy") or 0.0)
-    total_event_count = max(int(summary.get("total_event_count") or 0), 1)
+    window_summary = dict(summary.get("window_summary") or {})
     return float(
         abs(slope_share - 0.75)
-        + abs(threshold_rate - 0.75)
-        + abs(max_ms_rate - 0.25)
-        + (pair_cost_proxy / float(total_event_count))
+        + compute_window_policy_penalty(
+            pair_cost_proxy=float(window_summary.get("pair_cost_proxy") or 0.0),
+            same_window_pair_expansion_proxy=float(window_summary.get("same_window_pair_expansion_proxy") or 0.0),
+            sampled_event_count=max(int(summary.get("total_event_count") or 0), 1),
+            p95_event_count=float(window_summary.get("p95_event_count") or 0.0),
+            end_of_stream_rate=float(closure_mix.get("end_of_stream") or 0.0),
+        )
     )
 
 

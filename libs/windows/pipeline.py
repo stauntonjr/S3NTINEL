@@ -13,7 +13,7 @@ from libs.spark_sequence import (
     segment_policy_from_env,
 )
 from libs.windows.buffer import WindowSensorBuffer
-from libs.windows.window import WindowPolicy
+from libs.windows.window import WindowClosureBudgetPolicy, WindowPolicy
 
 
 def _default_window_segment_policy() -> SequenceSegmentPolicy:
@@ -21,6 +21,76 @@ def _default_window_segment_policy() -> SequenceSegmentPolicy:
         "WINDOW",
         default_max_rows_per_segment=50_000,
         default_max_span_ms=900_000,
+    )
+
+
+def build_window_coverage_timestamps(raw_df: "DataFrame") -> "DataFrame":
+    from pyspark.sql import functions as F
+
+    return (
+        raw_df.select("tail_id", "flight_id", "timestamp_utc", "date_utc")
+        .where(F.col("timestamp_utc").isNotNull())
+        .distinct()
+    )
+
+
+def build_budget_threshold_steps(
+    events_df: "DataFrame",
+    *,
+    policy: WindowPolicy,
+) -> "DataFrame":
+    from pyspark.sql import Window
+    from pyspark.sql import functions as F
+
+    budget_policy = WindowClosureBudgetPolicy.from_window_policy(policy)
+    threshold = max(int(budget_policy.event_threshold), 1)
+    event_window = Window.partitionBy("tail_id", "flight_id").orderBy("event_seq_id")
+    flight_window = Window.partitionBy("tail_id", "flight_id")
+    boundary_index_col = F.sequence(F.col("_boundary_start").cast("long"), F.col("_boundary_end").cast("long"))
+    return (
+        events_df.select("tail_id", "flight_id", "event_seq_id", "timestamp_utc", "date_utc")
+        .withColumn("_event_ordinal", F.row_number().over(event_window).cast("long"))
+        .withColumn("_flight_start_ts", F.min("timestamp_utc").over(flight_window))
+        .withColumn("_elapsed_ms", (F.unix_millis("timestamp_utc") - F.unix_millis("_flight_start_ts")).cast("long"))
+        .withColumn("_next_ts", F.lead("timestamp_utc").over(event_window))
+        .withColumn("_next_elapsed_ms", (F.unix_millis("_next_ts") - F.unix_millis("_flight_start_ts")).cast("long"))
+        .withColumn(
+            "_credit_after_event",
+            budget_policy.closure_budget_expr(
+                duration_ms=F.col("_elapsed_ms"),
+                real_event_count=F.col("_event_ordinal"),
+            ),
+        )
+        .withColumn(
+            "_credit_before_next_event",
+            budget_policy.closure_budget_expr(
+                duration_ms=F.col("_next_elapsed_ms"),
+                real_event_count=F.col("_event_ordinal"),
+            ),
+        )
+        .withColumn("_boundary_start", (F.floor(F.col("_credit_after_event") / F.lit(float(threshold))) + F.lit(1)).cast("long"))
+        .withColumn("_boundary_end", F.floor(F.col("_credit_before_next_event") / F.lit(float(threshold))).cast("long"))
+        .where(F.col("_next_ts").isNotNull() & (F.col("_boundary_end") >= F.col("_boundary_start")))
+        .withColumn("_boundary_index", F.explode(boundary_index_col))
+        .withColumn(
+            "_boundary_elapsed_ms",
+            budget_policy.elapsed_ms_for_budget_units_expr(
+                budget_units=(
+                    (F.col("_boundary_index").cast("double") * F.lit(float(threshold)))
+                    - F.col("_event_ordinal").cast("double")
+                )
+            ),
+        )
+        .select(
+            "tail_id",
+            "flight_id",
+            F.lit(None).cast("long").alias("event_seq_id"),
+            F.timestamp_millis(F.unix_millis("_flight_start_ts") + F.col("_boundary_elapsed_ms")).alias("timestamp_utc"),
+            F.to_date(F.timestamp_millis(F.unix_millis("_flight_start_ts") + F.col("_boundary_elapsed_ms"))).alias("date_utc"),
+            F.lit(None).cast("string").alias("parameter_name"),
+            F.lit(None).cast("string").alias("event_type_detected"),
+            F.lit(True).alias("is_budget_step"),
+        )
     )
 
 
@@ -52,6 +122,9 @@ class AdaptiveWindowSegmentState:
             "start_event_seq_id:bigint,"
             "end_event_seq_id:bigint,"
             "event_count:int,"
+            "real_event_count:int,"
+            "quiet_credit_end:double,"
+            "closure_budget_end:double,"
             "close_reason:string,"
             "date_utc:date"
             ">>"
@@ -73,6 +146,9 @@ class AdaptiveWindowSegmentState:
         start_event_seq_id: "Column",
         end_event_seq_id: "Column",
         event_count: "Column",
+        real_event_count: "Column",
+        quiet_credit_end: "Column",
+        closure_budget_end: "Column",
         close_reason: "Column",
         date_utc: "Column",
     ) -> "Column":
@@ -87,6 +163,9 @@ class AdaptiveWindowSegmentState:
             start_event_seq_id.cast("long").alias("start_event_seq_id"),
             end_event_seq_id.cast("long").alias("end_event_seq_id"),
             event_count.cast("int").alias("event_count"),
+            real_event_count.cast("int").alias("real_event_count"),
+            quiet_credit_end.cast("double").alias("quiet_credit_end"),
+            closure_budget_end.cast("double").alias("closure_budget_end"),
             close_reason.cast("string").alias("close_reason"),
             date_utc.cast("date").alias("date_utc"),
         )
@@ -146,6 +225,54 @@ class AdaptiveWindowTransition:
     policy: WindowPolicy
     state: AdaptiveWindowSegmentState = field(default_factory=AdaptiveWindowSegmentState)
 
+    def _budget_policy(self) -> WindowClosureBudgetPolicy:
+        return WindowClosureBudgetPolicy.from_window_policy(self.policy)
+
+    def _elapsed_ms_expr(self, *, t_start: "Column", t_end: "Column") -> "Column":
+        from pyspark.sql import functions as F
+
+        return (F.unix_millis(t_end) - F.unix_millis(t_start)).cast("long")
+
+    def _window_summary_from_ms_column(
+        self,
+        *,
+        tail_id: "Column",
+        flight_id: "Column",
+        win_id: "Column",
+        t_start_ms: "Column",
+        t_end_ms: "Column",
+        start_event_seq_id: "Column",
+        end_event_seq_id: "Column",
+        real_event_count: "Column",
+        close_reason: "Column",
+    ) -> "Column":
+        from pyspark.sql import functions as F
+
+        t_start = F.timestamp_millis(t_start_ms.cast("long"))
+        t_end = F.timestamp_millis(t_end_ms.cast("long"))
+        duration_ms = (t_end_ms.cast("long") - t_start_ms.cast("long")).cast("long")
+        budget_policy = self._budget_policy()
+        quiet_credit_end = budget_policy.quiet_credit_expr(duration_ms=duration_ms)
+        closure_budget_end = budget_policy.closure_budget_expr(
+            duration_ms=duration_ms,
+            real_event_count=real_event_count,
+        )
+        return self.state.window_summary_column(
+            tail_id=tail_id,
+            flight_id=flight_id,
+            win_id=win_id,
+            t_start=t_start,
+            t_end=t_end,
+            start_event_seq_id=start_event_seq_id,
+            end_event_seq_id=end_event_seq_id,
+            event_count=real_event_count,
+            real_event_count=real_event_count,
+            quiet_credit_end=quiet_credit_end,
+            closure_budget_end=closure_budget_end,
+            close_reason=close_reason,
+            date_utc=F.to_date(t_start),
+        )
+
     def state_after_step_column(
         self,
         *,
@@ -153,47 +280,45 @@ class AdaptiveWindowTransition:
         step: "Column",
         tail_id: "Column",
         flight_id: "Column",
-        max_ms: "Column",
-        event_threshold: "Column",
-        inactivity_timeout_ms: "Column",
     ) -> "Column":
         from pyspark.sql import functions as F
 
         open_state = self.state.open_state
         empty_windows = self.state.empty_windows_column()
+        is_budget_step = step["is_budget_step"]
         has_event = step["event_type_detected"].isNotNull() & (F.trim(step["event_type_detected"]) != F.lit(""))
+        threshold = F.lit(int(self.policy.event_threshold)).cast("int")
+        inactivity_timeout_ms = int(self.policy.inactivity_timeout_ms)
         inactivity_condition = (
-            (inactivity_timeout_ms > F.lit(0))
+            F.lit(inactivity_timeout_ms > 0)
             & acc[self.state.has_open_window]
             & (acc[open_state.event_count] > F.lit(0))
-            & ((F.unix_millis(step["timestamp_utc"]) - F.unix_millis(acc[open_state.t_end])).cast("int") >= inactivity_timeout_ms)
+            & (
+                (F.unix_millis(step["timestamp_utc"]) - F.unix_millis(acc[open_state.t_end])).cast("long")
+                >= F.lit(int(inactivity_timeout_ms)).cast("long")
+            )
         )
-        max_condition = (
-            acc[self.state.has_open_window]
-            & (acc[open_state.event_count] > F.lit(0))
-            & (F.unix_millis(step["timestamp_utc"]) >= F.unix_millis(acc[open_state.t_start]) + max_ms.cast("long"))
-        )
+        budget_boundary_condition = acc[self.state.has_open_window] & is_budget_step
         preclose_reason = (
             F.when(inactivity_condition, F.lit("inactivity_timeout"))
-            .when(max_condition, F.lit("max_ms"))
+            .when(budget_boundary_condition, F.lit("budget_threshold"))
             .otherwise(F.lit(None).cast("string"))
         )
-        preclose_t_end = (
-            F.when(inactivity_condition, acc[open_state.t_end])
-            .when(max_condition, F.timestamp_millis(F.unix_millis(acc[open_state.t_start]) + max_ms.cast("long")))
-            .otherwise(F.lit(None).cast("timestamp"))
+        preclose_t_end_ms = (
+            F.when(inactivity_condition, F.unix_millis(acc[open_state.t_end]).cast("long"))
+            .when(budget_boundary_condition, F.unix_millis(step["timestamp_utc"]).cast("long"))
+            .otherwise(F.lit(None).cast("long"))
         )
-        preclose_window = self.state.window_summary_column(
+        preclose_window = self._window_summary_from_ms_column(
             tail_id=tail_id,
             flight_id=flight_id,
             win_id=acc[open_state.win_id],
-            t_start=acc[open_state.t_start],
-            t_end=preclose_t_end,
+            t_start_ms=F.unix_millis(acc[open_state.t_start]).cast("long"),
+            t_end_ms=preclose_t_end_ms,
             start_event_seq_id=acc[open_state.start_event_seq_id],
             end_event_seq_id=acc[open_state.end_event_seq_id],
-            event_count=acc[open_state.event_count],
+            real_event_count=acc[open_state.event_count],
             close_reason=preclose_reason,
-            date_utc=F.to_date(acc[open_state.t_start]),
         )
         next_win_after_preclose = acc[self.state.next_win_id] + F.when(preclose_reason.isNotNull(), F.lit(1)).otherwise(F.lit(0))
         keep_existing_open = acc[self.state.has_open_window] & preclose_reason.isNull()
@@ -205,12 +330,19 @@ class AdaptiveWindowTransition:
             .otherwise(step["timestamp_utc"])
         )
         working_start_event_seq_id = (
-            F.when(keep_existing_open, acc[open_state.start_event_seq_id]).otherwise(step["event_seq_id"])
+            F.when(
+                has_event
+                & keep_existing_open
+                & ((acc[open_state.event_count] <= F.lit(0)) | acc[open_state.start_event_seq_id].isNull()),
+                step["event_seq_id"],
+            )
+            .when(keep_existing_open, acc[open_state.start_event_seq_id])
+            .otherwise(step["event_seq_id"])
         )
         working_end_event_seq_id = (
             F.when(has_event, step["event_seq_id"])
             .when(keep_existing_open, acc[open_state.end_event_seq_id])
-            .otherwise(step["event_seq_id"])
+            .otherwise(F.lit(None).cast("long"))
         )
         working_event_count = (
             F.when(
@@ -220,30 +352,23 @@ class AdaptiveWindowTransition:
             .otherwise(F.when(keep_existing_open, acc[open_state.event_count]).otherwise(F.lit(0)))
             .cast("int")
         )
-        duration_ms = (F.unix_millis(working_t_end) - F.unix_millis(working_t_start)).cast("int")
-        postclose_reason = (
-            F.when(
-                (duration_ms >= max_ms.cast("int")) & (working_event_count >= event_threshold.cast("int")),
-                F.lit("event_threshold+max_ms"),
-            )
-            .when(working_event_count >= event_threshold.cast("int"), F.lit("event_threshold"))
-            .otherwise(F.lit("max_ms"))
+        working_duration_ms = self._elapsed_ms_expr(t_start=working_t_start, t_end=working_t_end)
+        budget_policy = self._budget_policy()
+        working_closure_budget = budget_policy.closure_budget_expr(
+            duration_ms=working_duration_ms,
+            real_event_count=working_event_count,
         )
-        postclose_condition = (
-            (working_event_count > F.lit(0))
-            & ((duration_ms >= max_ms.cast("int")) | (working_event_count >= event_threshold.cast("int")))
-        )
-        postclose_window = self.state.window_summary_column(
+        postclose_condition = has_event & (working_closure_budget >= threshold.cast("double"))
+        postclose_window = self._window_summary_from_ms_column(
             tail_id=tail_id,
             flight_id=flight_id,
             win_id=working_win_id,
-            t_start=working_t_start,
-            t_end=working_t_end,
+            t_start_ms=F.unix_millis(working_t_start).cast("long"),
+            t_end_ms=F.unix_millis(working_t_end).cast("long"),
             start_event_seq_id=working_start_event_seq_id,
             end_event_seq_id=working_end_event_seq_id,
-            event_count=working_event_count,
-            close_reason=postclose_reason,
-            date_utc=F.to_date(working_t_start),
+            real_event_count=working_event_count,
+            close_reason=budget_policy.close_reason_expr(real_event_count=working_event_count),
         )
         closed_windows = F.concat(
             F.coalesce(acc[self.state.closed_windows], empty_windows),
@@ -278,17 +403,16 @@ class AdaptiveWindowTransition:
         from pyspark.sql import functions as F
 
         open_state = self.state.open_state
-        final_window = self.state.window_summary_column(
+        final_window = self._window_summary_from_ms_column(
             tail_id=tail_id,
             flight_id=flight_id,
             win_id=state[open_state.win_id],
-            t_start=state[open_state.t_start],
-            t_end=state[open_state.t_end],
+            t_start_ms=F.unix_millis(state[open_state.t_start]).cast("long"),
+            t_end_ms=F.unix_millis(state[open_state.t_end]).cast("long"),
             start_event_seq_id=state[open_state.start_event_seq_id],
             end_event_seq_id=state[open_state.end_event_seq_id],
-            event_count=state[open_state.event_count],
+            real_event_count=state[open_state.event_count],
             close_reason=F.lit("end_of_stream"),
-            date_utc=F.to_date(state[open_state.t_start]),
         )
         return F.when(
             is_last_segment & state[self.state.has_open_window] & (state[open_state.event_count] > F.lit(0)),
@@ -309,7 +433,7 @@ class AdaptiveWindowPlan:
         default_factory=lambda: SegmentedSequencePlan(
             ordering=SequenceOrderingPolicy(
                 key_columns=("tail_id", "flight_id"),
-                order_columns=("event_seq_id",),
+                order_columns=("window_step_order",),
                 timestamp_column="timestamp_utc",
             ),
             policy=_default_window_segment_policy(),
@@ -341,9 +465,15 @@ class AdaptiveWindowPlan:
                 f"missing: {missing}"
             )
 
-    def _build_segment_frame(self, events_df: "DataFrame") -> "SegmentedSequenceFrame":
-        self._validate_events(events_df)
-        sequence_plan = self._active_sequence_plan()
+    def _build_step_rows(
+        self,
+        events_df: "DataFrame",
+        *,
+        coverage_timestamps_df: "DataFrame | None" = None,
+    ) -> "DataFrame":
+        from pyspark.sql import Window
+        from pyspark.sql import functions as F
+
         event_rows = events_df.select(
             "tail_id",
             "flight_id",
@@ -352,6 +482,37 @@ class AdaptiveWindowPlan:
             "date_utc",
             "parameter_name",
             "event_type_detected",
+        ).withColumn("is_budget_step", F.lit(False))
+        budget_rows = build_budget_threshold_steps(
+            events_df,
+            policy=self.policy.to_window_policy(),
+        )
+        combined_rows = event_rows.withColumn("_step_priority", F.lit(1)).unionByName(
+            budget_rows.withColumn("_step_priority", F.lit(0)),
+            allowMissingColumns=False,
+        )
+        return combined_rows.withColumn(
+            "window_step_order",
+            F.row_number().over(
+                Window.partitionBy("tail_id", "flight_id").orderBy(
+                    F.col("timestamp_utc").asc(),
+                    F.col("_step_priority").asc(),
+                    F.col("event_seq_id").asc(),
+                )
+            ).cast("long"),
+        ).drop("_step_priority")
+
+    def _build_segment_frame(
+        self,
+        events_df: "DataFrame",
+        *,
+        coverage_timestamps_df: "DataFrame | None" = None,
+    ) -> "SegmentedSequenceFrame":
+        self._validate_events(events_df)
+        sequence_plan = self._active_sequence_plan()
+        event_rows = self._build_step_rows(
+            events_df,
+            coverage_timestamps_df=coverage_timestamps_df,
         )
         segmented = sequence_plan.assign_segments(event_rows)
         segment_steps_df = sequence_plan.build_segment_steps(
@@ -364,6 +525,7 @@ class AdaptiveWindowPlan:
                 "date_utc",
                 "event_type_detected",
                 "event_seq_id",
+                "is_budget_step",
             ),
         )
         return segmented.__class__(
@@ -411,9 +573,6 @@ class AdaptiveWindowPlan:
                 .withColumn("__tail_id", F.col("tail_id"))
                 .withColumn("__flight_id", F.col("flight_id"))
                 .withColumn("__is_last_segment", F.col(segment_id_column) == F.col("_last_segment_id"))
-                .withColumn("__max_ms", F.lit(int(self.policy.max_ms)))
-                .withColumn("__event_threshold", F.lit(int(self.policy.event_threshold)))
-                .withColumn("__inactivity_timeout_ms", F.lit(int(self.policy.inactivity_timeout_ms)))
             )
             if carry_df is not None:
                 current_segments_df = current_segments_df.join(carry_df, on=list(key_columns), how="left")
@@ -433,9 +592,6 @@ class AdaptiveWindowPlan:
                         step=step,
                         tail_id=F.col("__tail_id"),
                         flight_id=F.col("__flight_id"),
-                        max_ms=F.col("__max_ms"),
-                        event_threshold=F.col("__event_threshold"),
-                        inactivity_timeout_ms=F.col("__inactivity_timeout_ms"),
                     ),
                 ).alias("state_after"),
             )
@@ -474,7 +630,9 @@ class AdaptiveWindowPlan:
                     "tail_id string, flight_id string, win_id long, "
                     "t_start timestamp, t_end timestamp, "
                     "start_event_seq_id long, end_event_seq_id long, "
-                    "event_count int, close_reason string, date_utc date"
+                    "event_count int, real_event_count int, "
+                    "quiet_credit_end double, closure_budget_end double, "
+                    "close_reason string, date_utc date"
                 ),
             )
         summary_df = summary_frames[0]
@@ -542,6 +700,9 @@ class AdaptiveWindowPlan:
             "t_end",
             F.greatest(duration_ms_col, F.lit(int(self.policy.min_ms))).cast("int").alias("duration_ms"),
             F.col("event_count").cast("int").alias("event_count"),
+            F.col("real_event_count").cast("int").alias("real_event_count"),
+            F.col("quiet_credit_end").cast("double").alias("quiet_credit_end"),
+            F.col("closure_budget_end").cast("double").alias("closure_budget_end"),
             "close_reason",
             "date_utc",
         )
@@ -584,6 +745,9 @@ class AdaptiveWindowPlan:
                 "t_end",
                 "duration_ms",
                 "event_count",
+                "real_event_count",
+                "quiet_credit_end",
+                "closure_budget_end",
                 F.coalesce(F.col("sensor_count"), F.lit(0).cast("int")).alias("sensor_count"),
                 F.coalesce(F.col("event_type_counts"), self._empty_int_map_expr()).alias("event_type_counts"),
                 F.coalesce(F.col("zoh_snapshot"), self._empty_string_map_expr()).alias("zoh_snapshot"),
@@ -595,9 +759,18 @@ class AdaptiveWindowPlan:
 
     @hot_path
     def build(self, events_df: "DataFrame") -> AdaptiveWindowArtifactSet:
+        return self.build_with_coverage(events_df, coverage_timestamps_df=None)
+
+    @hot_path
+    def build_with_coverage(
+        self,
+        events_df: "DataFrame",
+        *,
+        coverage_timestamps_df: "DataFrame | None" = None,
+    ) -> AdaptiveWindowArtifactSet:
         from pyspark import StorageLevel
 
-        sequence_frame = self._build_segment_frame(events_df)
+        sequence_frame = self._build_segment_frame(events_df, coverage_timestamps_df=coverage_timestamps_df)
         assignment_events_df = self._build_assignment_events(events_df)
         window_summaries_df = self._build_window_summaries(sequence_frame=sequence_frame).persist(
             StorageLevel.MEMORY_AND_DISK

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
+
+import pandas as pd
 
 from libs.io.schemas import WINDOW_POLICY_PROFILE_SCHEMA
 from libs.perf import get_logger
@@ -30,6 +33,191 @@ def _safe_unpersist(df: "DataFrame | None", *, label: str) -> None:
         LOGGER.warning("window_policy_profile unpersist skipped for %s: %s", label, exc)
 
 
+def _normalize_timestamp_series(series: pd.Series) -> pd.Series:
+    return pd.to_datetime(series, utc=True, errors="coerce")
+
+
+def _majority_phase_label(labels: pd.Series) -> str | None:
+    values = [str(item) for item in labels.fillna("").astype(str).tolist() if str(item)]
+    if not values:
+        return None
+    ranked = sorted(((label, values.count(label)) for label in sorted(set(values))), key=lambda item: (-item[1], item[0]))
+    return str(ranked[0][0]) if ranked else None
+
+
+def compute_window_policy_penalty(
+    *,
+    pair_cost_proxy: float,
+    same_window_pair_expansion_proxy: float,
+    sampled_event_count: int,
+    p95_event_count: float,
+    end_of_stream_rate: float,
+) -> float:
+    normalized_event_count = max(float(sampled_event_count), 1.0)
+    event_overload = max(float(p95_event_count) - 1.0, 0.0)
+    return float(
+        math.log1p(max(float(pair_cost_proxy), 0.0) / normalized_event_count)
+        + (0.5 * math.log1p(max(float(same_window_pair_expansion_proxy), 0.0) / normalized_event_count))
+        + math.log1p(event_overload)
+        + max(float(end_of_stream_rate), 0.0)
+    )
+
+
+def _window_policy_penalty_expr(
+    *,
+    pair_cost_proxy_col: Any,
+    same_window_pair_expansion_proxy_col: Any,
+    sampled_event_count_col: Any,
+    p95_event_count_col: Any,
+    end_of_stream_close_rate_col: Any,
+) -> Any:
+    F = _spark_functions()
+    normalized_event_count = F.greatest(sampled_event_count_col.cast("double"), F.lit(1.0))
+    event_overload = F.greatest(p95_event_count_col.cast("double") - F.lit(1.0), F.lit(0.0))
+    return (
+        F.log1p(F.greatest(pair_cost_proxy_col.cast("double"), F.lit(0.0)) / normalized_event_count)
+        + (F.lit(0.5) * F.log1p(F.greatest(same_window_pair_expansion_proxy_col.cast("double"), F.lit(0.0)) / normalized_event_count))
+        + F.log1p(event_overload)
+        + F.greatest(end_of_stream_close_rate_col.cast("double"), F.lit(0.0))
+    )
+
+
+def _window_policy_objective_score_expr(
+    *,
+    mean_event_type_count_col: Any,
+    pair_cost_proxy_col: Any,
+    same_window_pair_expansion_proxy_col: Any,
+    sampled_event_count_col: Any,
+    p95_event_count_col: Any,
+    end_of_stream_close_rate_col: Any,
+) -> Any:
+    return mean_event_type_count_col.cast("double") - _window_policy_penalty_expr(
+        pair_cost_proxy_col=pair_cost_proxy_col,
+        same_window_pair_expansion_proxy_col=same_window_pair_expansion_proxy_col,
+        sampled_event_count_col=sampled_event_count_col,
+        p95_event_count_col=p95_event_count_col,
+        end_of_stream_close_rate_col=end_of_stream_close_rate_col,
+    )
+
+
+def build_window_truth_phase_coverage_summary(
+    *,
+    windows_df: pd.DataFrame,
+    phase_labels_df: pd.DataFrame,
+    target_phase_label: str = "cruise",
+) -> dict[str, Any]:
+    if windows_df is None or phase_labels_df is None or windows_df.empty or phase_labels_df.empty:
+        return {
+            "status": "skipped",
+            "reason": "missing windows or phase labels",
+        }
+
+    windows = windows_df.copy()
+    labels = phase_labels_df.copy()
+    windows["t_start"] = _normalize_timestamp_series(windows["t_start"])
+    windows["t_end"] = _normalize_timestamp_series(windows["t_end"])
+    labels["timestamp_utc"] = _normalize_timestamp_series(labels["timestamp_utc"])
+
+    assignments: list[dict[str, Any]] = []
+    for (tail_id, flight_id), flight_windows in windows.groupby(["tail_id", "flight_id"], dropna=False):
+        flight_labels = labels[
+            (labels["tail_id"].astype(str) == str(tail_id))
+            & (labels["flight_id"].astype(str) == str(flight_id))
+        ].copy()
+        if flight_labels.empty:
+            continue
+        for row in flight_windows.to_dict(orient="records"):
+            t_start = row.get("t_start")
+            t_end = row.get("t_end")
+            if pd.isna(t_start) or pd.isna(t_end):
+                continue
+            overlapping = flight_labels[
+                (flight_labels["timestamp_utc"] >= t_start)
+                & (flight_labels["timestamp_utc"] <= t_end)
+            ]
+            phase_label = _majority_phase_label(overlapping.get("phase_label", pd.Series(dtype="object")))
+            if phase_label is None:
+                continue
+            assignments.append(
+                {
+                    "tail_id": str(row.get("tail_id", "")),
+                    "flight_id": str(row.get("flight_id", "")),
+                    "win_id": int(row.get("win_id", 0) or 0),
+                    "phase_label": str(phase_label),
+                    "close_reason": str(row.get("close_reason", "") or ""),
+                    "duration_ms": float(row.get("duration_ms", 0.0) or 0.0),
+                    "real_event_count": float(
+                        row.get("real_event_count", row.get("event_count", 0.0)) or 0.0
+                    ),
+                }
+            )
+
+    if not assignments:
+        return {
+            "status": "skipped",
+            "reason": "no overlapping windows and phase labels",
+        }
+
+    assigned_df = pd.DataFrame.from_records(assignments)
+    majority_counts = {
+        str(label): int(count)
+        for label, count in assigned_df["phase_label"].value_counts(dropna=False).sort_index().items()
+    }
+    assigned_window_count = int(len(assigned_df))
+    target_phase = str(target_phase_label)
+    target_df = assigned_df[assigned_df["phase_label"] == target_phase].copy()
+    target_close_counts = {
+        str(reason): int(count)
+        for reason, count in target_df["close_reason"].fillna("").astype(str).value_counts(dropna=False).sort_index().items()
+        if str(reason)
+    }
+    target_window_count = int(len(target_df))
+    target_duration_series = pd.to_numeric(target_df.get("duration_ms"), errors="coerce")
+    target_real_event_series = pd.to_numeric(target_df.get("real_event_count"), errors="coerce")
+    return {
+        "status": "ok",
+        "assigned_window_count": assigned_window_count,
+        "majority_window_counts_by_phase_label": majority_counts,
+        "majority_window_fraction_by_phase_label": {
+            label: float(count / assigned_window_count)
+            for label, count in majority_counts.items()
+        },
+        "target_phase_label": target_phase,
+        "target_phase_window_count": target_window_count,
+        "target_phase_close_reason_counts": target_close_counts,
+        "target_phase_close_reason_rates": {
+            reason: float(count / target_window_count)
+            for reason, count in target_close_counts.items()
+            if target_window_count > 0
+        },
+        "target_phase_duration_ms": {
+            "mean": (
+                None
+                if target_duration_series.empty or target_duration_series.notna().sum() <= 0
+                else float(target_duration_series.mean())
+            ),
+            "p95": (
+                None
+                if target_duration_series.empty or target_duration_series.notna().sum() <= 0
+                else float(target_duration_series.quantile(0.95))
+            ),
+        },
+        "target_phase_real_event_count": {
+            "mean": (
+                None
+                if target_real_event_series.empty or target_real_event_series.notna().sum() <= 0
+                else float(target_real_event_series.mean())
+            ),
+            "p95": (
+                None
+                if target_real_event_series.empty or target_real_event_series.notna().sum() <= 0
+                else float(target_real_event_series.quantile(0.95))
+            ),
+        },
+        "cruise_majority_window_count": target_window_count if target_phase == "cruise" else int(majority_counts.get("cruise", 0)),
+    }
+
+
 @dataclass(frozen=True)
 class WindowPolicyProfileSpec:
     min_sampling_rate_hz: float
@@ -41,8 +229,6 @@ class WindowPolicyProfileSpec:
     gap_quantiles: tuple[float, ...] = (0.5, 0.75, 0.9)
     event_threshold_multipliers: tuple[float, ...] = (0.75, 1.0, 1.25, 1.5, 2.0)
     max_profile_flights: int = 64
-    target_event_threshold_close_rate: float = 0.75
-    target_max_ms_close_rate: float = 0.25
 
     @property
     def resolved_max_ms(self) -> int:
@@ -92,8 +278,7 @@ class WindowPolicyEvaluationSpec:
     stability_sample_fraction: float = 0.8
     stability_sample_count: int = 2
     max_stability_flights: int = 64
-    warning_pair_cost_ratio: float = 1.25
-    warning_p95_event_ratio: float = 1.25
+    warning_policy_penalty_ratio: float = 1.25
     warning_min_boundary_jaccard: float = 0.5
 
 
@@ -101,13 +286,16 @@ class WindowPolicyEvaluationSpec:
 class WindowMetricsSummary:
     window_count: int = 0
     event_threshold_rate: float = 0.0
-    max_ms_rate: float = 0.0
-    event_threshold_plus_max_ms_rate: float = 0.0
+    budget_threshold_rate: float = 0.0
     end_of_stream_rate: float = 0.0
     mean_duration_ms: float = 0.0
     p95_duration_ms: float = 0.0
     mean_event_count: float = 0.0
     p95_event_count: float = 0.0
+    mean_quiet_credit_end: float = 0.0
+    p95_quiet_credit_end: float = 0.0
+    mean_closure_budget_end: float = 0.0
+    p95_closure_budget_end: float = 0.0
     mean_sensor_count: float = 0.0
     p95_sensor_count: float = 0.0
     mean_event_type_count: float = 0.0
@@ -122,13 +310,16 @@ class WindowMetricsSummary:
         return cls(
             window_count=int(profile_row.get("predicted_window_count") or 0),
             event_threshold_rate=float(profile_row.get("event_threshold_close_rate") or 0.0),
-            max_ms_rate=float(profile_row.get("max_ms_close_rate") or 0.0),
-            event_threshold_plus_max_ms_rate=float(profile_row.get("event_threshold_plus_max_ms_close_rate") or 0.0),
+            budget_threshold_rate=float(profile_row.get("budget_threshold_close_rate") or 0.0),
             end_of_stream_rate=float(profile_row.get("end_of_stream_close_rate") or 0.0),
             mean_duration_ms=float(profile_row.get("mean_duration_ms") or 0.0),
             p95_duration_ms=float(profile_row.get("p95_duration_ms") or 0.0),
             mean_event_count=float(profile_row.get("mean_event_count") or 0.0),
             p95_event_count=float(profile_row.get("p95_event_count") or 0.0),
+            mean_quiet_credit_end=float(profile_row.get("mean_quiet_credit_end") or 0.0),
+            p95_quiet_credit_end=float(profile_row.get("p95_quiet_credit_end") or 0.0),
+            mean_closure_budget_end=float(profile_row.get("mean_closure_budget_end") or 0.0),
+            p95_closure_budget_end=float(profile_row.get("p95_closure_budget_end") or 0.0),
             mean_sensor_count=float(profile_row.get("mean_sensor_count") or 0.0),
             p95_sensor_count=float(profile_row.get("p95_sensor_count") or 0.0),
             mean_event_type_count=float(profile_row.get("mean_event_type_count") or 0.0),
@@ -150,13 +341,16 @@ class WindowMetricsSummary:
         return cls(
             window_count=int(metrics_row["window_count"] or 0),
             event_threshold_rate=_rate("event_threshold_count"),
-            max_ms_rate=_rate("max_ms_count"),
-            event_threshold_plus_max_ms_rate=_rate("event_threshold_plus_max_ms_count"),
+            budget_threshold_rate=_rate("budget_threshold_count"),
             end_of_stream_rate=_rate("end_of_stream_count"),
             mean_duration_ms=float(metrics_row["mean_duration_ms"] or 0.0),
             p95_duration_ms=float(metrics_row["p95_duration_ms"] or 0.0),
             mean_event_count=float(metrics_row["mean_event_count"] or 0.0),
             p95_event_count=float(metrics_row["p95_event_count"] or 0.0),
+            mean_quiet_credit_end=float(metrics_row["mean_quiet_credit_end"] or 0.0),
+            p95_quiet_credit_end=float(metrics_row["p95_quiet_credit_end"] or 0.0),
+            mean_closure_budget_end=float(metrics_row["mean_closure_budget_end"] or 0.0),
+            p95_closure_budget_end=float(metrics_row["p95_closure_budget_end"] or 0.0),
             mean_sensor_count=float(metrics_row["mean_sensor_count"] or 0.0),
             p95_sensor_count=float(metrics_row["p95_sensor_count"] or 0.0),
             mean_event_type_count=float(metrics_row["mean_event_type_count"] or 0.0),
@@ -174,20 +368,22 @@ class WindowMetricsSummary:
             "closure_mix": {
                 "rates": {
                     "event_threshold": float(self.event_threshold_rate),
-                    "max_ms": float(self.max_ms_rate),
-                    "event_threshold+max_ms": float(self.event_threshold_plus_max_ms_rate),
+                    "budget_threshold": float(self.budget_threshold_rate),
                     "end_of_stream": float(self.end_of_stream_rate),
                 },
                 "counts": {
                     "event_threshold": self._close_reason_count(self.event_threshold_rate),
-                    "max_ms": self._close_reason_count(self.max_ms_rate),
-                    "event_threshold+max_ms": self._close_reason_count(self.event_threshold_plus_max_ms_rate),
+                    "budget_threshold": self._close_reason_count(self.budget_threshold_rate),
                     "end_of_stream": self._close_reason_count(self.end_of_stream_rate),
                 },
                 "mean_duration_ms": float(self.mean_duration_ms),
                 "p95_duration_ms": float(self.p95_duration_ms),
                 "mean_event_count": float(self.mean_event_count),
                 "p95_event_count": float(self.p95_event_count),
+                "mean_quiet_credit_end": float(self.mean_quiet_credit_end),
+                "p95_quiet_credit_end": float(self.p95_quiet_credit_end),
+                "mean_closure_budget_end": float(self.mean_closure_budget_end),
+                "p95_closure_budget_end": float(self.p95_closure_budget_end),
                 "mean_sensor_count": float(self.mean_sensor_count),
                 "p95_sensor_count": float(self.p95_sensor_count),
                 "mean_event_type_count": float(self.mean_event_type_count),
@@ -237,9 +433,14 @@ class WindowPolicyProfile:
             "mean_event_type_count": 0.0,
             "p95_event_type_count": 0.0,
             "event_threshold_close_rate": 0.0,
+            "budget_threshold_close_rate": 0.0,
             "max_ms_close_rate": 0.0,
             "event_threshold_plus_max_ms_close_rate": 0.0,
             "end_of_stream_close_rate": 0.0,
+            "mean_quiet_credit_end": 0.0,
+            "p95_quiet_credit_end": 0.0,
+            "mean_closure_budget_end": 0.0,
+            "p95_closure_budget_end": 0.0,
             "pair_cost_proxy": 0.0,
             "same_window_pair_expansion_proxy": 0.0,
             "sampled_event_count": int(sampled_event_count),
@@ -329,6 +530,23 @@ class WindowPolicyProfile:
         return median_gap, tuple(float(item) for item in quantiles)
 
     def _evaluate_candidate(self, events_df: "DataFrame", *, policy: WindowPolicy, sampled_event_count: int, sampled_flight_count: int) -> "DataFrame":
+        return self._evaluate_candidate_with_coverage(
+            events_df,
+            policy=policy,
+            sampled_event_count=sampled_event_count,
+            sampled_flight_count=sampled_flight_count,
+            coverage_timestamps_df=None,
+        )
+
+    def _evaluate_candidate_with_coverage(
+        self,
+        events_df: "DataFrame",
+        *,
+        policy: WindowPolicy,
+        sampled_event_count: int,
+        sampled_flight_count: int,
+        coverage_timestamps_df: "DataFrame | None",
+    ) -> "DataFrame":
         from pyspark.sql import functions as F
 
         profile_windows_df = WindowProfileRowsFrame.from_events(
@@ -338,6 +556,7 @@ class WindowPolicyProfile:
             min_ms=int(policy.min_ms),
             inactivity_timeout_ms=int(policy.inactivity_timeout_ms),
             strategy=self.spec.strategy,
+            coverage_timestamps_df=coverage_timestamps_df,
         ).to_dataframe()
         return profile_windows_df.agg(
             F.count(F.lit(1)).cast("long").alias("predicted_window_count"),
@@ -345,6 +564,14 @@ class WindowPolicyProfile:
             F.percentile_approx(F.col("duration_ms").cast("double"), F.lit(0.95), 1000).alias("p95_duration_ms"),
             F.avg(F.col("event_count").cast("double")).alias("mean_event_count"),
             F.percentile_approx(F.col("event_count").cast("double"), F.lit(0.95), 1000).alias("p95_event_count"),
+            F.avg(F.col("quiet_credit_end").cast("double")).alias("mean_quiet_credit_end"),
+            F.percentile_approx(F.col("quiet_credit_end").cast("double"), F.lit(0.95), 1000).alias(
+                "p95_quiet_credit_end"
+            ),
+            F.avg(F.col("closure_budget_end").cast("double")).alias("mean_closure_budget_end"),
+            F.percentile_approx(F.col("closure_budget_end").cast("double"), F.lit(0.95), 1000).alias(
+                "p95_closure_budget_end"
+            ),
             F.avg(F.col("sensor_count").cast("double")).alias("mean_sensor_count"),
             F.percentile_approx(F.col("sensor_count").cast("double"), F.lit(0.95), 1000).alias("p95_sensor_count"),
             F.avg(F.col("event_type_count").cast("double")).alias("mean_event_type_count"),
@@ -353,7 +580,10 @@ class WindowPolicyProfile:
                 F.when(F.col("close_reason") == F.lit("event_threshold"), F.lit(1.0)).otherwise(F.lit(0.0))
             ).alias("event_threshold_close_rate"),
             F.avg(
-                F.when(F.col("close_reason") == F.lit("max_ms"), F.lit(1.0)).otherwise(F.lit(0.0))
+                F.when(F.col("close_reason") == F.lit("budget_threshold"), F.lit(1.0)).otherwise(F.lit(0.0))
+            ).alias("budget_threshold_close_rate"),
+            F.avg(
+                F.when(F.col("close_reason") == F.lit("budget_threshold"), F.lit(1.0)).otherwise(F.lit(0.0))
             ).alias("max_ms_close_rate"),
             F.avg(
                 F.when(F.col("close_reason") == F.lit("event_threshold+max_ms"), F.lit(1.0)).otherwise(F.lit(0.0))
@@ -379,11 +609,22 @@ class WindowPolicyProfile:
             F.coalesce(F.col("p95_duration_ms"), F.lit(0.0)).cast("double").alias("p95_duration_ms"),
             F.coalesce(F.col("mean_event_count"), F.lit(0.0)).cast("double").alias("mean_event_count"),
             F.coalesce(F.col("p95_event_count"), F.lit(0.0)).cast("double").alias("p95_event_count"),
+            F.coalesce(F.col("mean_quiet_credit_end"), F.lit(0.0)).cast("double").alias("mean_quiet_credit_end"),
+            F.coalesce(F.col("p95_quiet_credit_end"), F.lit(0.0)).cast("double").alias("p95_quiet_credit_end"),
+            F.coalesce(F.col("mean_closure_budget_end"), F.lit(0.0))
+            .cast("double")
+            .alias("mean_closure_budget_end"),
+            F.coalesce(F.col("p95_closure_budget_end"), F.lit(0.0))
+            .cast("double")
+            .alias("p95_closure_budget_end"),
             F.coalesce(F.col("mean_sensor_count"), F.lit(0.0)).cast("double").alias("mean_sensor_count"),
             F.coalesce(F.col("p95_sensor_count"), F.lit(0.0)).cast("double").alias("p95_sensor_count"),
             F.coalesce(F.col("mean_event_type_count"), F.lit(0.0)).cast("double").alias("mean_event_type_count"),
             F.coalesce(F.col("p95_event_type_count"), F.lit(0.0)).cast("double").alias("p95_event_type_count"),
             F.coalesce(F.col("event_threshold_close_rate"), F.lit(0.0)).cast("double").alias("event_threshold_close_rate"),
+            F.coalesce(F.col("budget_threshold_close_rate"), F.lit(0.0))
+            .cast("double")
+            .alias("budget_threshold_close_rate"),
             F.coalesce(F.col("max_ms_close_rate"), F.lit(0.0)).cast("double").alias("max_ms_close_rate"),
             F.coalesce(F.col("event_threshold_plus_max_ms_close_rate"), F.lit(0.0))
             .cast("double")
@@ -419,7 +660,6 @@ class WindowPolicyProfile:
                         F.col("predicted_window_count").cast("long").alias("predicted_window_count"),
                         F.col("p95_event_count").cast("double").alias("p95_event_count"),
                         F.col("event_threshold_close_rate").cast("double").alias("event_threshold_close_rate"),
-                        F.col("max_ms_close_rate").cast("double").alias("max_ms_close_rate"),
                         F.col("pair_cost_proxy").cast("double").alias("pair_cost_proxy"),
                     )
                 ).alias("frontier"),
@@ -428,6 +668,13 @@ class WindowPolicyProfile:
         )
         frontier = [] if frontier_row is None else list(frontier_row["frontier"] or [])
         return [dict(item.asDict()) for item in frontier]
+
+    @staticmethod
+    def _public_profile_row(profile_row: dict[str, Any] | None) -> dict[str, Any] | None:
+        if profile_row is None:
+            return None
+        hidden_keys = {"max_ms_close_rate", "event_threshold_plus_max_ms_close_rate"}
+        return {str(key): value for key, value in profile_row.items() if str(key) not in hidden_keys}
 
     def _profile_row_for_policy(self, profile_df: "DataFrame | None", *, policy: WindowPolicy) -> dict[str, Any] | None:
         if profile_df is None:
@@ -475,7 +722,9 @@ class WindowPolicyProfile:
                 F.sum(F.when(F.col("close_reason") == F.lit("event_threshold"), F.lit(1)).otherwise(F.lit(0)))
                 .cast("long")
                 .alias("event_threshold_count"),
-                F.sum(F.when(F.col("close_reason") == F.lit("max_ms"), F.lit(1)).otherwise(F.lit(0))).cast("long").alias("max_ms_count"),
+                F.sum(F.when(F.col("close_reason") == F.lit("budget_threshold"), F.lit(1)).otherwise(F.lit(0)))
+                .cast("long")
+                .alias("budget_threshold_count"),
                 F.sum(F.when(F.col("close_reason") == F.lit("event_threshold+max_ms"), F.lit(1)).otherwise(F.lit(0)))
                 .cast("long")
                 .alias("event_threshold_plus_max_ms_count"),
@@ -486,6 +735,14 @@ class WindowPolicyProfile:
                 F.percentile_approx(F.col("duration_ms").cast("double"), F.lit(0.95), 1000).alias("p95_duration_ms"),
                 F.avg(F.col("event_count").cast("double")).alias("mean_event_count"),
                 F.percentile_approx(F.col("event_count").cast("double"), F.lit(0.95), 1000).alias("p95_event_count"),
+                F.avg(F.col("quiet_credit_end").cast("double")).alias("mean_quiet_credit_end"),
+                F.percentile_approx(F.col("quiet_credit_end").cast("double"), F.lit(0.95), 1000).alias(
+                    "p95_quiet_credit_end"
+                ),
+                F.avg(F.col("closure_budget_end").cast("double")).alias("mean_closure_budget_end"),
+                F.percentile_approx(F.col("closure_budget_end").cast("double"), F.lit(0.95), 1000).alias(
+                    "p95_closure_budget_end"
+                ),
                 F.avg(F.col("sensor_count").cast("double")).alias("mean_sensor_count"),
                 F.percentile_approx(F.col("sensor_count").cast("double"), F.lit(0.95), 1000).alias("p95_sensor_count"),
                 F.avg(F.size(F.map_keys("event_type_counts")).cast("double")).alias("mean_event_type_count"),
@@ -531,6 +788,26 @@ class WindowPolicyProfile:
                 float(configured_cost.get("pair_cost_proxy") or 0.0),
             ),
         }
+
+    @staticmethod
+    def _warning_reasons(
+        *,
+        selected_profile_row: dict[str, Any] | None,
+        configured_profile_row: dict[str, Any] | None,
+        edge_stability: dict[str, Any],
+        evaluation_spec: WindowPolicyEvaluationSpec,
+    ) -> list[str]:
+        warning_reasons: list[str] = []
+        selected_policy_penalty = float(((selected_profile_row or {}).get("balance_penalty")) or 0.0)
+        configured_policy_penalty = float(((configured_profile_row or {}).get("balance_penalty")) or 0.0)
+        if configured_policy_penalty > 0.0:
+            policy_penalty_ratio = float(selected_policy_penalty / configured_policy_penalty)
+            if policy_penalty_ratio > float(evaluation_spec.warning_policy_penalty_ratio):
+                warning_reasons.append("policy_penalty_exceeds_configured_baseline")
+        mean_boundary_jaccard = edge_stability.get("mean_boundary_jaccard")
+        if mean_boundary_jaccard is not None and float(mean_boundary_jaccard) < float(evaluation_spec.warning_min_boundary_jaccard):
+            warning_reasons.append("boundary_stability_below_threshold")
+        return warning_reasons
 
     def _edge_stability(
         self,
@@ -635,6 +912,7 @@ class WindowPolicyProfile:
         *,
         profile_df: "DataFrame | None",
         evaluation_spec: WindowPolicyEvaluationSpec | None = None,
+        coverage_timestamps_df: "DataFrame | None" = None,
     ) -> dict[str, Any]:
         evaluation_spec = evaluation_spec or WindowPolicyEvaluationSpec(
             max_stability_flights=int(self.spec.max_profile_flights),
@@ -648,7 +926,7 @@ class WindowPolicyProfile:
                 managed_profile_df,
                 fallback_policy=configured_policy,
             )
-            selected_profile_row = self._selected_profile_row(managed_profile_df)
+            selected_profile_row = self._public_profile_row(self._selected_profile_row(managed_profile_df))
             event_count = int(events_df.count())
             flight_count = int(events_df.select("tail_id", "flight_id").distinct().count()) if event_count > 0 else 0
             if event_count <= 0:
@@ -692,6 +970,7 @@ class WindowPolicyProfile:
                     min_ms=int(selected_policy.min_ms),
                     inactivity_timeout_ms=int(selected_policy.inactivity_timeout_ms),
                     strategy=self.spec.strategy,
+                    coverage_timestamps_df=coverage_timestamps_df,
                 ).to_dataframe().persist()
                 try:
                     edge_stability = self._edge_stability(
@@ -709,24 +988,12 @@ class WindowPolicyProfile:
                 selected_metrics=selected_metrics,
                 configured_metrics=configured_metrics,
             )
-            pair_cost_ratio = None
-            configured_pair_cost = float(((configured_metrics.get("downstream_cost_proxy") or {}).get("pair_cost_proxy")) or 0.0)
-            selected_pair_cost = float(((selected_metrics.get("downstream_cost_proxy") or {}).get("pair_cost_proxy")) or 0.0)
-            if configured_pair_cost > 0.0:
-                pair_cost_ratio = float(selected_pair_cost / configured_pair_cost)
-            p95_event_ratio = None
-            configured_p95_event = float(((configured_metrics.get("closure_mix") or {}).get("p95_event_count")) or 0.0)
-            selected_p95_event = float(((selected_metrics.get("closure_mix") or {}).get("p95_event_count")) or 0.0)
-            if configured_p95_event > 0.0:
-                p95_event_ratio = float(selected_p95_event / configured_p95_event)
-            warning_reasons: list[str] = []
-            if pair_cost_ratio is not None and pair_cost_ratio > float(evaluation_spec.warning_pair_cost_ratio):
-                warning_reasons.append("pair_cost_proxy_exceeds_configured_baseline")
-            if p95_event_ratio is not None and p95_event_ratio > float(evaluation_spec.warning_p95_event_ratio):
-                warning_reasons.append("p95_event_count_exceeds_configured_baseline")
-            mean_boundary_jaccard = edge_stability.get("mean_boundary_jaccard")
-            if mean_boundary_jaccard is not None and float(mean_boundary_jaccard) < float(evaluation_spec.warning_min_boundary_jaccard):
-                warning_reasons.append("boundary_stability_below_threshold")
+            warning_reasons = self._warning_reasons(
+                selected_profile_row=selected_profile_row,
+                configured_profile_row=configured_profile_row,
+                edge_stability=edge_stability,
+                evaluation_spec=evaluation_spec,
+            )
             status = "warning" if warning_reasons else "ok"
             return {
                 "status": status,
@@ -760,7 +1027,7 @@ class WindowPolicyProfile:
             if managed_profile_df is not None:
                 _safe_unpersist(managed_profile_df, label="managed_profile_df")
 
-    def build_dataframe(self, events_df: "DataFrame") -> "DataFrame":
+    def build_dataframe(self, events_df: "DataFrame", *, coverage_timestamps_df: "DataFrame | None" = None) -> "DataFrame":
         spark = events_df.sparkSession
         F = _spark_functions()
         from pyspark.sql import Window as SparkWindow
@@ -778,11 +1045,12 @@ class WindowPolicyProfile:
                 candidate_rows: list[dict[str, Any]] = []
                 for policy in candidates:
                     candidate_row = (
-                        self._evaluate_candidate(
+                        self._evaluate_candidate_with_coverage(
                             sampled_events_df,
                             policy=policy,
                             sampled_event_count=sampled_event_count,
                             sampled_flight_count=sampled_flight_count,
+                            coverage_timestamps_df=coverage_timestamps_df,
                         )
                         .first()
                     )
@@ -806,14 +1074,24 @@ class WindowPolicyProfile:
             ranked_df = (
                 candidate_df.withColumn(
                     "balance_penalty",
-                    F.abs(F.col("event_threshold_close_rate") - F.lit(float(self.spec.target_event_threshold_close_rate)))
-                    + F.abs(F.col("max_ms_close_rate") - F.lit(float(self.spec.target_max_ms_close_rate))),
+                    _window_policy_penalty_expr(
+                        pair_cost_proxy_col=F.col("pair_cost_proxy"),
+                        same_window_pair_expansion_proxy_col=F.col("same_window_pair_expansion_proxy"),
+                        sampled_event_count_col=F.col("sampled_event_count"),
+                        p95_event_count_col=F.col("p95_event_count"),
+                        end_of_stream_close_rate_col=F.col("end_of_stream_close_rate"),
+                    ),
                 )
                 .withColumn(
                     "objective_score",
-                    F.col("mean_event_type_count")
-                    - F.col("balance_penalty")
-                    - F.log1p(F.col("pair_cost_proxy") / F.greatest(F.col("sampled_event_count").cast("double"), F.lit(1.0))),
+                    _window_policy_objective_score_expr(
+                        mean_event_type_count_col=F.col("mean_event_type_count"),
+                        pair_cost_proxy_col=F.col("pair_cost_proxy"),
+                        same_window_pair_expansion_proxy_col=F.col("same_window_pair_expansion_proxy"),
+                        sampled_event_count_col=F.col("sampled_event_count"),
+                        p95_event_count_col=F.col("p95_event_count"),
+                        end_of_stream_close_rate_col=F.col("end_of_stream_close_rate"),
+                    ),
                 )
                 .withColumn("_max_ms_distance", F.abs(F.col("max_ms") - F.lit(int(fallback_policy.max_ms))))
                 .withColumn(
@@ -822,9 +1100,11 @@ class WindowPolicyProfile:
                 )
             )
             ranking_window = SparkWindow.orderBy(
+                F.col("objective_score").desc(),
                 F.col("balance_penalty").asc(),
                 F.col("pair_cost_proxy").asc(),
-                F.col("mean_event_type_count").desc(),
+                F.col("same_window_pair_expansion_proxy").asc(),
+                F.col("p95_event_count").asc(),
                 F.col("_max_ms_distance").asc(),
                 F.col("_event_threshold_distance").asc(),
             )
@@ -863,6 +1143,7 @@ def build_window_policy_profile_evaluation_report_spark(
     profile_df: "DataFrame | None",
     profile_spec: WindowPolicyProfileSpec,
     evaluation_spec: WindowPolicyEvaluationSpec | None = None,
+    coverage_timestamps_df: "DataFrame | None" = None,
 ) -> dict[str, Any]:
     profile = WindowPolicyProfile(spec=profile_spec)
     try:
@@ -870,6 +1151,7 @@ def build_window_policy_profile_evaluation_report_spark(
             events_df,
             profile_df=profile_df,
             evaluation_spec=evaluation_spec,
+            coverage_timestamps_df=coverage_timestamps_df,
         )
     except Exception as exc:  # pragma: no cover - exercised in Spark integration
         LOGGER.warning("window policy evaluation skipped after profiling/evaluation failure: %s", exc)

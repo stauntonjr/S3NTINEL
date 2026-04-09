@@ -11,10 +11,28 @@ from libs.spark_sequence import SequenceSegmentPolicy
 
 
 @dataclass(frozen=True)
+class PhaseTransitionModel:
+    support_df: "DataFrame"
+    policy_name: str = "monotone_progress_band"
+    canonical_order_source: str = "seed_bucket"
+    progress_support_source: str = "seed_progress_mass_position_span"
+    allowed_transition_offsets: tuple[int, ...] = (0, 1)
+
+    def transition_penalty_for_offset(self, offset: int, *, base_penalty: float) -> float:
+        normalized_offset = abs(int(offset))
+        if normalized_offset == 0:
+            return 0.0
+        return float(base_penalty) * float(normalized_offset)
+
+
+@dataclass(frozen=True)
 class PhaseClusterModel:
     feature_stats_df: "DataFrame"
     centroids_df: "DataFrame"
     distance_scales_df: "DataFrame"
+    transition_model: PhaseTransitionModel
+    fit_source_stats_df: "DataFrame | None" = None
+    seed_bucket_counts_df: "DataFrame | None" = None
 
 
 @dataclass(frozen=True)
@@ -32,6 +50,7 @@ class PhaseDetectionRun:
     feature_frame: "PhaseFeatureFrame"
     cluster_model: PhaseClusterModel
     phase_windows: PhaseWindowsTable
+    diagnostics: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -96,7 +115,6 @@ class PhaseFeatureSelectionDiagnostics:
 class PhasePlanConfig:
     phase_count: int
     phase_stable_drift_quantile: float = 0.35
-    phase_smoothing_radius: int = 2
     phase_transition_penalty: float = 1.5
     phase_min_dwell_windows: int = 8
     phase_detect_sensor_count: int = 8

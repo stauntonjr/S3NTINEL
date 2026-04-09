@@ -11,11 +11,13 @@ from libs.windows.pipeline import (
     AdaptiveWindowSegmentState,
     AdaptiveWindowTransition,
     OpenWindowState,
+    build_window_coverage_timestamps,
 )
 from libs.windows.policy_profile import (
     WindowPolicyEvaluationSpec,
     WindowPolicyProfile,
     WindowPolicyProfileSpec,
+    build_window_truth_phase_coverage_summary,
     build_window_policy_profile_evaluation_report_spark,
 )
 from libs.windows.features import WindowFeaturesDiagnostics, WindowFeaturesPlan, WindowFeatureVectorSpec
@@ -23,6 +25,8 @@ from libs.windows.tables import WindowFeaturesTable, WindowPolicyProfileTable, W
 
 __all__ = [
     "build_window_policy_profile_evaluation_report_spark",
+    "build_window_truth_phase_coverage_summary",
+    "build_window_coverage_timestamps",
     "AdaptiveWindowPolicy",
     "OpenWindowState",
     "AdaptiveWindowSegmentState",

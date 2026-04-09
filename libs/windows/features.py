@@ -187,7 +187,13 @@ class WindowFeaturesPlan:
             F.lead(self.vector_spec.timestamp_column).over(parameter_window),
         ).withColumn("next_timestamp_utc", F.coalesce(F.col("next_timestamp_utc"), far_future_ts))
 
-    def _build_snapshot_rows(self, *, base_windows_df: "DataFrame", raw_intervals_df: "DataFrame") -> "DataFrame":
+    def _build_snapshot_rows(
+        self,
+        *,
+        base_windows_df: "DataFrame",
+        raw_intervals_df: "DataFrame",
+        anchor_column: str,
+    ) -> "DataFrame":
         from pyspark.sql import functions as F
 
         return (
@@ -197,8 +203,8 @@ class WindowFeaturesPlan:
                 on=(
                     (F.col("w.tail_id") == F.col("r.tail_id"))
                     & (F.col("w.flight_id") == F.col("r.flight_id"))
-                    & (F.col("w.t_end") >= F.col(f"r.{self.vector_spec.timestamp_column}"))
-                    & (F.col("w.t_end") < F.col("r.next_timestamp_utc"))
+                    & (F.col(f"w.{anchor_column}") >= F.col(f"r.{self.vector_spec.timestamp_column}"))
+                    & (F.col(f"w.{anchor_column}") < F.col("r.next_timestamp_utc"))
                 ),
                 how="left",
             )
@@ -218,6 +224,7 @@ class WindowFeaturesPlan:
         *,
         snapshot_rows_df: "DataFrame",
         scaler_df: "DataFrame",
+        suffix: str,
     ) -> tuple["DataFrame", "DataFrame", "DataFrame"]:
         from pyspark.sql import functions as F
 
@@ -227,7 +234,7 @@ class WindowFeaturesPlan:
             .agg(
                 F.map_from_entries(
                     F.collect_list(F.struct(F.col("parameter_name"), F.col("value_num").cast("double")))
-                ).alias("snapshot_continuous_vector_t_end")
+                ).alias(f"snapshot_continuous_vector_{suffix}")
             )
         )
         continuous_snapshot_scaled_df = (
@@ -238,7 +245,7 @@ class WindowFeaturesPlan:
             .agg(
                 F.map_from_entries(
                     F.collect_list(F.struct(F.col("parameter_name"), F.col("scaled_value").cast("double")))
-                ).alias("snapshot_continuous_vector_t_end_scaled")
+                ).alias(f"snapshot_continuous_vector_{suffix}_scaled")
             )
         )
         categorical_snapshot_df = (
@@ -251,7 +258,7 @@ class WindowFeaturesPlan:
             .agg(
                 F.map_from_entries(
                     F.collect_list(F.struct(F.col("parameter_name"), F.col("parameter_value").cast("string")))
-                ).alias("snapshot_categorical_state_t_end")
+                ).alias(f"snapshot_categorical_state_{suffix}")
             )
         )
         return continuous_snapshot_df, continuous_snapshot_scaled_df, categorical_snapshot_df
@@ -449,8 +456,11 @@ class WindowFeaturesPlan:
         self,
         *,
         base_windows_df: "DataFrame",
+        continuous_snapshot_start_df: "DataFrame",
+        continuous_snapshot_start_scaled_df: "DataFrame",
         continuous_snapshot_df: "DataFrame",
         continuous_snapshot_scaled_df: "DataFrame",
+        categorical_snapshot_start_df: "DataFrame",
         categorical_snapshot_df: "DataFrame",
         event_type_counts_df: "DataFrame",
         continuous_event_summary_df: "DataFrame",
@@ -458,11 +468,28 @@ class WindowFeaturesPlan:
         from pyspark.sql import functions as F
 
         return (
-            base_windows_df.join(continuous_snapshot_df, on=["tail_id", "flight_id", "win_id"], how="left")
+            base_windows_df.join(continuous_snapshot_start_df, on=["tail_id", "flight_id", "win_id"], how="left")
+            .join(continuous_snapshot_start_scaled_df, on=["tail_id", "flight_id", "win_id"], how="left")
+            .join(continuous_snapshot_df, on=["tail_id", "flight_id", "win_id"], how="left")
             .join(continuous_snapshot_scaled_df, on=["tail_id", "flight_id", "win_id"], how="left")
+            .join(categorical_snapshot_start_df, on=["tail_id", "flight_id", "win_id"], how="left")
             .join(categorical_snapshot_df, on=["tail_id", "flight_id", "win_id"], how="left")
             .join(event_type_counts_df, on=["tail_id", "flight_id", "win_id"], how="left")
             .join(continuous_event_summary_df, on=["tail_id", "flight_id", "win_id"], how="left")
+            .withColumn(
+                "continuous_vector_t_start",
+                F.coalesce(
+                    F.col("snapshot_continuous_vector_t_start"),
+                    empty_map("string", "double"),
+                ),
+            )
+            .withColumn(
+                "continuous_vector_t_start_scaled",
+                F.coalesce(
+                    F.col("snapshot_continuous_vector_t_start_scaled"),
+                    empty_map("string", "double"),
+                ),
+            )
             .withColumn(
                 "continuous_vector_t_end",
                 F.coalesce(
@@ -476,6 +503,13 @@ class WindowFeaturesPlan:
                     F.col("snapshot_continuous_vector_t_end_scaled"),
                     empty_map("string", "double"),
                 ),
+            )
+            .withColumn(
+                "categorical_state_t_start",
+                F.when(
+                    F.col("snapshot_categorical_state_t_start").isNotNull(),
+                    F.col("snapshot_categorical_state_t_start"),
+                ).otherwise(empty_map()),
             )
             .withColumn(
                 "categorical_state_t_end",
@@ -543,8 +577,14 @@ class WindowFeaturesPlan:
             "date_utc",
             "event_type_counts",
             "continuous_event_summary",
+            "continuous_vector_t_start",
+            "continuous_vector_t_start_scaled",
             "continuous_vector_t_end",
             "continuous_vector_t_end_scaled",
+            F.coalesce(
+                F.col("categorical_state_t_start"),
+                empty_map(),
+            ).alias("categorical_state_t_start"),
             F.coalesce(
                 F.col("categorical_state_t_end"),
                 empty_map(),
@@ -559,16 +599,22 @@ class WindowFeaturesPlan:
         self,
         *,
         base_windows_df: "DataFrame",
+        continuous_snapshot_start_df: "DataFrame",
+        continuous_snapshot_start_scaled_df: "DataFrame",
         continuous_snapshot_df: "DataFrame",
         continuous_snapshot_scaled_df: "DataFrame",
+        categorical_snapshot_start_df: "DataFrame",
         categorical_snapshot_df: "DataFrame",
         event_type_counts_df: "DataFrame",
         continuous_event_summary_df: "DataFrame",
     ) -> "DataFrame":
         combined_df = self._merge_feature_sources(
             base_windows_df=base_windows_df,
+            continuous_snapshot_start_df=continuous_snapshot_start_df,
+            continuous_snapshot_start_scaled_df=continuous_snapshot_start_scaled_df,
             continuous_snapshot_df=continuous_snapshot_df,
             continuous_snapshot_scaled_df=continuous_snapshot_scaled_df,
+            categorical_snapshot_start_df=categorical_snapshot_start_df,
             categorical_snapshot_df=categorical_snapshot_df,
             event_type_counts_df=event_type_counts_df,
             continuous_event_summary_df=continuous_event_summary_df,
@@ -604,28 +650,62 @@ class WindowFeaturesPlan:
             lambda: self._build_scaler_frame(prepared_raw_df, scaling_profile_df=scaling_profile_df),
             materialize=materialize,
         )
-        snapshot_rows_df = self._build_step(
-            "snapshot_rows",
-            lambda: self._build_snapshot_rows(base_windows_df=base_windows_df, raw_intervals_df=raw_intervals_df),
+        snapshot_rows_start_df = self._build_step(
+            "snapshot_rows_start",
+            lambda: self._build_snapshot_rows(
+                base_windows_df=base_windows_df,
+                raw_intervals_df=raw_intervals_df,
+                anchor_column="t_start",
+            ),
             materialize=materialize,
         )
-        snapshot_feature_frames = self._build_snapshot_feature_frames(
-            snapshot_rows_df=snapshot_rows_df,
+        snapshot_rows_end_df = self._build_step(
+            "snapshot_rows_end",
+            lambda: self._build_snapshot_rows(
+                base_windows_df=base_windows_df,
+                raw_intervals_df=raw_intervals_df,
+                anchor_column="t_end",
+            ),
+            materialize=materialize,
+        )
+        snapshot_feature_frames_start = self._build_snapshot_feature_frames(
+            snapshot_rows_df=snapshot_rows_start_df,
             scaler_df=scaler_df,
+            suffix="t_start",
+        )
+        snapshot_feature_frames_end = self._build_snapshot_feature_frames(
+            snapshot_rows_df=snapshot_rows_end_df,
+            scaler_df=scaler_df,
+            suffix="t_end",
+        )
+        continuous_snapshot_start_df = self._build_step(
+            "continuous_snapshot_start",
+            lambda: snapshot_feature_frames_start[0],
+            materialize=materialize,
+        )
+        continuous_snapshot_start_scaled_df = self._build_step(
+            "continuous_snapshot_start_scaled",
+            lambda: snapshot_feature_frames_start[1],
+            materialize=materialize,
+        )
+        categorical_snapshot_start_df = self._build_step(
+            "categorical_snapshot_start",
+            lambda: snapshot_feature_frames_start[2],
+            materialize=materialize,
         )
         continuous_snapshot_df = self._build_step(
             "continuous_snapshot",
-            lambda: snapshot_feature_frames[0],
+            lambda: snapshot_feature_frames_end[0],
             materialize=materialize,
         )
         continuous_snapshot_scaled_df = self._build_step(
             "continuous_snapshot_scaled",
-            lambda: snapshot_feature_frames[1],
+            lambda: snapshot_feature_frames_end[1],
             materialize=materialize,
         )
         categorical_snapshot_df = self._build_step(
             "categorical_snapshot",
-            lambda: snapshot_feature_frames[2],
+            lambda: snapshot_feature_frames_end[2],
             materialize=materialize,
         )
         events_in_windows_df = self._build_step(
@@ -650,8 +730,11 @@ class WindowFeaturesPlan:
             "assemble_feature_frame",
             lambda: self._assemble_feature_frame(
                 base_windows_df=base_windows_df,
+                continuous_snapshot_start_df=continuous_snapshot_start_df,
+                continuous_snapshot_start_scaled_df=continuous_snapshot_start_scaled_df,
                 continuous_snapshot_df=continuous_snapshot_df,
                 continuous_snapshot_scaled_df=continuous_snapshot_scaled_df,
+                categorical_snapshot_start_df=categorical_snapshot_start_df,
                 categorical_snapshot_df=categorical_snapshot_df,
                 event_type_counts_df=event_type_counts_df,
                 continuous_event_summary_df=continuous_event_summary_df,

@@ -24,7 +24,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--format", default="parquet", choices=("parquet", "delta"), help="Persisted table format")
     parser.add_argument("--write-mode", default="overwrite", choices=("overwrite", "append", "merge"))
     parser.add_argument("--min-warm", default=1, type=int, help="Conformal minimum warm size")
-    parser.add_argument("--phase-count", type=int, default=3, help="Detected phase count")
+    parser.add_argument("--phase-count", type=int, default=4, help="Detected phase count")
     return parser.parse_args()
 
 

@@ -28,14 +28,16 @@ def select_phase_windows(
     enriched_df: "DataFrame",
     phase_literals: dict[str, "Column"],
 ) -> "DataFrame":
+    from pyspark.sql import Window
     from pyspark.sql import functions as F
 
-    assigned_distance_expr = F.element_at("phase_raw_distances", F.col("phase_id_detected") + F.lit(1)).cast("double")
+    assigned_phase_index_expr = F.col("phase_id_detected").cast("int") + F.lit(1)
+    assigned_distance_expr = F.element_at("phase_raw_distances", assigned_phase_index_expr).cast("double")
     assigned_scale_expr = F.greatest(
-        F.element_at("phase_distance_scales", F.col("phase_id_detected") + F.lit(1)).cast("double"),
+        F.element_at("phase_distance_scales", assigned_phase_index_expr).cast("double"),
         F.lit(1e-6),
     )
-    assigned_cost_expr = F.element_at("phase_costs", F.col("phase_id_detected") + F.lit(1)).cast("double")
+    assigned_cost_expr = F.element_at("phase_costs", assigned_phase_index_expr).cast("double")
     assigned_vs_alt_costs = F.zip_with(
         F.sequence(F.lit(0), F.size("phase_costs") - F.lit(1)),
         F.col("phase_costs"),
@@ -57,7 +59,55 @@ def select_phase_windows(
             / F.greatest(assigned_second_best_cost_expr, F.lit(1e-6)),
         )
     )
-    return enriched_df.select(
+    local_stable_expr = (
+        (F.coalesce(F.col("drift_magnitude_profiled"), F.lit(0.0)) <= F.coalesce(F.col("drift_threshold"), F.lit(0.0)))
+        & (assigned_distance_expr <= assigned_scale_expr)
+    )
+    order_window = Window.partitionBy("tail_id", "flight_id").orderBy(
+        F.col("t_start").asc_nulls_last(),
+        F.col("win_id").asc(),
+    )
+    stable_phase_id_expr = F.when(local_stable_expr, F.col("phase_id_detected").cast("int"))
+    transition_context_df = (
+        enriched_df.withColumn(
+            "_previous_stable_phase_id_detected",
+            F.last(stable_phase_id_expr, ignorenulls=True).over(
+                order_window.rowsBetween(Window.unboundedPreceding, -1)
+            ),
+        )
+        .withColumn(
+            "_next_stable_phase_id_detected",
+            F.first(stable_phase_id_expr, ignorenulls=True).over(
+                order_window.rowsBetween(1, Window.unboundedFollowing)
+            ),
+        )
+        .withColumn(
+            "_is_transition_boundary",
+            (~local_stable_expr)
+            & F.col("_previous_stable_phase_id_detected").isNotNull()
+            & F.col("_next_stable_phase_id_detected").isNotNull()
+            & (F.col("_previous_stable_phase_id_detected") != F.col("_next_stable_phase_id_detected")),
+        )
+        .withColumn(
+            "phase_state_detected",
+            F.when(F.col("_is_transition_boundary"), F.lit("transition_region")).otherwise(F.lit("stable")),
+        )
+        .withColumn(
+            "transition_from_phase_id_detected",
+            F.when(
+                F.col("_is_transition_boundary"),
+                F.col("_previous_stable_phase_id_detected").cast("int"),
+            ),
+        )
+        .withColumn(
+            "transition_to_phase_id_detected",
+            F.when(
+                F.col("_is_transition_boundary"),
+                F.col("_next_stable_phase_id_detected").cast("int"),
+            ),
+        )
+    )
+    return transition_context_df.select(
         F.col("tail_id").cast("string").alias("tail_id"),
         F.col("flight_id").cast("string").alias("flight_id"),
         F.col("win_id").cast("int").alias("win_id"),
@@ -66,13 +116,9 @@ def select_phase_windows(
         F.col("duration_ms").cast("int").alias("duration_ms"),
         F.col("event_count").cast("int").alias("event_count"),
         F.col("phase_id_detected").cast("int").alias("phase_id_detected"),
-        F.when(
-            (F.coalesce(F.col("drift_magnitude_profiled"), F.lit(0.0)) <= F.coalesce(F.col("drift_threshold"), F.lit(0.0)))
-            & (assigned_distance_expr <= assigned_scale_expr),
-            F.lit("stable"),
-        )
-        .otherwise(F.lit("transition_region"))
-        .alias("phase_state_detected"),
+        F.col("phase_state_detected").cast("string").alias("phase_state_detected"),
+        F.col("transition_from_phase_id_detected").cast("int").alias("transition_from_phase_id_detected"),
+        F.col("transition_to_phase_id_detected").cast("int").alias("transition_to_phase_id_detected"),
         assigned_margin_confidence_expr.cast("double").alias("phase_confidence_detected"),
         assigned_distance_expr.alias("distance_to_centroid_detected"),
         F.coalesce(F.col("drift_magnitude_profiled"), F.lit(0.0)).cast("double").alias("drift_magnitude"),

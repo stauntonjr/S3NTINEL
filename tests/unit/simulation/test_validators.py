@@ -6,7 +6,9 @@ import pandas as pd
 
 from libs.anomaly import validate_attribution_against_fault_truth, validate_attribution_against_misbehavior_truth
 from libs.graph import build_coupling_validation_summary, build_graph_validation_summary
-from libs.phase import validate_detected_phases_from_tables
+from libs.phase import build_phase_validation_assignments, validate_detected_phases_from_tables
+from libs.simulation.report_tables import RunArtifactBundle
+from libs.simulation.reporting import _build_phase_validation_summary
 from libs.scoring import (
     summarize_fault_window_detection,
     summarize_misbehavior_window_detection,
@@ -29,7 +31,7 @@ def test_validate_detected_phases_from_tables_uses_library_phase_evaluator():
                 "t_start": _ts(0),
                 "t_end": _ts(2),
                 "phase_id_detected": 0,
-                "phase_state_detected": "gate_turnaround",
+                "phase_state_detected": "stable",
                 "phase_confidence_detected": 0.9,
                 "distance_to_centroid_detected": 0.1,
             }
@@ -65,7 +67,7 @@ def test_validate_detected_phases_from_tables_prefers_windows_timestamps_when_pr
                 "t_start": _ts(0),
                 "t_end": _ts(0),
                 "phase_id_detected": 0,
-                "phase_state_detected": "gate_turnaround",
+                "phase_state_detected": "stable",
                 "phase_confidence_detected": 0.9,
                 "distance_to_centroid_detected": 0.1,
             }
@@ -100,6 +102,353 @@ def test_validate_detected_phases_from_tables_prefers_windows_timestamps_when_pr
     assert summary["assignment_count"] == 1
     assert summary["overall_accuracy"] == 1.0
     assert summary["macro_f1"] == 1.0
+
+
+def test_build_phase_validation_assignments_derives_truth_transition_context():
+    phase_windows_df = pd.DataFrame.from_records(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 1,
+                "t_start": _ts(0),
+                "t_end": _ts(2),
+                "phase_id_detected": 0,
+                "phase_state_detected": "stable",
+                "phase_confidence_detected": 0.9,
+                "distance_to_centroid_detected": 0.1,
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 2,
+                "t_start": _ts(3),
+                "t_end": _ts(5),
+                "phase_id_detected": 1,
+                "phase_state_detected": "transition_region",
+                "phase_confidence_detected": 0.3,
+                "distance_to_centroid_detected": 0.5,
+            },
+        ]
+    )
+    phase_labels_df = pd.DataFrame.from_records(
+        [
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": _ts(0), "phase_label": "gate_turnaround"},
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": _ts(1), "phase_label": "gate_turnaround"},
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": _ts(2), "phase_label": "gate_turnaround"},
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": _ts(3), "phase_label": "gate_turnaround"},
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": _ts(4), "phase_label": "takeoff_climb"},
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": _ts(5), "phase_label": "takeoff_climb"},
+        ]
+    )
+
+    assignments = build_phase_validation_assignments(
+        phase_windows_df=phase_windows_df,
+        phase_labels_df=phase_labels_df,
+    )
+
+    assert assignments[0]["truth_phase_label_primary"] == "gate_turnaround"
+    assert assignments[0]["truth_phase_state"] == "stable"
+    assert assignments[0]["truth_transition_from_label"] is None
+    assert assignments[0]["truth_transition_to_label"] is None
+    assert assignments[1]["truth_phase_label_primary"] == "takeoff_climb"
+    assert assignments[1]["truth_phase_state"] == "transition_region"
+    assert assignments[1]["truth_transition_from_label"] == "gate_turnaround"
+    assert assignments[1]["truth_transition_to_label"] == "takeoff_climb"
+
+
+def test_validate_detected_phases_from_tables_reports_supplemental_transition_metrics():
+    phase_windows_df = pd.DataFrame.from_records(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 1,
+                "t_start": _ts(0),
+                "t_end": _ts(1),
+                "phase_id_detected": 0,
+                "phase_state_detected": "stable",
+                "phase_confidence_detected": 0.9,
+                "distance_to_centroid_detected": 0.1,
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 2,
+                "t_start": _ts(2),
+                "t_end": _ts(3),
+                "phase_id_detected": 0,
+                "phase_state_detected": "transition_region",
+                "transition_from_phase_id_detected": 0,
+                "transition_to_phase_id_detected": 1,
+                "phase_confidence_detected": 0.2,
+                "distance_to_centroid_detected": 0.4,
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 3,
+                "t_start": _ts(4),
+                "t_end": _ts(5),
+                "phase_id_detected": 1,
+                "phase_state_detected": "stable",
+                "phase_confidence_detected": 0.9,
+                "distance_to_centroid_detected": 0.1,
+            },
+        ]
+    )
+    phase_labels_df = pd.DataFrame.from_records(
+        [
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": _ts(0), "phase_label": "gate_turnaround"},
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": _ts(1), "phase_label": "gate_turnaround"},
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": _ts(2), "phase_label": "gate_turnaround"},
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": _ts(3), "phase_label": "takeoff_climb"},
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": _ts(4), "phase_label": "takeoff_climb"},
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": _ts(5), "phase_label": "takeoff_climb"},
+        ]
+    )
+
+    summary = validate_detected_phases_from_tables(
+        phase_windows_df=phase_windows_df,
+        phase_labels_df=phase_labels_df,
+    )
+
+    assert summary["macro_f1"] == 1.0
+    assert summary["transition_state_validation"]["status"] == "ok"
+    assert summary["transition_state_validation"]["transition_region_precision"] == 1.0
+    assert summary["transition_state_validation"]["transition_region_recall"] == 1.0
+    assert summary["transition_state_validation"]["transition_region_f1"] == 1.0
+    assert summary["transition_state_validation"]["truth_transition_counts_by_label_pair"] == [
+        {
+            "transition_from_label": "gate_turnaround",
+            "transition_to_label": "takeoff_climb",
+            "count": 1,
+        }
+    ]
+    assert summary["transition_state_validation"]["detected_transition_counts_by_label_pair"] == [
+        {
+            "transition_from_label": "gate_turnaround",
+            "transition_to_label": "takeoff_climb",
+            "count": 1,
+        }
+    ]
+    assert summary["transition_state_validation"]["transition_event_alignment"] == {
+        "status": "ok",
+        "truth_transition_event_count": 1,
+        "detected_transition_event_count": 1,
+        "truth_transition_event_counts_by_label_pair": [
+            {
+                "transition_from_label": "gate_turnaround",
+                "transition_to_label": "takeoff_climb",
+                "count": 1,
+            }
+        ],
+        "detected_transition_event_counts_by_label_pair": [
+            {
+                "transition_from_label": "gate_turnaround",
+                "transition_to_label": "takeoff_climb",
+                "count": 1,
+            }
+        ],
+        "matched_truth_transition_event_count": 1,
+        "mean_abs_win_id_delta": 0.0,
+        "mean_abs_progress_delta": 0.0,
+        "nearest_detected_event_by_truth_transition": [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "transition_from_label": "gate_turnaround",
+                "transition_to_label": "takeoff_climb",
+                "truth_win_id_center": 2.0,
+                "detected_win_id_center": 2.0,
+                "abs_win_id_delta": 0.0,
+                "abs_progress_delta": 0.0,
+            }
+        ],
+    }
+
+
+def test_validate_detected_phases_from_tables_reports_transition_event_alignment_when_shifted():
+    phase_windows_df = pd.DataFrame.from_records(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 1,
+                "t_start": _ts(0),
+                "t_end": _ts(1),
+                "phase_id_detected": 0,
+                "phase_state_detected": "stable",
+                "phase_confidence_detected": 0.9,
+                "distance_to_centroid_detected": 0.1,
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 2,
+                "t_start": _ts(2),
+                "t_end": _ts(3),
+                "phase_id_detected": 0,
+                "phase_state_detected": "stable",
+                "phase_confidence_detected": 0.9,
+                "distance_to_centroid_detected": 0.1,
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 3,
+                "t_start": _ts(4),
+                "t_end": _ts(5),
+                "phase_id_detected": 0,
+                "phase_state_detected": "transition_region",
+                "transition_from_phase_id_detected": 0,
+                "transition_to_phase_id_detected": 1,
+                "phase_confidence_detected": 0.2,
+                "distance_to_centroid_detected": 0.4,
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 4,
+                "t_start": _ts(6),
+                "t_end": _ts(7),
+                "phase_id_detected": 1,
+                "phase_state_detected": "stable",
+                "phase_confidence_detected": 0.9,
+                "distance_to_centroid_detected": 0.1,
+            },
+        ]
+    )
+    phase_labels_df = pd.DataFrame.from_records(
+        [
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": _ts(0), "phase_label": "gate_turnaround"},
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": _ts(1), "phase_label": "gate_turnaround"},
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": _ts(2), "phase_label": "gate_turnaround"},
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": _ts(3), "phase_label": "takeoff_climb"},
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": _ts(4), "phase_label": "takeoff_climb"},
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": _ts(5), "phase_label": "takeoff_climb"},
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": _ts(6), "phase_label": "takeoff_climb"},
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": _ts(7), "phase_label": "takeoff_climb"},
+        ]
+    )
+
+    summary = validate_detected_phases_from_tables(
+        phase_windows_df=phase_windows_df,
+        phase_labels_df=phase_labels_df,
+    )
+
+    assert summary["transition_state_validation"]["transition_event_alignment"] == {
+        "status": "ok",
+        "truth_transition_event_count": 1,
+        "detected_transition_event_count": 1,
+        "truth_transition_event_counts_by_label_pair": [
+            {
+                "transition_from_label": "gate_turnaround",
+                "transition_to_label": "takeoff_climb",
+                "count": 1,
+            }
+        ],
+        "detected_transition_event_counts_by_label_pair": [
+            {
+                "transition_from_label": "gate_turnaround",
+                "transition_to_label": "takeoff_climb",
+                "count": 1,
+            }
+        ],
+        "matched_truth_transition_event_count": 1,
+        "mean_abs_win_id_delta": 1.0,
+        "mean_abs_progress_delta": 1.0 / 3.0,
+        "nearest_detected_event_by_truth_transition": [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "transition_from_label": "gate_turnaround",
+                "transition_to_label": "takeoff_climb",
+                "truth_win_id_center": 2.0,
+                "detected_win_id_center": 3.0,
+                "abs_win_id_delta": 1.0,
+                "abs_progress_delta": 1.0 / 3.0,
+            }
+        ],
+    }
+
+
+def test_build_phase_validation_summary_preserves_detected_transition_pairs_through_reporting_view(spark):
+    phase_windows_df = spark.createDataFrame(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 1,
+                "t_start": _ts(0),
+                "t_end": _ts(1),
+                "phase_id_detected": 0,
+                "phase_state_detected": "stable",
+                "phase_confidence_detected": 0.9,
+                "distance_to_centroid_detected": 0.1,
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 2,
+                "t_start": _ts(2),
+                "t_end": _ts(3),
+                "phase_id_detected": 0,
+                "phase_state_detected": "transition_region",
+                "transition_from_phase_id_detected": 0,
+                "transition_to_phase_id_detected": 1,
+                "phase_confidence_detected": 0.2,
+                "distance_to_centroid_detected": 0.4,
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 3,
+                "t_start": _ts(4),
+                "t_end": _ts(5),
+                "phase_id_detected": 1,
+                "phase_state_detected": "stable",
+                "phase_confidence_detected": 0.9,
+                "distance_to_centroid_detected": 0.1,
+            },
+        ]
+    )
+    phase_labels_df = spark.createDataFrame(
+        [
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": _ts(0), "phase_label": "gate_turnaround"},
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": _ts(1), "phase_label": "gate_turnaround"},
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": _ts(2), "phase_label": "gate_turnaround"},
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": _ts(3), "phase_label": "takeoff_climb"},
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": _ts(4), "phase_label": "takeoff_climb"},
+            {"tail_id": "T1", "flight_id": "F1", "timestamp_utc": _ts(5), "phase_label": "takeoff_climb"},
+        ]
+    )
+    windows_df = spark.createDataFrame(
+        [
+            {"tail_id": "T1", "flight_id": "F1", "win_id": 1, "t_start": _ts(0), "t_end": _ts(1), "date_utc": _ts(0).date()},
+            {"tail_id": "T1", "flight_id": "F1", "win_id": 2, "t_start": _ts(2), "t_end": _ts(3), "date_utc": _ts(0).date()},
+            {"tail_id": "T1", "flight_id": "F1", "win_id": 3, "t_start": _ts(4), "t_end": _ts(5), "date_utc": _ts(0).date()},
+        ]
+    )
+
+    summary = _build_phase_validation_summary(
+        RunArtifactBundle(
+            tables={
+                "phase_windows": phase_windows_df,
+                "phase_labels": phase_labels_df,
+                "windows": windows_df,
+            }
+        )
+    )
+
+    assert summary["transition_state_validation"]["detected_transition_counts_by_label_pair"] == [
+        {
+            "transition_from_label": "gate_turnaround",
+            "transition_to_label": "takeoff_climb",
+            "count": 1,
+        }
+    ]
+    assert summary["transition_state_validation"]["transition_event_alignment"]["matched_truth_transition_event_count"] == 1
 
 
 def test_build_graph_validation_summary_reports_hierarchy_and_expected_lag_edges():

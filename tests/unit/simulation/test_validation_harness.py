@@ -77,9 +77,22 @@ def test_flatten_numeric_metric_records_includes_window_policy_profile_metric_pa
                 "mean_boundary_jaccard": 0.72,
             },
             "selected_balance_penalty": 0.18,
+            "closure_mix": {
+                "budget_threshold_rate": 0.22,
+            },
             "downstream_cost_proxy": {
                 "pair_cost_proxy": 24.0,
                 "same_window_pair_expansion_proxy": 15.0,
+            },
+            "truth_phase_window_supply": {
+                "cruise_majority_window_count": 6,
+                "target_phase_real_event_count": {
+                    "mean": 0.5,
+                },
+                "target_phase_duration_ms": {
+                    "mean": 4200.0,
+                    "p95": 5000.0,
+                },
             },
         },
         category="validation",
@@ -88,8 +101,13 @@ def test_flatten_numeric_metric_records_includes_window_policy_profile_metric_pa
     )
 
     assert [(record.metric_path, record.value) for record in records] == [
+        ("closure_mix.budget_threshold_rate", 0.22),
         ("downstream_cost_proxy.pair_cost_proxy", 24.0),
         ("downstream_cost_proxy.same_window_pair_expansion_proxy", 15.0),
         ("edge_stability.mean_boundary_jaccard", 0.72),
         ("selected_balance_penalty", 0.18),
+        ("truth_phase_window_supply.cruise_majority_window_count", 6),
+        ("truth_phase_window_supply.target_phase_duration_ms.mean", 4200.0),
+        ("truth_phase_window_supply.target_phase_duration_ms.p95", 5000.0),
+        ("truth_phase_window_supply.target_phase_real_event_count.mean", 0.5),
     ]

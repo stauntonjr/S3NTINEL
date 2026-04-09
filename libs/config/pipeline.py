@@ -233,7 +233,6 @@ class PhaseSettings:
     detect_event_type_count: int
     detect_categorical_state_count: int
     stable_drift_quantile: float
-    smoothing_radius: int
     transition_penalty: float
     min_dwell_windows: int
 
@@ -597,10 +596,6 @@ def load_pipeline_context_settings(config: dict[str, Any]) -> PipelineContextSet
             stable_drift_quantile=_env_float(
                 "S3NTINEL_PHASE_STABLE_DRIFT_QUANTILE",
                 _config_float(config, ["phase", "stable_drift_quantile"], 0.35),
-            ),
-            smoothing_radius=_env_int(
-                "S3NTINEL_PHASE_SMOOTHING_RADIUS",
-                _config_int(config, ["phase", "smoothing_radius"], 2),
             ),
             transition_penalty=_env_float(
                 "S3NTINEL_PHASE_TRANSITION_PENALTY",

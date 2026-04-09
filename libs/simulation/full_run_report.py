@@ -7,8 +7,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from libs.simulation.report_tables import ArtifactView, RunArtifactBundle
 from libs.simulation.run_bundle import load_json_if_exists, path_size_bytes
 from libs.simulation.run_context import RunPaths, write_manifest
+from libs.windows import build_window_truth_phase_coverage_summary
 
 
 @dataclass(frozen=True)
@@ -102,6 +104,17 @@ STAGE_MODELING_SECTIONS = (
         ("score_validation", "misbehavior_score_validation", "fault_window_validation", "misbehavior_window_validation"),
     ),
     StageModelingSection("90_anomaly_attribution.py", ("attribution_validation", "misbehavior_attribution_validation")),
+)
+
+WINDOW_POLICY_WINDOWS_VIEW = ArtifactView(
+    "windows",
+    ("tail_id", "flight_id", "win_id", "t_start", "t_end", "duration_ms", "event_count", "real_event_count", "close_reason"),
+    ("tail_id", "flight_id", "win_id"),
+)
+WINDOW_POLICY_PHASE_LABELS_VIEW = ArtifactView(
+    "phase_labels",
+    ("tail_id", "flight_id", "timestamp_utc", "phase_label"),
+    ("tail_id", "flight_id", "timestamp_utc"),
 )
 
 
@@ -245,15 +258,98 @@ def _build_engineering_performance_summary(
     )
 
 
-def _build_window_policy_profile_summary(*, paths: RunPaths) -> dict[str, Any]:
+def _build_truth_phase_window_supply_summary(
+    *,
+    spark: Any | None,
+    paths: RunPaths,
+    table_format: str | None,
+) -> dict[str, Any]:
+    if spark is None or table_format is None:
+        return {
+            "status": "skipped",
+            "reason": "spark or table_format unavailable",
+        }
+    try:
+        bundle = RunArtifactBundle.load(
+            spark=spark,
+            paths=paths,
+            table_format=str(table_format),
+            views=(WINDOW_POLICY_WINDOWS_VIEW, WINDOW_POLICY_PHASE_LABELS_VIEW),
+        )
+        return build_window_truth_phase_coverage_summary(
+            windows_df=bundle.pandas(WINDOW_POLICY_WINDOWS_VIEW),
+            phase_labels_df=bundle.pandas(WINDOW_POLICY_PHASE_LABELS_VIEW),
+        )
+    except Exception as exc:
+        return {
+            "status": "skipped",
+            "reason": f"window_truth_phase_coverage_unavailable: {exc!r}",
+        }
+
+
+def _build_window_policy_profile_summary_without_stage25(
+    *,
+    spark: Any | None,
+    paths: RunPaths,
+    table_format: str | None,
+    reason: str,
+) -> dict[str, Any]:
+    stage30_summary_path = paths.run_dir / "reports" / "stages" / "30_windows_adaptive_summary.json"
+    stage30_summary = load_json_if_exists(stage30_summary_path) or {}
+    return {
+        "status": "skipped",
+        "reason": str(reason),
+        "source_report_path": str(stage30_summary_path if stage30_summary else (paths.run_dir / "reports" / "stages" / "25_window_policy_profile_evaluation.json")),
+        "policy_source": stage30_summary.get("policy_source"),
+        "selected_max_ms": stage30_summary.get("max_ms"),
+        "selected_event_threshold": stage30_summary.get("event_threshold"),
+        "selected_candidate_rank": None,
+        "selected_objective_score": None,
+        "selected_balance_penalty": None,
+        "closure_mix": {
+            "event_threshold_rate": None,
+            "budget_threshold_rate": None,
+            "end_of_stream_rate": None,
+            "mean_quiet_credit_end": None,
+            "p95_quiet_credit_end": None,
+            "mean_closure_budget_end": None,
+            "p95_closure_budget_end": None,
+        },
+        "downstream_cost_proxy": {
+            "window_count": None,
+            "pair_cost_proxy": None,
+            "same_window_pair_expansion_proxy": None,
+            "p95_event_count": None,
+            "p95_sensor_count": None,
+        },
+        "edge_stability": {
+            "status": "skipped",
+            "mean_boundary_jaccard": None,
+        },
+        "truth_phase_window_supply": _build_truth_phase_window_supply_summary(
+            spark=spark,
+            paths=paths,
+            table_format=table_format,
+        ),
+        "warnings": [],
+    }
+
+
+def _build_window_policy_profile_summary(
+    *,
+    spark: Any | None,
+    paths: RunPaths,
+    table_format: str | None,
+) -> dict[str, Any]:
     evaluation_report_path = paths.run_dir / "reports" / "stages" / "25_window_policy_profile_evaluation.json"
     evaluation_payload = load_json_if_exists(evaluation_report_path)
     if evaluation_payload is None:
-        return {
-            "status": "skipped",
-            "reason": "missing stage-25 evaluation report",
-            "source_report_path": str(evaluation_report_path),
-        }
+        return _build_window_policy_profile_summary_without_stage25(
+            spark=spark,
+            paths=paths,
+            table_format=table_format,
+            reason="missing stage-25 evaluation report",
+        )
     selected_policy = dict(evaluation_payload.get("selected_policy") or {})
     resolved_policy = dict(selected_policy.get("resolved_policy") or {})
     closure_rates = dict((evaluation_payload.get("closure_mix") or {}).get("rates") or {})
@@ -270,9 +366,12 @@ def _build_window_policy_profile_summary(*, paths: RunPaths) -> dict[str, Any]:
         "selected_balance_penalty": ((selected_policy.get("profile_row") or {}) or {}).get("balance_penalty"),
         "closure_mix": {
             "event_threshold_rate": closure_rates.get("event_threshold"),
-            "max_ms_rate": closure_rates.get("max_ms"),
-            "event_threshold_plus_max_ms_rate": closure_rates.get("event_threshold+max_ms"),
+            "budget_threshold_rate": closure_rates.get("budget_threshold"),
             "end_of_stream_rate": closure_rates.get("end_of_stream"),
+            "mean_quiet_credit_end": (evaluation_payload.get("closure_mix") or {}).get("mean_quiet_credit_end"),
+            "p95_quiet_credit_end": (evaluation_payload.get("closure_mix") or {}).get("p95_quiet_credit_end"),
+            "mean_closure_budget_end": (evaluation_payload.get("closure_mix") or {}).get("mean_closure_budget_end"),
+            "p95_closure_budget_end": (evaluation_payload.get("closure_mix") or {}).get("p95_closure_budget_end"),
         },
         "downstream_cost_proxy": {
             "window_count": downstream_cost.get("window_count"),
@@ -285,6 +384,11 @@ def _build_window_policy_profile_summary(*, paths: RunPaths) -> dict[str, Any]:
             "status": edge_stability.get("status"),
             "mean_boundary_jaccard": edge_stability.get("mean_boundary_jaccard"),
         },
+        "truth_phase_window_supply": _build_truth_phase_window_supply_summary(
+            spark=spark,
+            paths=paths,
+            table_format=table_format,
+        ),
         "warnings": list(evaluation_payload.get("warnings") or []),
     }
 
@@ -340,17 +444,23 @@ def _render_markdown(report: dict[str, Any]) -> str:
 
 def write_full_run_report(
     *,
+    spark: Any | None = None,
     paths: RunPaths,
     manifest: dict[str, Any],
     summary_artifact_path: str | None,
     validation_payloads: dict[str, Any] | None,
+    table_format: str | None = None,
 ) -> dict[str, Any]:
     report = FullRunReport(
         report_version="v1",
         status=manifest.get("status"),
         run_dir=str(paths.run_dir),
         modeling_performance=_build_modeling_performance_summary(validation_payloads),
-        window_policy_profile=_build_window_policy_profile_summary(paths=paths),
+        window_policy_profile=_build_window_policy_profile_summary(
+            spark=spark,
+            paths=paths,
+            table_format=table_format,
+        ),
         engineering_performance=_build_engineering_performance_summary(
             paths=paths,
             manifest=manifest,

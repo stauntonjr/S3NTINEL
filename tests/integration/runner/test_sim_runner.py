@@ -372,8 +372,7 @@ def test_full_run_report_surfaces_window_policy_profile_and_skips_when_missing(t
         "closure_mix": {
             "rates": {
                 "event_threshold": 0.7,
-                "max_ms": 0.2,
-                "event_threshold+max_ms": 0.05,
+                "budget_threshold": 0.25,
                 "end_of_stream": 0.05,
             }
         },
@@ -620,6 +619,15 @@ def test_validation_harness_event_mode_uses_event_objective(tmp_path):
                 "recall": 0.75,
                 "f1": 0.72,
                 "detected_per_label_ratio": 1.4,
+                "slope_run_capture_metrics": {
+                    "slope_pos": {"run_recall": 0.7},
+                    "slope_neg": {"run_recall": 0.65},
+                },
+                "event_family_metrics": {
+                    "slope_pos": {"f1": 0.12},
+                    "slope_neg": {"f1": 0.11},
+                    "transition": {"f1": 0.2},
+                },
             },
         },
         "engineering_performance": {
@@ -654,6 +662,15 @@ def test_validation_harness_event_mode_uses_event_objective(tmp_path):
                             "precision": 0.7,
                             "recall": 0.75,
                             "f1": 0.72,
+                            "slope_run_capture_metrics": {
+                                "slope_pos": {"run_recall": 0.7},
+                                "slope_neg": {"run_recall": 0.65},
+                            },
+                            "event_family_metrics": {
+                                "slope_pos": {"f1": 0.12},
+                                "slope_neg": {"f1": 0.11},
+                                "transition": {"f1": 0.2},
+                            },
                         }
                     },
                 },

@@ -42,6 +42,7 @@ The phase model is intentionally split:
 Persisted artifacts are defined in `libs/io/schemas/phase.py`:
 - phase windows
 - phase baselines
+- phase label centroids
 
 Inputs come from the `window_features` artifact in `libs/windows` plus the persisted backbone artifact from stage 10.
 
@@ -50,8 +51,9 @@ Inputs come from the `window_features` artifact in `libs/windows` plus the persi
 Phase detection combines:
 - selected structure vectors from window features
 - backbone-backed feature selection
-- Spark-first per-flight clustering and ordered assignment
-- assignment smoothing
+- Spark-first per-flight clustering
+- progress-mass seeding and ordered support bands
+- monotone transition-aware decode over the ordered phases
 - minimum-dwell enforcement
 - baseline emission over assigned phases
 
@@ -59,11 +61,21 @@ Phase detection combines:
 
 Phases represent recurring operating regimes such as ground, climb, cruise, or descent, inferred from telemetry behavior rather than only from labels.
 
+The active artifact contract also carries an auxiliary boundary state:
+- `phase_state_detected = stable | transition_region`
+- optional `transition_from_phase_id_detected`
+- optional `transition_to_phase_id_detected`
+
+This boundary metadata does not expand the primary steady-phase taxonomy.
+
 ## Testing / Validation
 
 - unit tests cover phase detection behavior and analysis
-- integration tests cover stage 50 artifact generation
+- integration tests cover stage 70 phase fitting and downstream phase artifacts
 - simulation-backed validation compares detected phases against known phase truth
+- transition validation is supplemental and parallel to the primary steady-phase macro F1
+
+See [phase_validation_semantics.md](/home/jrs/code/S3NTINEL/sentinel/docs/phase_validation_semantics.md) for the current steady-phase versus transition-region validation contract.
 
 ## Notes
 

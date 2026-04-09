@@ -74,6 +74,9 @@ class AdaptiveWindowRow(TypedDict, total=False):
     t_end: datetime
     duration_ms: int
     event_count: int
+    real_event_count: int
+    quiet_credit_end: float
+    closure_budget_end: float
     zoh_version: int
     date_utc: date
     sensor_count: int
@@ -93,8 +96,11 @@ class WindowFeatureRow(TypedDict, total=False):
     event_count: int
     date_utc: date
     event_type_counts: EventTypeCountByName
+    continuous_vector_t_start: ParameterValueByName
+    continuous_vector_t_start_scaled: ParameterValueByName
     continuous_vector_t_end: ParameterValueByName
     continuous_vector_t_end_scaled: ParameterValueByName
+    categorical_state_t_start: ParameterStateByName
     categorical_state_t_end: ParameterStateByName
     drift_magnitude_profiled: float
     phase_label: str | None
@@ -109,9 +115,15 @@ class PhaseAssignmentRow(TypedDict, total=False):
     win_id: int
     phase_id_detected: int
     phase_state_detected: str
+    transition_from_phase_id_detected: int | None
+    transition_to_phase_id_detected: int | None
     phase_confidence_detected: float
     distance_to_centroid_detected: float | None
     phase_label: str | None
+    truth_phase_label_primary: str | None
+    truth_phase_state: str | None
+    truth_transition_from_label: str | None
+    truth_transition_to_label: str | None
 
 
 class PhaseBaselineRow(TypedDict, total=False):
@@ -146,6 +158,8 @@ class PhaseWindowRow(TypedDict, total=False):
     event_count: int
     phase_id_detected: int
     phase_state_detected: str
+    transition_from_phase_id_detected: int | None
+    transition_to_phase_id_detected: int | None
     phase_confidence_detected: float
     distance_to_centroid_detected: float
     drift_magnitude: float

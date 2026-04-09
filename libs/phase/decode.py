@@ -6,9 +6,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from libs.perf.annotations import hot_path
-from libs.phase.types import PhaseClusterModel, PhasePlanConfig
+from libs.phase.types import PhaseClusterModel, PhasePlanConfig, PhaseTransitionModel
+from libs.phase.utils import array_distance, with_progress_mass_coordinates
 from libs.spark_sequence import SegmentedSequencePlan, SequenceOrderingPolicy
-from libs.phase.utils import array_distance
 
 
 @dataclass(frozen=True)
@@ -32,46 +32,50 @@ class PhaseSequenceState:
         steps: "Column",
         phase_scores: "Column",
         phase_paths: "Column",
+        transition_model: PhaseTransitionModel,
         transition_penalty: float,
     ) -> "Column":
         from pyspark.sql import functions as F
 
-        penalty = F.lit(float(transition_penalty))
         huge = F.lit(1e18)
 
         def initial_state(step: "Column") -> "Column":
             indices = F.sequence(F.lit(1), F.size(step["phase_costs"]))
             return F.struct(
-                F.transform(
-                    indices,
-                    lambda idx: F.element_at(step["phase_costs"], idx)
-                    + F.when((idx - F.lit(1)) == step["hint_phase_id"], F.lit(0.0)).otherwise(F.lit(0.15)),
-                ).alias(self.score_column),
+                F.transform(indices, lambda idx: F.element_at(step["phase_costs"], idx)).alias(self.score_column),
                 F.transform(indices, lambda idx: F.array(idx - F.lit(1))).alias(self.path_column),
                 F.lit(True).alias(self.initialized_column),
             )
 
+        def best_transition(idx: "Column", acc: "Column", step: "Column") -> "Column":
+            transition_options = [
+                F.struct(
+                    F.when(
+                        idx > F.lit(int(offset)),
+                        F.element_at(acc[self.score_column], idx - F.lit(int(offset)))
+                        + F.element_at(step["phase_costs"], idx)
+                        + F.lit(transition_model.transition_penalty_for_offset(offset, base_penalty=transition_penalty)),
+                    )
+                    .otherwise(huge)
+                    .alias("score"),
+                    F.lit(int(offset)).alias("transition_offset"),
+                    F.when(
+                        idx > F.lit(int(offset)),
+                        F.concat(F.element_at(acc[self.path_column], idx - F.lit(int(offset))), F.array(idx - F.lit(1))),
+                    )
+                    .otherwise(F.array(F.lit(-1)))
+                    .alias("path"),
+                )
+                for offset in transition_model.allowed_transition_offsets
+            ]
+            return F.element_at(F.array_sort(F.array(*transition_options)), F.lit(1))
+
         def updated_state(acc: "Column", step: "Column") -> "Column":
             indices = F.sequence(F.lit(1), F.size(step["phase_costs"]))
-
-            def stay_cost(idx: "Column") -> "Column":
-                return F.element_at(acc[self.score_column], idx) + F.element_at(step["phase_costs"], idx)
-
-            def transition_cost(idx: "Column") -> "Column":
-                return F.when(
-                    idx > F.lit(1),
-                    F.element_at(acc[self.score_column], idx - F.lit(1)) + penalty + F.element_at(step["phase_costs"], idx),
-                ).otherwise(huge)
-
+            best_transitions = F.transform(indices, lambda idx: best_transition(idx, acc, step))
             return F.struct(
-                F.transform(indices, lambda idx: F.least(stay_cost(idx), transition_cost(idx))).alias(self.score_column),
-                F.transform(
-                    indices,
-                    lambda idx: F.when(
-                        (idx > F.lit(1)) & (transition_cost(idx) <= stay_cost(idx)),
-                        F.concat(F.element_at(acc[self.path_column], idx - F.lit(1)), F.array(idx - F.lit(1))),
-                    ).otherwise(F.concat(F.element_at(acc[self.path_column], idx), F.array(idx - F.lit(1)))),
-                ).alias(self.path_column),
+                F.transform(best_transitions, lambda option: option["score"]).alias(self.score_column),
+                F.transform(best_transitions, lambda option: option["path"]).alias(self.path_column),
                 F.lit(True).alias(self.initialized_column),
             )
 
@@ -89,16 +93,39 @@ def build_phase_distance_candidates(
 ) -> "DataFrame":
     from pyspark.sql import functions as F
 
+    progress_half_width = F.greatest(F.coalesce(F.col("phase_progress_half_width"), F.lit(0.0)), F.lit(1e-6))
     return (
-        feature_df.join(cluster_model.centroids_df, on=["tail_id", "flight_id"], how="inner")
+        with_progress_mass_coordinates(feature_df).join(cluster_model.centroids_df, on=["tail_id", "flight_id"], how="inner")
         .withColumn("raw_distance", array_distance(F.col("s_w_scaled"), F.col("s_w_centroid")))
         .join(
             cluster_model.distance_scales_df,
             on=["tail_id", "flight_id", "phase_id_detected"],
             how="left",
         )
+        .join(
+            cluster_model.transition_model.support_df,
+            on=["tail_id", "flight_id", "phase_id_detected"],
+            how="left",
+        )
         .withColumn("distance_scale", F.greatest(F.coalesce(F.col("distance_scale"), F.lit(1.0)), F.lit(1e-6)))
-        .withColumn("phase_cost", F.col("raw_distance") / F.col("distance_scale"))
+        .withColumn("phase_cost_base", F.col("raw_distance") / F.col("distance_scale"))
+        .withColumn(
+            "phase_progress_outside_band",
+            F.when(
+                F.col("progress_mass_position") < F.col("phase_progress_start"),
+                F.col("phase_progress_start") - F.col("progress_mass_position"),
+            )
+            .when(
+                F.col("progress_mass_position") > F.col("phase_progress_end"),
+                F.col("progress_mass_position") - F.col("phase_progress_end"),
+            )
+            .otherwise(F.lit(0.0)),
+        )
+        .withColumn(
+            "phase_progress_penalty",
+            F.col("phase_progress_outside_band") / progress_half_width,
+        )
+        .withColumn("phase_cost", F.col("phase_cost_base") + F.col("phase_progress_penalty"))
     )
 
 
@@ -165,33 +192,6 @@ def summarize_phase_candidates(distance_candidates_df: "DataFrame") -> "DataFram
     )
 
 
-def apply_phase_hint_smoothing(assignment_input_df: "DataFrame", *, config: PhasePlanConfig) -> "DataFrame":
-    from pyspark.sql import functions as F
-    from pyspark.sql.window import Window
-
-    smoothing_radius = max(int(config.phase_smoothing_radius), 0)
-    if smoothing_radius > 0:
-        order_window = Window.partitionBy("tail_id", "flight_id").orderBy("phase_row_number").rowsBetween(
-            -smoothing_radius,
-            smoothing_radius,
-        )
-        neighborhood_counts = [
-            F.sum(F.when(F.col("raw_phase_id") == F.lit(idx), F.lit(1)).otherwise(F.lit(0))).over(order_window).cast("int")
-            for idx in range(max(int(config.phase_count), 1))
-        ]
-        assignment_input_df = assignment_input_df.withColumn("phase_neighborhood_counts", F.array(*neighborhood_counts))
-        return assignment_input_df.withColumn(
-            "hint_phase_id",
-            F.when(
-                F.col("raw_phase_confidence") < F.lit(0.5),
-                F.expr(
-                    "cast(array_position(phase_neighborhood_counts, array_max(phase_neighborhood_counts)) - 1 as int)"
-                ),
-            ).otherwise(F.col("raw_phase_id")),
-        ).drop("phase_neighborhood_counts")
-    return assignment_input_df.withColumn("hint_phase_id", F.col("raw_phase_id"))
-
-
 def _single_phase_assignments(assignment_input_df: "DataFrame") -> "DataFrame":
     from pyspark.sql import functions as F
 
@@ -227,12 +227,11 @@ def _build_segmented_phase_frame(
             "phase_row_number",
             "t_end",
             "phase_costs",
-            "hint_phase_id",
         )
     )
     segment_steps_df = sequence_plan.build_segment_steps(
         segmented_frame.rows_df,
-        step_columns=("phase_costs", "hint_phase_id"),
+        step_columns=("phase_costs",),
     )
     return sequence_plan, segmented_frame.segments_df, segment_steps_df
 
@@ -252,6 +251,7 @@ def _advance_phase_segment(
     current_steps_df: "DataFrame",
     *,
     state: PhaseSequenceState,
+    transition_model: PhaseTransitionModel,
     config: PhasePlanConfig,
 ) -> "DataFrame":
     return current_steps_df.withColumn(
@@ -260,6 +260,7 @@ def _advance_phase_segment(
             steps=current_steps_df["steps"],
             phase_scores=current_steps_df["phase_scores"],
             phase_paths=current_steps_df["phase_paths"],
+            transition_model=transition_model,
             transition_penalty=config.phase_transition_penalty,
         ),
     )
@@ -302,12 +303,10 @@ def build_assignment_input(
     feature_df: "DataFrame",
     *,
     cluster_model: PhaseClusterModel,
-    config: PhasePlanConfig,
 ) -> "DataFrame":
     assignment_input_df = summarize_phase_candidates(
         build_phase_distance_candidates(feature_df, cluster_model=cluster_model)
     )
-    assignment_input_df = apply_phase_hint_smoothing(assignment_input_df, config=config)
     return assignment_input_df.select(
         "tail_id",
         "flight_id",
@@ -320,12 +319,17 @@ def build_assignment_input(
         "phase_raw_distances",
         "phase_distance_scales",
         "phase_costs",
-        "hint_phase_id",
+        "raw_phase_id",
     )
 
 
 @hot_path
-def assign_phases_segmented(assignment_input_df: "DataFrame", *, config: PhasePlanConfig) -> "DataFrame":
+def assign_phases_segmented(
+    assignment_input_df: "DataFrame",
+    *,
+    cluster_model: PhaseClusterModel,
+    config: PhasePlanConfig,
+) -> "DataFrame":
     from pyspark.sql import functions as F
 
     single_phase_assigned_df = _single_phase_assignments(assignment_input_df)
@@ -346,6 +350,7 @@ def assign_phases_segmented(assignment_input_df: "DataFrame", *, config: PhasePl
                 carry_df=carry_df,
             ),
             state=state,
+            transition_model=cluster_model.transition_model,
             config=config,
         )
         carry_df = _segment_carry(current_state_df, state=state)
@@ -399,7 +404,11 @@ def _phase_run_stats(with_runs_df: "DataFrame") -> "DataFrame":
 def _short_run_replacements(with_runs_df: "DataFrame", run_stats_df: "DataFrame") -> "DataFrame":
     from pyspark.sql import functions as F
 
-    short_runs_df = run_stats_df.where(F.col("run_length") < F.col("dwell_limit"))
+    short_runs_df = run_stats_df.where(
+        (F.col("run_length") < F.col("dwell_limit"))
+        & F.col("left_phase_id").isNotNull()
+        & F.col("right_phase_id").isNotNull()
+    )
     if not int(short_runs_df.limit(1).count()):
         return short_runs_df.limit(0)
     return (
@@ -439,13 +448,7 @@ def _short_run_replacements(with_runs_df: "DataFrame", run_stats_df: "DataFrame"
         )
         .withColumn(
             "replacement_phase_id",
-            F.when(
-                F.col("left_phase_id").isNull() & F.col("right_phase_id").isNull(),
-                F.lit(None).cast("int"),
-            )
-            .when(F.col("left_phase_id").isNull(), F.col("right_phase_id"))
-            .when(F.col("right_phase_id").isNull(), F.col("left_phase_id"))
-            .when(F.col("left_cost") <= F.col("right_cost"), F.col("left_phase_id"))
+            F.when(F.col("left_cost") <= F.col("right_cost"), F.col("left_phase_id"))
             .otherwise(F.col("right_phase_id")),
         )
         .where(F.col("replacement_phase_id").isNotNull() & (F.col("replacement_phase_id") != F.col("run_phase_id")))

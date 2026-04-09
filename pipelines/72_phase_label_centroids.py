@@ -77,6 +77,7 @@ def run() -> None:
             "phase_id_detected",
             "phase_name_detected",
             "stable_window_count",
+            "feature_names",
             "s_w_centroid",
         ).toPandas(),
     )

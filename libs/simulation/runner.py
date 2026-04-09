@@ -132,10 +132,12 @@ def run_pipeline(config: PipelineRunConfig) -> PipelineRunResult:
         )
         _write_manifest(paths.manifest_path, manifest)
         full_run_report = _write_full_run_report(
+            spark=(locals().get("spark")),
             paths=paths,
             manifest=manifest,
             summary_artifact_path=summary_artifact_path,
             validation_payloads=validation_payloads,
+            table_format=config.table_format,
         )
         harness_report = _write_validation_harness_report(
             paths=paths,

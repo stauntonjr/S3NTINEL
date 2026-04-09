@@ -82,7 +82,6 @@ def run() -> None:
     phase_detect_event_type_count = runtime.settings.phase.detect_event_type_count
     phase_detect_categorical_state_count = runtime.settings.phase.detect_categorical_state_count
     phase_stable_drift_quantile = runtime.settings.phase.stable_drift_quantile
-    phase_smoothing_radius = runtime.settings.phase.smoothing_radius
     phase_transition_penalty = runtime.settings.phase.transition_penalty
     phase_min_dwell_windows = runtime.settings.phase.min_dwell_windows
 
@@ -97,14 +96,15 @@ def run() -> None:
         phase_plan = PhaseDetectionPlan(
             phase_count=phase_count,
             phase_stable_drift_quantile=phase_stable_drift_quantile,
-            phase_smoothing_radius=phase_smoothing_radius,
             phase_transition_penalty=phase_transition_penalty,
             phase_min_dwell_windows=phase_min_dwell_windows,
         )
-        phase_windows = phase_plan.build_phase_windows(
+        detection_run = phase_plan.run_detection(
             window_features_df,
             phase_config=phase_config,
         )
+        phase_fit_diagnostics = detection_run.diagnostics or {}
+        phase_windows = detection_run.phase_windows
         phase_windows = phase_windows.with_dataframe(phase_windows.to_dataframe().persist(StorageLevel.MEMORY_AND_DISK)).bind(
             path=phase_windows_path,
             format=table_format,
@@ -153,6 +153,7 @@ def run() -> None:
             "write_mode": write_mode,
             "phase_partition_by": ["tail_id"],
             "phase_windows_partition_by": list(context.config["output"]["partition_by"]),
+            "phase_fit_flights": phase_fit_diagnostics.get("phase_fit_flights", []),
         },
         runtime.report_paths.summary_artifact_path,
     )
@@ -166,7 +167,6 @@ def run() -> None:
             "phase_detect_event_type_count": phase_detect_event_type_count,
             "phase_detect_categorical_state_count": phase_detect_categorical_state_count,
             "phase_stable_drift_quantile": phase_stable_drift_quantile,
-            "phase_smoothing_radius": phase_smoothing_radius,
             "phase_transition_penalty": phase_transition_penalty,
             "phase_min_dwell_windows": phase_min_dwell_windows,
         },
@@ -193,7 +193,12 @@ def run() -> None:
             ),
         },
         replayable_from=["window_features", "backbone"],
-        cache_artifacts={"phase_fit_cache": {"config_keys": sorted(list(phase_config.keys()))}},
+        cache_artifacts={
+            "phase_fit_cache": {
+                "config_keys": sorted(list(phase_config.keys())),
+                "phase_fit_flights": phase_fit_diagnostics.get("phase_fit_flights", []),
+            }
+        },
     )
     log_stage_manifest_if_active(stage_manifest, runtime.report_paths.manifest_artifact_path)
     LOGGER.info(

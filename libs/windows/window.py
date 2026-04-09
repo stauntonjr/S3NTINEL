@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -11,6 +12,91 @@ from libs.windows.buffer import WindowSensorBuffer
 
 
 DEFAULT_MIN_SAMPLING_RATE_HZ = 1.0
+
+
+@dataclass(frozen=True)
+class WindowClosureBudgetPolicy:
+    quiet_horizon_ms: int
+    event_threshold: int
+
+    @classmethod
+    def from_window_policy(cls, policy: "WindowPolicy") -> "WindowClosureBudgetPolicy":
+        # `max_ms` remains the external policy field, but the planner now uses it
+        # as the quiet-time horizon for continuous closure budget.
+        return cls(
+            quiet_horizon_ms=max(int(policy.max_ms), 1),
+            event_threshold=max(int(policy.event_threshold), 1),
+        )
+
+    def quiet_credit(self, *, duration_ms: int) -> float:
+        return float(max(int(duration_ms), 0)) * float(self.event_threshold) / float(self.quiet_horizon_ms)
+
+    def closure_budget(self, *, duration_ms: int, real_event_count: int) -> float:
+        return float(max(int(real_event_count), 0)) + self.quiet_credit(duration_ms=duration_ms)
+
+    def should_close(self, *, duration_ms: int, real_event_count: int) -> bool:
+        return self.closure_budget(duration_ms=duration_ms, real_event_count=real_event_count) >= float(
+            self.event_threshold
+        )
+
+    def close_reason(self, *, real_event_count: int) -> str:
+        return "event_threshold" if int(real_event_count) >= int(self.event_threshold) else "budget_threshold"
+
+    def budget_close_elapsed_ms(self, *, real_event_count: int) -> int:
+        remaining = max(int(self.event_threshold) - max(int(real_event_count), 0), 0)
+        if remaining <= 0:
+            return 0
+        return int(math.ceil(float(remaining * self.quiet_horizon_ms) / float(self.event_threshold)))
+
+    def quiet_credit_expr(self, *, duration_ms: "Column") -> "Column":
+        from pyspark.sql import functions as F
+
+        return duration_ms.cast("double") * (
+            F.lit(float(self.event_threshold)) / F.lit(float(max(int(self.quiet_horizon_ms), 1)))
+        )
+
+    def closure_budget_expr(
+        self,
+        *,
+        duration_ms: "Column",
+        real_event_count: "Column",
+    ) -> "Column":
+        return real_event_count.cast("double") + self.quiet_credit_expr(duration_ms=duration_ms)
+
+    def should_close_expr(
+        self,
+        *,
+        duration_ms: "Column",
+        real_event_count: "Column",
+    ) -> "Column":
+        from pyspark.sql import functions as F
+
+        return self.closure_budget_expr(
+            duration_ms=duration_ms,
+            real_event_count=real_event_count,
+        ) >= F.lit(float(self.event_threshold))
+
+    def close_reason_expr(self, *, real_event_count: "Column") -> "Column":
+        from pyspark.sql import functions as F
+
+        return F.when(real_event_count >= F.lit(int(self.event_threshold)), F.lit("event_threshold")).otherwise(
+            F.lit("budget_threshold")
+        )
+
+    def elapsed_ms_for_budget_units_expr(self, *, budget_units: "Column") -> "Column":
+        from pyspark.sql import functions as F
+
+        return F.ceil(
+            budget_units.cast("double")
+            * F.lit(float(max(int(self.quiet_horizon_ms), 1)))
+            / F.lit(float(max(int(self.event_threshold), 1)))
+        ).cast("long")
+
+    def budget_close_elapsed_ms_expr(self, *, real_event_count: "Column") -> "Column":
+        from pyspark.sql import functions as F
+
+        remaining = F.greatest(F.lit(float(self.event_threshold)) - real_event_count.cast("double"), F.lit(0.0))
+        return self.elapsed_ms_for_budget_units_expr(budget_units=remaining)
 
 
 @dataclass(frozen=True)
@@ -35,16 +121,15 @@ class WindowPolicy:
         )
 
     def should_close(self, *, duration_ms: int, event_count: int) -> bool:
-        return duration_ms >= int(self.max_ms) or event_count >= int(self.event_threshold)
+        return WindowClosureBudgetPolicy.from_window_policy(self).should_close(
+            duration_ms=duration_ms,
+            real_event_count=event_count,
+        )
 
     def close_reason(self, *, duration_ms: int, event_count: int) -> str:
-        by_duration = duration_ms >= int(self.max_ms)
-        by_count = event_count >= int(self.event_threshold)
-        if by_duration and by_count:
-            return "event_threshold+max_ms"
-        if by_count:
-            return "event_threshold"
-        return "max_ms"
+        if not self.should_close(duration_ms=duration_ms, event_count=event_count):
+            return "open"
+        return WindowClosureBudgetPolicy.from_window_policy(self).close_reason(real_event_count=event_count)
 
     def effective_duration_ms(self, duration_ms: int) -> int:
         return max(int(duration_ms), int(self.min_ms))
@@ -53,25 +138,6 @@ class WindowPolicy:
         from pyspark.sql import functions as F
 
         return (F.unix_millis(t_end) - F.unix_millis(t_start)).cast("int")
-
-    def cap_timestamp_expr(self, *, t_start: "Column") -> "Column":
-        from pyspark.sql import functions as F
-
-        return F.timestamp_millis(F.unix_millis(t_start) + F.lit(int(self.max_ms)))
-
-    def should_close_expr(self, *, duration_ms: "Column", event_count: "Column") -> "Column":
-        return (duration_ms >= int(self.max_ms)) | (event_count >= int(self.event_threshold))
-
-    def close_reason_expr(self, *, duration_ms: "Column", event_count: "Column") -> "Column":
-        from pyspark.sql import functions as F
-
-        by_duration = duration_ms >= int(self.max_ms)
-        by_count = event_count >= int(self.event_threshold)
-        return (
-            F.when(by_duration & by_count, F.lit("event_threshold+max_ms"))
-            .when(by_count, F.lit("event_threshold"))
-            .otherwise(F.lit("max_ms"))
-        )
 
 
 @dataclass
@@ -134,6 +200,9 @@ class Window:
         )
 
     def to_row(self, *, tail_id: str, flight_id: str, win_id: int, policy: WindowPolicy, close_reason: str) -> AdaptiveWindowRow:
+        budget_policy = WindowClosureBudgetPolicy.from_window_policy(policy)
+        quiet_credit_end = budget_policy.quiet_credit(duration_ms=self.duration_ms)
+        closure_budget_end = budget_policy.closure_budget(duration_ms=self.duration_ms, real_event_count=self.event_count)
         row: AdaptiveWindowRow = {
             "tail_id": tail_id,
             "flight_id": flight_id,
@@ -142,6 +211,9 @@ class Window:
             "t_end": self.t_end,
             "duration_ms": policy.effective_duration_ms(self.duration_ms),
             "event_count": int(self.event_count),
+            "real_event_count": int(self.event_count),
+            "quiet_credit_end": float(quiet_credit_end),
+            "closure_budget_end": float(closure_budget_end),
             "zoh_version": 1,
             "date_utc": self.date_utc,
             "sensor_count": self.sensor_count,

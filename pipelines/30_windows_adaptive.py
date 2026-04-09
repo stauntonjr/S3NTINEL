@@ -31,6 +31,7 @@ def run() -> None:
     context = runtime.context
     settings = runtime.settings
     input_path = runtime.artifacts.events
+    raw_telemetry_path = runtime.artifacts.raw_table
     window_policy_profile_path = runtime.artifacts.window_policy_profile
     output_path = runtime.artifacts.windows
     table_format = runtime.execution.table_format
@@ -46,6 +47,7 @@ def run() -> None:
     window_strategy = settings.windowing.strategy
 
     spark = get_spark("s3ntinel.windows_adaptive")
+    raw_df = read_table(spark, raw_telemetry_path, fmt=table_format)
     events_df = read_table(spark, input_path, fmt=table_format)
     fallback_policy = WindowPolicyProfileSpec(
         min_sampling_rate_hz=min_sampling_rate_hz,
@@ -97,6 +99,7 @@ def run() -> None:
         {
             "stage": "30_windows_adaptive",
             "input_path": input_path,
+            "raw_telemetry_path": raw_telemetry_path,
             "output_path": output_path,
             "window_policy_profile_path": window_policy_profile_path,
             "table_format": table_format,
@@ -113,6 +116,7 @@ def run() -> None:
         runtime.report_paths.summary_artifact_path,
     )
     input_artifacts = {
+        "raw_telemetry": build_artifact_manifest(path=raw_telemetry_path, dataframe=raw_df),
         "events": build_artifact_manifest(path=input_path, dataframe=events_df, row_count=events_count),
     }
     if profile_df is not None:
@@ -140,7 +144,7 @@ def run() -> None:
         output_artifacts={
             "windows": build_artifact_manifest(path=output_path, dataframe=windows_df, row_count=windows_count),
         },
-        replayable_from=["events"],
+        replayable_from=["raw_telemetry", "events"],
     )
     log_stage_manifest_if_active(stage_manifest, runtime.report_paths.manifest_artifact_path)
     LOGGER.info(

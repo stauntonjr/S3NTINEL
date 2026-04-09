@@ -361,7 +361,7 @@ def _windowing_objective_spec() -> ObjectiveSpec:
                 ),
                 direction="minimize",
                 weight=1.0,
-                label="window balance penalty",
+                label="window policy penalty",
             ),
             ObjectiveTerm(
                 metric=_metric(

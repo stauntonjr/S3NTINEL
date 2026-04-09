@@ -100,7 +100,6 @@ phase:
   detect_event_type_count: 6
   detect_categorical_state_count: 6
   stable_drift_quantile: 0.35
-  smoothing_radius: 2
   transition_penalty: 1.5
   min_dwell_windows: 8
   persistence_reversal_cosine: -0.2
