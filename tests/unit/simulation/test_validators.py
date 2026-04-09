@@ -688,8 +688,215 @@ def test_anomaly_validator_compares_attribution_to_fault_truth():
     assert summary["event_parameter_match_count"] == 1
     assert summary["telemetry_parameter_match_rate"] == 1.0
     assert summary["event_parameter_match_rate"] == 1.0
+    assert summary["parameter_localization_validation"]["exact_parameter_match_count_by_source"] == {
+        "telemetry": 1,
+        "event": 1,
+        "any": 1,
+        "both": 1,
+    }
+    assert summary["parameter_localization_validation"]["parameter_localization_cases"] == [
+        {
+            "tail_id": "T1",
+            "flight_id": "F1",
+            "fault_window_id": "FW1",
+            "misbehavior_window_id": "MBW1",
+            "subsystem_id": "SUB_AIR_BLEED",
+            "parameter_name": "bleed_supply_psi",
+            "overlapping_window_count": 1,
+            "matched_attribution_window_count": 1,
+            "telemetry_parameter_match": True,
+            "event_parameter_match": True,
+            "any_parameter_match": True,
+            "both_sources_parameter_match": True,
+            "telemetry_truth_subsystem_present": False,
+            "event_truth_subsystem_present": False,
+            "telemetry_attributed_parameter_names": ["bleed_supply_psi"],
+            "event_attributed_parameter_names": ["bleed_supply_psi"],
+        }
+    ]
     assert misbehavior_summary["misbehavior_window_count"] == 1
     assert misbehavior_summary["dominant_subsystem_match_rate"] == 1.0
+
+
+def test_score_validator_reports_raw_calibrated_and_emission_diagnostics():
+    raw_telemetry_df = pd.DataFrame.from_records(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "timestamp_utc": _ts(10),
+                "parameter_name": "bleed_supply_psi",
+                "system_id": "SYS_AIRFRAME",
+                "subsystem_id": "SUB_AIR_BLEED",
+                "module_id": "MOD_BLEED_SUPPLY",
+                "misbehavior_active": True,
+                "misbehavior_family_label": "saturation",
+                "misbehavior_detail_label": "saturation",
+                "misbehavior_window_id": "MBW1",
+                "fault_active": True,
+                "fault_family_label": "regulated",
+                "fault_type": "saturation",
+                "fault_window_id": "FW1",
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "timestamp_utc": _ts(11),
+                "parameter_name": "bleed_supply_psi",
+                "system_id": "SYS_AIRFRAME",
+                "subsystem_id": "SUB_AIR_BLEED",
+                "module_id": "MOD_BLEED_SUPPLY",
+                "misbehavior_active": True,
+                "misbehavior_family_label": "saturation",
+                "misbehavior_detail_label": "saturation",
+                "misbehavior_window_id": "MBW1",
+                "fault_active": True,
+                "fault_family_label": "regulated",
+                "fault_type": "saturation",
+                "fault_window_id": "FW1",
+            },
+        ]
+    )
+    windows_df = pd.DataFrame.from_records(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 1,
+                "t_start": _ts(10),
+                "t_end": _ts(11),
+                "event_count": 2,
+                "real_event_count": 2,
+                "close_reason": "event_threshold",
+                "date_utc": _ts(10).date(),
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 2,
+                "t_start": _ts(8),
+                "t_end": _ts(11),
+                "event_count": 1,
+                "real_event_count": 1,
+                "close_reason": "budget_threshold",
+                "date_utc": _ts(8).date(),
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 3,
+                "t_start": _ts(20),
+                "t_end": _ts(21),
+                "event_count": 0,
+                "real_event_count": 0,
+                "close_reason": "budget_threshold",
+                "date_utc": _ts(20).date(),
+            },
+        ]
+    )
+    raw_scores_df = pd.DataFrame.from_records(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 1,
+                "date_utc": _ts(10).date(),
+                "phase_id_detected": 0,
+                "phase_state_detected": "transition_region",
+                "phase_confidence_detected": 0.4,
+                "distance_to_centroid_detected": 1.0,
+                "global_score": 12.0,
+                "severity": "high",
+                "dominant_subsystem_id": "SUB_AIR_BLEED",
+                "dominant_score_component": "reconstruction",
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 2,
+                "date_utc": _ts(8).date(),
+                "phase_id_detected": 0,
+                "phase_state_detected": "transition_region",
+                "phase_confidence_detected": 0.3,
+                "distance_to_centroid_detected": 2.0,
+                "global_score": 6.0,
+                "severity": "medium",
+                "dominant_subsystem_id": "SUB_AIR_BLEED",
+                "dominant_score_component": "structure",
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 3,
+                "date_utc": _ts(20).date(),
+                "phase_id_detected": 1,
+                "phase_state_detected": "stable",
+                "phase_confidence_detected": 0.9,
+                "distance_to_centroid_detected": 0.1,
+                "global_score": 0.1,
+                "severity": "normal",
+                "dominant_subsystem_id": "SUB_AIR_BLEED",
+                "dominant_score_component": "structure",
+            },
+        ]
+    )
+    calibrated_scores_df = pd.DataFrame.from_records(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 1,
+                "date_utc": _ts(10).date(),
+                "global_score": 12.0,
+                "p_value": 0.01,
+                "severity": "high",
+                "emit_ready": True,
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 2,
+                "date_utc": _ts(8).date(),
+                "global_score": 6.0,
+                "p_value": 0.02,
+                "severity": "medium",
+                "emit_ready": False,
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 3,
+                "date_utc": _ts(20).date(),
+                "global_score": 0.1,
+                "p_value": 0.9,
+                "severity": "normal",
+                "emit_ready": False,
+            },
+        ]
+    )
+
+    summary = validate_scores_against_misbehavior_windows(
+        raw_telemetry_df=raw_telemetry_df,
+        windows_df=windows_df,
+        raw_scores_df=raw_scores_df,
+        calibrated_scores_df=calibrated_scores_df,
+    )
+
+    assert summary["status"] == "ok"
+    assert summary["raw_score_validation"]["window_count_by_truth_overlap_bucket"] == {
+        "strict_overlap": 1,
+        "soft_overlap": 1,
+        "no_overlap": 1,
+    }
+    assert summary["raw_score_validation"]["truth_window_recall_by_top_k_raw_score"]["any_overlap"]["top_1"] == 1.0
+    assert summary["raw_score_validation"]["truth_window_recall_by_top_k_raw_score"]["strict_overlap"]["top_1"] == 1.0
+    assert summary["calibrated_score_validation"]["truth_window_recall_by_top_k_calibrated_rarity"]["any_overlap"][
+        "top_1"
+    ] == 1.0
+    assert summary["emission_validation"]["blocked_candidate_window_count_by_p_value_threshold"]["p_le_0p05"] == 1
+    assert summary["emission_validation"]["emit_ready_candidate_window_count_by_p_value_threshold"]["p_le_0p05"] == 1
+    assert summary["score_window_diagnostics"][0]["global_score_raw"] >= summary["score_window_diagnostics"][1]["global_score_raw"]
+    assert any(row["truth_overlap_bucket"] == "soft_overlap" for row in summary["score_window_diagnostics"])
 
 
 def test_anomaly_validator_handles_truth_windows_with_no_overlapping_detected_windows():
@@ -736,6 +943,66 @@ def test_anomaly_validator_handles_truth_windows_with_no_overlapping_detected_wi
     assert summary["event_parameter_match_count"] == 0
     assert summary["misbehavior_windows"][0]["overlapping_window_count"] == 0
     assert summary["misbehavior_windows"][0]["primary_win_id"] is None
+
+
+def test_anomaly_validator_credits_short_contained_window_alignment():
+    raw_telemetry_df = pd.DataFrame.from_records(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "timestamp_utc": _ts(second),
+                "parameter_name": "bleed_supply_psi",
+                "system_id": "SYS_AIRFRAME",
+                "subsystem_id": "SUB_AIR_BLEED",
+                "module_id": "MOD_BLEED_SUPPLY",
+                "misbehavior_active": True,
+                "misbehavior_family_label": "saturation",
+                "misbehavior_detail_label": "saturation",
+                "misbehavior_window_id": "MBW1",
+                "fault_active": True,
+                "fault_family_label": "regulated",
+                "fault_type": "saturation",
+                "fault_window_id": "FW1",
+            }
+            for second in range(10, 21)
+        ]
+    )
+    windows_df = pd.DataFrame.from_records(
+        [
+            {"tail_id": "T1", "flight_id": "F1", "win_id": 5, "t_start": _ts(18), "t_end": _ts(19)},
+        ]
+    )
+    anomaly_window_df = pd.DataFrame.from_records(
+        [
+            {"tail_id": "T1", "flight_id": "F1", "win_id": 5, "dominant_subsystem_id": "SUB_AIR_BLEED"},
+        ]
+    )
+    anomaly_telemetry_df = pd.DataFrame.from_records(
+        [
+            {"tail_id": "T1", "flight_id": "F1", "win_id": 5, "parameter_name": "bleed_supply_psi"},
+        ]
+    )
+    anomaly_event_df = anomaly_telemetry_df.copy()
+
+    summary = validate_attribution_against_misbehavior_truth(
+        raw_telemetry_df=raw_telemetry_df,
+        windows_df=windows_df,
+        anomaly_window_attribution_df=anomaly_window_df,
+        anomaly_telemetry_attribution_df=anomaly_telemetry_df,
+        anomaly_event_attribution_df=anomaly_event_df,
+    )
+
+    assert summary["dominant_subsystem_match_rate"] == 1.0
+    assert summary["telemetry_parameter_match_rate"] == 1.0
+    assert summary["event_parameter_match_rate"] == 1.0
+    assert summary["misbehavior_windows"][0]["overlapping_window_count"] == 1
+    assert summary["misbehavior_windows"][0]["matched_attribution_window_count"] == 1
+    assert summary["misbehavior_windows"][0]["primary_win_id"] == 5
+    assert summary["misbehavior_windows"][0]["telemetry_attributed_parameter_names"] == ["bleed_supply_psi"]
+    assert summary["misbehavior_windows"][0]["event_attributed_parameter_names"] == ["bleed_supply_psi"]
+    assert summary["misbehavior_windows"][0]["strict_window_coverage_threshold"] == 0.5
+    assert summary["parameter_localization_validation"]["exact_parameter_match_rate_by_source"]["any"] == 1.0
 
 
 def test_score_validator_does_not_credit_early_broad_overlap():
@@ -858,3 +1125,4 @@ def test_attribution_validator_uses_earliest_qualifying_window_only():
 
     assert summary["telemetry_parameter_match_rate"] == 1.0
     assert summary["event_parameter_match_rate"] == 1.0
+    assert summary["parameter_localization_validation"]["exact_parameter_match_count_by_source"]["both"] == 1

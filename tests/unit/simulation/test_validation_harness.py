@@ -111,3 +111,77 @@ def test_flatten_numeric_metric_records_includes_window_policy_profile_metric_pa
         ("truth_phase_window_supply.target_phase_duration_ms.p95", 5000.0),
         ("truth_phase_window_supply.target_phase_real_event_count.mean", 0.5),
     ]
+
+
+def test_flatten_numeric_metric_records_includes_score_diagnostic_metric_paths():
+    records = _flatten_numeric_metric_records(
+        {
+            "raw_score_validation": {
+                "window_count": 307,
+                "window_count_by_truth_overlap_bucket": {
+                    "strict_overlap": 2,
+                    "soft_overlap": 14,
+                },
+                "truth_window_recall_by_top_k_raw_score": {
+                    "any_overlap": {
+                        "top_5": 0.5,
+                    }
+                },
+            },
+            "calibrated_score_validation": {
+                "truth_window_recall_by_top_k_calibrated_rarity": {
+                    "strict_overlap": {
+                        "top_10": 0.25,
+                    }
+                }
+            },
+            "emission_validation": {
+                "blocked_candidate_window_count_by_p_value_threshold": {
+                    "p_le_0p05": 3,
+                },
+                "emit_ready_rate_by_top_k_calibrated_rarity": {
+                    "top_10": 0.9,
+                },
+            },
+        },
+        category="validation",
+        scope_name="overall",
+        subscope_name="score_validation",
+    )
+
+    assert [(record.metric_path, record.value) for record in records] == [
+        ("calibrated_score_validation.truth_window_recall_by_top_k_calibrated_rarity.strict_overlap.top_10", 0.25),
+        ("emission_validation.blocked_candidate_window_count_by_p_value_threshold.p_le_0p05", 3),
+        ("emission_validation.emit_ready_rate_by_top_k_calibrated_rarity.top_10", 0.9),
+        ("raw_score_validation.truth_window_recall_by_top_k_raw_score.any_overlap.top_5", 0.5),
+        ("raw_score_validation.window_count", 307),
+        ("raw_score_validation.window_count_by_truth_overlap_bucket.soft_overlap", 14),
+        ("raw_score_validation.window_count_by_truth_overlap_bucket.strict_overlap", 2),
+    ]
+
+
+def test_flatten_numeric_metric_records_includes_parameter_localization_metric_paths():
+    records = _flatten_numeric_metric_records(
+        {
+            "parameter_localization_validation": {
+                "exact_parameter_match_rate_by_source": {
+                    "telemetry": 0.8,
+                    "event": 0.25,
+                    "any": 0.9,
+                },
+                "truth_subsystem_present_count_by_source": {
+                    "telemetry": 4,
+                },
+            }
+        },
+        category="validation",
+        scope_name="overall",
+        subscope_name="attribution_validation",
+    )
+
+    assert [(record.metric_path, record.value) for record in records] == [
+        ("parameter_localization_validation.exact_parameter_match_rate_by_source.any", 0.9),
+        ("parameter_localization_validation.exact_parameter_match_rate_by_source.event", 0.25),
+        ("parameter_localization_validation.exact_parameter_match_rate_by_source.telemetry", 0.8),
+        ("parameter_localization_validation.truth_subsystem_present_count_by_source.telemetry", 4),
+    ]

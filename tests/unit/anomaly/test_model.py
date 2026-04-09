@@ -124,3 +124,72 @@ def test_anomaly_models_build_expected_dataframes(spark):
     row = window_df.where("win_id = 1").collect()[0]
     assert row["artifact_versions"]["graph"] == 1
     assert row["attribution_context"] is not None
+
+
+def test_anomaly_event_attribution_includes_nearby_window_shoulder_events(spark):
+    calibrated_df = spark.createDataFrame(
+        [
+            {
+                "tail_id": "T001",
+                "flight_id": "F001",
+                "win_id": 1,
+                "phase_state_detected": "stable",
+                "phase_id_detected": 0,
+                "phase_confidence_detected": 0.9,
+                "distance_to_centroid_detected": 0.1,
+                "drift_magnitude": 0.1,
+                "breadth": 0.2,
+                "global_score": 5.0,
+                "p_value": 0.01,
+                "severity": "high",
+                "dominant_subsystem_id": "SUBSYS_0001",
+                "dominant_score_component": "structure",
+                "subsystem_scores": {"SUBSYS_0001": 1.0},
+                "score_component_scores": {"structure": 5.0, "reconstruction": 0.0},
+                "warm": True,
+                "emit_ready": True,
+                "min_warm": 1,
+                "date_utc": date(2026, 2, 28),
+            }
+        ]
+    )
+    windows_df = spark.createDataFrame(
+        [
+            {
+                "tail_id": "T001",
+                "flight_id": "F001",
+                "win_id": 1,
+                "t_start": datetime(2026, 2, 28, 0, 0, 0, 100000),
+                "t_end": datetime(2026, 2, 28, 0, 0, 0, 500000),
+                "duration_ms": 400,
+                "date_utc": date(2026, 2, 28),
+            }
+        ]
+    )
+    events_df = spark.createDataFrame(
+        [
+            {
+                "tail_id": "T001",
+                "flight_id": "F001",
+                "timestamp_utc": datetime(2026, 2, 28, 0, 0, 0, 850000),
+                "parameter_name": "ENG_TEMP_1",
+                "event_type_detected": "slope_pos",
+                "anomaly_type_detected": "",
+                "anomaly_score_detected": 0.0,
+                "date_utc": date(2026, 2, 28),
+            }
+        ]
+    )
+
+    event_df = AnomalyAttributionPlan(top_k_per_subsystem=3).build_event_attribution(
+        calibrated_df=calibrated_df,
+        windows_df=windows_df,
+        events_df=events_df,
+        hierarchy_sensor_map_df=_hierarchy_sensor_map_df(spark),
+    ).to_dataframe()
+
+    rows = event_df.select("win_id", "parameter_name", "event_type_detected").collect()
+    assert len(rows) == 1
+    assert rows[0]["win_id"] == 1
+    assert rows[0]["parameter_name"] == "ENG_TEMP_1"
+    assert rows[0]["event_type_detected"] == "slope_pos"

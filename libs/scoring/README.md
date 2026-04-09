@@ -40,7 +40,12 @@ Persisted score artifacts are defined in `libs/io/schemas/scoring.py`:
 
 ## Math / Methods
 
-Scores summarize reconstruction and structural deviation at the window level, then are calibrated into emit-ready outputs for downstream anomaly handling.
+Scores summarize reconstruction and structural deviation at the window level, then are calibrated into phase-conditioned rarity (`p_value`) plus a conservative `emit_ready` flag.
+
+`emit_ready` now means:
+- the phase bucket is warm enough to calibrate
+- either the upstream raw score is already `medium` / `high`
+- or a `low`-severity window is rare within its detected phase
 
 ## Subject Matter View
 

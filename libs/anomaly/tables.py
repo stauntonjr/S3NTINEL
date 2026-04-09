@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from libs.anomaly.frames import mapped_events_in_supported_windows
 from libs.io.schemas.anomaly import (
     ANOMALY_EVENT_ATTRIBUTION_SCHEMA,
     ANOMALY_TELEMETRY_ATTRIBUTION_SCHEMA,
@@ -175,32 +176,16 @@ class AnomalyEventAttributionTable(Table):
     ) -> "AnomalyEventAttributionTable":
         from pyspark.sql import functions as F
 
-        anomaly_type_col = (
-            F.col("e.anomaly_type_detected")
-            if "anomaly_type_detected" in events_df.columns
-            else F.lit(None).cast("string")
-        )
-        anomaly_score_col = (
-            F.col("e.anomaly_score_detected")
-            if "anomaly_score_detected" in events_df.columns
-            else F.lit(None).cast("double")
+        events_in_windows = mapped_events_in_supported_windows(
+            events_df=events_df,
+            windows_df=windows_df,
+            hierarchy_sensor_map_df=hierarchy_sensor_map_df,
         )
         return cls(
             dataframe=(
                 calibrated_df.alias("c")
                 .where(F.col("emit_ready") == F.lit(True))
-                .join(windows_df.alias("w"), on=["tail_id", "flight_id", "win_id", "date_utc"], how="inner")
-                .join(
-                    events_df.alias("e"),
-                    on=(
-                        (F.col("c.tail_id") == F.col("e.tail_id"))
-                        & (F.col("c.flight_id") == F.col("e.flight_id"))
-                        & (F.col("e.timestamp_utc") >= F.col("w.t_start"))
-                        & (F.col("e.timestamp_utc") <= F.col("w.t_end"))
-                    ),
-                    how="inner",
-                )
-                .join(hierarchy_sensor_map_df.alias("h"), on=F.col("e.parameter_name") == F.col("h.parameter_name"), how="left")
+                .join(events_in_windows.alias("e"), on=["tail_id", "flight_id", "win_id", "date_utc"], how="inner")
                 .select(
                     F.col("c.tail_id").alias("tail_id"),
                     F.col("c.flight_id").alias("flight_id"),
@@ -208,11 +193,11 @@ class AnomalyEventAttributionTable(Table):
                     F.col("e.timestamp_utc").alias("timestamp_utc"),
                     F.col("e.parameter_name").alias("parameter_name"),
                     F.col("e.event_type_detected").alias("event_type_detected"),
-                    anomaly_type_col.alias("anomaly_type_detected"),
-                    anomaly_score_col.cast("double").alias("anomaly_score_detected"),
-                    F.col("h.system_id").alias("system_id"),
-                    F.col("h.subsystem_id").alias("subsystem_id"),
-                    F.col("h.module_id").alias("module_id"),
+                    F.col("e.anomaly_type_detected").alias("anomaly_type_detected"),
+                    F.col("e.anomaly_score_detected").cast("double").alias("anomaly_score_detected"),
+                    F.col("e.system_id").alias("system_id"),
+                    F.col("e.subsystem_id").alias("subsystem_id"),
+                    F.col("e.module_id").alias("module_id"),
                     F.col("c.global_score").cast("double").alias("window_global_score"),
                     F.col("c.severity").alias("severity"),
                     F.col("c.date_utc").alias("date_utc"),

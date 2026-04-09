@@ -1,6 +1,44 @@
 from __future__ import annotations
 
-from libs.scoring import WindowScoreArtifacts, build_phase_window_score_baselines, score_phase_window_rows
+from datetime import date
+
+from libs.io.schemas.scoring import WINDOW_SCORES_RAW_SCHEMA
+from libs.scoring import (
+    WindowScoreArtifacts,
+    WindowScoresCalibratedTable,
+    build_phase_window_score_baselines,
+    score_phase_window_rows,
+)
+
+
+def _score_row(
+    *,
+    win_id: int,
+    phase_id_detected: int,
+    global_score: float,
+    severity: str,
+    flight_id: str = "F1",
+    date_utc: date = date(2025, 1, 1),
+) -> dict[str, object]:
+    return {
+        "tail_id": "T1",
+        "flight_id": flight_id,
+        "win_id": int(win_id),
+        "phase_state_detected": "stable",
+        "phase_id_detected": int(phase_id_detected),
+        "phase_confidence_detected": 0.9,
+        "distance_to_centroid_detected": 0.1,
+        "drift_magnitude": 0.1,
+        "breadth": 0.2,
+        "global_score": float(global_score),
+        "p_value": 1.0,
+        "severity": str(severity),
+        "dominant_subsystem_id": None,
+        "dominant_score_component": "structure",
+        "subsystem_scores": {},
+        "score_component_scores": {"structure": float(global_score), "reconstruction": 0.0},
+        "date_utc": date_utc,
+    }
 
 
 def test_scoring_v2_builds_baselines_and_scores():
@@ -126,3 +164,61 @@ def test_window_score_artifacts_build_from_phase_rows():
     by_win = {int(item["win_id"]): item for item in artifacts.rows}
     assert by_win[2]["global_score"] > by_win[1]["global_score"]
     assert by_win[2]["dominant_subsystem_id"] == "SUB1"
+
+
+def test_window_score_calibration_emits_warm_windows_by_severity_and_rarity(spark):
+    rows = [
+        _score_row(win_id=win_id, phase_id_detected=0, global_score=float(21 - win_id), severity="low")
+        for win_id in range(1, 21)
+    ]
+    rows[0]["severity"] = "normal"
+    rows[1]["severity"] = "low"
+    rows[2]["severity"] = "high"
+    rows[3]["severity"] = "low"
+    rows.extend(
+        [
+            _score_row(
+                win_id=101,
+                phase_id_detected=1,
+                global_score=9.0,
+                severity="high",
+                flight_id="F2",
+            ),
+            _score_row(
+                win_id=102,
+                phase_id_detected=1,
+                global_score=8.0,
+                severity="high",
+                flight_id="F2",
+            ),
+        ]
+    )
+
+    calibrated = WindowScoresCalibratedTable.from_scores(
+        spark.createDataFrame(rows, schema=WINDOW_SCORES_RAW_SCHEMA()),
+        min_warm=3,
+    ).to_dataframe()
+    records = {
+        (str(row["flight_id"]), int(row["win_id"])): row
+        for row in calibrated.select("flight_id", "win_id", "p_value", "warm", "emit_ready").collect()
+    }
+
+    assert records[("F1", 1)]["warm"] is True
+    assert records[("F1", 1)]["emit_ready"] is False
+    assert float(records[("F1", 1)]["p_value"]) == 0.05
+
+    assert records[("F1", 2)]["warm"] is True
+    assert records[("F1", 2)]["emit_ready"] is True
+    assert float(records[("F1", 2)]["p_value"]) == 0.10
+
+    assert records[("F1", 3)]["warm"] is True
+    assert records[("F1", 3)]["emit_ready"] is True
+    assert float(records[("F1", 3)]["p_value"]) == 0.15
+
+    assert records[("F1", 4)]["warm"] is True
+    assert records[("F1", 4)]["emit_ready"] is False
+    assert float(records[("F1", 4)]["p_value"]) == 0.20
+
+    assert records[("F2", 101)]["warm"] is False
+    assert records[("F2", 101)]["emit_ready"] is False
+    assert records[("F2", 101)]["p_value"] is None

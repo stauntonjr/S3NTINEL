@@ -9,6 +9,57 @@ from libs.perf.annotations import hot_path
 from libs.pyspark import Frame
 
 
+def mapped_events_in_supported_windows(
+    *,
+    events_df: "DataFrame",
+    windows_df: "DataFrame",
+    hierarchy_sensor_map_df: "DataFrame",
+) -> "DataFrame":
+    from pyspark.sql import functions as F
+
+    duration_ms = (
+        F.col("w.duration_ms").cast("long")
+        if "duration_ms" in windows_df.columns
+        else (F.unix_millis("w.t_end") - F.unix_millis("w.t_start")).cast("long")
+    )
+    support_shoulder_ms = F.greatest(duration_ms, F.lit(1).cast("long"))
+    support_start = F.timestamp_millis(F.unix_millis("w.t_start") - support_shoulder_ms)
+    support_end = F.timestamp_millis(F.unix_millis("w.t_end") + support_shoulder_ms)
+
+    mapped_events = events_df.join(
+        hierarchy_sensor_map_df.select("parameter_name", "system_id", "subsystem_id", "module_id"),
+        on="parameter_name",
+        how="inner",
+    )
+    return (
+        mapped_events.alias("e")
+        .join(
+            windows_df.alias("w"),
+            on=(
+                (F.col("e.tail_id") == F.col("w.tail_id"))
+                & (F.col("e.flight_id") == F.col("w.flight_id"))
+                & (F.col("e.timestamp_utc") >= support_start)
+                & (F.col("e.timestamp_utc") <= support_end)
+            ),
+            how="inner",
+        )
+        .select(
+            F.col("w.tail_id").alias("tail_id"),
+            F.col("w.flight_id").alias("flight_id"),
+            F.col("w.win_id").alias("win_id"),
+            F.col("w.date_utc").alias("date_utc"),
+            F.col("e.timestamp_utc").alias("timestamp_utc"),
+            F.col("e.parameter_name").alias("parameter_name"),
+            F.col("e.event_type_detected").alias("event_type_detected"),
+            F.col("e.anomaly_type_detected").alias("anomaly_type_detected"),
+            F.col("e.anomaly_score_detected").alias("anomaly_score_detected"),
+            F.col("e.system_id").alias("system_id"),
+            F.col("e.subsystem_id").alias("subsystem_id"),
+            F.col("e.module_id").alias("module_id"),
+        )
+    )
+
+
 @dataclass(frozen=True)
 class AnomalySubsystemContextFrame(Frame):
     @classmethod
@@ -24,31 +75,20 @@ class AnomalySubsystemContextFrame(Frame):
         from pyspark.sql import functions as F
         from pyspark.sql.window import Window
 
-        mapped_events = events_df.join(
-            hierarchy_sensor_map_df.select("parameter_name", "system_id", "subsystem_id", "module_id"),
-            on="parameter_name",
-            how="inner",
-        )
         events_in_windows = (
-            mapped_events.alias("e")
-            .join(
-                windows_df.alias("w"),
-                on=(
-                    (F.col("e.tail_id") == F.col("w.tail_id"))
-                    & (F.col("e.flight_id") == F.col("w.flight_id"))
-                    & (F.col("e.timestamp_utc") >= F.col("w.t_start"))
-                    & (F.col("e.timestamp_utc") <= F.col("w.t_end"))
-                ),
-                how="inner",
+            mapped_events_in_supported_windows(
+                events_df=events_df,
+                windows_df=windows_df,
+                hierarchy_sensor_map_df=hierarchy_sensor_map_df,
             )
             .select(
-                F.col("w.tail_id").alias("tail_id"),
-                F.col("w.flight_id").alias("flight_id"),
-                F.col("w.win_id").alias("win_id"),
-                F.col("w.date_utc").alias("date_utc"),
-                F.col("e.subsystem_id").alias("subsystem_id"),
-                F.col("e.parameter_name").alias("parameter_name"),
-                F.col("e.event_type_detected").alias("event_type_detected"),
+                "tail_id",
+                "flight_id",
+                "win_id",
+                "date_utc",
+                "subsystem_id",
+                "parameter_name",
+                "event_type_detected",
             )
         )
 

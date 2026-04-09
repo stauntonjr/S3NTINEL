@@ -8,6 +8,7 @@ from typing import Any
 import pandas as pd
 
 from libs.anomaly.validator import (
+    build_fault_attribution_summary_from_misbehavior_summary,
     validate_attribution_against_misbehavior_truth,
 )
 from libs.events.validator import build_event_validation_summary
@@ -145,6 +146,21 @@ WINDOWS_VIEW = ArtifactView(
     ("tail_id", "flight_id", "win_id", "t_start", "t_end", "date_utc"),
     ("tail_id", "flight_id", "win_id"),
 )
+WINDOWS_SCORE_VIEW = ArtifactView(
+    "windows",
+    (
+        "tail_id",
+        "flight_id",
+        "win_id",
+        "t_start",
+        "t_end",
+        "event_count",
+        "real_event_count",
+        "close_reason",
+        "date_utc",
+    ),
+    ("tail_id", "flight_id", "win_id"),
+)
 PHASE_LABELS_VIEW = ArtifactView(
     "phase_labels",
     ("tail_id", "flight_id", "timestamp_utc", "phase_label"),
@@ -218,7 +234,34 @@ FUSED_GRAPH_VIEW = ArtifactView(
 )
 CALIBRATED_SCORES_VIEW = ArtifactView(
     "window_scores_calibrated",
-    ("tail_id", "flight_id", "win_id", "date_utc", "global_score", "severity", "emit_ready"),
+    (
+        "tail_id",
+        "flight_id",
+        "win_id",
+        "date_utc",
+        "global_score",
+        "p_value",
+        "severity",
+        "emit_ready",
+    ),
+    ("tail_id", "flight_id", "win_id"),
+)
+RAW_SCORES_VIEW = ArtifactView(
+    "window_scores_raw",
+    (
+        "tail_id",
+        "flight_id",
+        "win_id",
+        "date_utc",
+        "phase_id_detected",
+        "phase_state_detected",
+        "phase_confidence_detected",
+        "distance_to_centroid_detected",
+        "global_score",
+        "severity",
+        "dominant_subsystem_id",
+        "dominant_score_component",
+    ),
     ("tail_id", "flight_id", "win_id"),
 )
 ANOMALY_WINDOW_VIEW = ArtifactView(
@@ -248,6 +291,7 @@ VALIDATION_ARTIFACT_VIEWS = (
     EVENTS_VIEW,
     DETECTED_EVENT_VIEW,
     WINDOWS_VIEW,
+    WINDOWS_SCORE_VIEW,
     PHASE_LABELS_VIEW,
     PHASE_WINDOWS_VIEW,
     HIERARCHY_SENSOR_MAP_VIEW,
@@ -258,6 +302,7 @@ VALIDATION_ARTIFACT_VIEWS = (
     LAG_GRAPH_VIEW,
     PRECISION_GRAPH_VIEW,
     FUSED_GRAPH_VIEW,
+    RAW_SCORES_VIEW,
     CALIBRATED_SCORES_VIEW,
     ANOMALY_WINDOW_VIEW,
     ANOMALY_TELEMETRY_VIEW,
@@ -407,7 +452,8 @@ def _build_coupling_validation_summary(
 def _build_misbehavior_score_summary(tables: RunArtifactBundle) -> dict[str, Any]:
     return validate_scores_against_misbehavior_windows(
         raw_telemetry_df=tables.pandas(RAW_TELEMETRY_SCORE_VIEW),
-        windows_df=tables.pandas(WINDOWS_VIEW),
+        windows_df=tables.pandas(WINDOWS_SCORE_VIEW),
+        raw_scores_df=tables.pandas(RAW_SCORES_VIEW),
         calibrated_scores_df=tables.pandas(CALIBRATED_SCORES_VIEW),
     )
 
@@ -449,6 +495,10 @@ def build_fault_score_summary_from_misbehavior(summary: dict[str, Any]) -> dict[
         "median_fault_window_score": summary.get("median_misbehavior_window_score"),
         "median_detection_latency_seconds": summary.get("median_detection_latency_seconds"),
         "median_emit_ready_latency_seconds": summary.get("median_emit_ready_latency_seconds"),
+        "raw_score_validation": summary.get("raw_score_validation"),
+        "calibrated_score_validation": summary.get("calibrated_score_validation"),
+        "emission_validation": summary.get("emission_validation"),
+        "score_window_diagnostics": summary.get("score_window_diagnostics", []),
         "fault_windows": _remap_windows(summary.get("misbehavior_windows", [])),
     }
 
@@ -478,23 +528,7 @@ def _build_misbehavior_attribution_summary(tables: RunArtifactBundle) -> dict[st
 
 
 def build_fault_attribution_summary_from_misbehavior(summary: dict[str, Any]) -> dict[str, Any]:
-    if summary.get("status") != "ok":
-        return summary
-    return {
-        "status": "ok",
-        "fault_window_count": int(summary.get("misbehavior_window_count", 0)),
-        "dominant_subsystem_match_count": int(summary.get("dominant_subsystem_match_count", 0)),
-        "dominant_subsystem_mappable_count": int(summary.get("dominant_subsystem_mappable_count", 0)),
-        "dominant_subsystem_match_rate": summary.get("dominant_subsystem_match_rate"),
-        "dominant_subsystem_mappable_rate": summary.get("dominant_subsystem_mappable_rate"),
-        "telemetry_parameter_match_count": int(summary.get("telemetry_parameter_match_count", 0)),
-        "event_parameter_match_count": int(summary.get("event_parameter_match_count", 0)),
-        "telemetry_parameter_match_rate": summary.get("telemetry_parameter_match_rate"),
-        "event_parameter_match_rate": summary.get("event_parameter_match_rate"),
-        "telemetry_truth_subsystem_present_rate": summary.get("telemetry_truth_subsystem_present_rate"),
-        "event_truth_subsystem_present_rate": summary.get("event_truth_subsystem_present_rate"),
-        "fault_windows": _remap_windows(summary.get("misbehavior_windows", [])),
-    }
+    return build_fault_attribution_summary_from_misbehavior_summary(summary)
 
 
 def write_validation_reports(

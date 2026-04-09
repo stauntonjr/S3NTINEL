@@ -60,3 +60,5 @@ This package answers: given an anomalous window, which subsystem, parameters, an
 - Use `misbehavior` for simulator/source truth.
 - `fault` remains a deprecated compatibility alias in validator/report wrappers.
 - Use `anomaly` for the downstream attribution domain.
+- Attribution validation uses the same window-local strict-overlap semantics as score validation, so short emitted windows can still be credited against long truth intervals when they are well-aligned.
+- Attribution validation now also emits a dedicated `parameter_localization_validation` block plus per-truth attributed-parameter name lists, so reports make exact parameter localization visible even when subsystem localization stays coarse.

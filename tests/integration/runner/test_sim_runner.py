@@ -818,6 +818,16 @@ def test_runner_fault_wrappers_preserve_extended_validation_metrics():
         "median_misbehavior_window_score": 3.2,
         "median_detection_latency_seconds": 1.5,
         "median_emit_ready_latency_seconds": 2.5,
+        "raw_score_validation": {
+            "window_count": 10,
+        },
+        "calibrated_score_validation": {
+            "truth_window_recall_by_top_k_calibrated_rarity": {"any_overlap": {"top_5": 0.5}},
+        },
+        "emission_validation": {
+            "blocked_candidate_window_count_by_p_value_threshold": {"p_le_0p05": 1},
+        },
+        "score_window_diagnostics": [{"win_id": 7}],
         "misbehavior_windows": [],
     }
     misbehavior_attribution_summary = {
@@ -833,6 +843,15 @@ def test_runner_fault_wrappers_preserve_extended_validation_metrics():
         "event_parameter_match_rate": 0.5,
         "telemetry_truth_subsystem_present_rate": 1.0,
         "event_truth_subsystem_present_rate": 0.5,
+        "parameter_localization_validation": {
+            "truth_window_count": 2,
+            "exact_parameter_match_count_by_source": {
+                "telemetry": 2,
+                "event": 1,
+                "any": 2,
+                "both": 1,
+            },
+        },
         "misbehavior_windows": [],
     }
 
@@ -843,6 +862,18 @@ def test_runner_fault_wrappers_preserve_extended_validation_metrics():
     assert fault_score_summary["emit_ready_fault_window_rate"] == 0.5
     assert fault_score_summary["median_detection_latency_seconds"] == 1.5
     assert fault_score_summary["median_emit_ready_latency_seconds"] == 2.5
+    assert fault_score_summary["raw_score_validation"]["window_count"] == 10
+    assert fault_score_summary["calibrated_score_validation"]["truth_window_recall_by_top_k_calibrated_rarity"]["any_overlap"][
+        "top_5"
+    ] == 0.5
+    assert fault_score_summary["emission_validation"]["blocked_candidate_window_count_by_p_value_threshold"]["p_le_0p05"] == 1
+    assert fault_score_summary["score_window_diagnostics"] == [{"win_id": 7}]
     assert fault_attribution_summary["dominant_subsystem_match_count"] == 1
     assert fault_attribution_summary["telemetry_parameter_match_count"] == 2
     assert fault_attribution_summary["event_parameter_match_count"] == 1
+    assert fault_attribution_summary["parameter_localization_validation"]["exact_parameter_match_count_by_source"] == {
+        "telemetry": 2,
+        "event": 1,
+        "any": 2,
+        "both": 1,
+    }

@@ -8,6 +8,12 @@ from typing import TYPE_CHECKING
 from libs.io.schemas.scoring import WINDOW_SCORES_CALIBRATED_SCHEMA, WINDOW_SCORES_RAW_SCHEMA
 from libs.pyspark import Table
 
+EMIT_READY_P_VALUE_THRESHOLD = 0.10
+HIGH_SEVERITY_LABEL = "high"
+LOW_SEVERITY_LABEL = "low"
+MEDIUM_SEVERITY_LABEL = "medium"
+NORMAL_SEVERITY_LABEL = "normal"
+
 
 @dataclass(frozen=True)
 class WindowScoresRawTable(Table):
@@ -221,6 +227,20 @@ class WindowScoresCalibratedTable(Table):
     def spark_schema(cls):
         return WINDOW_SCORES_CALIBRATED_SCHEMA()
 
+    @staticmethod
+    def emit_ready_expr():
+        from pyspark.sql import functions as F
+
+        severity = F.lower(F.coalesce(F.col("severity"), F.lit(NORMAL_SEVERITY_LABEL)))
+        return (
+            F.col("warm")
+            & F.col("p_value").isNotNull()
+            & (
+                severity.isin(MEDIUM_SEVERITY_LABEL, HIGH_SEVERITY_LABEL)
+                | ((severity == F.lit(LOW_SEVERITY_LABEL)) & (F.col("p_value") <= F.lit(float(EMIT_READY_P_VALUE_THRESHOLD))))
+            )
+        )
+
     @classmethod
     def from_scores(cls, scores_df: "DataFrame", *, min_warm: int) -> "WindowScoresCalibratedTable":
         from pyspark.sql import functions as F
@@ -236,13 +256,17 @@ class WindowScoresCalibratedTable(Table):
             .withColumn("warm", F.col("phase_count") >= F.lit(int(min_warm)))
         )
 
-        with_pvalue = enriched.withColumn("empirical_tail", F.cume_dist().over(score_desc_window)).withColumn(
-            "p_value",
-            F.when(F.col("warm"), F.col("empirical_tail").cast("double")).otherwise(F.lit(None).cast("double")),
+        calibrated = (
+            enriched.withColumn("empirical_tail", F.cume_dist().over(score_desc_window))
+            .withColumn(
+                "p_value",
+                F.when(F.col("warm"), F.col("empirical_tail").cast("double")).otherwise(F.lit(None).cast("double")),
+            )
+            .withColumn("emit_ready", cls.emit_ready_expr())
         )
 
         return cls(
-            dataframe=with_pvalue.select(
+            dataframe=calibrated.select(
                 "tail_id",
                 "flight_id",
                 "win_id",
@@ -260,7 +284,7 @@ class WindowScoresCalibratedTable(Table):
                 "subsystem_scores",
                 "score_component_scores",
                 "warm",
-                F.col("warm").alias("emit_ready"),
+                "emit_ready",
                 F.lit(int(min_warm)).alias("min_warm"),
                 "date_utc",
             )

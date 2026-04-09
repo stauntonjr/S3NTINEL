@@ -9,11 +9,52 @@ import pandas as pd
 
 from libs.scoring.validator import (
     STRICT_MAX_EARLY_LEAD_SECONDS,
-    STRICT_TRUTH_COVERAGE_MIN_RATIO,
+    STRICT_WINDOW_COVERAGE_MIN_RATIO,
     build_truth_window_overlap_table,
     extract_fault_truth_windows,
     extract_misbehavior_truth_windows,
+    strict_overlap_mask,
 )
+
+
+def _empty_parameter_localization_validation() -> dict[str, Any]:
+    return {
+        "status": "ok",
+        "truth_window_count": 0,
+        "exact_parameter_match_count_by_source": {
+            "telemetry": 0,
+            "event": 0,
+            "any": 0,
+            "both": 0,
+        },
+        "exact_parameter_match_rate_by_source": {
+            "telemetry": None,
+            "event": None,
+            "any": None,
+            "both": None,
+        },
+        "truth_subsystem_present_count_by_source": {
+            "telemetry": 0,
+            "event": 0,
+        },
+        "truth_subsystem_present_rate_by_source": {
+            "telemetry": None,
+            "event": None,
+        },
+        "parameter_localization_cases": [],
+    }
+
+
+def _sorted_non_empty_string_values(df: pd.DataFrame, column: str) -> list[str]:
+    if df.empty or column not in df.columns:
+        return []
+    return sorted(
+        {
+            str(value)
+            for value in df[column].fillna("").astype(str).tolist()
+            if str(value)
+        }
+    )
 
 
 @dataclass(frozen=True)
@@ -105,42 +146,44 @@ class _TruthWindowAttributionMatch:
             start_field=truth_start_field,
             end_field=truth_end_field,
         )
-        qualifying_overlap_df = (
-            overlap_df[
-                (overlap_df["truth_coverage_ratio"].fillna(0.0).astype(float) >= float(STRICT_TRUTH_COVERAGE_MIN_RATIO))
-                & (
-                    overlap_df["detection_latency_seconds"].fillna(float("inf")).astype(float)
-                    >= float(-STRICT_MAX_EARLY_LEAD_SECONDS)
-                )
-            ]
-            if not overlap_df.empty
-            else overlap_df.copy()
-        )
+        qualifying_overlap_df = overlap_df[strict_overlap_mask(overlap_df)] if not overlap_df.empty else overlap_df.copy()
         qualifying_overlap_df = qualifying_overlap_df.sort_values(
             ["t_start", "truth_coverage_ratio", "win_id"],
             ascending=[True, False, True],
             kind="mergesort",
         )
-        primary_win_id = (
-            int(qualifying_overlap_df["win_id"].iloc[0])
+        qualifying_win_ids = (
+            qualifying_overlap_df["win_id"].dropna().astype(int).drop_duplicates().tolist()
             if not qualifying_overlap_df.empty and "win_id" in qualifying_overlap_df.columns
+            else []
+        )
+        primary_win_id = (
+            int(qualifying_win_ids[0])
+            if qualifying_win_ids
             else None
         )
         window_hits = anomaly_window_attribution_df[
             (anomaly_window_attribution_df.get("tail_id", pd.Series(dtype="object")).astype(str) == str(truth["tail_id"]))
             & (anomaly_window_attribution_df.get("flight_id", pd.Series(dtype="object")).astype(str) == str(truth["flight_id"]))
-            & (anomaly_window_attribution_df.get("win_id", pd.Series(dtype="int")) == primary_win_id)
+            & (anomaly_window_attribution_df.get("win_id", pd.Series(dtype="int")).isin(qualifying_win_ids))
         ] if not anomaly_window_attribution_df.empty else pd.DataFrame()
         telemetry_hits = anomaly_telemetry_attribution_df[
             (anomaly_telemetry_attribution_df.get("tail_id", pd.Series(dtype="object")).astype(str) == str(truth["tail_id"]))
             & (anomaly_telemetry_attribution_df.get("flight_id", pd.Series(dtype="object")).astype(str) == str(truth["flight_id"]))
-            & (anomaly_telemetry_attribution_df.get("win_id", pd.Series(dtype="int")) == primary_win_id)
+            & (anomaly_telemetry_attribution_df.get("win_id", pd.Series(dtype="int")).isin(qualifying_win_ids))
         ] if not anomaly_telemetry_attribution_df.empty else pd.DataFrame()
         event_hits = anomaly_event_attribution_df[
             (anomaly_event_attribution_df.get("tail_id", pd.Series(dtype="object")).astype(str) == str(truth["tail_id"]))
             & (anomaly_event_attribution_df.get("flight_id", pd.Series(dtype="object")).astype(str) == str(truth["flight_id"]))
-            & (anomaly_event_attribution_df.get("win_id", pd.Series(dtype="int")) == primary_win_id)
+            & (anomaly_event_attribution_df.get("win_id", pd.Series(dtype="int")).isin(qualifying_win_ids))
         ] if not anomaly_event_attribution_df.empty else pd.DataFrame()
+        matched_window_ids = (
+            window_hits.get("win_id", pd.Series(dtype="int")).dropna().astype(int).drop_duplicates().tolist()
+            if not window_hits.empty
+            else []
+        )
+        telemetry_parameter_names = _sorted_non_empty_string_values(telemetry_hits, "parameter_name")
+        event_parameter_names = _sorted_non_empty_string_values(event_hits, "parameter_name")
 
         truth_subsystem = str(truth["subsystem_id"])
         truth_parameter = str(truth["parameter_name"])
@@ -151,15 +194,17 @@ class _TruthWindowAttributionMatch:
             dominant_detected = str(window_hits["dominant_subsystem_id"].fillna("").astype(str).mode().iloc[0] or "")
             dominant_subsystem_truth, dominant_subsystem_mappable = subsystem_truth_map.resolve(dominant_detected)
             dominant_subsystem_match = bool(dominant_subsystem_mappable and dominant_subsystem_truth == truth_subsystem)
+        telemetry_parameter_match = bool(truth_parameter in telemetry_parameter_names)
+        event_parameter_match = bool(truth_parameter in event_parameter_names)
 
         telemetry_truth_subsystems = {
             truth_parameter_to_subsystem.get(str(parameter_name))
-            for parameter_name in telemetry_hits.get("parameter_name", pd.Series(dtype="object")).fillna("").astype(str).tolist()
+            for parameter_name in telemetry_parameter_names
         }
         telemetry_truth_subsystems.discard(None)
         event_truth_subsystems = {
             truth_parameter_to_subsystem.get(str(parameter_name))
-            for parameter_name in event_hits.get("parameter_name", pd.Series(dtype="object")).fillna("").astype(str).tolist()
+            for parameter_name in event_parameter_names
         }
         event_truth_subsystems.discard(None)
 
@@ -171,20 +216,19 @@ class _TruthWindowAttributionMatch:
             "parameter_name": truth_parameter,
             "overlapping_window_count": int(len(qualifying_overlap_df)),
             "primary_win_id": primary_win_id,
+            "matched_attribution_window_count": int(len(matched_window_ids)),
             "dominant_subsystem_match": bool(dominant_subsystem_match),
             "dominant_subsystem_mappable": bool(dominant_subsystem_mappable),
             "dominant_subsystem_truth": dominant_subsystem_truth,
-            "telemetry_parameter_match": bool(
-                not telemetry_hits.empty
-                and (telemetry_hits["parameter_name"].fillna("").astype(str) == truth_parameter).any()
-            ),
-            "event_parameter_match": bool(
-                not event_hits.empty
-                and (event_hits["parameter_name"].fillna("").astype(str) == truth_parameter).any()
-            ),
+            "telemetry_parameter_match": telemetry_parameter_match,
+            "event_parameter_match": event_parameter_match,
+            "any_parameter_match": bool(telemetry_parameter_match or event_parameter_match),
+            "both_sources_parameter_match": bool(telemetry_parameter_match and event_parameter_match),
             "telemetry_truth_subsystem_present": bool(truth_subsystem in telemetry_truth_subsystems),
             "event_truth_subsystem_present": bool(truth_subsystem in event_truth_subsystems),
-            "strict_truth_coverage_threshold": float(STRICT_TRUTH_COVERAGE_MIN_RATIO),
+            "telemetry_attributed_parameter_names": telemetry_parameter_names,
+            "event_attributed_parameter_names": event_parameter_names,
+            "strict_window_coverage_threshold": float(STRICT_WINDOW_COVERAGE_MIN_RATIO),
             "strict_max_early_lead_seconds": float(STRICT_MAX_EARLY_LEAD_SECONDS),
         }
         if "misbehavior_family_label" in truth:
@@ -219,6 +263,102 @@ def _truth_parameter_to_subsystem_map(hierarchy_label_df: pd.DataFrame | None) -
     }
 
 
+def _build_parameter_localization_validation(per_truth_df: pd.DataFrame) -> dict[str, Any]:
+    if per_truth_df.empty:
+        return _empty_parameter_localization_validation()
+
+    telemetry_match = per_truth_df["telemetry_parameter_match"].fillna(False).astype(bool)
+    event_match = per_truth_df["event_parameter_match"].fillna(False).astype(bool)
+    any_match = per_truth_df["any_parameter_match"].fillna(False).astype(bool)
+    both_match = per_truth_df["both_sources_parameter_match"].fillna(False).astype(bool)
+    telemetry_truth_subsystem_present = per_truth_df["telemetry_truth_subsystem_present"].fillna(False).astype(bool)
+    event_truth_subsystem_present = per_truth_df["event_truth_subsystem_present"].fillna(False).astype(bool)
+    case_columns = [
+        "tail_id",
+        "flight_id",
+        "fault_window_id",
+        "misbehavior_window_id",
+        "subsystem_id",
+        "parameter_name",
+        "overlapping_window_count",
+        "matched_attribution_window_count",
+        "telemetry_parameter_match",
+        "event_parameter_match",
+        "any_parameter_match",
+        "both_sources_parameter_match",
+        "telemetry_truth_subsystem_present",
+        "event_truth_subsystem_present",
+        "telemetry_attributed_parameter_names",
+        "event_attributed_parameter_names",
+    ]
+    available_case_columns = [column for column in case_columns if column in per_truth_df.columns]
+    cases = (
+        per_truth_df[available_case_columns]
+        .sort_values(
+            [column for column in ("fault_window_id", "misbehavior_window_id", "parameter_name") if column in available_case_columns],
+            kind="mergesort",
+        )
+        .to_dict(orient="records")
+    )
+    return {
+        "status": "ok",
+        "truth_window_count": int(len(per_truth_df)),
+        "exact_parameter_match_count_by_source": {
+            "telemetry": int(telemetry_match.sum()),
+            "event": int(event_match.sum()),
+            "any": int(any_match.sum()),
+            "both": int(both_match.sum()),
+        },
+        "exact_parameter_match_rate_by_source": {
+            "telemetry": float(telemetry_match.mean()),
+            "event": float(event_match.mean()),
+            "any": float(any_match.mean()),
+            "both": float(both_match.mean()),
+        },
+        "truth_subsystem_present_count_by_source": {
+            "telemetry": int(telemetry_truth_subsystem_present.sum()),
+            "event": int(event_truth_subsystem_present.sum()),
+        },
+        "truth_subsystem_present_rate_by_source": {
+            "telemetry": float(telemetry_truth_subsystem_present.mean()),
+            "event": float(event_truth_subsystem_present.mean()),
+        },
+        "parameter_localization_cases": cases,
+    }
+
+
+def build_fault_attribution_summary_from_misbehavior_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    if summary.get("status") != "ok":
+        return summary
+    return {
+        "status": "ok",
+        "fault_window_count": int(summary.get("misbehavior_window_count", 0)),
+        "dominant_subsystem_match_count": int(summary.get("dominant_subsystem_match_count", 0)),
+        "dominant_subsystem_mappable_count": int(summary.get("dominant_subsystem_mappable_count", 0)),
+        "dominant_subsystem_match_rate": summary.get("dominant_subsystem_match_rate"),
+        "dominant_subsystem_mappable_rate": summary.get("dominant_subsystem_mappable_rate"),
+        "telemetry_parameter_match_count": int(summary.get("telemetry_parameter_match_count", 0)),
+        "event_parameter_match_count": int(summary.get("event_parameter_match_count", 0)),
+        "telemetry_parameter_match_rate": summary.get("telemetry_parameter_match_rate"),
+        "event_parameter_match_rate": summary.get("event_parameter_match_rate"),
+        "telemetry_truth_subsystem_present_rate": summary.get("telemetry_truth_subsystem_present_rate"),
+        "event_truth_subsystem_present_rate": summary.get("event_truth_subsystem_present_rate"),
+        "parameter_localization_validation": summary.get(
+            "parameter_localization_validation",
+            _empty_parameter_localization_validation(),
+        ),
+        "fault_windows": [
+            {
+                **row,
+                "fault_window_id": row.get("fault_window_id", row.get("misbehavior_window_id", "")),
+                "fault_family_label": row.get("fault_family_label", ""),
+                "fault_type": row.get("fault_type", ""),
+            }
+            for row in summary.get("misbehavior_windows", [])
+        ],
+    }
+
+
 def validate_attribution_against_misbehavior_truth(
     *,
     raw_telemetry_df: pd.DataFrame,
@@ -234,9 +374,18 @@ def validate_attribution_against_misbehavior_truth(
         return {
             "status": "ok",
             "misbehavior_window_count": 0,
+            "dominant_subsystem_match_count": 0,
+            "dominant_subsystem_mappable_count": 0,
             "dominant_subsystem_match_rate": None,
+            "dominant_subsystem_mappable_rate": None,
+            "telemetry_parameter_match_count": 0,
+            "event_parameter_match_count": 0,
             "telemetry_parameter_match_rate": None,
             "event_parameter_match_rate": None,
+            "telemetry_truth_subsystem_present_rate": None,
+            "event_truth_subsystem_present_rate": None,
+            "parameter_localization_validation": _empty_parameter_localization_validation(),
+            "misbehavior_windows": [],
         }
 
     windows = windows_df.copy()
@@ -272,8 +421,16 @@ def validate_attribution_against_misbehavior_truth(
     misbehavior_window_count = int(len(per_truth_df))
     dominant_subsystem_match_count = int(per_truth_df["dominant_subsystem_match"].sum()) if not per_truth_df.empty else 0
     dominant_subsystem_mappable_count = int(per_truth_df["dominant_subsystem_mappable"].sum()) if not per_truth_df.empty else 0
-    telemetry_parameter_match_count = int(per_truth_df["telemetry_parameter_match"].sum()) if not per_truth_df.empty else 0
-    event_parameter_match_count = int(per_truth_df["event_parameter_match"].sum()) if not per_truth_df.empty else 0
+    parameter_localization_validation = _build_parameter_localization_validation(per_truth_df)
+    exact_parameter_match_count_by_source = dict(
+        parameter_localization_validation.get("exact_parameter_match_count_by_source") or {}
+    )
+    exact_parameter_match_rate_by_source = dict(
+        parameter_localization_validation.get("exact_parameter_match_rate_by_source") or {}
+    )
+    truth_subsystem_present_rate_by_source = dict(
+        parameter_localization_validation.get("truth_subsystem_present_rate_by_source") or {}
+    )
     return {
         "status": "ok",
         "misbehavior_window_count": misbehavior_window_count,
@@ -283,12 +440,13 @@ def validate_attribution_against_misbehavior_truth(
             float(mappable["dominant_subsystem_match"].mean()) if not mappable.empty else 0.0
         ) if misbehavior_window_count > 0 else None,
         "dominant_subsystem_mappable_rate": float(per_truth_df["dominant_subsystem_mappable"].mean()) if not per_truth_df.empty else None,
-        "telemetry_parameter_match_count": telemetry_parameter_match_count,
-        "event_parameter_match_count": event_parameter_match_count,
-        "telemetry_parameter_match_rate": float(per_truth_df["telemetry_parameter_match"].mean()) if not per_truth_df.empty else None,
-        "event_parameter_match_rate": float(per_truth_df["event_parameter_match"].mean()) if not per_truth_df.empty else None,
-        "telemetry_truth_subsystem_present_rate": float(per_truth_df["telemetry_truth_subsystem_present"].mean()) if not per_truth_df.empty else None,
-        "event_truth_subsystem_present_rate": float(per_truth_df["event_truth_subsystem_present"].mean()) if not per_truth_df.empty else None,
+        "telemetry_parameter_match_count": int(exact_parameter_match_count_by_source.get("telemetry", 0)),
+        "event_parameter_match_count": int(exact_parameter_match_count_by_source.get("event", 0)),
+        "telemetry_parameter_match_rate": exact_parameter_match_rate_by_source.get("telemetry"),
+        "event_parameter_match_rate": exact_parameter_match_rate_by_source.get("event"),
+        "telemetry_truth_subsystem_present_rate": truth_subsystem_present_rate_by_source.get("telemetry"),
+        "event_truth_subsystem_present_rate": truth_subsystem_present_rate_by_source.get("event"),
+        "parameter_localization_validation": parameter_localization_validation,
         "misbehavior_windows": [match.payload for match in matches],
     }
 
@@ -303,7 +461,8 @@ def validate_attribution_against_fault_truth(
     hierarchy_sensor_map_df: pd.DataFrame | None = None,
     hierarchy_label_df: pd.DataFrame | None = None,
 ) -> dict[str, Any]:
-    summary = validate_attribution_against_misbehavior_truth(
+    return build_fault_attribution_summary_from_misbehavior_summary(
+        validate_attribution_against_misbehavior_truth(
         raw_telemetry_df=raw_telemetry_df,
         windows_df=windows_df,
         anomaly_window_attribution_df=anomaly_window_attribution_df,
@@ -311,29 +470,5 @@ def validate_attribution_against_fault_truth(
         anomaly_event_attribution_df=anomaly_event_attribution_df,
         hierarchy_sensor_map_df=hierarchy_sensor_map_df,
         hierarchy_label_df=hierarchy_label_df,
+        )
     )
-    if summary.get("status") != "ok":
-        return summary
-    return {
-        "status": "ok",
-        "fault_window_count": int(summary.get("misbehavior_window_count", 0)),
-        "dominant_subsystem_match_count": int(summary.get("dominant_subsystem_match_count", 0)),
-        "dominant_subsystem_mappable_count": int(summary.get("dominant_subsystem_mappable_count", 0)),
-        "dominant_subsystem_match_rate": summary.get("dominant_subsystem_match_rate"),
-        "dominant_subsystem_mappable_rate": summary.get("dominant_subsystem_mappable_rate"),
-        "telemetry_parameter_match_count": int(summary.get("telemetry_parameter_match_count", 0)),
-        "event_parameter_match_count": int(summary.get("event_parameter_match_count", 0)),
-        "telemetry_parameter_match_rate": summary.get("telemetry_parameter_match_rate"),
-        "event_parameter_match_rate": summary.get("event_parameter_match_rate"),
-        "telemetry_truth_subsystem_present_rate": summary.get("telemetry_truth_subsystem_present_rate"),
-        "event_truth_subsystem_present_rate": summary.get("event_truth_subsystem_present_rate"),
-        "fault_windows": [
-            {
-                **row,
-                "fault_window_id": row.get("fault_window_id", row["misbehavior_window_id"]),
-                "fault_family_label": row.get("fault_family_label", ""),
-                "fault_type": row.get("fault_type", ""),
-            }
-            for row in summary.get("misbehavior_windows", [])
-        ],
-    }
