@@ -199,17 +199,29 @@ def test_docs_readme_lists_doc_subdirectories() -> None:
 
 def test_plan_docs_have_index_and_status_headers() -> None:
     plans_index = _read_repo_file("docs/plans/README.md")
+    assert "libs/README.md" in plans_index
+
+    library_plans_index = _read_repo_file("docs/plans/libs/README.md")
     for expected_plan in [
-        "anomaly_modeling_next_steps.md",
-        "simulation_medium_term_plan.md",
-        "phaseplan_2.1.md",
-        "behavior_simulation_improvements.md",
-        "v2_1_notes.md",
+        "anomaly.md",
+        "simulation.md",
+        "phase.md",
+        "windows.md",
+    ]:
+        assert expected_plan in library_plans_index, f"docs/plans/libs/README.md is missing plan reference: {expected_plan}"
+    for expected_plan in [
+        "anomaly.md",
+        "simulation.md",
+        "phase.md",
+        "windows.md",
     ]:
         assert expected_plan in plans_index, f"docs/plans/README.md is missing plan reference: {expected_plan}"
 
+    root_plan_files = sorted(path.name for path in (REPO_ROOT / "docs" / "plans").glob("*.md"))
+    assert root_plan_files == ["README.md"], f"docs/plans root should only contain README.md, found: {root_plan_files}"
+
     plans_dir = REPO_ROOT / "docs" / "plans"
-    for path in sorted(plans_dir.glob("*.md")):
+    for path in sorted(plans_dir.rglob("*.md")):
         if path.name == "README.md":
             continue
         content = path.read_text()
@@ -220,7 +232,7 @@ def test_plan_docs_have_index_and_status_headers() -> None:
 
 
 def test_simulation_medium_term_plan_does_not_reference_removed_duplicate_paths() -> None:
-    content = _read_repo_file("docs/plans/simulation_medium_term_plan.md")
+    content = _read_repo_file("docs/plans/libs/simulation.md")
     for stale_path in [
         "libs/scoring/pipeline.py",
         "pandas and Spark boundaries are still duplicated across",

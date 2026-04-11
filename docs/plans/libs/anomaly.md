@@ -1,10 +1,17 @@
-# Anomaly Modeling Next Steps
+# Anomaly Library Plan
 
 Status: Plan
 Authority: Non-authoritative roadmap. Use package READMEs and `docs/current/` for current behavior.
 
 This plan captures the next anomaly-focused work after the single-model-path
 refactor, anomaly-channel expansion, and recent localization experiments.
+
+Primary library owner:
+- `libs/anomaly`
+
+Shared library dependencies covered here:
+- `libs/scoring`
+- `libs/graph`
 
 For current implementation ownership, prefer:
 - [libs/scoring/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/scoring/README.md)

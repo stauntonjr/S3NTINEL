@@ -1,4 +1,4 @@
-# Simulation Medium-Term Plan
+# Simulation Library Plan
 
 Status: Plan
 Authority: Non-authoritative roadmap. Use package READMEs and `docs/current/` for current behavior.
@@ -19,6 +19,16 @@ The standing priorities are:
 2. improve simulation realism and feature depth
 3. keep the hot path bounded and performant
 4. keep phase detection and anomaly channels moving forward together
+
+Related library coverage:
+
+- `libs/simulation`
+  - primary owner of this plan
+- `libs/behavior`
+  - current behavior-family observability work is simulator-driven and is tracked here
+- `libs/phase`
+  - coordinated phase-simulation semantics are tracked here and in
+    [phase.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/phase.md)
 
 ## Current State
 
@@ -149,8 +159,7 @@ Each golden scenario should eventually include:
 - expected graph/phase/anomaly downstream signals
 
 See also:
-- [phaseplan_2.1.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/phaseplan_2.1.md)
-- [behavior_simulation_improvements.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/behavior_simulation_improvements.md)
+- [phase.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/phase.md)
 
 ## B. Golden Scenarios And Validation Discipline
 
@@ -185,6 +194,52 @@ When realism changes land, check:
 - anomaly detection quality
 - parameter localization quality
 - subsystem/module localization when relevant
+
+## D. Behavior-Family Observability
+
+### Objective
+
+Make simulated behavior families more externally observable in the emitted
+telemetry so downstream profiling and event interpretation are limited by model
+quality rather than waveform ambiguity.
+
+### Current ambiguity
+
+The strongest current ambiguity is:
+
+- `regulated` versus `inertial`
+
+And unary `tracking` should still be treated cautiously until both simulator and
+profiler expose a real tracked-signal relationship.
+
+### Near-term rules
+
+- do not treat unary `tracking` recovery as the main near-term benchmark target
+- prefer observable waveform semantics over hidden internal mechanism labels
+- use stronger simulator excitation before relabeling families
+
+### Recommended simulator changes
+
+- make `regulated` channels visibly corrective:
+  - sharper setpoint changes
+  - load steps or disturbances with return-to-band behavior
+  - clearer recovery signatures
+- make `inertial` channels visibly lagged:
+  - measurable response delay
+  - smoother ramp-and-settle structure
+  - less controller-like correction
+- stop over-smoothing latent drivers when that erases the distinction between
+  control and lag
+
+### Optional benchmark split
+
+If needed, split:
+
+- internal mechanism semantics
+- observable waveform semantics
+
+so simulator internals can remain rich while unary behavior benchmarks stay
+scientifically defensible.
 
 ## C. Remaining Performance And Hot-Path Profiling
 

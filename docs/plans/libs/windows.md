@@ -1,4 +1,4 @@
-# V2.1 Notes: Rate- and Type-Aware Representation
+# Windows Library Plan
 
 Status: Plan
 Authority: Non-authoritative roadmap. Use package READMEs and `docs/current/` for current behavior.

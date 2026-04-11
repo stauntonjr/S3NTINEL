@@ -13,30 +13,33 @@ Do not use plans as the source of truth for current behavior. For that, prefer:
 - package READMEs near the code
 - current code, schemas, contracts, and validation outputs
 
-## Active Plans
+## Structure
 
-- [anomaly_modeling_next_steps.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/anomaly_modeling_next_steps.md)
-  - current next-step plan for anomaly scoring, localization, and hierarchy decision gates
-- [simulation_medium_term_plan.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/simulation_medium_term_plan.md)
-  - medium-term simulation, realism, and performance sequencing
-- [phaseplan_2.1.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/phaseplan_2.1.md)
-  - proposed next phase-simulation model for schedule and envelope semantics
+- `libs/`
+  - library-owned plan docs mirroring the `libs/` repo structure
+  - use [libs/README.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/README.md) as the main index
+- avoid flat topic files at this root level
+- add future repo-mirrored subtrees only when there is a real ownership boundary, for example `pipelines/` or `scripts/`
 
-## Targeted Proposal Docs
+## Current Plan Entry Points
 
-- [behavior_simulation_improvements.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/behavior_simulation_improvements.md)
-  - focused simulator changes to make behavior families more observable
-
-## Deferred Notes
-
-- [v2_1_notes.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/v2_1_notes.md)
-  - deferred continuous representation ideas for a later modeling pass
+- [libs/README.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/README.md)
+  - library-by-library plan index that mirrors `libs/`
+- [libs/anomaly.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/anomaly.md)
+  - current anomaly, scoring, and hierarchy-decision next steps
+- [libs/simulation.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/simulation.md)
+  - current simulation, realism, and performance next steps
+- [libs/phase.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/phase.md)
+  - current phase-simulation next step
+- [libs/windows.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/windows.md)
+  - deferred windows representation note
 
 ## Maintenance Rules
 
 - every plan doc should include:
   - `Status: Plan`
   - `Authority: Non-authoritative roadmap. Use package READMEs and docs/current/ for current behavior.`
+- keep plan artifacts organized by repo ownership instead of flat topic piles
 - update an existing plan before creating a second one on the same topic
 - when a planned change is implemented, move the authoritative semantics into code, contracts, package READMEs, or `docs/current/`
 - remove or clearly retire plans that no longer describe real next steps

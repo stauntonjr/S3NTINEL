@@ -1,9 +1,9 @@
-# Phase Plan 2.1
+# Phase Library Plan
 
 Status: Plan
 Authority: Non-authoritative roadmap. Use package READMEs and `docs/current/` for current behavior.
 
-Plan for phase simulation in the current object model:
+This plan covers the next phase-focused simulation work in the current object model.
 
 For current implementation ownership, see:
 - [libs/simulation/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/simulation/README.md)
