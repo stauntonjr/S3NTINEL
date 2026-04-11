@@ -4,29 +4,31 @@ S3NTINEL stands for Structural Streaming Sparse Event Nexus for Telemetry Infere
 
 ## Active architecture
 
-The active path is now the V2 pipeline. Use [v2_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/v2_architecture.md) as the source of truth for current fitting/inference semantics.
-Use [theory_foundations.md](/home/jrs/code/S3NTINEL/sentinel/docs/theory_foundations.md) for the mathematical/statistical interpretation of the active representations, graph weights, and scoring quantities.
-Use [glossary.md](/home/jrs/code/S3NTINEL/sentinel/docs/glossary.md) for the active code/data taxonomy and naming rules.
-Use [avionics_simulation_guidelines.md](/home/jrs/code/S3NTINEL/sentinel/docs/avionics_simulation_guidelines.md) for domain guidance on avionics-system behavior, coupling, and simulation inputs.
-Use [artifact_replay_design.md](/home/jrs/code/S3NTINEL/sentinel/docs/artifact_replay_design.md) for artifact persistence, replay, cache, and MLflow lineage design.
-Use [simulation_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/simulation_architecture.md) for the proposed next simulation architecture and extensibility model.
-Use [behavior_profiling_design.md](/home/jrs/code/S3NTINEL/sentinel/docs/behavior_profiling_design.md) for the behavior-profile artifact and the mirrored profiling design for simulation behavior semantics.
-Use [fitting_workflow.md](/home/jrs/code/S3NTINEL/sentinel/docs/fitting_workflow.md) for the intended one-off fitting sequence for datatype profiling, robust scaling, behavior profiling, and backbone fitting.
-Use [computational_complexity_report.md](/home/jrs/code/S3NTINEL/sentinel/docs/computational_complexity_report.md) for a stage-by-stage workload and scaling analysis grounded in the current code and a checked-in simulation bundle.
-Use [behavior_family_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/behavior_family_architecture.md) and [behavior_family_skeletons.md](/home/jrs/code/S3NTINEL/sentinel/docs/behavior_family_skeletons.md) for the per-family file/class layout.
-Use [misbehavior_taxonomy.md](/home/jrs/code/S3NTINEL/sentinel/docs/misbehavior_taxonomy.md) for the planned structured deviation/anomaly ontology.
-Use [anomaly_injection_and_backbone_validation.md](/home/jrs/code/S3NTINEL/sentinel/docs/anomaly_injection_and_backbone_validation.md) for anomaly-injection design and backbone-fit validation guidance.
+The active path is now the V2 pipeline. Use [v2_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/current/v2_architecture.md) as the source of truth for current fitting/inference semantics.
+Use [theory_foundations.md](/home/jrs/code/S3NTINEL/sentinel/docs/reference/theory_foundations.md) for the mathematical/statistical interpretation of the active representations, graph weights, and scoring quantities.
+Use [glossary.md](/home/jrs/code/S3NTINEL/sentinel/docs/reference/glossary.md) for the active code/data taxonomy and naming rules.
+Use [avionics_simulation_guidelines.md](/home/jrs/code/S3NTINEL/sentinel/docs/simulation/avionics_simulation_guidelines.md) for domain guidance on avionics-system behavior, coupling, and simulation inputs.
+Use [artifact_replay_design.md](/home/jrs/code/S3NTINEL/sentinel/docs/design/artifact_replay_design.md) for artifact persistence, replay, cache, and MLflow lineage design.
+Use [simulation_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/simulation/simulation_architecture.md) for the proposed next simulation architecture and extensibility model.
+Use [behavior_profiling_design.md](/home/jrs/code/S3NTINEL/sentinel/docs/design/behavior_profiling_design.md) for the behavior-profile artifact and the mirrored profiling design for simulation behavior semantics.
+Use [fitting_workflow.md](/home/jrs/code/S3NTINEL/sentinel/docs/current/fitting_workflow.md) for the intended one-off fitting sequence for datatype profiling, robust scaling, behavior profiling, and backbone fitting.
+Use [computational_complexity_report.md](/home/jrs/code/S3NTINEL/sentinel/docs/current/computational_complexity_report.md) for a stage-by-stage workload and scaling analysis grounded in the current code and a checked-in simulation bundle.
+Use [behavior_family_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/design/behavior_family_architecture.md) and [behavior_family_skeletons.md](/home/jrs/code/S3NTINEL/sentinel/docs/design/behavior_family_skeletons.md) for the per-family file/class layout.
+Use [misbehavior_taxonomy.md](/home/jrs/code/S3NTINEL/sentinel/docs/reference/misbehavior_taxonomy.md) for the planned structured deviation/anomaly ontology.
+Use [anomaly_injection_and_backbone_validation.md](/home/jrs/code/S3NTINEL/sentinel/docs/research/anomaly_injection_and_backbone_validation.md) for anomaly-injection design and backbone-fit validation guidance.
 
 ### Active fitting path
 
 1. `pipelines/00_ingest_raw.py`
 2. `pipelines/10_parameter_profiles_fit.py`
-3. `pipelines/20_events_extract.py`
-4. `pipelines/25_window_policy_profile.py`
-5. `pipelines/30_windows_adaptive.py`
-6. `pipelines/40_backbone_fit.py`
-7. `pipelines/50_build_graph.py`
-8. `pipelines/60_fit_hierarchy.py`
+3. `pipelines/12_behavior_profiles_fit.py`
+4. `pipelines/15_event_profiles_fit.py`
+5. `pipelines/20_events_extract.py`
+6. `pipelines/25_window_policy_profile.py`
+7. `pipelines/30_windows_adaptive.py`
+8. `pipelines/40_backbone_fit.py`
+9. `pipelines/50_build_graph.py`
+10. `pipelines/60_fit_hierarchy.py`
 
 Run with:
 
@@ -73,36 +75,32 @@ Run with:
 - `notebooks/`: exploratory and validation notebooks.
   Notebook workflow and kernel registration guidance live in [notebooks/README.md](/home/jrs/code/S3NTINEL/sentinel/notebooks/README.md).
 - `scripts/`: local-to-AVD handoff helpers (bundle/patch export-import).
-- `docs/v2_architecture.md`: architecture and contract source of truth.
+- `docs/current/v2_architecture.md`: architecture and contract source of truth.
 - `docs/architecture/`: generated C4 workspace, repo maps, LOC skew reports, and architecture-tooling annotations.
-- `docs/glossary.md`: active code/data taxonomy and naming conventions.
-- `docs/theory_foundations.md`: theory-to-code map for active mathematical/statistical choices.
-- `docs/avionics_simulation_guidelines.md`: domain guidance for realistic avionics simulation inputs and couplings.
-- `docs/artifact_replay_design.md`: replayable stage artifacts, manifests, caches, and MLflow lineage policy.
-- `docs/simulation_architecture.md`: proposed simulation architecture for an open-ended hierarchy.
-- `docs/behavior_profiling_design.md`: behavior-profile artifact and mirrored behavior-profiling design for real telemetry.
-- `docs/fitting_workflow.md`: intended one-off fitting workflow for datatype, scaling, behavior, and backbone artifacts.
-- `docs/behavior_family_architecture.md`: proposed per-family package/file/class layout.
-- `docs/behavior_family_skeletons.md`: concrete family skeletons for `regulated` and `inertial`.
-- `docs/misbehavior_taxonomy.md`: planned structured misbehavior ontology and pipeline mapping.
-- `docs/anomaly_injection_and_backbone_validation.md`: research note for simulator anomaly families and backbone-fit validation.
-- `docs/v2_1_notes.md`: deferred notes for a future rate- and type-aware representation layer.
+- `docs/current/`: active implementation-facing architecture, workflow, validation, and complexity notes.
+- `docs/reference/`: stable taxonomy, schema, and theory reference docs.
+- `docs/design/`: design specs for replay, profiling, and behavior-family layout.
+- `docs/simulation/`: simulation-specific guidance, diagrams, and architecture notes.
+- `docs/plans/`: forward-looking roadmap and proposal docs; non-authoritative for current behavior.
+- `docs/research/`: exploratory or research-note material.
 
 ## Pipeline order
 
 1. `pipelines/00_ingest_raw.py`
 2. `pipelines/10_parameter_profiles_fit.py`
-3. `pipelines/20_events_extract.py`
-4. `pipelines/25_window_policy_profile.py`
-5. `pipelines/30_windows_adaptive.py`
-6. `pipelines/40_backbone_fit.py`
-7. `pipelines/50_build_graph.py`
-8. `pipelines/60_fit_hierarchy.py`
-9. `pipelines/70_phase_fit.py`
-10. `pipelines/80_window_scores_raw.py`
-11. `pipelines/85_window_scores_calibrate.py`
-12. `pipelines/90_anomaly_attribution.py`
-13. `pipelines/95_emit_explorer_bundle.py`
+3. `pipelines/12_behavior_profiles_fit.py`
+4. `pipelines/15_event_profiles_fit.py`
+5. `pipelines/20_events_extract.py`
+6. `pipelines/25_window_policy_profile.py`
+7. `pipelines/30_windows_adaptive.py`
+8. `pipelines/40_backbone_fit.py`
+9. `pipelines/50_build_graph.py`
+10. `pipelines/60_fit_hierarchy.py`
+11. `pipelines/70_phase_fit.py`
+12. `pipelines/80_window_scores_raw.py`
+13. `pipelines/85_window_scores_calibrate.py`
+14. `pipelines/90_anomaly_attribution.py`
+15. `pipelines/95_emit_explorer_bundle.py`
 
 ## Quick start
 
@@ -183,8 +181,8 @@ Run with:
 	- family scoring consumes that primitive artifact to emit `parameter_behavior_profile`
 - The active family taxonomy now includes `tracking` in addition to `regulated`, `inertial`, `accumulative`, `discrete_state`, and `mixed_unknown`.
 - Event rows should be derived from telemetry via detector tooling (`pipelines/20_events_extract.py`, or `libs.events` builders).
-- For system-level behavior, coupling, and dynamics priors, use [docs/avionics_simulation_guidelines.md](/home/jrs/code/S3NTINEL/sentinel/docs/avionics_simulation_guidelines.md).
-- For the next extensible simulator design, use [docs/simulation_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/simulation_architecture.md).
+- For system-level behavior, coupling, and dynamics priors, use [docs/simulation/avionics_simulation_guidelines.md](/home/jrs/code/S3NTINEL/sentinel/docs/simulation/avionics_simulation_guidelines.md).
+- For the next extensible simulator design, use [docs/simulation/simulation_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/simulation/simulation_architecture.md).
 - Optional causal delay realism is available in `flight_setup.causal_delay` via:
 	- `mode` (`random_pair` default, or `fixed_group` for legacy behavior)
 	- `default_lag_sec` (default baseline lag in seconds; defaults to `0`)

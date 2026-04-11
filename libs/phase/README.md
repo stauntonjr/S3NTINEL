@@ -75,7 +75,7 @@ This boundary metadata does not expand the primary steady-phase taxonomy.
 - simulation-backed validation compares detected phases against known phase truth
 - transition validation is supplemental and parallel to the primary steady-phase macro F1
 
-See [phase_validation_semantics.md](/home/jrs/code/S3NTINEL/sentinel/docs/phase_validation_semantics.md) for the current steady-phase versus transition-region validation contract.
+See [phase_validation_semantics.md](/home/jrs/code/S3NTINEL/sentinel/docs/current/phase_validation_semantics.md) for the current steady-phase versus transition-region validation contract.
 
 ## Notes
 

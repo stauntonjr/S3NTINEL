@@ -1,5 +1,8 @@
 # Behavior Simulation Improvements
 
+Status: Plan
+Authority: Non-authoritative roadmap. Use package READMEs and `docs/current/` for current behavior.
+
 This note records proposed simulator-side changes to improve behavior-family
 separability in the emitted telemetry, with a near-term focus on:
 
@@ -10,8 +13,8 @@ separability in the emitted telemetry, with a near-term focus on:
 
 It is a companion to:
 
-- [behavior_profiling_design.md](/home/jrs/code/S3NTINEL/sentinel/docs/behavior_profiling_design.md)
-- [simulation_medium_term_plan.md](/home/jrs/code/S3NTINEL/sentinel/docs/simulation_medium_term_plan.md)
+- [behavior_profiling_design.md](/home/jrs/code/S3NTINEL/sentinel/docs/design/behavior_profiling_design.md)
+- [simulation_medium_term_plan.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/simulation_medium_term_plan.md)
 
 ## 1. Problem Statement
 

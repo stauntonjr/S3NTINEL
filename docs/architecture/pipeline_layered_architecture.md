@@ -14,23 +14,23 @@ flowchart TB
     layer_3 --> layer_4
     layer_5["Layer 5: 20 Events Extract<br/>Purpose: Extract event stream from mixed-rate sensor channels.<br/>Module: pipelines.20_events_extract<br/>LOC: 184 | Functions: 1 | Classes: 0"]
     layer_4 --> layer_5
-    layer_6["Layer 6: 25 Window Policy Profile<br/>Purpose: Fit a data-driven window policy profile from detected events.<br/>Module: pipelines.25_window_policy_profile<br/>LOC: 153 | Functions: 1 | Classes: 0"]
+    layer_6["Layer 6: 25 Window Policy Profile<br/>Purpose: Fit a data-driven window policy profile from detected events.<br/>Module: pipelines.25_window_policy_profile<br/>LOC: 157 | Functions: 1 | Classes: 0"]
     layer_5 --> layer_6
-    layer_7["Layer 7: 30 Windows Adaptive<br/>Purpose: Build adaptive windows from event thresholds and max duration.<br/>Module: pipelines.30_windows_adaptive<br/>LOC: 160 | Functions: 1 | Classes: 0"]
+    layer_7["Layer 7: 30 Windows Adaptive<br/>Purpose: Build adaptive windows from event thresholds and max duration.<br/>Module: pipelines.30_windows_adaptive<br/>LOC: 164 | Functions: 1 | Classes: 0"]
     layer_6 --> layer_7
     layer_8["Layer 8: 40 Backbone Fit<br/>Purpose: Fit backbone artifacts from adaptive windows and raw telemetry.<br/>Module: pipelines.40_backbone_fit<br/>LOC: 282 | Functions: 1 | Classes: 0"]
     layer_7 --> layer_8
     layer_9["Layer 9: 50 Build Graph<br/>Purpose: Build graph component artifacts from backbone, events, and windows.<br/>Module: pipelines.50_build_graph<br/>LOC: 547 | Functions: 7 | Classes: 0"]
     layer_8 --> layer_9
-    layer_10["Layer 10: 60 Fit Hierarchy<br/>Purpose: Fit hierarchy artifacts from fused graph and the persisted graph parameter universe.<br/>Module: pipelines.60_fit_hierarchy<br/>LOC: 141 | Functions: 2 | Classes: 0"]
+    layer_10["Layer 10: 60 Fit Hierarchy<br/>Purpose: Fit hierarchy artifacts from fused graph and the persisted graph parameter universe.<br/>Module: pipelines.60_fit_hierarchy<br/>LOC: 163 | Functions: 2 | Classes: 0"]
     layer_9 --> layer_10
-    layer_11["Layer 11: 70 Phase Fit<br/>Purpose: Fit phase baselines and assign detected phases to windows.<br/>Module: pipelines.70_phase_fit<br/>LOC: 209 | Functions: 2 | Classes: 0"]
+    layer_11["Layer 11: 70 Phase Fit<br/>Purpose: Fit phase baselines and assign detected phases to windows.<br/>Module: pipelines.70_phase_fit<br/>LOC: 214 | Functions: 2 | Classes: 0"]
     layer_10 --> layer_11
-    layer_12["Layer 12: 72 Phase Label Centroids<br/>Purpose: Build validation-only centroids from truth-labeled phase windows.<br/>Module: pipelines.72_phase_label_centroids<br/>LOC: 141 | Functions: 1 | Classes: 0"]
+    layer_12["Layer 12: 72 Phase Label Centroids<br/>Purpose: Build validation-only centroids from truth-labeled phase windows.<br/>Module: pipelines.72_phase_label_centroids<br/>LOC: 142 | Functions: 1 | Classes: 0"]
     layer_11 --> layer_12
-    layer_13["Layer 13: 80 Window Scores Raw<br/>Purpose: Build raw window scores from phase windows and phase baselines.<br/>Module: pipelines.80_window_scores_raw<br/>LOC: 118 | Functions: 1 | Classes: 0"]
+    layer_13["Layer 13: 80 Window Scores Raw<br/>Purpose: Build raw window scores from phase windows and phase baselines.<br/>Module: pipelines.80_window_scores_raw<br/>LOC: 172 | Functions: 1 | Classes: 0"]
     layer_12 --> layer_13
-    layer_14["Layer 14: 85 Window Scores Calibrate<br/>Purpose: Calibrate raw window scores with phase-conditioned conformal calibration.<br/>Module: pipelines.85_window_scores_calibrate<br/>LOC: 93 | Functions: 1 | Classes: 0"]
+    layer_14["Layer 14: 85 Window Scores Calibrate<br/>Purpose: Calibrate raw window scores with phase-conditioned conformal calibration.<br/>Module: pipelines.85_window_scores_calibrate<br/>LOC: 100 | Functions: 1 | Classes: 0"]
     layer_13 --> layer_14
     layer_15["Layer 15: 90 Anomaly Attribution<br/>Purpose: Emit anomaly attribution tables for anomalous windows.<br/>Module: pipelines.90_anomaly_attribution<br/>LOC: 198 | Functions: 1 | Classes: 0"]
     layer_14 --> layer_15

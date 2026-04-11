@@ -10,9 +10,9 @@ focus_paths:
 
 doc_paths:
   - README.md
-  - docs/v2_architecture.md
-  - docs/simulation_codepath_wire_diagram.md
-  - docs/simulation_architecture.md
+  - docs/current/v2_architecture.md
+  - docs/simulation/simulation_codepath_wire_diagram.md
+  - docs/simulation/simulation_architecture.md
   - pipelines/README.md
   - scripts/README.md
   - libs/README.md
@@ -251,4 +251,3 @@ views:
     - core_libraries.io
     - core_libraries.perf
     - core_libraries.behavior
-

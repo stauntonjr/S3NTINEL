@@ -75,7 +75,7 @@ REMOVED_LOCAL_SCORING_SYMBOLS = [
 AUTHORITATIVE_DOC_FILES = [
     "README.md",
     "docs/README.md",
-    "docs/computational_complexity_report.md",
+    "docs/current/computational_complexity_report.md",
     "libs/README.md",
     "libs/scoring/README.md",
     "libs/graph/README.md",
@@ -169,7 +169,7 @@ def test_dead_scoring_config_surface_is_removed() -> None:
 
 
 def test_computational_complexity_report_covers_time_and_space_and_current_paths() -> None:
-    content = _read_repo_file("docs/computational_complexity_report.md")
+    content = _read_repo_file("docs/current/computational_complexity_report.md")
     assert "time-complexity" in content
     assert "space-complexity" in content
     assert "Space / materialization envelope" in content
@@ -181,3 +181,17 @@ def test_computational_complexity_report_covers_time_and_space_and_current_paths
         "libs/anomaly/panel_context.py",
     ]:
         assert stale_path not in content, f"computational complexity report still references stale path: {stale_path}"
+
+
+def test_docs_readme_lists_doc_subdirectories() -> None:
+    content = _read_repo_file("docs/README.md")
+    for directory_name in [
+        "current/",
+        "reference/",
+        "design/",
+        "simulation/",
+        "plans/",
+        "research/",
+        "architecture/",
+    ]:
+        assert directory_name in content, f"docs/README.md is missing docs subdirectory section: {directory_name}"

@@ -111,15 +111,15 @@ def _seed_repo(tmp_path: Path) -> Path:
     )
     _write(root / "tools" / "__init__.py", '"""Tools."""\n')
     _write(
-        root / "docs" / "v2_architecture.md",
+        root / "docs" / "current" / "v2_architecture.md",
         "# Demo Architecture\n\n## Purpose\n\nArchitecture notes.\n",
     )
     _write(
-        root / "docs" / "simulation_codepath_wire_diagram.md",
+        root / "docs" / "simulation" / "simulation_codepath_wire_diagram.md",
         "# Demo Simulation Flow\n\nSimulation path.\n",
     )
     _write(
-        root / "docs" / "simulation_architecture.md",
+        root / "docs" / "simulation" / "simulation_architecture.md",
         "# Demo Simulation Architecture\n\nSimulation architecture notes.\n",
     )
     _write(
@@ -135,7 +135,7 @@ def _seed_repo(tmp_path: Path) -> Path:
                 "  - scripts/",
                 "doc_paths:",
                 "  - README.md",
-                "  - docs/v2_architecture.md",
+                "  - docs/current/v2_architecture.md",
                 "people:",
                 "  - id: engineer",
                 "    name: Engineer",

@@ -109,7 +109,7 @@ and should not continuously re-fit those semantics unless a separate adaptation 
 
 ## 5. Notes
 
-- For the mathematical interpretation of robust scaling, backbone fitting, graph weights, and phase fitting, see [theory_foundations.md](/home/jrs/code/S3NTINEL/sentinel/docs/theory_foundations.md).
+- For the mathematical interpretation of robust scaling, backbone fitting, graph weights, and phase fitting, see [theory_foundations.md](/home/jrs/code/S3NTINEL/sentinel/docs/reference/theory_foundations.md).
 - For current stage ownership and artifact flow, prefer the package READMEs over historical stage-level implementation notes.
 
 ## 6. Validation Harness

@@ -6,7 +6,7 @@ Each section summarizes one `core_libraries` component and the dataclasses it us
 
 libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation.
 
-Dataclasses detected: `10`
+Dataclasses detected: `11`
 
 ```mermaid
 flowchart TB
@@ -17,6 +17,8 @@ flowchart TB
     core_libraries_anomaly_libs_anomaly_frames --> core_libraries_anomaly_libs_anomaly_frames_anomalysubsystemcontextframe
     core_libraries_anomaly_libs_anomaly_frames_anomalypanelcontextframe["AnomalyPanelContextFrame\nNo extracted dataclass fields."]
     core_libraries_anomaly_libs_anomaly_frames --> core_libraries_anomaly_libs_anomaly_frames_anomalypanelcontextframe
+    core_libraries_anomaly_libs_anomaly_frames_anomalyparameterlocalizationframe["AnomalyParameterLocalizationFrame\nNo extracted dataclass fields."]
+    core_libraries_anomaly_libs_anomaly_frames --> core_libraries_anomaly_libs_anomaly_frames_anomalyparameterlocalizationframe
     core_libraries_anomaly_libs_anomaly_frames_anomalyattributioncontextframe["AnomalyAttributionContextFrame\nNo extracted dataclass fields."]
     core_libraries_anomaly_libs_anomaly_frames --> core_libraries_anomaly_libs_anomaly_frames_anomalyattributioncontextframe
     core_libraries_anomaly_libs_anomaly_pipeline["pipeline.py"]
@@ -35,24 +37,25 @@ flowchart TB
     core_libraries_anomaly_libs_anomaly_tables --> core_libraries_anomaly_libs_anomaly_tables_anomalyeventattributiontable
     core_libraries_anomaly_libs_anomaly_validator["validator.py"]
     core_libraries_anomaly --> core_libraries_anomaly_libs_anomaly_validator
-    core_libraries_anomaly_libs_anomaly_validator_detectedsubsystemtruthmap["DetectedSubsystemTruthMap\nCarries detected_to_truth_subsystem: dict[str, str], ambiguous_detect..."]
-    core_libraries_anomaly_libs_anomaly_validator --> core_libraries_anomaly_libs_anomaly_validator_detectedsubsystemtruthmap
+    core_libraries_anomaly_libs_anomaly_validator_detectedlocalizationtruthmap["DetectedLocalizationTruthMap\nCarries detected_to_truth_id: dict[str, str], ambiguous_detected_ids:..."]
+    core_libraries_anomaly_libs_anomaly_validator --> core_libraries_anomaly_libs_anomaly_validator_detectedlocalizationtruthmap
     core_libraries_anomaly_libs_anomaly_validator__truthwindowattributionmatch["_TruthWindowAttributionMatch\nCarries truth_window_id: str, dominant_subsystem_match: bool, dominan..."]
     core_libraries_anomaly_libs_anomaly_validator --> core_libraries_anomaly_libs_anomaly_validator__truthwindowattributionmatch
 ```
 
 | Dataclass | Module | Semantic Kind | Represents | Payload Shape | Fields | LOC |
 | --- | --- | --- | --- | --- | ---: | ---: |
-| AnomalySubsystemContextFrame | `libs.anomaly.frames` | Frame Artifact | frame artifact for Anomaly Subsystem Context within libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation | No extracted dataclass fields. | 0 | 146 |
+| AnomalySubsystemContextFrame | `libs.anomaly.frames` | Frame Artifact | frame artifact for Anomaly Subsystem Context within libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation | No extracted dataclass fields. | 0 | 135 |
 | AnomalyPanelContextFrame | `libs.anomaly.frames` | Frame Artifact | frame artifact for Anomaly Panel Context within libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation | No extracted dataclass fields. | 0 | 135 |
+| AnomalyParameterLocalizationFrame | `libs.anomaly.frames` | Frame Artifact | frame artifact for Anomaly Parameter Localization within libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation | No extracted dataclass fields. | 0 | 500 |
 | AnomalyAttributionContextFrame | `libs.anomaly.frames` | Frame Artifact | frame artifact for Anomaly Attribution Context within libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation | No extracted dataclass fields. | 0 | 37 |
 | AnomalyArtifactSet | `libs.anomaly.pipeline` | Artifact Bundle | artifact bundle for Anomaly within libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation | Carries window_attribution: AnomalyWindowAttributionTable, telemetry_attribution: AnomalyTelemetryAttributionTable, event_attribution: AnomalyEventAttributionTable. | 3 | 4 |
-| AnomalyAttributionPlan | `libs.anomaly.pipeline` | Execution Plan | execution plan for Anomaly Attribution within libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation | Carries top_k_per_subsystem: int = 5. | 1 | 95 |
-| AnomalyWindowAttributionTable | `libs.anomaly.tables` | Table Artifact | table artifact for Anomaly Window Attribution within libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation | Carries partition_by: tuple[str, ...] = ('tail_id',). | 1 | 81 |
-| AnomalyTelemetryAttributionTable | `libs.anomaly.tables` | Table Artifact | table artifact for Anomaly Telemetry Attribution within libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation | Carries partition_by: tuple[str, ...] = ('tail_id',). | 1 | 56 |
-| AnomalyEventAttributionTable | `libs.anomaly.tables` | Table Artifact | table artifact for Anomaly Event Attribution within libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation | Carries partition_by: tuple[str, ...] = ('tail_id',). | 1 | 62 |
-| DetectedSubsystemTruthMap | `libs.anomaly.validator` | Domain Dataclass | Detected Subsystem Truth Map within anomaly attribution validation against simulator misbehavior truth with fault wrappers | Carries detected_to_truth_subsystem: dict[str, str], ambiguous_detected_subsystems: set[str]. | 2 | 53 |
-| _TruthWindowAttributionMatch | `libs.anomaly.validator` | Domain Dataclass | Truth Window Attribution Match within anomaly attribution validation against simulator misbehavior truth with fault wrappers | Carries truth_window_id: str, dominant_subsystem_match: bool, dominant_subsystem_mappable: bool, dominant_subsystem_truth: str | None, +5 more. | 9 | 135 |
+| AnomalyAttributionPlan | `libs.anomaly.pipeline` | Execution Plan | execution plan for Anomaly Attribution within libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation | Carries top_k_per_subsystem: int = 5. | 1 | 134 |
+| AnomalyWindowAttributionTable | `libs.anomaly.tables` | Table Artifact | table artifact for Anomaly Window Attribution within libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation | Carries partition_by: tuple[str, ...] = ('tail_id',). | 1 | 120 |
+| AnomalyTelemetryAttributionTable | `libs.anomaly.tables` | Table Artifact | table artifact for Anomaly Telemetry Attribution within libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation | Carries partition_by: tuple[str, ...] = ('tail_id',). | 1 | 84 |
+| AnomalyEventAttributionTable | `libs.anomaly.tables` | Table Artifact | table artifact for Anomaly Event Attribution within libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation | Carries partition_by: tuple[str, ...] = ('tail_id',). | 1 | 46 |
+| DetectedLocalizationTruthMap | `libs.anomaly.validator` | Domain Dataclass | Detected Localization Truth Map within anomaly attribution validation against simulator misbehavior truth with fault wrappers | Carries detected_to_truth_id: dict[str, str], ambiguous_detected_ids: set[str]. | 2 | 55 |
+| _TruthWindowAttributionMatch | `libs.anomaly.validator` | Domain Dataclass | Truth Window Attribution Match within anomaly attribution validation against simulator misbehavior truth with fault wrappers | Carries truth_window_id: str, dominant_subsystem_match: bool, dominant_subsystem_mappable: bool, dominant_subsystem_truth: str | None, +10 more. | 14 | 223 |
 
 ### Dataclass Fields
 
@@ -70,6 +73,15 @@ No extracted dataclass fields.
 - Module: `libs.anomaly.frames`
 - Semantic kind: Frame Artifact
 - Represents: frame artifact for Anomaly Panel Context within libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation
+- Payload shape: No extracted dataclass fields.
+
+No extracted dataclass fields.
+
+#### AnomalyParameterLocalizationFrame
+
+- Module: `libs.anomaly.frames`
+- Semantic kind: Frame Artifact
+- Represents: frame artifact for Anomaly Parameter Localization within libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation
 - Payload shape: No extracted dataclass fields.
 
 No extracted dataclass fields.
@@ -140,24 +152,24 @@ No extracted dataclass fields.
 | --- | --- | --- | --- |
 | partition_by | tuple[str, ...] | ('tail_id',) | partitioning contract |
 
-#### DetectedSubsystemTruthMap
+#### DetectedLocalizationTruthMap
 
 - Module: `libs.anomaly.validator`
 - Semantic kind: Domain Dataclass
-- Represents: Detected Subsystem Truth Map within anomaly attribution validation against simulator misbehavior truth with fault wrappers
-- Payload shape: Carries detected_to_truth_subsystem: dict[str, str], ambiguous_detected_subsystems: set[str].
+- Represents: Detected Localization Truth Map within anomaly attribution validation against simulator misbehavior truth with fault wrappers
+- Payload shape: Carries detected_to_truth_id: dict[str, str], ambiguous_detected_ids: set[str].
 
 | Field | Type | Default | Role |
 | --- | --- | --- | --- |
-| detected_to_truth_subsystem | dict[str, str] |  | lookup or grouped mapping |
-| ambiguous_detected_subsystems | set[str] |  | ordered or grouped values |
+| detected_to_truth_id | dict[str, str] |  | identity / key |
+| ambiguous_detected_ids | set[str] |  | ordered or grouped values |
 
 #### _TruthWindowAttributionMatch
 
 - Module: `libs.anomaly.validator`
 - Semantic kind: Domain Dataclass
 - Represents: Truth Window Attribution Match within anomaly attribution validation against simulator misbehavior truth with fault wrappers
-- Payload shape: Carries truth_window_id: str, dominant_subsystem_match: bool, dominant_subsystem_mappable: bool, dominant_subsystem_truth: str | None, +5 more.
+- Payload shape: Carries truth_window_id: str, dominant_subsystem_match: bool, dominant_subsystem_mappable: bool, dominant_subsystem_truth: str | None, +10 more.
 
 | Field | Type | Default | Role |
 | --- | --- | --- | --- |
@@ -165,10 +177,15 @@ No extracted dataclass fields.
 | dominant_subsystem_match | bool |  | domain payload field |
 | dominant_subsystem_mappable | bool |  | domain payload field |
 | dominant_subsystem_truth | str | None |  | domain payload field |
+| dominant_module_match | bool |  | domain payload field |
+| dominant_module_mappable | bool |  | domain payload field |
+| dominant_module_truth | str | None |  | domain payload field |
 | telemetry_parameter_match | bool |  | domain payload field |
 | event_parameter_match | bool |  | domain payload field |
 | telemetry_truth_subsystem_present | bool |  | domain payload field |
 | event_truth_subsystem_present | bool |  | domain payload field |
+| telemetry_truth_module_present | bool |  | domain payload field |
+| event_truth_module_present | bool |  | domain payload field |
 | payload | dict[str, Any] |  | lookup or grouped mapping |
 
 ## Backbone
@@ -668,7 +685,7 @@ flowchart TB
 | GraphFusionSettings | `libs.config.pipeline` | Configuration | configuration for Graph Fusion within modules grouped under libs.config | Carries alpha: float, beta: float, gamma: float, min_fused_edge_weight: float. | 4 | 5 |
 | GraphSettings | `libs.config.pipeline` | Configuration | configuration for Graph within modules grouped under libs.config | Carries precision_ridge_lambda: float, min_abs_partial_corr: float, max_sensor_universe: int, event: EventGraphSettings, +3 more. | 7 | 8 |
 | HierarchySettings | `libs.config.pipeline` | Configuration | configuration for Hierarchy within modules grouped under libs.config | Carries top_k_per_parameter_name: int, subsystem_min_edge_weight: float | None, system_min_edge_weight: float | None. | 3 | 4 |
-| PhaseSettings | `libs.config.pipeline` | Configuration | configuration for Phase within modules grouped under libs.config | Carries phase_count: int, detect_sensor_count: int, detect_event_type_count: int, detect_categorical_state_count: int, +4 more. | 8 | 9 |
+| PhaseSettings | `libs.config.pipeline` | Configuration | configuration for Phase within modules grouped under libs.config | Carries phase_count: int, detect_sensor_count: int, detect_event_type_count: int, detect_categorical_state_count: int, +3 more. | 7 | 8 |
 | ScoringSettings | `libs.config.pipeline` | Configuration | configuration for Scoring within modules grouped under libs.config | Carries max_bridge_reference_rows: int, min_warm: int. | 2 | 3 |
 | AnomalySettings | `libs.config.pipeline` | Configuration | configuration for Anomaly within modules grouped under libs.config | Carries subsystem_top_sensors_k: int. | 1 | 2 |
 | PipelineContextSettings | `libs.config.pipeline` | Configuration | configuration for Pipeline Context within modules grouped under libs.config | Carries profiling: ProfilingSettings, events: EventSettings, windowing: WindowingSettings, backbone: BackboneSettings, +5 more. | 9 | 10 |
@@ -906,7 +923,7 @@ flowchart TB
 - Module: `libs.config.pipeline`
 - Semantic kind: Configuration
 - Represents: configuration for Phase within modules grouped under libs.config
-- Payload shape: Carries phase_count: int, detect_sensor_count: int, detect_event_type_count: int, detect_categorical_state_count: int, +4 more.
+- Payload shape: Carries phase_count: int, detect_sensor_count: int, detect_event_type_count: int, detect_categorical_state_count: int, +3 more.
 
 | Field | Type | Default | Role |
 | --- | --- | --- | --- |
@@ -915,7 +932,6 @@ flowchart TB
 | detect_event_type_count | int |  | numeric value |
 | detect_categorical_state_count | int |  | numeric value |
 | stable_drift_quantile | float |  | numeric value |
-| smoothing_radius | int |  | numeric value |
 | transition_penalty | float |  | numeric value |
 | min_dwell_windows | int |  | artifact or table reference |
 
@@ -1576,7 +1592,7 @@ No extracted dataclass fields.
 
 libs/graph owns graph-domain models built from telemetry windows and events.
 
-Dataclasses detected: `23`
+Dataclasses detected: `24`
 
 ```mermaid
 flowchart TB
@@ -1601,6 +1617,8 @@ flowchart TB
     core_libraries_graph --> core_libraries_graph_libs_graph_hierarchy_artifacts
     core_libraries_graph_libs_graph_hierarchy_artifacts_hierarchyspec["HierarchySpec\nCarries min_edge_weight: float = 0.05, top_k_per_parameter_name: int..."]
     core_libraries_graph_libs_graph_hierarchy_artifacts --> core_libraries_graph_libs_graph_hierarchy_artifacts_hierarchyspec
+    core_libraries_graph_libs_graph_hierarchy_artifacts_modulecompatibilityprofile["ModuleCompatibilityProfile\nCarries datatype: str | None = None, behavior_family: str | None = None."]
+    core_libraries_graph_libs_graph_hierarchy_artifacts --> core_libraries_graph_libs_graph_hierarchy_artifacts_modulecompatibilityprofile
     core_libraries_graph_libs_graph_hierarchy_artifacts_graphhierarchy["GraphHierarchy\nCarries spec: HierarchySpec, rows: pd.DataFrame."]
     core_libraries_graph_libs_graph_hierarchy_artifacts --> core_libraries_graph_libs_graph_hierarchy_artifacts_graphhierarchy
     core_libraries_graph_libs_graph_lag["lag.py"]
@@ -1655,7 +1673,8 @@ flowchart TB
 | FusedGraphSpec | `libs.graph.fused` | Specification | specification for Fused Graph within libs/graph owns graph-domain models built from telemetry windows and events | Carries alpha: float = 1.0, beta: float = 1.0, gamma: float = 1.0. | 3 | 4 |
 | FusedGraph | `libs.graph.fused` | Domain Dataclass | Fused Graph within libs/graph owns graph-domain models built from telemetry windows and events | Carries spec: FusedGraphSpec, edges: pd.DataFrame. | 2 | 52 |
 | HierarchySpec | `libs.graph.hierarchy_artifacts` | Specification | specification for Hierarchy within libs/graph owns graph-domain models built from telemetry windows and events | Carries min_edge_weight: float = 0.05, top_k_per_parameter_name: int = 3, subsystem_min_edge_weight: float | None = None, system_min_edge_weight: float | None = None. | 4 | 5 |
-| GraphHierarchy | `libs.graph.hierarchy_artifacts` | Domain Dataclass | Graph Hierarchy within libs/graph owns graph-domain models built from telemetry windows and events | Carries spec: HierarchySpec, rows: pd.DataFrame. | 2 | 314 |
+| ModuleCompatibilityProfile | `libs.graph.hierarchy_artifacts` | Profile | profile for Module Compatibility within libs/graph owns graph-domain models built from telemetry windows and events | Carries datatype: str | None = None, behavior_family: str | None = None. | 2 | 3 |
+| GraphHierarchy | `libs.graph.hierarchy_artifacts` | Domain Dataclass | Graph Hierarchy within libs/graph owns graph-domain models built from telemetry windows and events | Carries spec: HierarchySpec, rows: pd.DataFrame. | 2 | 373 |
 | LagBandSpec | `libs.graph.lag` | Specification | specification for Lag Band within libs/graph owns graph-domain models built from telemetry windows and events | Carries name: str, lower_seconds: float, upper_seconds: float, combine_weight: float. | 4 | 5 |
 | GraphBuildStepDiagnostics | `libs.graph.pipeline` | Domain Dataclass | Graph Build Step Diagnostics within graph artifact builders for spark fitting stages | Carries step_name: str, row_count: int, timing_ms: float. | 3 | 4 |
 | GraphBuildDiagnostics | `libs.graph.pipeline` | Domain Dataclass | Graph Build Diagnostics within graph artifact builders for spark fitting stages | Carries steps: list[GraphBuildStepDiagnostics], total_timing_ms: float. | 2 | 16 |
@@ -1669,7 +1688,7 @@ flowchart TB
 | TransitionGraphTable | `libs.graph.tables` | Table Artifact | table artifact for Transition Graph within libs/graph owns graph-domain models built from telemetry windows and events | No extracted dataclass fields. | 0 | 10 |
 | FusedGraphTable | `libs.graph.tables` | Table Artifact | table artifact for Fused Graph within libs/graph owns graph-domain models built from telemetry windows and events | No extracted dataclass fields. | 0 | 28 |
 | GraphParameterUniverseTable | `libs.graph.tables` | Table Artifact | table artifact for Graph Parameter Universe within libs/graph owns graph-domain models built from telemetry windows and events | No extracted dataclass fields. | 0 | 25 |
-| HierarchySensorMapTable | `libs.graph.tables` | Table Artifact | table artifact for Hierarchy Sensor Map within libs/graph owns graph-domain models built from telemetry windows and events | No extracted dataclass fields. | 0 | 29 |
+| HierarchySensorMapTable | `libs.graph.tables` | Table Artifact | table artifact for Hierarchy Sensor Map within libs/graph owns graph-domain models built from telemetry windows and events | No extracted dataclass fields. | 0 | 33 |
 | TransitionGraphSpec | `libs.graph.transition` | Specification | specification for Transition Graph within libs/graph owns graph-domain models built from telemetry windows and events | Carries min_count: int = 1. | 1 | 2 |
 | TransitionGraph | `libs.graph.transition` | Domain Dataclass | Transition Graph within libs/graph owns graph-domain models built from telemetry windows and events | Carries spec: TransitionGraphSpec, edges: pd.DataFrame. | 2 | 67 |
 
@@ -1751,6 +1770,18 @@ flowchart TB
 | top_k_per_parameter_name | int | 3 | numeric value |
 | subsystem_min_edge_weight | float | None | None | model parameter or coefficient |
 | system_min_edge_weight | float | None | None | model parameter or coefficient |
+
+#### ModuleCompatibilityProfile
+
+- Module: `libs.graph.hierarchy_artifacts`
+- Semantic kind: Profile
+- Represents: profile for Module Compatibility within libs/graph owns graph-domain models built from telemetry windows and events
+- Payload shape: Carries datatype: str | None = None, behavior_family: str | None = None.
+
+| Field | Type | Default | Role |
+| --- | --- | --- | --- |
+| datatype | str | None | None | domain payload field |
+| behavior_family | str | None | None | domain payload field |
 
 #### GraphHierarchy
 
@@ -2002,7 +2033,7 @@ flowchart TB
 
 libs/phase owns phase feature selection, phase detection, phase analysis, and phase validation.
 
-Dataclasses detected: `15`
+Dataclasses detected: `16`
 
 ```mermaid
 flowchart TB
@@ -2035,6 +2066,8 @@ flowchart TB
     core_libraries_phase_libs_phase_tables --> core_libraries_phase_libs_phase_tables_phaselabelcentroidstable
     core_libraries_phase_libs_phase_types["types.py"]
     core_libraries_phase --> core_libraries_phase_libs_phase_types
+    core_libraries_phase_libs_phase_types_phasetransitionmodel["PhaseTransitionModel\nCarries support_df: 'DataFrame', policy_name: str = 'monotone_progres..."]
+    core_libraries_phase_libs_phase_types --> core_libraries_phase_libs_phase_types_phasetransitionmodel
     core_libraries_phase_libs_phase_types_phaseclustermodel["PhaseClusterModel\nCarries feature_stats_df: 'DataFrame', centroids_df: 'DataFrame', dis..."]
     core_libraries_phase_libs_phase_types --> core_libraries_phase_libs_phase_types_phaseclustermodel
     core_libraries_phase_libs_phase_types_phaseartifactset["PhaseArtifactSet\nCarries phase_windows: PhaseWindowsTable, phase_baselines: PhaseBasel..."]
@@ -2053,21 +2086,22 @@ flowchart TB
 
 | Dataclass | Module | Semantic Kind | Represents | Payload Shape | Fields | LOC |
 | --- | --- | --- | --- | --- | ---: | ---: |
-| PhaseSequenceState | `libs.phase.decode` | Runtime State | runtime state for Phase Sequence within libs/phase owns phase feature selection, phase detection, phase analysis, and phase validation | Carries score_column: str = 'phase_scores', path_column: str = 'phase_paths', initialized_column: str = 'initialized'. | 3 | 68 |
-| PhaseFeatureConfig | `libs.phase.feature_config` | Configuration | configuration for Phase Feature within libs/phase owns phase feature selection, phase detection, phase analysis, and phase validation | Carries backbone_model: BackboneModel, phase_selected_sensors: list[str], phase_selected_event_types: list[str], phase_selected_categorical_state_pairs: list[tuple[str, str]], +1 more. | 5 | 101 |
-| PhaseFeatureFrame | `libs.phase.frames` | Frame Artifact | frame artifact for Phase Feature within libs/phase owns phase feature selection, phase detection, phase analysis, and phase validation | Carries feature_names: list[str]. | 1 | 316 |
+| PhaseSequenceState | `libs.phase.decode` | Runtime State | runtime state for Phase Sequence within libs/phase owns phase feature selection, phase detection, phase analysis, and phase validation | Carries score_column: str = 'phase_scores', path_column: str = 'phase_paths', initialized_column: str = 'initialized'. | 3 | 72 |
+| PhaseFeatureConfig | `libs.phase.feature_config` | Configuration | configuration for Phase Feature within libs/phase owns phase feature selection, phase detection, phase analysis, and phase validation | Carries backbone_model: BackboneModel, phase_selected_sensors: list[str], phase_selected_event_types: list[str], phase_selected_categorical_state_pairs: list[tuple[str, str]], +1 more. | 5 | 210 |
+| PhaseFeatureFrame | `libs.phase.frames` | Frame Artifact | frame artifact for Phase Feature within libs/phase owns phase feature selection, phase detection, phase analysis, and phase validation | Carries feature_names: list[str]. | 1 | 725 |
 | PhaseObservationFrame | `libs.phase.frames` | Frame Artifact | frame artifact for Phase Observation within libs/phase owns phase feature selection, phase detection, phase analysis, and phase validation | No extracted dataclass fields. | 0 | 24 |
-| PhaseDetectionPlan | `libs.phase.pipeline` | Execution Plan | execution plan for Phase Detection within libs/phase owns phase feature selection, phase detection, phase analysis, and phase validation | No extracted dataclass fields. | 0 | 138 |
+| PhaseDetectionPlan | `libs.phase.pipeline` | Execution Plan | execution plan for Phase Detection within libs/phase owns phase feature selection, phase detection, phase analysis, and phase validation | No extracted dataclass fields. | 0 | 154 |
 | PhaseWindowsTable | `libs.phase.tables` | Table Artifact | table artifact for Phase Windows within libs/phase owns phase feature selection, phase detection, phase analysis, and phase validation | Carries partition_by: tuple[str, ...] = ('tail_id',). | 1 | 23 |
 | PhaseBaselinesTable | `libs.phase.tables` | Table Artifact | table artifact for Phase Baselines within libs/phase owns phase feature selection, phase detection, phase analysis, and phase validation | Carries partition_by: tuple[str, ...] = ('tail_id',). | 1 | 121 |
 | PhaseLabelCentroidsTable | `libs.phase.tables` | Table Artifact | table artifact for Phase Label Centroids within libs/phase owns phase feature selection, phase detection, phase analysis, and phase validation | Carries partition_by: tuple[str, ...] = ('tail_id',). | 1 | 87 |
-| PhaseClusterModel | `libs.phase.types` | Model | model for Phase Cluster within libs/phase owns phase feature selection, phase detection, phase analysis, and phase validation | Carries feature_stats_df: 'DataFrame', centroids_df: 'DataFrame', distance_scales_df: 'DataFrame'. | 3 | 4 |
+| PhaseTransitionModel | `libs.phase.types` | Model | model for Phase Transition within libs/phase owns phase feature selection, phase detection, phase analysis, and phase validation | Carries support_df: 'DataFrame', policy_name: str = 'monotone_progress_band', canonical_order_source: str = 'seed_bucket', progress_support_source: str = 'seed_progress_mass_position_span', +1 more. | 5 | 12 |
+| PhaseClusterModel | `libs.phase.types` | Model | model for Phase Cluster within libs/phase owns phase feature selection, phase detection, phase analysis, and phase validation | Carries feature_stats_df: 'DataFrame', centroids_df: 'DataFrame', distance_scales_df: 'DataFrame', transition_model: PhaseTransitionModel, +2 more. | 6 | 7 |
 | PhaseArtifactSet | `libs.phase.types` | Artifact Bundle | artifact bundle for Phase within libs/phase owns phase feature selection, phase detection, phase analysis, and phase validation | Carries phase_windows: PhaseWindowsTable, phase_baselines: PhaseBaselinesTable, phase_config: 'PhaseFeatureConfig', feature_frame: 'PhaseFeatureFrame | None' = None, +1 more. | 5 | 6 |
-| PhaseDetectionRun | `libs.phase.types` | Domain Dataclass | Phase Detection Run within phase artifact and plan dataclasses | Carries phase_config: 'PhaseFeatureConfig', feature_frame: 'PhaseFeatureFrame', cluster_model: PhaseClusterModel, phase_windows: PhaseWindowsTable. | 4 | 5 |
+| PhaseDetectionRun | `libs.phase.types` | Domain Dataclass | Phase Detection Run within phase artifact and plan dataclasses | Carries phase_config: 'PhaseFeatureConfig', feature_frame: 'PhaseFeatureFrame', cluster_model: PhaseClusterModel, phase_windows: PhaseWindowsTable, +1 more. | 5 | 6 |
 | PhaseFeatureSelectionPolicy | `libs.phase.types` | Policy | policy for Phase Feature Selection within libs/phase owns phase feature selection, phase detection, phase analysis, and phase validation | Carries sensor_count: int = 8, event_type_count: int = 6, categorical_state_count: int = 6. | 3 | 4 |
 | PhaseSelectorDiagnostics | `libs.phase.types` | Domain Dataclass | Phase Selector Diagnostics within phase artifact and plan dataclasses | Carries selector_name: str, selected_count: int, timing_ms: float, candidate_count: int | None = None, +1 more. | 5 | 6 |
 | PhaseFeatureSelectionDiagnostics | `libs.phase.types` | Domain Dataclass | Phase Feature Selection Diagnostics within phase artifact and plan dataclasses | Carries sensors: PhaseSelectorDiagnostics, event_types: PhaseSelectorDiagnostics, categorical_state_pairs: PhaseSelectorDiagnostics, selected_event_types: list[str], +1 more. | 5 | 39 |
-| PhasePlanConfig | `libs.phase.types` | Configuration | configuration for Phase Plan within libs/phase owns phase feature selection, phase detection, phase analysis, and phase validation | Carries phase_count: int, phase_stable_drift_quantile: float = 0.35, phase_smoothing_radius: int = 2, phase_transition_penalty: float = 1.5, +6 more. | 10 | 11 |
+| PhasePlanConfig | `libs.phase.types` | Configuration | configuration for Phase Plan within libs/phase owns phase feature selection, phase detection, phase analysis, and phase validation | Carries phase_count: int, phase_stable_drift_quantile: float = 0.35, phase_transition_penalty: float = 1.5, phase_min_dwell_windows: int = 8, +5 more. | 9 | 10 |
 
 ### Dataclass Fields
 
@@ -2161,18 +2195,36 @@ No extracted dataclass fields.
 | --- | --- | --- | --- |
 | partition_by | tuple[str, ...] | ('tail_id',) | partitioning contract |
 
+#### PhaseTransitionModel
+
+- Module: `libs.phase.types`
+- Semantic kind: Model
+- Represents: model for Phase Transition within libs/phase owns phase feature selection, phase detection, phase analysis, and phase validation
+- Payload shape: Carries support_df: 'DataFrame', policy_name: str = 'monotone_progress_band', canonical_order_source: str = 'seed_bucket', progress_support_source: str = 'seed_progress_mass_position_span', +1 more.
+
+| Field | Type | Default | Role |
+| --- | --- | --- | --- |
+| support_df | 'DataFrame' |  | domain payload field |
+| policy_name | str | 'monotone_progress_band' | descriptive or categorical value |
+| canonical_order_source | str | 'seed_bucket' | descriptive or categorical value |
+| progress_support_source | str | 'seed_progress_mass_position_span' | descriptive or categorical value |
+| allowed_transition_offsets | tuple[int, ...] | (0, 1) | ordered or grouped values |
+
 #### PhaseClusterModel
 
 - Module: `libs.phase.types`
 - Semantic kind: Model
 - Represents: model for Phase Cluster within libs/phase owns phase feature selection, phase detection, phase analysis, and phase validation
-- Payload shape: Carries feature_stats_df: 'DataFrame', centroids_df: 'DataFrame', distance_scales_df: 'DataFrame'.
+- Payload shape: Carries feature_stats_df: 'DataFrame', centroids_df: 'DataFrame', distance_scales_df: 'DataFrame', transition_model: PhaseTransitionModel, +2 more.
 
 | Field | Type | Default | Role |
 | --- | --- | --- | --- |
 | feature_stats_df | 'DataFrame' |  | domain payload field |
 | centroids_df | 'DataFrame' |  | domain payload field |
 | distance_scales_df | 'DataFrame' |  | domain payload field |
+| transition_model | PhaseTransitionModel |  | domain model or execution contract |
+| fit_source_stats_df | 'DataFrame | None' | None | domain payload field |
+| seed_bucket_counts_df | 'DataFrame | None' | None | domain payload field |
 
 #### PhaseArtifactSet
 
@@ -2194,7 +2246,7 @@ No extracted dataclass fields.
 - Module: `libs.phase.types`
 - Semantic kind: Domain Dataclass
 - Represents: Phase Detection Run within phase artifact and plan dataclasses
-- Payload shape: Carries phase_config: 'PhaseFeatureConfig', feature_frame: 'PhaseFeatureFrame', cluster_model: PhaseClusterModel, phase_windows: PhaseWindowsTable.
+- Payload shape: Carries phase_config: 'PhaseFeatureConfig', feature_frame: 'PhaseFeatureFrame', cluster_model: PhaseClusterModel, phase_windows: PhaseWindowsTable, +1 more.
 
 | Field | Type | Default | Role |
 | --- | --- | --- | --- |
@@ -2202,6 +2254,7 @@ No extracted dataclass fields.
 | feature_frame | 'PhaseFeatureFrame' |  | artifact or table reference |
 | cluster_model | PhaseClusterModel |  | domain model or execution contract |
 | phase_windows | PhaseWindowsTable |  | artifact or table reference |
+| diagnostics | dict[str, Any] | None | None | lookup or grouped mapping |
 
 #### PhaseFeatureSelectionPolicy
 
@@ -2251,13 +2304,12 @@ No extracted dataclass fields.
 - Module: `libs.phase.types`
 - Semantic kind: Configuration
 - Represents: configuration for Phase Plan within libs/phase owns phase feature selection, phase detection, phase analysis, and phase validation
-- Payload shape: Carries phase_count: int, phase_stable_drift_quantile: float = 0.35, phase_smoothing_radius: int = 2, phase_transition_penalty: float = 1.5, +6 more.
+- Payload shape: Carries phase_count: int, phase_stable_drift_quantile: float = 0.35, phase_transition_penalty: float = 1.5, phase_min_dwell_windows: int = 8, +5 more.
 
 | Field | Type | Default | Role |
 | --- | --- | --- | --- |
 | phase_count | int |  | numeric value |
 | phase_stable_drift_quantile | float | 0.35 | numeric value |
-| phase_smoothing_radius | int | 2 | numeric value |
 | phase_transition_penalty | float | 1.5 | numeric value |
 | phase_min_dwell_windows | int | 8 | artifact or table reference |
 | phase_detect_sensor_count | int | 8 | numeric value |
@@ -2503,12 +2555,10 @@ Dataclasses detected: `3`
 ```mermaid
 flowchart TB
     core_libraries_scoring["Scoring\nlibs/scoring owns raw and calibrated anomaly scoring over fitted phase and structural..."]
-    core_libraries_scoring_libs_scoring_artifacts["artifacts.py"]
-    core_libraries_scoring --> core_libraries_scoring_libs_scoring_artifacts
-    core_libraries_scoring_libs_scoring_artifacts_windowscoreartifacts["WindowScoreArtifacts\nCarries rows: list[WindowScoreRow]."]
-    core_libraries_scoring_libs_scoring_artifacts --> core_libraries_scoring_libs_scoring_artifacts_windowscoreartifacts
     core_libraries_scoring_libs_scoring_tables["tables.py"]
     core_libraries_scoring --> core_libraries_scoring_libs_scoring_tables
+    core_libraries_scoring_libs_scoring_tables__localizedhierarchysupportframes["_LocalizedHierarchySupportFrames\nCarries module_ranked_df: 'DataFrame', dominant_modules_df: 'DataFram..."]
+    core_libraries_scoring_libs_scoring_tables --> core_libraries_scoring_libs_scoring_tables__localizedhierarchysupportframes
     core_libraries_scoring_libs_scoring_tables_windowscoresrawtable["WindowScoresRawTable\nCarries partition_by: tuple[str, ...] = ('tail_id',)."]
     core_libraries_scoring_libs_scoring_tables --> core_libraries_scoring_libs_scoring_tables_windowscoresrawtable
     core_libraries_scoring_libs_scoring_tables_windowscorescalibratedtable["WindowScoresCalibratedTable\nCarries partition_by: tuple[str, ...] = ('tail_id',)."]
@@ -2517,22 +2567,25 @@ flowchart TB
 
 | Dataclass | Module | Semantic Kind | Represents | Payload Shape | Fields | LOC |
 | --- | --- | --- | --- | --- | ---: | ---: |
-| WindowScoreArtifacts | `libs.scoring.artifacts` | Artifact Bundle | Window Score Artifacts within in-memory window score artifact assembly | Carries rows: list[WindowScoreRow]. | 1 | 110 |
-| WindowScoresRawTable | `libs.scoring.tables` | Table Artifact | table artifact for Window Scores Raw within libs/scoring owns raw and calibrated anomaly scoring over fitted phase and structural artifacts | Carries partition_by: tuple[str, ...] = ('tail_id',). | 1 | 201 |
-| WindowScoresCalibratedTable | `libs.scoring.tables` | Table Artifact | table artifact for Window Scores Calibrated within libs/scoring owns raw and calibrated anomaly scoring over fitted phase and structural artifacts | Carries partition_by: tuple[str, ...] = ('tail_id',). | 1 | 51 |
+| _LocalizedHierarchySupportFrames | `libs.scoring.tables` | Domain Dataclass | Localized Hierarchy Support Frames within typed spark tables for scoring artifacts | Carries module_ranked_df: 'DataFrame', dominant_modules_df: 'DataFrame', subsystem_ranked_df: 'DataFrame', dominant_subsystems_df: 'DataFrame'. | 4 | 5 |
+| WindowScoresRawTable | `libs.scoring.tables` | Table Artifact | table artifact for Window Scores Raw within libs/scoring owns raw and calibrated anomaly scoring over fitted phase and structural artifacts | Carries partition_by: tuple[str, ...] = ('tail_id',). | 1 | 612 |
+| WindowScoresCalibratedTable | `libs.scoring.tables` | Table Artifact | table artifact for Window Scores Calibrated within libs/scoring owns raw and calibrated anomaly scoring over fitted phase and structural artifacts | Carries partition_by: tuple[str, ...] = ('tail_id',). | 1 | 72 |
 
 ### Dataclass Fields
 
-#### WindowScoreArtifacts
+#### _LocalizedHierarchySupportFrames
 
-- Module: `libs.scoring.artifacts`
-- Semantic kind: Artifact Bundle
-- Represents: Window Score Artifacts within in-memory window score artifact assembly
-- Payload shape: Carries rows: list[WindowScoreRow].
+- Module: `libs.scoring.tables`
+- Semantic kind: Domain Dataclass
+- Represents: Localized Hierarchy Support Frames within typed spark tables for scoring artifacts
+- Payload shape: Carries module_ranked_df: 'DataFrame', dominant_modules_df: 'DataFrame', subsystem_ranked_df: 'DataFrame', dominant_subsystems_df: 'DataFrame'.
 
 | Field | Type | Default | Role |
 | --- | --- | --- | --- |
-| rows | list[WindowScoreRow] |  | ordered or grouped values |
+| module_ranked_df | 'DataFrame' |  | domain payload field |
+| dominant_modules_df | 'DataFrame' |  | domain payload field |
+| subsystem_ranked_df | 'DataFrame' |  | domain payload field |
+| dominant_subsystems_df | 'DataFrame' |  | domain payload field |
 
 #### WindowScoresRawTable
 
@@ -4273,7 +4326,7 @@ flowchart TB
 
 libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented Spark window builder.
 
-Dataclasses detected: `22`
+Dataclasses detected: `23`
 
 ```mermaid
 flowchart TB
@@ -4316,7 +4369,7 @@ flowchart TB
     core_libraries_windows_libs_windows_policy_profile --> core_libraries_windows_libs_windows_policy_profile_windowpolicyprofilespec
     core_libraries_windows_libs_windows_policy_profile_windowpolicyevaluationspec["WindowPolicyEvaluationSpec\nCarries candidate_frontier_size: int = 5, stability_sample_fraction:..."]
     core_libraries_windows_libs_windows_policy_profile --> core_libraries_windows_libs_windows_policy_profile_windowpolicyevaluationspec
-    core_libraries_windows_libs_windows_policy_profile_windowmetricssummary["WindowMetricsSummary\nCarries window_count: int = 0, event_threshold_rate: float = 0.0, max..."]
+    core_libraries_windows_libs_windows_policy_profile_windowmetricssummary["WindowMetricsSummary\nCarries window_count: int = 0, event_threshold_rate: float = 0.0, bud..."]
     core_libraries_windows_libs_windows_policy_profile --> core_libraries_windows_libs_windows_policy_profile_windowmetricssummary
     core_libraries_windows_libs_windows_policy_profile_windowpolicyprofile["WindowPolicyProfile\nCarries spec: WindowPolicyProfileSpec."]
     core_libraries_windows_libs_windows_policy_profile --> core_libraries_windows_libs_windows_policy_profile_windowpolicyprofile
@@ -4332,6 +4385,8 @@ flowchart TB
     core_libraries_windows_libs_windows_tables --> core_libraries_windows_libs_windows_tables_windowpolicyprofiletable
     core_libraries_windows_libs_windows_window["window.py"]
     core_libraries_windows --> core_libraries_windows_libs_windows_window
+    core_libraries_windows_libs_windows_window_windowclosurebudgetpolicy["WindowClosureBudgetPolicy\nCarries quiet_horizon_ms: int, event_threshold: int."]
+    core_libraries_windows_libs_windows_window --> core_libraries_windows_libs_windows_window_windowclosurebudgetpolicy
     core_libraries_windows_libs_windows_window_windowpolicy["WindowPolicy\nCarries max_ms: int, event_threshold: int, min_ms: int = 50, inactivi..."]
     core_libraries_windows_libs_windows_window --> core_libraries_windows_libs_windows_window_windowpolicy
     core_libraries_windows_libs_windows_window_window["Window\nCarries t_start: datetime, t_end: datetime, event_count: int = 0, sen..."]
@@ -4345,23 +4400,24 @@ flowchart TB
 | WindowFeatureVectorSpec | `libs.windows.features` | Specification | specification for Window Feature Vector within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | Carries timestamp_column: str = 'timestamp_utc', parameter_name_column: str = 'parameter_name', numeric_value_column: str = 'value_num', text_value_column: str = 'parameter_value'. | 4 | 5 |
 | WindowFeatureStepDiagnostics | `libs.windows.features` | Domain Dataclass | Window Feature Step Diagnostics within class-oriented builders for the canonical window_features artifact | Carries step_name: str, row_count: int, timing_ms: float. | 3 | 4 |
 | WindowFeaturesDiagnostics | `libs.windows.features` | Domain Dataclass | Window Features Diagnostics within class-oriented builders for the canonical window_features artifact | Carries steps: list[WindowFeatureStepDiagnostics], output_row_count: int, total_timing_ms: float. | 3 | 18 |
-| WindowFeaturesPlan | `libs.windows.features` | Execution Plan | execution plan for Window Features within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | Carries vector_spec: WindowFeatureVectorSpec = field(default_factory=WindowFeatureVectorSpec). | 1 | 653 |
+| WindowFeaturesPlan | `libs.windows.features` | Execution Plan | execution plan for Window Features within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | Carries vector_spec: WindowFeatureVectorSpec = field(default_factory=WindowFeatureVectorSpec). | 1 | 736 |
 | OpenWindowState | `libs.windows.pipeline` | Runtime State | runtime state for Open Window within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | Carries win_id: str = 'open_win_id', t_start: str = 'open_t_start', t_end: str = 'open_t_end', start_event_seq_id: str = 'open_start_event_seq_id', +2 more. | 6 | 7 |
-| AdaptiveWindowSegmentState | `libs.windows.pipeline` | Runtime State | runtime state for Adaptive Window Segment within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | Carries next_win_id: str = 'next_win_id', has_open_window: str = 'has_open_window', open_state: OpenWindowState = field(default_factory=OpenWindowState), closed_windows: str = 'closed_windows'. | 4 | 87 |
+| AdaptiveWindowSegmentState | `libs.windows.pipeline` | Runtime State | runtime state for Adaptive Window Segment within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | Carries next_win_id: str = 'next_win_id', has_open_window: str = 'has_open_window', open_state: OpenWindowState = field(default_factory=OpenWindowState), closed_windows: str = 'closed_windows'. | 4 | 96 |
 | AdaptiveWindowPolicy | `libs.windows.pipeline` | Policy | policy for Adaptive Window within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | Carries max_ms: int, event_threshold: int, min_ms: int, inactivity_timeout_ms: int = 0, +1 more. | 5 | 14 |
-| AdaptiveWindowTransition | `libs.windows.pipeline` | Domain Dataclass | Adaptive Window Transition within class-oriented canonical windows-table builder | Carries policy: WindowPolicy, state: AdaptiveWindowSegmentState = field(default_factory=AdaptiveWindowSegmentState). | 2 | 152 |
+| AdaptiveWindowTransition | `libs.windows.pipeline` | Domain Dataclass | Adaptive Window Transition within class-oriented canonical windows-table builder | Carries policy: WindowPolicy, state: AdaptiveWindowSegmentState = field(default_factory=AdaptiveWindowSegmentState). | 2 | 197 |
 | AdaptiveWindowArtifactSet | `libs.windows.pipeline` | Artifact Bundle | artifact bundle for Adaptive Window within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | Carries windows_df: 'DataFrame', segments_df: 'DataFrame'. | 2 | 3 |
-| AdaptiveWindowPlan | `libs.windows.pipeline` | Execution Plan | execution plan for Adaptive Window within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | Carries policy: AdaptiveWindowPolicy, sequence_plan: SegmentedSequencePlan = field(default_factory=lambda: SegmentedSequencePlan(ordering=SequenceOrderingPolicy(key_columns=('tail_id', 'flight_id'), order_columns=('event_seq_id',), timestamp_column='timestamp_utc'), policy=_default_window_segment_policy())). | 2 | 308 |
-| WindowPolicyProfileSpec | `libs.windows.policy_profile` | Specification | specification for Window Policy Profile within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | Carries min_sampling_rate_hz: float, configured_max_ms: int, configured_event_threshold: int, min_ms: int, +7 more. | 11 | 53 |
-| WindowPolicyEvaluationSpec | `libs.windows.policy_profile` | Specification | specification for Window Policy Evaluation within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | Carries candidate_frontier_size: int = 5, stability_sample_fraction: float = 0.8, stability_sample_count: int = 2, max_stability_flights: int = 64, +3 more. | 7 | 8 |
-| WindowMetricsSummary | `libs.windows.policy_profile` | Domain Dataclass | Window Metrics Summary within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | Carries window_count: int = 0, event_threshold_rate: float = 0.0, max_ms_rate: float = 0.0, event_threshold_plus_max_ms_rate: float = 0.0, +11 more. | 15 | 105 |
-| WindowPolicyProfile | `libs.windows.policy_profile` | Profile | profile for Window Policy within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | Carries spec: WindowPolicyProfileSpec. | 1 | 650 |
-| WindowProfileRowsFrame | `libs.windows.tables` | Frame Artifact | frame artifact for Window Profile Rows within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | No extracted dataclass fields. | 0 | 64 |
-| WindowsTable | `libs.windows.tables` | Table Artifact | table artifact for Windows within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | No extracted dataclass fields. | 0 | 30 |
+| AdaptiveWindowPlan | `libs.windows.pipeline` | Execution Plan | execution plan for Adaptive Window within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | Carries policy: AdaptiveWindowPolicy, sequence_plan: SegmentedSequencePlan = field(default_factory=lambda: SegmentedSequencePlan(ordering=SequenceOrderingPolicy(key_columns=('tail_id', 'flight_id'), order_columns=('window_step_order',), timestamp_column='timestamp_utc'), policy=_default_window_segment_policy())). | 2 | 357 |
+| WindowPolicyProfileSpec | `libs.windows.policy_profile` | Specification | specification for Window Policy Profile within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | Carries min_sampling_rate_hz: float, configured_max_ms: int, configured_event_threshold: int, min_ms: int, +5 more. | 9 | 51 |
+| WindowPolicyEvaluationSpec | `libs.windows.policy_profile` | Specification | specification for Window Policy Evaluation within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | Carries candidate_frontier_size: int = 5, stability_sample_fraction: float = 0.8, stability_sample_count: int = 2, max_stability_flights: int = 64, +2 more. | 6 | 7 |
+| WindowMetricsSummary | `libs.windows.policy_profile` | Domain Dataclass | Window Metrics Summary within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | Carries window_count: int = 0, event_threshold_rate: float = 0.0, budget_threshold_rate: float = 0.0, end_of_stream_rate: float = 0.0, +14 more. | 18 | 116 |
+| WindowPolicyProfile | `libs.windows.policy_profile` | Profile | profile for Window Policy within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | Carries spec: WindowPolicyProfileSpec. | 1 | 734 |
+| WindowProfileRowsFrame | `libs.windows.tables` | Frame Artifact | frame artifact for Window Profile Rows within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | No extracted dataclass fields. | 0 | 71 |
+| WindowsTable | `libs.windows.tables` | Table Artifact | table artifact for Windows within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | No extracted dataclass fields. | 0 | 34 |
 | WindowFeaturesTable | `libs.windows.tables` | Table Artifact | table artifact for Window Features within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | No extracted dataclass fields. | 0 | 41 |
-| WindowPolicyProfileTable | `libs.windows.tables` | Table Artifact | table artifact for Window Policy Profile within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | No extracted dataclass fields. | 0 | 10 |
-| WindowPolicy | `libs.windows.window` | Policy | policy for Window within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | Carries max_ms: int, event_threshold: int, min_ms: int = 50, inactivity_timeout_ms: int = 0. | 4 | 58 |
-| Window | `libs.windows.window` | Domain Dataclass | Window within window domain objects and closure policy | Carries t_start: datetime, t_end: datetime, event_count: int = 0, sensor_buffer: WindowSensorBuffer = field(default_factory=WindowSensorBuffer), +2 more. | 6 | 77 |
+| WindowPolicyProfileTable | `libs.windows.tables` | Table Artifact | table artifact for Window Policy Profile within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | No extracted dataclass fields. | 0 | 21 |
+| WindowClosureBudgetPolicy | `libs.windows.window` | Policy | policy for Window Closure Budget within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | Carries quiet_horizon_ms: int, event_threshold: int. | 2 | 82 |
+| WindowPolicy | `libs.windows.window` | Policy | policy for Window within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder | Carries max_ms: int, event_threshold: int, min_ms: int = 50, inactivity_timeout_ms: int = 0. | 4 | 38 |
+| Window | `libs.windows.window` | Domain Dataclass | Window within window domain objects and closure policy | Carries t_start: datetime, t_end: datetime, event_count: int = 0, sensor_buffer: WindowSensorBuffer = field(default_factory=WindowSensorBuffer), +2 more. | 6 | 83 |
 
 ### Dataclass Fields
 
@@ -4513,19 +4569,19 @@ flowchart TB
 - Module: `libs.windows.pipeline`
 - Semantic kind: Execution Plan
 - Represents: execution plan for Adaptive Window within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder
-- Payload shape: Carries policy: AdaptiveWindowPolicy, sequence_plan: SegmentedSequencePlan = field(default_factory=lambda: SegmentedSequencePlan(ordering=SequenceOrderingPolicy(key_columns=('tail_id', 'flight_id'), order_columns=('event_seq_id',), timestamp_column='timestamp_utc'), policy=_default_window_segment_policy())).
+- Payload shape: Carries policy: AdaptiveWindowPolicy, sequence_plan: SegmentedSequencePlan = field(default_factory=lambda: SegmentedSequencePlan(ordering=SequenceOrderingPolicy(key_columns=('tail_id', 'flight_id'), order_columns=('window_step_order',), timestamp_column='timestamp_utc'), policy=_default_window_segment_policy())).
 
 | Field | Type | Default | Role |
 | --- | --- | --- | --- |
 | policy | AdaptiveWindowPolicy |  | domain model or execution contract |
-| sequence_plan | SegmentedSequencePlan | field(default_factory=lambda: SegmentedSequencePlan(ordering=SequenceOrderingPolicy(key_columns=('tail_id', 'flight_id'), order_columns=('event_seq_id',), timestamp_column='timestamp_utc'), policy=_default_window_segment_policy())) | domain model or execution contract |
+| sequence_plan | SegmentedSequencePlan | field(default_factory=lambda: SegmentedSequencePlan(ordering=SequenceOrderingPolicy(key_columns=('tail_id', 'flight_id'), order_columns=('window_step_order',), timestamp_column='timestamp_utc'), policy=_default_window_segment_policy())) | domain model or execution contract |
 
 #### WindowPolicyProfileSpec
 
 - Module: `libs.windows.policy_profile`
 - Semantic kind: Specification
 - Represents: specification for Window Policy Profile within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder
-- Payload shape: Carries min_sampling_rate_hz: float, configured_max_ms: int, configured_event_threshold: int, min_ms: int, +7 more.
+- Payload shape: Carries min_sampling_rate_hz: float, configured_max_ms: int, configured_event_threshold: int, min_ms: int, +5 more.
 
 | Field | Type | Default | Role |
 | --- | --- | --- | --- |
@@ -4538,15 +4594,13 @@ flowchart TB
 | gap_quantiles | tuple[float, ...] | (0.5, 0.75, 0.9) | ordered or grouped values |
 | event_threshold_multipliers | tuple[float, ...] | (0.75, 1.0, 1.25, 1.5, 2.0) | model parameter or coefficient |
 | max_profile_flights | int | 64 | numeric value |
-| target_event_threshold_close_rate | float | 0.75 | model parameter or coefficient |
-| target_max_ms_close_rate | float | 0.25 | numeric value |
 
 #### WindowPolicyEvaluationSpec
 
 - Module: `libs.windows.policy_profile`
 - Semantic kind: Specification
 - Represents: specification for Window Policy Evaluation within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder
-- Payload shape: Carries candidate_frontier_size: int = 5, stability_sample_fraction: float = 0.8, stability_sample_count: int = 2, max_stability_flights: int = 64, +3 more.
+- Payload shape: Carries candidate_frontier_size: int = 5, stability_sample_fraction: float = 0.8, stability_sample_count: int = 2, max_stability_flights: int = 64, +2 more.
 
 | Field | Type | Default | Role |
 | --- | --- | --- | --- |
@@ -4554,8 +4608,7 @@ flowchart TB
 | stability_sample_fraction | float | 0.8 | numeric value |
 | stability_sample_count | int | 2 | numeric value |
 | max_stability_flights | int | 64 | numeric value |
-| warning_pair_cost_ratio | float | 1.25 | numeric value |
-| warning_p95_event_ratio | float | 1.25 | numeric value |
+| warning_policy_penalty_ratio | float | 1.25 | domain model or execution contract |
 | warning_min_boundary_jaccard | float | 0.5 | numeric value |
 
 #### WindowMetricsSummary
@@ -4563,19 +4616,22 @@ flowchart TB
 - Module: `libs.windows.policy_profile`
 - Semantic kind: Domain Dataclass
 - Represents: Window Metrics Summary within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder
-- Payload shape: Carries window_count: int = 0, event_threshold_rate: float = 0.0, max_ms_rate: float = 0.0, event_threshold_plus_max_ms_rate: float = 0.0, +11 more.
+- Payload shape: Carries window_count: int = 0, event_threshold_rate: float = 0.0, budget_threshold_rate: float = 0.0, end_of_stream_rate: float = 0.0, +14 more.
 
 | Field | Type | Default | Role |
 | --- | --- | --- | --- |
 | window_count | int | 0 | numeric value |
 | event_threshold_rate | float | 0.0 | model parameter or coefficient |
-| max_ms_rate | float | 0.0 | numeric value |
-| event_threshold_plus_max_ms_rate | float | 0.0 | model parameter or coefficient |
+| budget_threshold_rate | float | 0.0 | model parameter or coefficient |
 | end_of_stream_rate | float | 0.0 | numeric value |
 | mean_duration_ms | float | 0.0 | numeric value |
 | p95_duration_ms | float | 0.0 | numeric value |
 | mean_event_count | float | 0.0 | numeric value |
 | p95_event_count | float | 0.0 | numeric value |
+| mean_quiet_credit_end | float | 0.0 | numeric value |
+| p95_quiet_credit_end | float | 0.0 | numeric value |
+| mean_closure_budget_end | float | 0.0 | numeric value |
+| p95_closure_budget_end | float | 0.0 | numeric value |
 | mean_sensor_count | float | 0.0 | numeric value |
 | p95_sensor_count | float | 0.0 | numeric value |
 | mean_event_type_count | float | 0.0 | numeric value |
@@ -4629,6 +4685,18 @@ No extracted dataclass fields.
 - Payload shape: No extracted dataclass fields.
 
 No extracted dataclass fields.
+
+#### WindowClosureBudgetPolicy
+
+- Module: `libs.windows.window`
+- Semantic kind: Policy
+- Represents: policy for Window Closure Budget within libs/windows owns: window lifecycle and closure semantics; window-policy profiling and selection; per-window signal buffering; the canonical segmented spark window builder
+- Payload shape: Carries quiet_horizon_ms: int, event_threshold: int.
+
+| Field | Type | Default | Role |
+| --- | --- | --- | --- |
+| quiet_horizon_ms | int |  | numeric value |
+| event_threshold | int |  | model parameter or coefficient |
 
 #### WindowPolicy
 

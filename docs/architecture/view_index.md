@@ -13,9 +13,9 @@
 ## Source Docs
 
 - `README.md`: S3NTINEL Codebase
-- `docs/v2_architecture.md`: S3NTINEL V2 Architecture
-- `docs/simulation_codepath_wire_diagram.md`: Simulation Codepath
-- `docs/simulation_architecture.md`: Simulation Architecture
+- `docs/current/v2_architecture.md`: S3NTINEL V2 Architecture
+- `docs/simulation/simulation_codepath_wire_diagram.md`: Simulation Codepath
+- `docs/simulation/simulation_architecture.md`: Simulation Architecture
 - `pipelines/README.md`: Pipelines
 - `scripts/README.md`: Scripts — Canonical Entry Points and Utilities
 - `libs/README.md`: Libraries

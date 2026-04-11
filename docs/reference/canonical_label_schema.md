@@ -5,7 +5,7 @@ This repo uses one label/detection nomenclature with no aliases.
 Architecture note:
 
 - label/detected naming here applies to both legacy and V2 code paths
-- the active pipeline architecture is documented in [v2_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/v2_architecture.md)
+- the active pipeline architecture is documented in [v2_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/current/v2_architecture.md)
 
 ## Canonical fields
 

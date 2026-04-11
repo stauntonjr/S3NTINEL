@@ -13,6 +13,7 @@ libs.anomaly.frames  (libs/anomaly/frames.py)
   -> internal:
      - libs.perf.annotations
      - libs.pyspark
+     - libs.scoring.channels
 
 libs.anomaly.pipeline  (libs/anomaly/pipeline.py)
   -> internal:
@@ -22,6 +23,7 @@ libs.anomaly.pipeline  (libs/anomaly/pipeline.py)
 
 libs.anomaly.tables  (libs/anomaly/tables.py)
   -> internal:
+     - libs.anomaly.frames
      - libs.io.schemas.anomaly
      - libs.pyspark
 
@@ -195,6 +197,7 @@ libs.events.calibration  (libs/events/calibration.py)
      - libs.events.continuous
      - libs.events.pipeline
      - libs.windows
+     - libs.windows.policy_profile
 
 libs.events.categorical  (libs/events/categorical.py)
   -> internal:
@@ -240,14 +243,9 @@ libs.events.validator  (libs/events/validator.py)
 
 libs.graph  (libs/graph/__init__.py)
   -> internal:
-     - libs.graph.event
-     - libs.graph.fused
-     - libs.graph.hierarchy_artifacts
      - libs.graph.lag
      - libs.graph.pipeline
-     - libs.graph.precision
      - libs.graph.tables
-     - libs.graph.transition
      - libs.graph.validator
 
 libs.graph.data  (libs/graph/data.py)
@@ -286,7 +284,6 @@ libs.graph.pipeline  (libs/graph/pipeline.py)
   -> internal:
      - libs.graph.data
      - libs.graph.event
-     - libs.graph.fused
      - libs.graph.hierarchy_artifacts
      - libs.graph.lag
      - libs.graph.precision
@@ -560,30 +557,30 @@ libs.reporting.frame  (libs/reporting/frame.py)
 
 libs.scoring  (libs/scoring/__init__.py)
   -> internal:
-     - libs.scoring.artifacts
-     - libs.scoring.rules
+     - libs.scoring.channels
      - libs.scoring.tables
      - libs.scoring.validator
 
-libs.scoring.artifacts  (libs/scoring/artifacts.py)
-  -> internal:
-     - libs.io.contracts
-     - libs.scoring.rules
-
-libs.scoring.rules  (libs/scoring/rules.py)
-  -> internal:
-     - libs.io.contracts
+libs.scoring.channels  (libs/scoring/channels.py)
+  -> none
 
 libs.scoring.tables  (libs/scoring/tables.py)
   -> internal:
+     - libs.common.event_types
+     - libs.events.profiling
+     - libs.events.tables
      - libs.graph.tables
      - libs.io.schemas
      - libs.io.schemas.scoring
      - libs.phase.tables
+     - libs.profiling.profiles
      - libs.pyspark
+     - libs.scoring.channels
+     - libs.windows.tables
 
 libs.scoring.validator  (libs/scoring/validator.py)
-  -> none
+  -> internal:
+     - libs.scoring.channels
 
 libs.simulation  (libs/simulation/__init__.py)
   -> internal:
@@ -733,8 +730,10 @@ libs.simulation.flight.spec  (libs/simulation/flight/spec.py)
 
 libs.simulation.full_run_report  (libs/simulation/full_run_report.py)
   -> internal:
+     - libs.simulation.report_tables
      - libs.simulation.run_bundle
      - libs.simulation.run_context
+     - libs.windows
 
 libs.simulation.module  (libs/simulation/module/__init__.py)
   -> internal:
@@ -983,7 +982,8 @@ libs.testing.assertions  (libs/testing/assertions.py)
   -> none
 
 libs.testing.data  (libs/testing/data.py)
-  -> none
+  -> internal:
+     - libs.scoring.channels
 
 libs.testing.evaluation  (libs/testing/evaluation.py)
   -> none
@@ -1205,11 +1205,14 @@ pipelines.72_phase_label_centroids  (pipelines/72_phase_label_centroids.py)
 
 pipelines.80_window_scores_raw  (pipelines/80_window_scores_raw.py)
   -> internal:
+     - libs.events
      - libs.graph.tables
      - libs.io.delta
      - libs.perf
      - libs.phase
+     - libs.profiling
      - libs.scoring
+     - libs.windows
      - pipelines.common
 
 pipelines.85_window_scores_calibrate  (pipelines/85_window_scores_calibrate.py)

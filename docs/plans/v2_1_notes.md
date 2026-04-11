@@ -1,5 +1,8 @@
 # V2.1 Notes: Rate- and Type-Aware Representation
 
+Status: Plan
+Authority: Non-authoritative roadmap. Use package READMEs and `docs/current/` for current behavior.
+
 This note records a likely next-step architectural refinement for the continuous
 window-feature layer. It is intentionally not part of the active path yet.
 

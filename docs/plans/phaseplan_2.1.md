@@ -1,3 +1,8 @@
+# Phase Plan 2.1
+
+Status: Plan
+Authority: Non-authoritative roadmap. Use package READMEs and `docs/current/` for current behavior.
+
 Plan for phase simulation in the current object model:
 
 For current implementation ownership, see:

@@ -4,6 +4,7 @@ libs.anomaly
 libs.anomaly.frames
   <- libs.anomaly
   <- libs.anomaly.pipeline
+  <- libs.anomaly.tables
 
 libs.anomaly.pipeline
   <- libs.anomaly
@@ -147,6 +148,7 @@ libs.common.event_types
   <- libs.events.types
   <- libs.phase.frames
   <- libs.phase.selectors
+  <- libs.scoring.tables
 
 libs.common.parameter_datatypes
   <- libs.common
@@ -164,6 +166,7 @@ libs.events
   <- libs.testing.seed
   <- pipelines.15_event_profiles_fit
   <- pipelines.20_events_extract
+  <- pipelines.80_window_scores_raw
   <- scripts.calibrate_continuous_events
   <- scripts.evaluate_sim_event_labels
 
@@ -185,10 +188,12 @@ libs.events.pipeline
 
 libs.events.profiling
   <- libs.events
+  <- libs.scoring.tables
 
 libs.events.tables
   <- libs.events
   <- libs.events.pipeline
+  <- libs.scoring.tables
 
 libs.events.types
   <- libs.events
@@ -212,21 +217,17 @@ libs.graph.evaluation
   <- pipelines.50_build_graph
 
 libs.graph.event
-  <- libs.graph
   <- libs.graph.lag
   <- libs.graph.pipeline
   <- libs.graph.transition
 
 libs.graph.fused
-  <- libs.graph
   <- libs.graph.evaluation
-  <- libs.graph.pipeline
 
 libs.graph.hierarchy
   <- libs.graph.hierarchy_artifacts
 
 libs.graph.hierarchy_artifacts
-  <- libs.graph
   <- libs.graph.evaluation
   <- libs.graph.pipeline
   <- pipelines.50_build_graph
@@ -243,7 +244,6 @@ libs.graph.pipeline
   <- libs.graph.tables
 
 libs.graph.precision
-  <- libs.graph
   <- libs.graph.pipeline
 
 libs.graph.tables
@@ -253,7 +253,6 @@ libs.graph.tables
   <- pipelines.80_window_scores_raw
 
 libs.graph.transition
-  <- libs.graph
   <- libs.graph.pipeline
 
 libs.graph.validator
@@ -264,8 +263,6 @@ libs.io.contracts
   <- libs.events.validator
   <- libs.io
   <- libs.profiling.validator
-  <- libs.scoring.artifacts
-  <- libs.scoring.rules
   <- libs.windows.window
 
 libs.io.delta
@@ -502,6 +499,7 @@ libs.profiling
   <- libs.testing.seed
   <- pipelines.10_parameter_profiles_fit
   <- pipelines.12_behavior_profiles_fit
+  <- pipelines.80_window_scores_raw
 
 libs.profiling.pipeline
   <- libs.profiling
@@ -510,6 +508,7 @@ libs.profiling.profiles
   <- libs.events.profiling
   <- libs.profiling
   <- libs.profiling.pipeline
+  <- libs.scoring.tables
 
 libs.profiling.validator
   <- libs.profiling
@@ -551,12 +550,12 @@ libs.scoring
   <- pipelines.80_window_scores_raw
   <- pipelines.85_window_scores_calibrate
 
-libs.scoring.artifacts
+libs.scoring.channels
+  <- libs.anomaly.frames
   <- libs.scoring
-
-libs.scoring.rules
-  <- libs.scoring
-  <- libs.scoring.artifacts
+  <- libs.scoring.tables
+  <- libs.scoring.validator
+  <- libs.testing.data
 
 libs.scoring.tables
   <- libs.scoring
@@ -758,6 +757,7 @@ libs.simulation.replay_report
   <- scripts.report_sim_replay
 
 libs.simulation.report_tables
+  <- libs.simulation.full_run_report
   <- libs.simulation.reporting
 
 libs.simulation.reporting
@@ -923,9 +923,11 @@ libs.tuning.validation_panels
 
 libs.windows
   <- libs.events.calibration
+  <- libs.simulation.full_run_report
   <- pipelines.25_window_policy_profile
   <- pipelines.30_windows_adaptive
   <- pipelines.40_backbone_fit
+  <- pipelines.80_window_scores_raw
 
 libs.windows.buffer
   <- libs.windows
@@ -944,10 +946,12 @@ libs.windows.pipeline
   <- libs.windows.tables
 
 libs.windows.policy_profile
+  <- libs.events.calibration
   <- libs.windows
   <- libs.windows.tables
 
 libs.windows.tables
+  <- libs.scoring.tables
   <- libs.windows
   <- libs.windows.policy_profile
 

@@ -20,7 +20,8 @@
     {
       "internal_dependencies": [
         "libs.perf.annotations",
-        "libs.pyspark"
+        "libs.pyspark",
+        "libs.scoring.channels"
       ],
       "module": "libs.anomaly.frames",
       "path": "libs/anomaly/frames.py"
@@ -36,6 +37,7 @@
     },
     {
       "internal_dependencies": [
+        "libs.anomaly.frames",
         "libs.io.schemas.anomaly",
         "libs.pyspark"
       ],
@@ -297,7 +299,8 @@
       "internal_dependencies": [
         "libs.events.continuous",
         "libs.events.pipeline",
-        "libs.windows"
+        "libs.windows",
+        "libs.windows.policy_profile"
       ],
       "module": "libs.events.calibration",
       "path": "libs/events/calibration.py"
@@ -367,14 +370,9 @@
     },
     {
       "internal_dependencies": [
-        "libs.graph.event",
-        "libs.graph.fused",
-        "libs.graph.hierarchy_artifacts",
         "libs.graph.lag",
         "libs.graph.pipeline",
-        "libs.graph.precision",
         "libs.graph.tables",
-        "libs.graph.transition",
         "libs.graph.validator"
       ],
       "module": "libs.graph",
@@ -434,7 +432,6 @@
       "internal_dependencies": [
         "libs.graph.data",
         "libs.graph.event",
-        "libs.graph.fused",
         "libs.graph.hierarchy_artifacts",
         "libs.graph.lag",
         "libs.graph.precision",
@@ -851,8 +848,7 @@
     },
     {
       "internal_dependencies": [
-        "libs.scoring.artifacts",
-        "libs.scoring.rules",
+        "libs.scoring.channels",
         "libs.scoring.tables",
         "libs.scoring.validator"
       ],
@@ -860,33 +856,31 @@
       "path": "libs/scoring/__init__.py"
     },
     {
-      "internal_dependencies": [
-        "libs.io.contracts",
-        "libs.scoring.rules"
-      ],
-      "module": "libs.scoring.artifacts",
-      "path": "libs/scoring/artifacts.py"
+      "internal_dependencies": [],
+      "module": "libs.scoring.channels",
+      "path": "libs/scoring/channels.py"
     },
     {
       "internal_dependencies": [
-        "libs.io.contracts"
-      ],
-      "module": "libs.scoring.rules",
-      "path": "libs/scoring/rules.py"
-    },
-    {
-      "internal_dependencies": [
+        "libs.common.event_types",
+        "libs.events.profiling",
+        "libs.events.tables",
         "libs.graph.tables",
         "libs.io.schemas",
         "libs.io.schemas.scoring",
         "libs.phase.tables",
-        "libs.pyspark"
+        "libs.profiling.profiles",
+        "libs.pyspark",
+        "libs.scoring.channels",
+        "libs.windows.tables"
       ],
       "module": "libs.scoring.tables",
       "path": "libs/scoring/tables.py"
     },
     {
-      "internal_dependencies": [],
+      "internal_dependencies": [
+        "libs.scoring.channels"
+      ],
       "module": "libs.scoring.validator",
       "path": "libs/scoring/validator.py"
     },
@@ -1101,8 +1095,10 @@
     },
     {
       "internal_dependencies": [
+        "libs.simulation.report_tables",
         "libs.simulation.run_bundle",
-        "libs.simulation.run_context"
+        "libs.simulation.run_context",
+        "libs.windows"
       ],
       "module": "libs.simulation.full_run_report",
       "path": "libs/simulation/full_run_report.py"
@@ -1475,7 +1471,9 @@
       "path": "libs/testing/assertions.py"
     },
     {
-      "internal_dependencies": [],
+      "internal_dependencies": [
+        "libs.scoring.channels"
+      ],
       "module": "libs.testing.data",
       "path": "libs/testing/data.py"
     },
@@ -1799,11 +1797,14 @@
     },
     {
       "internal_dependencies": [
+        "libs.events",
         "libs.graph.tables",
         "libs.io.delta",
         "libs.perf",
         "libs.phase",
+        "libs.profiling",
         "libs.scoring",
+        "libs.windows",
         "pipelines.common"
       ],
       "module": "pipelines.80_window_scores_raw",

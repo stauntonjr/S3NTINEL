@@ -22,17 +22,35 @@ Recommended orientation order:
 4. the package-level README for the area you are editing
 5. the deeper conceptual notes in this directory
 
+Directory layout:
+- `current/`
+  - active implementation-facing docs
+  - start here for architecture, workflow, validation, and complexity
+- `reference/`
+  - stable taxonomy, schema, and theory reference docs
+- `design/`
+  - design notes and detailed architecture/spec material
+- `simulation/`
+  - simulator-specific guidance and diagrams
+- `plans/`
+  - roadmap and proposal docs
+  - non-authoritative for current behavior
+- `research/`
+  - exploratory or research-note material
+- `architecture/`
+  - generated architecture snapshot subtree
+  - non-authoritative until regenerated
+
 Useful starting points:
+- [current/v2_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/current/v2_architecture.md)
+- [current/fitting_workflow.md](/home/jrs/code/S3NTINEL/sentinel/docs/current/fitting_workflow.md)
+- [current/phase_validation_semantics.md](/home/jrs/code/S3NTINEL/sentinel/docs/current/phase_validation_semantics.md)
+- [current/computational_complexity_report.md](/home/jrs/code/S3NTINEL/sentinel/docs/current/computational_complexity_report.md)
+- [reference/theory_foundations.md](/home/jrs/code/S3NTINEL/sentinel/docs/reference/theory_foundations.md)
+- [design/artifact_replay_design.md](/home/jrs/code/S3NTINEL/sentinel/docs/design/artifact_replay_design.md)
+- [simulation/simulation_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/simulation/simulation_architecture.md)
+- [plans/simulation_medium_term_plan.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/simulation_medium_term_plan.md)
 - [architecture/README.md](/home/jrs/code/S3NTINEL/sentinel/docs/architecture/README.md)
-- [simulation_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/simulation_architecture.md)
-- [behavior_simulation_improvements.md](/home/jrs/code/S3NTINEL/sentinel/docs/behavior_simulation_improvements.md)
-- [fitting_workflow.md](/home/jrs/code/S3NTINEL/sentinel/docs/fitting_workflow.md)
-- [phase_validation_semantics.md](/home/jrs/code/S3NTINEL/sentinel/docs/phase_validation_semantics.md)
-- [computational_complexity_report.md](/home/jrs/code/S3NTINEL/sentinel/docs/computational_complexity_report.md)
-- [theory_foundations.md](/home/jrs/code/S3NTINEL/sentinel/docs/theory_foundations.md)
-- [v2_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/v2_architecture.md)
-- [artifact_replay_design.md](/home/jrs/code/S3NTINEL/sentinel/docs/artifact_replay_design.md)
-- [simulation_medium_term_plan.md](/home/jrs/code/S3NTINEL/sentinel/docs/simulation_medium_term_plan.md)
 
 Notes:
 - These docs preserve conceptual material even where the code-level READMEs are now the primary implementation guide.

@@ -11,9 +11,9 @@ The motivation is symmetry:
 Without that symmetry, the simulator becomes richer than the runtime model and the
 sim-to-real gap widens.
 
-For the corresponding deviation/anomaly ontology, see [misbehavior_taxonomy.md](/home/jrs/code/S3NTINEL/sentinel/docs/misbehavior_taxonomy.md).
+For the corresponding deviation/anomaly ontology, see [misbehavior_taxonomy.md](/home/jrs/code/S3NTINEL/sentinel/docs/reference/misbehavior_taxonomy.md).
 For the intended fitting-stage placement of datatype profiling, robust scaling, and
-behavior profiling, see [fitting_workflow.md](/home/jrs/code/S3NTINEL/sentinel/docs/fitting_workflow.md).
+behavior profiling, see [fitting_workflow.md](/home/jrs/code/S3NTINEL/sentinel/docs/current/fitting_workflow.md).
 
 ## 1. Purpose
 
@@ -353,8 +353,8 @@ Suggested additions:
 
 For the proposed shared package and per-family file layout, see:
 
-- [behavior_family_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/behavior_family_architecture.md)
-- [behavior_family_skeletons.md](/home/jrs/code/S3NTINEL/sentinel/docs/behavior_family_skeletons.md)
+- [behavior_family_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/design/behavior_family_architecture.md)
+- [behavior_family_skeletons.md](/home/jrs/code/S3NTINEL/sentinel/docs/design/behavior_family_skeletons.md)
 
 Suggested public API:
 

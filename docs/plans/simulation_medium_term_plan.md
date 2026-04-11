@@ -1,5 +1,8 @@
 # Simulation Medium-Term Plan
 
+Status: Plan
+Authority: Non-authoritative roadmap. Use package READMEs and `docs/current/` for current behavior.
+
 This document defines the next 2-3 engineering milestones for the simulation and
  simulation pipeline work. It is intended to keep the codebase moving in one clear
 direction instead of growing new parallel seams.

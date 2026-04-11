@@ -5,7 +5,7 @@ transition-region validation in the active V2 phase stack.
 
 For current implementation ownership, see:
 - [libs/phase/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/phase/README.md)
-- [docs/v2_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/v2_architecture.md)
+- [docs/current/v2_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/current/v2_architecture.md)
 
 ## Primary phase taxonomy
 

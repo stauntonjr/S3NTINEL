@@ -6,7 +6,7 @@ This note records a practical research-backed view of two adjacent questions:
 2. how the backbone fit should be validated beyond "the code ran"
 
 For the planned structured deviation ontology that should sit underneath anomaly
-classification, see [misbehavior_taxonomy.md](/home/jrs/code/S3NTINEL/sentinel/docs/misbehavior_taxonomy.md).
+classification, see [misbehavior_taxonomy.md](/home/jrs/code/S3NTINEL/sentinel/docs/reference/misbehavior_taxonomy.md).
 
 The intent is not to catalogue every anomaly type in the literature. The intent is
 to identify the families that are both scientifically defensible and operationally

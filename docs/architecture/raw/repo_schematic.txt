@@ -3,15 +3,15 @@ libs/__init__.py  [loc=6]
   imports:
     - from libs.perf.annotations import hot_path, is_hot_path
 
-libs/anomaly/__init__.py  [loc=30]
+libs/anomaly/__init__.py  [loc=32]
   doc: Anomaly attribution package.
   imports:
-    - from libs.anomaly.frames import AnomalyAttributionContextFrame, AnomalyPanelContextFrame, AnomalySubsystemContextFrame
+    - from libs.anomaly.frames import AnomalyAttributionContextFrame, AnomalyPanelContextFrame, AnomalyParameterLocalizationFrame, AnomalySubsystemContextFrame
     - from libs.anomaly.pipeline import AnomalyArtifactSet, AnomalyAttributionPlan
     - from libs.anomaly.tables import AnomalyEventAttributionTable, AnomalyTelemetryAttributionTable, AnomalyWindowAttributionTable
     - from libs.anomaly.validator import validate_attribution_against_fault_truth, validate_attribution_against_misbehavior_truth
 
-libs/anomaly/frames.py  [loc=340]
+libs/anomaly/frames.py  [loc=922]
   doc: Typed Spark frames for reusable anomaly attribution context.
   imports:
     - from __future__ import annotations
@@ -19,36 +19,54 @@ libs/anomaly/frames.py  [loc=340]
     - from typing import TYPE_CHECKING
     - from libs.perf.annotations import hot_path
     - from libs.pyspark import Frame
+    - from libs.scoring.channels import BOUND_VIOLATION_CHANNEL, COHERENCE_BREAK_CHANNEL, EVENT_DISCORDANCE_CHANNEL, RECONSTRUCTION_ERROR_CHANNEL, REGIME_DEVIATION_CHANNEL, RESPONSE_VIOLATION_CHANNEL, STATE_VIOLATION_CHANNEL
     - from pyspark.sql import DataFrame
+  constants:
+    - ANOMALY_LOCALIZATION_PARAMETER_TOP_K
+    - ANOMALY_LOCALIZATION_TARGET_TOP_K
+  functions:
+    - def _component_score_expr(component_scores_col: str, channel_name: str) -> 'Column'  [lines 24-27, loc=4]
+    - def _log_component_weight_expr(component_scores_col: str, channel_name: str) -> 'Column'  [lines 30-48, loc=19]
+    - def mapped_events_in_supported_windows(*, events_df: 'DataFrame', windows_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame') -> 'DataFrame'  [lines 51-99, loc=49]
   classes:
-    - @dataclass(frozen=True) class AnomalySubsystemContextFrame(Frame)  [lines 13-158, loc=146]
+    - @dataclass(frozen=True) class AnomalySubsystemContextFrame(Frame)  [lines 103-237, loc=135]
       methods:
         - @classmethod
         - @hot_path
-        - def from_events_and_windows(cls, events_df: 'DataFrame', windows_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', *, top_k_per_subsystem: int) -> 'AnomalySubsystemContextFrame'  [lines 16-158, loc=143]
-    - @dataclass(frozen=True) class AnomalyPanelContextFrame(Frame)  [lines 162-296, loc=135]
+        - def from_events_and_windows(cls, events_df: 'DataFrame', windows_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', *, top_k_per_subsystem: int) -> 'AnomalySubsystemContextFrame'  [lines 106-237, loc=132]
+    - @dataclass(frozen=True) class AnomalyPanelContextFrame(Frame)  [lines 241-375, loc=135]
       methods:
         - @classmethod
         - @hot_path
-        - def from_raw_and_windows(cls, raw_df: 'DataFrame', windows_df: 'DataFrame', *, max_items: int = 5) -> 'AnomalyPanelContextFrame'  [lines 165-296, loc=132]
-    - @dataclass(frozen=True) class AnomalyAttributionContextFrame(Frame)  [lines 300-336, loc=37]
+        - def from_raw_and_windows(cls, raw_df: 'DataFrame', windows_df: 'DataFrame', *, max_items: int = 5) -> 'AnomalyPanelContextFrame'  [lines 244-375, loc=132]
+    - @dataclass(frozen=True) class AnomalyParameterLocalizationFrame(Frame)  [lines 379-878, loc=500]
+      methods:
+        - def _module_support_df(self) -> 'DataFrame'  [lines 380-401, loc=22]
+        - @classmethod
+        - @hot_path
+        - def from_calibrated_phase_windows_events_and_hierarchy(cls, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', top_k_per_window: int = ANOMALY_LOCALIZATION_PARAMETER_TOP_K) -> 'AnomalyParameterLocalizationFrame'  [lines 405-761, loc=357]
+        - @hot_path
+        - def localized_targets_df(self, *, top_k_per_window: int = ANOMALY_LOCALIZATION_TARGET_TOP_K) -> 'DataFrame'  [lines 764-867, loc=104]
+        - @hot_path
+        - def dominant_targets_df(self) -> 'DataFrame'  [lines 870-878, loc=9]
+    - @dataclass(frozen=True) class AnomalyAttributionContextFrame(Frame)  [lines 882-918, loc=37]
       methods:
         - @classmethod
         - @hot_path
-        - def from_context_frames(cls, *, subsystem_context: AnomalySubsystemContextFrame, panel_context: AnomalyPanelContextFrame) -> 'AnomalyAttributionContextFrame'  [lines 303-336, loc=34]
+        - def from_context_frames(cls, *, subsystem_context: AnomalySubsystemContextFrame, panel_context: AnomalyPanelContextFrame) -> 'AnomalyAttributionContextFrame'  [lines 885-918, loc=34]
 
-libs/anomaly/pipeline.py  [loc=128]
+libs/anomaly/pipeline.py  [loc=168]
   doc: Spark adapters for anomaly attribution artifacts.
   imports:
     - from __future__ import annotations
     - from dataclasses import dataclass
-    - from libs.anomaly.frames import AnomalyAttributionContextFrame, AnomalyPanelContextFrame, AnomalySubsystemContextFrame
+    - from libs.anomaly.frames import AnomalyAttributionContextFrame, AnomalyPanelContextFrame, AnomalyParameterLocalizationFrame, AnomalySubsystemContextFrame
     - from libs.anomaly.tables import AnomalyEventAttributionTable, AnomalyTelemetryAttributionTable, AnomalyWindowAttributionTable
     - from libs.perf.annotations import hot_path
     - from typing import TYPE_CHECKING
     - from pyspark.sql import DataFrame
   classes:
-    - @dataclass(frozen=True) class AnomalyArtifactSet  [lines 21-24, loc=4]
+    - @dataclass(frozen=True) class AnomalyArtifactSet  [lines 22-25, loc=4]
       attributes:
         - window_attribution
         - telemetry_attribution
@@ -57,107 +75,131 @@ libs/anomaly/pipeline.py  [loc=128]
         - window_attribution: AnomalyWindowAttributionTable
         - telemetry_attribution: AnomalyTelemetryAttributionTable
         - event_attribution: AnomalyEventAttributionTable
-    - @dataclass(frozen=True) class AnomalyAttributionPlan  [lines 28-122, loc=95]
+    - @dataclass(frozen=True) class AnomalyAttributionPlan  [lines 29-162, loc=134]
       attributes:
         - top_k_per_subsystem
       fields:
         - top_k_per_subsystem: int = 5
       methods:
-        - def build_window_attribution(self, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame', windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', raw_df: 'DataFrame') -> AnomalyWindowAttributionTable  [lines 31-58, loc=28]
-        - def build_telemetry_attribution(self, *, calibrated_df: 'DataFrame', windows_df: 'DataFrame', raw_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame') -> AnomalyTelemetryAttributionTable  [lines 60-73, loc=14]
-        - def build_event_attribution(self, *, calibrated_df: 'DataFrame', windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame') -> AnomalyEventAttributionTable  [lines 75-88, loc=14]
+        - def build_window_attribution(self, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame', windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', raw_df: 'DataFrame', localization_targets_df: 'DataFrame | None' = None) -> AnomalyWindowAttributionTable  [lines 32-70, loc=39]
+        - def build_telemetry_attribution(self, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame | None' = None, windows_df: 'DataFrame', events_df: 'DataFrame | None' = None, raw_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', parameter_localization_df: 'DataFrame | None' = None) -> AnomalyTelemetryAttributionTable  [lines 72-102, loc=31]
+        - def build_event_attribution(self, *, calibrated_df: 'DataFrame', windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame') -> AnomalyEventAttributionTable  [lines 104-117, loc=14]
         - @hot_path
-        - def build(self, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame', windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', raw_df: 'DataFrame') -> AnomalyArtifactSet  [lines 91-122, loc=32]
+        - def build(self, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame', windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', raw_df: 'DataFrame') -> AnomalyArtifactSet  [lines 120-162, loc=43]
 
-libs/anomaly/tables.py  [loc=225]
+libs/anomaly/tables.py  [loc=277]
   doc: Typed Spark tables for anomaly attribution artifacts.
   imports:
     - from __future__ import annotations
     - from dataclasses import dataclass
     - from typing import TYPE_CHECKING
+    - from libs.anomaly.frames import mapped_events_in_supported_windows
     - from libs.io.schemas.anomaly import ANOMALY_EVENT_ATTRIBUTION_SCHEMA, ANOMALY_TELEMETRY_ATTRIBUTION_SCHEMA, ANOMALY_WINDOW_ATTRIBUTION_SCHEMA
     - from libs.pyspark import Table
     - from pyspark.sql import DataFrame
   classes:
-    - @dataclass(frozen=True) class AnomalyWindowAttributionTable(Table)  [lines 17-97, loc=81]
+    - @dataclass(frozen=True) class AnomalyWindowAttributionTable(Table)  [lines 18-137, loc=120]
       attributes:
         - partition_by
       fields:
         - partition_by: tuple[str, ...] = ('tail_id',)
       methods:
         - @classmethod
-        - def spark_schema(cls)  [lines 21-22, loc=2]
+        - def spark_schema(cls)  [lines 22-23, loc=2]
         - @classmethod
-        - def from_calibrated_windows_and_context(cls, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame', windows_df: 'DataFrame', attribution_context_df: 'DataFrame') -> 'AnomalyWindowAttributionTable'  [lines 25-97, loc=73]
-    - @dataclass(frozen=True) class AnomalyTelemetryAttributionTable(Table)  [lines 101-156, loc=56]
+        - def from_calibrated_windows_and_context(cls, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame', windows_df: 'DataFrame', attribution_context_df: 'DataFrame', localization_targets_df: 'DataFrame | None' = None) -> 'AnomalyWindowAttributionTable'  [lines 26-137, loc=112]
+    - @dataclass(frozen=True) class AnomalyTelemetryAttributionTable(Table)  [lines 141-224, loc=84]
       attributes:
         - partition_by
       fields:
         - partition_by: tuple[str, ...] = ('tail_id',)
       methods:
         - @classmethod
-        - def spark_schema(cls)  [lines 105-106, loc=2]
+        - def spark_schema(cls)  [lines 145-146, loc=2]
         - @classmethod
-        - def from_calibrated_windows_raw_and_hierarchy(cls, *, calibrated_df: 'DataFrame', windows_df: 'DataFrame', raw_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame') -> 'AnomalyTelemetryAttributionTable'  [lines 109-156, loc=48]
-    - @dataclass(frozen=True) class AnomalyEventAttributionTable(Table)  [lines 160-221, loc=62]
+        - def from_calibrated_windows_raw_and_hierarchy(cls, *, calibrated_df: 'DataFrame', windows_df: 'DataFrame', raw_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', parameter_localization_df: 'DataFrame | None' = None) -> 'AnomalyTelemetryAttributionTable'  [lines 149-224, loc=76]
+    - @dataclass(frozen=True) class AnomalyEventAttributionTable(Table)  [lines 228-273, loc=46]
       attributes:
         - partition_by
       fields:
         - partition_by: tuple[str, ...] = ('tail_id',)
       methods:
         - @classmethod
-        - def spark_schema(cls)  [lines 164-165, loc=2]
+        - def spark_schema(cls)  [lines 232-233, loc=2]
         - @classmethod
-        - def from_calibrated_windows_events_and_hierarchy(cls, *, calibrated_df: 'DataFrame', windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame') -> 'AnomalyEventAttributionTable'  [lines 168-221, loc=54]
+        - def from_calibrated_windows_events_and_hierarchy(cls, *, calibrated_df: 'DataFrame', windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame') -> 'AnomalyEventAttributionTable'  [lines 236-273, loc=38]
 
-libs/anomaly/validator.py  [loc=339]
+libs/anomaly/validator.py  [loc=880]
   doc: Anomaly attribution validation against simulator misbehavior truth with fault wrappers.
   imports:
     - from __future__ import annotations
     - from dataclasses import dataclass
     - from typing import Any
     - import pandas as pd
-    - from libs.scoring.validator import STRICT_MAX_EARLY_LEAD_SECONDS, STRICT_TRUTH_COVERAGE_MIN_RATIO, build_truth_window_overlap_table, extract_fault_truth_windows, extract_misbehavior_truth_windows
+    - from libs.scoring.validator import STRICT_MAX_EARLY_LEAD_SECONDS, STRICT_WINDOW_COVERAGE_MIN_RATIO, build_truth_window_overlap_table, extract_fault_truth_windows, extract_misbehavior_truth_windows, strict_overlap_mask
   functions:
-    - def _truth_parameter_to_subsystem_map(hierarchy_label_df: pd.DataFrame | None) -> dict[str, str]  [lines 213-219, loc=7]
-    - def validate_attribution_against_misbehavior_truth(*, raw_telemetry_df: pd.DataFrame, windows_df: pd.DataFrame, anomaly_window_attribution_df: pd.DataFrame, anomaly_telemetry_attribution_df: pd.DataFrame, anomaly_event_attribution_df: pd.DataFrame, hierarchy_sensor_map_df: pd.DataFrame | None = None, hierarchy_label_df: pd.DataFrame | None = None) -> dict[str, Any]  [lines 222-293, loc=72]
-    - def validate_attribution_against_fault_truth(*, raw_telemetry_df: pd.DataFrame, windows_df: pd.DataFrame, anomaly_window_attribution_df: pd.DataFrame, anomaly_telemetry_attribution_df: pd.DataFrame, anomaly_event_attribution_df: pd.DataFrame, hierarchy_sensor_map_df: pd.DataFrame | None = None, hierarchy_label_df: pd.DataFrame | None = None) -> dict[str, Any]  [lines 296-339, loc=44]
+    - def _empty_parameter_localization_validation() -> dict[str, Any]  [lines 20-49, loc=30]
+    - def _empty_module_localization_validation() -> dict[str, Any]  [lines 52-71, loc=20]
+    - def _empty_channel_localization_validation() -> dict[str, Any]  [lines 74-87, loc=14]
+    - def _sorted_non_empty_string_values(df: pd.DataFrame, column: str) -> list[str]  [lines 90-99, loc=10]
+    - def _records_with_none_for_missing(df: pd.DataFrame) -> list[dict[str, Any]]  [lines 102-103, loc=2]
+    - def _sorted_detected_candidate_ids(df: pd.DataFrame, column: str) -> list[str]  [lines 106-130, loc=25]
+    - def _resolve_truth_candidate_ids(detected_candidate_ids: list[str], truth_map: 'DetectedLocalizationTruthMap') -> list[str]  [lines 133-142, loc=10]
+    - def _rate_by_score_component(per_truth_df: pd.DataFrame, *, value_column: str, require_mappable_column: str | None = None) -> dict[str, float]  [lines 145-165, loc=21]
+    - def _truth_parameter_to_subsystem_map(hierarchy_label_df: pd.DataFrame | None) -> dict[str, str]  [lines 452-458, loc=7]
+    - def _truth_parameter_to_module_map(hierarchy_label_df: pd.DataFrame | None) -> dict[str, str]  [lines 461-467, loc=7]
+    - def _build_parameter_localization_validation(per_truth_df: pd.DataFrame) -> dict[str, Any]  [lines 470-545, loc=76]
+    - def _build_module_localization_validation(per_truth_df: pd.DataFrame) -> dict[str, Any]  [lines 548-603, loc=56]
+    - def _build_channel_localization_validation(per_truth_df: pd.DataFrame) -> dict[str, Any]  [lines 606-680, loc=75]
+    - def build_fault_attribution_summary_from_misbehavior_summary(summary: dict[str, Any]) -> dict[str, Any]  [lines 683-728, loc=46]
+    - def validate_attribution_against_misbehavior_truth(*, raw_telemetry_df: pd.DataFrame, windows_df: pd.DataFrame, anomaly_window_attribution_df: pd.DataFrame, anomaly_telemetry_attribution_df: pd.DataFrame, anomaly_event_attribution_df: pd.DataFrame, hierarchy_sensor_map_df: pd.DataFrame | None = None, hierarchy_label_df: pd.DataFrame | None = None) -> dict[str, Any]  [lines 731-857, loc=127]
+    - def validate_attribution_against_fault_truth(*, raw_telemetry_df: pd.DataFrame, windows_df: pd.DataFrame, anomaly_window_attribution_df: pd.DataFrame, anomaly_telemetry_attribution_df: pd.DataFrame, anomaly_event_attribution_df: pd.DataFrame, hierarchy_sensor_map_df: pd.DataFrame | None = None, hierarchy_label_df: pd.DataFrame | None = None) -> dict[str, Any]  [lines 860-880, loc=21]
   classes:
-    - @dataclass(frozen=True) class DetectedSubsystemTruthMap  [lines 20-72, loc=53]
+    - @dataclass(frozen=True) class DetectedLocalizationTruthMap  [lines 169-223, loc=55]
       attributes:
-        - detected_to_truth_subsystem
-        - ambiguous_detected_subsystems
+        - detected_to_truth_id
+        - ambiguous_detected_ids
       fields:
-        - detected_to_truth_subsystem: dict[str, str]
-        - ambiguous_detected_subsystems: set[str]
+        - detected_to_truth_id: dict[str, str]
+        - ambiguous_detected_ids: set[str]
       methods:
         - @classmethod
-        - def from_hierarchy_frames(cls, *, hierarchy_sensor_map_df: pd.DataFrame | None, hierarchy_label_df: pd.DataFrame | None) -> 'DetectedSubsystemTruthMap'  [lines 25-66, loc=42]
-        - def resolve(self, detected_subsystem_id: str) -> tuple[str | None, bool]  [lines 68-72, loc=5]
-    - @dataclass(frozen=True) class _TruthWindowAttributionMatch  [lines 76-210, loc=135]
+        - def from_hierarchy_frames(cls, *, hierarchy_sensor_map_df: pd.DataFrame | None, hierarchy_label_df: pd.DataFrame | None, detected_id_field: str, truth_id_field: str) -> 'DetectedLocalizationTruthMap'  [lines 174-217, loc=44]
+        - def resolve(self, detected_id: str) -> tuple[str | None, bool]  [lines 219-223, loc=5]
+    - @dataclass(frozen=True) class _TruthWindowAttributionMatch  [lines 227-449, loc=223]
       attributes:
         - truth_window_id
         - dominant_subsystem_match
         - dominant_subsystem_mappable
         - dominant_subsystem_truth
+        - dominant_module_match
+        - dominant_module_mappable
+        - dominant_module_truth
         - telemetry_parameter_match
         - event_parameter_match
         - telemetry_truth_subsystem_present
         - event_truth_subsystem_present
+        - telemetry_truth_module_present
+        - event_truth_module_present
         - payload
       fields:
         - truth_window_id: str
         - dominant_subsystem_match: bool
         - dominant_subsystem_mappable: bool
         - dominant_subsystem_truth: str | None
+        - dominant_module_match: bool
+        - dominant_module_mappable: bool
+        - dominant_module_truth: str | None
         - telemetry_parameter_match: bool
         - event_parameter_match: bool
         - telemetry_truth_subsystem_present: bool
         - event_truth_subsystem_present: bool
+        - telemetry_truth_module_present: bool
+        - event_truth_module_present: bool
         - payload: dict[str, Any]
       methods:
         - @classmethod
-        - def from_truth_record(cls, *, truth: dict[str, Any], windows_df: pd.DataFrame, anomaly_window_attribution_df: pd.DataFrame, anomaly_telemetry_attribution_df: pd.DataFrame, anomaly_event_attribution_df: pd.DataFrame, subsystem_truth_map: DetectedSubsystemTruthMap, truth_parameter_to_subsystem: dict[str, str], truth_window_id_field: str, truth_start_field: str, truth_end_field: str) -> '_TruthWindowAttributionMatch'  [lines 88-210, loc=123]
+        - def from_truth_record(cls, *, truth: dict[str, Any], windows_df: pd.DataFrame, anomaly_window_attribution_df: pd.DataFrame, anomaly_telemetry_attribution_df: pd.DataFrame, anomaly_event_attribution_df: pd.DataFrame, subsystem_truth_map: DetectedLocalizationTruthMap, module_truth_map: DetectedLocalizationTruthMap, truth_parameter_to_subsystem: dict[str, str], truth_parameter_to_module: dict[str, str], truth_window_id_field: str, truth_start_field: str, truth_end_field: str) -> '_TruthWindowAttributionMatch'  [lines 244-449, loc=206]
 
 libs/architecture/__init__.py  [loc=14]
   doc: Architecture extraction and rendering helpers.
@@ -1448,7 +1490,7 @@ libs/config/__init__.py  [loc=19]
   imports:
     - from libs.config.pipeline import PipelineArtifactPaths, PipelineContextSettings, PipelineExecutionSettings, load_pipeline_artifact_paths, load_pipeline_context_settings, load_pipeline_execution_settings
 
-libs/config/pipeline.py  [loc=630]
+libs/config/pipeline.py  [loc=623]
   doc: Typed pipeline configuration derived from defaults.yaml plus env overrides.
   imports:
     - from __future__ import annotations
@@ -1465,9 +1507,9 @@ libs/config/pipeline.py  [loc=630]
     - def _config_optional_float(config: dict[str, Any], path: list[str], default: float | None) -> float | None  [lines 50-58, loc=9]
     - def _config_str(config: dict[str, Any], path: list[str], default: str) -> str  [lines 61-67, loc=7]
     - def _config_list(config: dict[str, Any], path: list[str], default: list[Any]) -> list[Any]  [lines 70-78, loc=9]
-    - def load_pipeline_execution_settings() -> PipelineExecutionSettings  [lines 265-272, loc=8]
-    - def load_pipeline_artifact_paths() -> PipelineArtifactPaths  [lines 275-353, loc=79]
-    - def load_pipeline_context_settings(config: dict[str, Any]) -> PipelineContextSettings  [lines 356-630, loc=275]
+    - def load_pipeline_execution_settings() -> PipelineExecutionSettings  [lines 264-271, loc=8]
+    - def load_pipeline_artifact_paths() -> PipelineArtifactPaths  [lines 274-352, loc=79]
+    - def load_pipeline_context_settings(config: dict[str, Any]) -> PipelineContextSettings  [lines 355-623, loc=269]
   classes:
     - @dataclass(frozen=True) class PipelineExecutionSettings  [lines 82-86, loc=5]
       attributes:
@@ -1700,14 +1742,13 @@ libs/config/pipeline.py  [loc=630]
         - top_k_per_parameter_name: int
         - subsystem_min_edge_weight: float | None
         - system_min_edge_weight: float | None
-    - @dataclass(frozen=True) class PhaseSettings  [lines 230-238, loc=9]
+    - @dataclass(frozen=True) class PhaseSettings  [lines 230-237, loc=8]
       attributes:
         - phase_count
         - detect_sensor_count
         - detect_event_type_count
         - detect_categorical_state_count
         - stable_drift_quantile
-        - smoothing_radius
         - transition_penalty
         - min_dwell_windows
       fields:
@@ -1716,22 +1757,21 @@ libs/config/pipeline.py  [loc=630]
         - detect_event_type_count: int
         - detect_categorical_state_count: int
         - stable_drift_quantile: float
-        - smoothing_radius: int
         - transition_penalty: float
         - min_dwell_windows: int
-    - @dataclass(frozen=True) class ScoringSettings  [lines 242-244, loc=3]
+    - @dataclass(frozen=True) class ScoringSettings  [lines 241-243, loc=3]
       attributes:
         - max_bridge_reference_rows
         - min_warm
       fields:
         - max_bridge_reference_rows: int
         - min_warm: int
-    - @dataclass(frozen=True) class AnomalySettings  [lines 248-249, loc=2]
+    - @dataclass(frozen=True) class AnomalySettings  [lines 247-248, loc=2]
       attributes:
         - subsystem_top_sensors_k
       fields:
         - subsystem_top_sensors_k: int
-    - @dataclass(frozen=True) class PipelineContextSettings  [lines 253-262, loc=10]
+    - @dataclass(frozen=True) class PipelineContextSettings  [lines 252-261, loc=10]
       attributes:
         - profiling
         - events
@@ -1771,15 +1811,16 @@ libs/events/calibration.py  [loc=219]
     - from libs.events.continuous import ContinuousDetectorConfig, ContinuousEventDetector
     - from libs.events.pipeline import EventDetectionPlan
     - from libs.windows import WindowProfileRowsFrame
+    - from libs.windows.policy_profile import compute_window_policy_penalty
     - from pyspark.sql import DataFrame
   functions:
-    - def _spark_functions()  [lines 14-17, loc=4]
-    - def _event_type_counts(events_df: 'DataFrame') -> dict[str, int]  [lines 60-78, loc=19]
-    - def _window_summary(profile_windows_df: 'DataFrame') -> dict[str, Any]  [lines 81-129, loc=49]
-    - def _candidate_score(summary: dict[str, Any]) -> float  [lines 132-144, loc=13]
+    - def _spark_functions()  [lines 15-18, loc=4]
+    - def _event_type_counts(events_df: 'DataFrame') -> dict[str, int]  [lines 61-79, loc=19]
+    - def _window_summary(profile_windows_df: 'DataFrame') -> dict[str, Any]  [lines 82-128, loc=47]
+    - def _candidate_score(summary: dict[str, Any]) -> float  [lines 131-144, loc=14]
     - def build_continuous_event_calibration_report_spark(raw_df: 'DataFrame', *, datatype_profile_df: 'DataFrame | None' = None, spec: ContinuousEventCalibrationSpec) -> dict[str, Any]  [lines 147-219, loc=73]
   classes:
-    - @dataclass(frozen=True) class ContinuousEventCalibrationSpec  [lines 21-57, loc=37]
+    - @dataclass(frozen=True) class ContinuousEventCalibrationSpec  [lines 22-58, loc=37]
       attributes:
         - slope_sources
         - ema_alphas
@@ -1801,7 +1842,7 @@ libs/events/calibration.py  [loc=219]
         - window_inactivity_timeout_ms: int = 0
         - window_strategy: str = 'segmented'
       methods:
-        - def candidate_grid(self) -> tuple[dict[str, Any], ...]  [lines 32-57, loc=26]
+        - def candidate_grid(self) -> tuple[dict[str, Any], ...]  [lines 33-58, loc=26]
 
 libs/events/categorical.py  [loc=386]
   doc: Categorical transition and missing/dropped event detection.
@@ -2339,17 +2380,12 @@ libs/events/validator.py  [loc=690]
         - start_ts: datetime
         - end_ts: datetime
 
-libs/graph/__init__.py  [loc=64]
-  doc: Graph artifact builders for the active V2 fitting pipeline.
+libs/graph/__init__.py  [loc=49]
+  doc: Spark graph artifact builders and validation helpers for the active V2 fitting pipeline.
   imports:
-    - from libs.graph.event import EventGraph, EventGraphSpec
-    - from libs.graph.fused import FusedGraph, FusedGraphSpec
-    - from libs.graph.hierarchy_artifacts import GraphHierarchy, HierarchySpec
     - from libs.graph.lag import LagBandSpec, LagProfileGraph, resolve_lag_band_specs
     - from libs.graph.pipeline import build_graph_components_with_diagnostics_spark_table, collapse_lag_profile_spark_table, retain_event_graph_top_k, retain_lag_graph_top_k
-    - from libs.graph.precision import PrecisionGraph, PrecisionGraphSpec
     - from libs.graph.tables import EventGraphTable, FusedGraphTable, GraphParameterUniverseTable, HierarchySensorMapTable, LagCandidatePairsFrame, LagGraphTable, LagProfileTable, PrecisionGraphTable, TransitionGraphTable
-    - from libs.graph.transition import TransitionGraph, TransitionGraphSpec
     - from libs.graph.validator import build_coupling_validation_summary, build_graph_validation_summary, validate_expected_graph_signatures, validate_hierarchy_recovery
 
 libs/graph/data.py  [loc=134]
@@ -2490,7 +2526,7 @@ libs/graph/hierarchy.py  [loc=171]
     - def assign_subsystems_from_weighted_edges(sensor_ids: list[str], edges: list[tuple[str, str, float]], *, min_edge_weight: float) -> dict[str, str]  [lines 59-75, loc=17]
     - def assign_hierarchy_from_weighted_edges(sensor_ids: list[str], edges: list[tuple[str, str, float]], *, module_min_edge_weight: float, subsystem_min_edge_weight: float | None = None, system_min_edge_weight: float | None = None, rollup_edges: list[tuple[str, str, float]] | None = None) -> list[dict[str, str]]  [lines 78-171, loc=94]
 
-libs/graph/hierarchy_artifacts.py  [loc=334]
+libs/graph/hierarchy_artifacts.py  [loc=477]
   imports:
     - from __future__ import annotations
     - from collections import defaultdict
@@ -2498,6 +2534,12 @@ libs/graph/hierarchy_artifacts.py  [loc=334]
     - import os
     - import pandas as pd
     - from libs.graph.hierarchy import _connected_components_from_edges, assign_hierarchy_from_weighted_edges
+  functions:
+    - def _module_affinity_weight(row: dict[str, object]) -> float  [lines 26-32, loc=7]
+    - def _normalized_datatype(value: object) -> str | None  [lines 35-41, loc=7]
+    - def _normalized_behavior_family(value: object) -> str | None  [lines 44-48, loc=5]
+    - def _module_compatibility_by_parameter(*, parameter_names: list[str], datatype_profile_df: pd.DataFrame | None, behavior_profile_df: pd.DataFrame | None) -> dict[str, ModuleCompatibilityProfile]  [lines 51-84, loc=34]
+    - def _module_edge_is_compatible(left_parameter: str, right_parameter: str, *, compatibility_by_parameter: dict[str, ModuleCompatibilityProfile]) -> bool  [lines 87-101, loc=15]
   classes:
     - @dataclass(frozen=True) class HierarchySpec  [lines 13-17, loc=5]
       attributes:
@@ -2510,7 +2552,14 @@ libs/graph/hierarchy_artifacts.py  [loc=334]
         - top_k_per_parameter_name: int = 3
         - subsystem_min_edge_weight: float | None = None
         - system_min_edge_weight: float | None = None
-    - @dataclass(frozen=True) class GraphHierarchy  [lines 21-334, loc=314]
+    - @dataclass(frozen=True) class ModuleCompatibilityProfile  [lines 21-23, loc=3]
+      attributes:
+        - datatype
+        - behavior_family
+      fields:
+        - datatype: str | None = None
+        - behavior_family: str | None = None
+    - @dataclass(frozen=True) class GraphHierarchy  [lines 105-477, loc=373]
       attributes:
         - spec
         - rows
@@ -2519,11 +2568,11 @@ libs/graph/hierarchy_artifacts.py  [loc=334]
         - rows: pd.DataFrame
       methods:
         - @classmethod
-        - def from_fused(cls, fused_df: pd.DataFrame, parameter_names: list[str], *, spec: HierarchySpec) -> GraphHierarchy  [lines 26-78, loc=53]
+        - def from_fused(cls, fused_df: pd.DataFrame, parameter_names: list[str], *, spec: HierarchySpec, datatype_profile_df: pd.DataFrame | None = None, behavior_profile_df: pd.DataFrame | None = None) -> GraphHierarchy  [lines 110-184, loc=75]
         - @classmethod
-        - def from_fused_spark(cls, fused_df: 'DataFrame', *, parameter_names: list[str], spec: HierarchySpec) -> GraphHierarchy  [lines 81-328, loc=248]
+        - def from_fused_spark(cls, fused_df: 'DataFrame', *, parameter_names: list[str], spec: HierarchySpec, datatype_profile_df: 'DataFrame | None' = None, behavior_profile_df: 'DataFrame | None' = None) -> GraphHierarchy  [lines 187-471, loc=285]
         - @staticmethod
-        - def empty_rows() -> pd.DataFrame  [lines 331-334, loc=4]
+        - def empty_rows() -> pd.DataFrame  [lines 474-477, loc=4]
 
 libs/graph/lag.py  [loc=302]
   imports:
@@ -2561,7 +2610,7 @@ libs/graph/lag.py  [loc=302]
         - @staticmethod
         - def empty_lag_graph_table(spark: 'SparkSession') -> 'DataFrame'  [lines 297-298, loc=2]
 
-libs/graph/pipeline.py  [loc=709]
+libs/graph/pipeline.py  [loc=540]
   doc: Graph artifact builders for Spark fitting stages.
   imports:
     - from __future__ import annotations
@@ -2569,14 +2618,12 @@ libs/graph/pipeline.py  [loc=709]
     - from dataclasses import dataclass
     - from collections.abc import Callable
     - from typing import TYPE_CHECKING
-    - import numpy as np
     - import pandas as pd
     - from libs.io.schemas import PRECISION_GRAPH_SCHEMA
     - from libs.perf.logger import get_logger
     - from libs.perf.annotations import hot_path
-    - from libs.graph.data import parameter_name_union_from_component_tables, retain_top_k_directed, retain_top_k_undirected, selected_backbone_sensors
+    - from libs.graph.data import retain_top_k_directed, retain_top_k_undirected
     - from libs.graph.event import EventGraph, EventGraphSpec
-    - from libs.graph.fused import FusedGraph, FusedGraphSpec
     - from libs.graph.hierarchy_artifacts import GraphHierarchy, HierarchySpec
     - from libs.graph.lag import LagBandSpec, LagProfileGraph
     - from libs.graph.precision import PrecisionGraph, PrecisionGraphSpec
@@ -2586,49 +2633,40 @@ libs/graph/pipeline.py  [loc=709]
   constants:
     - LOGGER
   functions:
-    - def _spark_functions()  [lines 75-78, loc=4]
-    - def _event_graph_schema()  [lines 80-81, loc=2]
-    - def _lag_graph_schema()  [lines 84-85, loc=2]
-    - def _transition_graph_schema()  [lines 87-88, loc=2]
-    - def _fused_graph_schema()  [lines 91-92, loc=2]
-    - def _elapsed_ms(start_time: float) -> float  [lines 95-96, loc=2]
-    - def _record_pandas_step(*, name: str, build_frame: 'Callable[[], pd.DataFrame]', diagnostics: list[GraphBuildStepDiagnostics]) -> pd.DataFrame  [lines 99-114, loc=16]
-    - def _record_spark_step(*, name: str, build_frame: 'Callable[[], DataFrame]', diagnostics: list[GraphBuildStepDiagnostics]) -> 'DataFrame'  [lines 117-135, loc=19]
-    - def retain_event_graph_top_k(event_df: pd.DataFrame, *, top_k_per_parameter_name: int) -> pd.DataFrame  [lines 138-149, loc=12]
-    - def retain_lag_graph_top_k(lag_df: pd.DataFrame, *, top_k_outgoing: int) -> pd.DataFrame  [lines 152-163, loc=12]
-    - def _build_precision_graph_from_covariance(selected_sensors: list[str], covariance: np.ndarray, *, ridge_lambda: float, min_abs_partial_corr: float) -> pd.DataFrame  [lines 166-180, loc=15]
-    - def _build_precision_graph(window_features_df: pd.DataFrame, selected_sensors: list[str], *, ridge_lambda: float, min_abs_partial_corr: float) -> pd.DataFrame  [lines 183-197, loc=15]
-    - def _build_event_graph(events_df: pd.DataFrame, windows_df: pd.DataFrame, *, min_count: int, min_npmi: float, top_k_per_parameter_name: int) -> pd.DataFrame  [lines 200-216, loc=17]
+    - def _spark_functions()  [lines 71-74, loc=4]
+    - def _event_graph_schema()  [lines 76-77, loc=2]
+    - def _lag_graph_schema()  [lines 80-81, loc=2]
+    - def _transition_graph_schema()  [lines 83-84, loc=2]
+    - def _fused_graph_schema()  [lines 87-88, loc=2]
+    - def _elapsed_ms(start_time: float) -> float  [lines 91-92, loc=2]
+    - def _record_pandas_step(*, name: str, build_frame: 'Callable[[], pd.DataFrame]', diagnostics: list[GraphBuildStepDiagnostics]) -> pd.DataFrame  [lines 95-110, loc=16]
+    - def _record_spark_step(*, name: str, build_frame: 'Callable[[], DataFrame]', diagnostics: list[GraphBuildStepDiagnostics]) -> 'DataFrame'  [lines 113-131, loc=19]
+    - def retain_event_graph_top_k(event_df: pd.DataFrame, *, top_k_per_parameter_name: int) -> pd.DataFrame  [lines 134-145, loc=12]
+    - def retain_lag_graph_top_k(lag_df: pd.DataFrame, *, top_k_outgoing: int) -> pd.DataFrame  [lines 148-159, loc=12]
     - @hot_path
-    - def build_event_graph_spark_table(events_df: DataFrame, windows_df: DataFrame, *, min_count: int, min_npmi: float, top_k_per_parameter_name: int) -> DataFrame  [lines 220-236, loc=17]
+    - def build_event_graph_spark_table(events_df: DataFrame, windows_df: DataFrame, *, min_count: int, min_npmi: float, top_k_per_parameter_name: int) -> DataFrame  [lines 163-179, loc=17]
     - @hot_path
-    - def build_lag_candidate_pairs_spark_table(event_df: DataFrame, transition_df: DataFrame) -> DataFrame  [lines 240-242, loc=3]
+    - def build_lag_candidate_pairs_spark_table(event_df: DataFrame, transition_df: DataFrame) -> DataFrame  [lines 183-185, loc=3]
     - @hot_path
-    - def build_lag_profile_spark_table(events_df: DataFrame, *, tau_max_seconds: float, bands: tuple[LagBandSpec, ...] | None = None, candidate_pairs_df: DataFrame | None = None) -> DataFrame  [lines 246-259, loc=14]
+    - def build_lag_profile_spark_table(events_df: DataFrame, *, tau_max_seconds: float, bands: tuple[LagBandSpec, ...] | None = None, candidate_pairs_df: DataFrame | None = None) -> DataFrame  [lines 189-202, loc=14]
     - @hot_path
-    - def collapse_lag_profile_spark_table(lag_profile_df: DataFrame, *, tau_max_seconds: float, bands: tuple[LagBandSpec, ...] | None, min_count: int, max_mean_lag_seconds: float | None, top_k_outgoing: int) -> DataFrame  [lines 263-280, loc=18]
+    - def collapse_lag_profile_spark_table(lag_profile_df: DataFrame, *, tau_max_seconds: float, bands: tuple[LagBandSpec, ...] | None, min_count: int, max_mean_lag_seconds: float | None, top_k_outgoing: int) -> DataFrame  [lines 206-223, loc=18]
     - @hot_path
-    - def build_lag_graph_spark_table(events_df: DataFrame, *, tau_max_seconds: float, min_count: int, max_mean_lag_seconds: float | None, top_k_outgoing: int, bands: tuple[LagBandSpec, ...] | None = None, candidate_pairs_df: DataFrame | None = None) -> DataFrame  [lines 284-308, loc=25]
+    - def build_lag_graph_spark_table(events_df: DataFrame, *, tau_max_seconds: float, min_count: int, max_mean_lag_seconds: float | None, top_k_outgoing: int, bands: tuple[LagBandSpec, ...] | None = None, candidate_pairs_df: DataFrame | None = None) -> DataFrame  [lines 227-251, loc=25]
     - @hot_path
-    - def build_transition_graph_spark_table(events_df: DataFrame, *, min_count: int) -> DataFrame  [lines 312-316, loc=5]
+    - def build_transition_graph_spark_table(events_df: DataFrame, *, min_count: int) -> DataFrame  [lines 255-259, loc=5]
     - @hot_path
-    - def build_fused_graph_spark_table(precision_df: DataFrame, event_df: DataFrame, lag_df: DataFrame, *, alpha: float, beta: float, gamma: float) -> DataFrame  [lines 320-371, loc=52]
+    - def build_fused_graph_spark_table(precision_df: DataFrame, event_df: DataFrame, lag_df: DataFrame, *, alpha: float, beta: float, gamma: float) -> DataFrame  [lines 263-314, loc=52]
     - @hot_path
-    - def build_hierarchy_from_fused_spark_table(fused_df: DataFrame, *, parameter_names: list[str], min_fused_edge_weight: float, hierarchy_top_k_per_parameter_name: int, hierarchy_subsystem_min_edge_weight: float | None = None, hierarchy_system_min_edge_weight: float | None = None) -> pd.DataFrame  [lines 375-394, loc=20]
+    - def build_hierarchy_from_fused_spark_table(fused_df: DataFrame, *, parameter_names: list[str], min_fused_edge_weight: float, hierarchy_top_k_per_parameter_name: int, hierarchy_subsystem_min_edge_weight: float | None = None, hierarchy_system_min_edge_weight: float | None = None, datatype_profile_df: DataFrame | None = None, behavior_profile_df: DataFrame | None = None) -> pd.DataFrame  [lines 318-341, loc=24]
     - @hot_path
-    - def build_graph_parameter_universe_spark_table(event_df: DataFrame, lag_df: DataFrame, transition_df: DataFrame, *, backbone_all_sensors: list[str], max_graph_sensor_universe: int) -> tuple[DataFrame, list[str]]  [lines 398-446, loc=49]
+    - def build_graph_parameter_universe_spark_table(event_df: DataFrame, lag_df: DataFrame, transition_df: DataFrame, *, backbone_all_sensors: list[str], max_graph_sensor_universe: int) -> tuple[DataFrame, list[str]]  [lines 345-393, loc=49]
     - @hot_path
-    - def build_graph_components_with_diagnostics_spark_table(window_features_df: DataFrame, events_df: DataFrame, windows_df: DataFrame, backbone_df: DataFrame, *, precision_ridge_lambda: float = 1.0, min_abs_partial_corr: float = 0.05, min_event_count: int = 1, min_event_npmi: float = 0.0, event_top_k_per_parameter_name: int = 8, lag_tau_max_seconds: float = 30.0, min_lag_count: int = 1, max_mean_lag_seconds: float | None = None, lag_top_k_outgoing: int = 8, lag_bands: tuple[LagBandSpec, ...] | None = None, min_transition_count: int = 1, alpha: float = 1.0, beta: float = 1.0, gamma: float = 1.0, max_graph_sensor_universe: int = 50000) -> tuple[DataFrame, DataFrame, DataFrame, DataFrame, DataFrame, DataFrame, GraphBuildDiagnostics]  [lines 450-574, loc=125]
+    - def build_graph_components_with_diagnostics_spark_table(window_features_df: DataFrame, events_df: DataFrame, windows_df: DataFrame, backbone_df: DataFrame, *, precision_ridge_lambda: float = 1.0, min_abs_partial_corr: float = 0.05, min_event_count: int = 1, min_event_npmi: float = 0.0, event_top_k_per_parameter_name: int = 8, lag_tau_max_seconds: float = 30.0, min_lag_count: int = 1, max_mean_lag_seconds: float | None = None, lag_top_k_outgoing: int = 8, lag_bands: tuple[LagBandSpec, ...] | None = None, min_transition_count: int = 1, alpha: float = 1.0, beta: float = 1.0, gamma: float = 1.0, max_graph_sensor_universe: int = 50000) -> tuple[DataFrame, DataFrame, DataFrame, DataFrame, DataFrame, DataFrame, GraphBuildDiagnostics]  [lines 397-521, loc=125]
     - @hot_path
-    - def build_precision_graph_from_window_features_spark_table(window_features_df: DataFrame, *, selected_sensors: list[str], ridge_lambda: float, min_abs_partial_corr: float) -> pd.DataFrame  [lines 578-593, loc=16]
-    - def _fuse_graphs(precision_df: pd.DataFrame, event_df: pd.DataFrame, lag_df: pd.DataFrame, *, alpha: float, beta: float, gamma: float) -> pd.DataFrame  [lines 596-610, loc=15]
-    - def _assign_hierarchy(fused_df: pd.DataFrame, parameter_names: list[str], *, min_edge_weight: float, top_k_per_parameter_name: int = 3, subsystem_min_edge_weight: float | None = None, system_min_edge_weight: float | None = None) -> pd.DataFrame  [lines 613-631, loc=19]
-    - @hot_path
-    - def build_graph_fusion_from_tables(window_feature_df: pd.DataFrame, event_df: pd.DataFrame, lag_df: pd.DataFrame, backbone_df: pd.DataFrame, *, precision_ridge_lambda: float = 1.0, min_abs_partial_corr: float = 0.05, alpha: float = 1.0, beta: float = 1.0, gamma: float = 1.0, min_fused_edge_weight: float = 0.05, hierarchy_top_k_per_parameter_name: int = 3, hierarchy_subsystem_min_edge_weight: float | None = None, hierarchy_system_min_edge_weight: float | None = None) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]  [lines 635-672, loc=38]
-    - @hot_path
-    - def build_graph_fusion_from_component_tables(precision_df: pd.DataFrame, event_df: pd.DataFrame, lag_df: pd.DataFrame, backbone_df: pd.DataFrame, *, alpha: float = 1.0, beta: float = 1.0, gamma: float = 1.0, min_fused_edge_weight: float = 0.05, hierarchy_top_k_per_parameter_name: int = 3, hierarchy_subsystem_min_edge_weight: float | None = None, hierarchy_system_min_edge_weight: float | None = None) -> tuple[pd.DataFrame, pd.DataFrame]  [lines 676-709, loc=34]
+    - def build_precision_graph_from_window_features_spark_table(window_features_df: DataFrame, *, selected_sensors: list[str], ridge_lambda: float, min_abs_partial_corr: float) -> pd.DataFrame  [lines 525-540, loc=16]
   classes:
-    - @dataclass(frozen=True) class GraphBuildStepDiagnostics  [lines 50-53, loc=4]
+    - @dataclass(frozen=True) class GraphBuildStepDiagnostics  [lines 46-49, loc=4]
       attributes:
         - step_name
         - row_count
@@ -2637,7 +2675,7 @@ libs/graph/pipeline.py  [loc=709]
         - step_name: str
         - row_count: int
         - timing_ms: float
-    - @dataclass(frozen=True) class GraphBuildDiagnostics  [lines 57-72, loc=16]
+    - @dataclass(frozen=True) class GraphBuildDiagnostics  [lines 53-68, loc=16]
       attributes:
         - steps
         - total_timing_ms
@@ -2645,7 +2683,7 @@ libs/graph/pipeline.py  [loc=709]
         - steps: list[GraphBuildStepDiagnostics]
         - total_timing_ms: float
       methods:
-        - def to_dict(self) -> dict[str, object]  [lines 61-72, loc=12]
+        - def to_dict(self) -> dict[str, object]  [lines 57-68, loc=12]
 
 libs/graph/precision.py  [loc=156]
   imports:
@@ -2683,7 +2721,7 @@ libs/graph/precision.py  [loc=156]
         - @staticmethod
         - def empty_edges() -> pd.DataFrame  [lines 155-156, loc=2]
 
-libs/graph/tables.py  [loc=257]
+libs/graph/tables.py  [loc=261]
   doc: Typed Spark tables for graph artifact boundaries.
   imports:
     - from __future__ import annotations
@@ -2741,12 +2779,12 @@ libs/graph/tables.py  [loc=257]
         - def spark_schema(cls)  [lines 197-198, loc=2]
         - @classmethod
         - def from_component_tables(cls, event_df: 'DataFrame', lag_df: 'DataFrame', transition_df: 'DataFrame', *, backbone_all_sensors: list[str], max_graph_sensor_universe: int) -> tuple['GraphParameterUniverseTable', list[str]]  [lines 201-219, loc=19]
-    - @dataclass(frozen=True) class HierarchySensorMapTable(Table)  [lines 223-251, loc=29]
+    - @dataclass(frozen=True) class HierarchySensorMapTable(Table)  [lines 223-255, loc=33]
       methods:
         - @classmethod
         - def spark_schema(cls)  [lines 225-226, loc=2]
         - @classmethod
-        - def from_fused_graph(cls, fused_df: 'DataFrame', *, parameter_names: list[str], min_fused_edge_weight: float, hierarchy_top_k_per_parameter_name: int, hierarchy_subsystem_min_edge_weight: float | None = None, hierarchy_system_min_edge_weight: float | None = None) -> 'HierarchySensorMapTable'  [lines 229-251, loc=23]
+        - def from_fused_graph(cls, fused_df: 'DataFrame', *, parameter_names: list[str], min_fused_edge_weight: float, hierarchy_top_k_per_parameter_name: int, hierarchy_subsystem_min_edge_weight: float | None = None, hierarchy_system_min_edge_weight: float | None = None, datatype_profile_df: 'DataFrame | None' = None, behavior_profile_df: 'DataFrame | None' = None) -> 'HierarchySensorMapTable'  [lines 229-255, loc=27]
 
 libs/graph/transition.py  [loc=94]
   imports:
@@ -2811,7 +2849,7 @@ libs/io/__init__.py  [loc=34]
   imports:
     - from libs.io.contracts import AdaptiveWindowRow, DatatypeLabelRow, DatatypeProfiledRow, DetectedEventRow, EventLabelRow, EventValidatorSnapshot, PhaseAssignmentRow, PhaseBaselineRow, PhaseWindowRow, ProfilerValidatorSnapshot, TelemetryRow, WindowFeatureRow, WindowScoreRow
 
-libs/io/contracts.py  [loc=225]
+libs/io/contracts.py  [loc=240]
   doc: Typed row contracts for active pipeline and simulation I/O boundaries.
   imports:
     - from __future__ import annotations
@@ -2911,7 +2949,7 @@ libs/io/contracts.py  [loc=225]
         - parameter_name: str
         - timestamp_utc: datetime
         - event_type_label: str
-    - class AdaptiveWindowRow(TypedDict)  [lines 69-83, loc=15]
+    - class AdaptiveWindowRow(TypedDict)  [lines 69-86, loc=18]
       attributes:
         - tail_id
         - flight_id
@@ -2920,6 +2958,9 @@ libs/io/contracts.py  [loc=225]
         - t_end
         - duration_ms
         - event_count
+        - real_event_count
+        - quiet_credit_end
+        - closure_budget_end
         - zoh_version
         - date_utc
         - sensor_count
@@ -2935,6 +2976,9 @@ libs/io/contracts.py  [loc=225]
         - t_end: datetime
         - duration_ms: int
         - event_count: int
+        - real_event_count: int
+        - quiet_credit_end: float
+        - closure_budget_end: float
         - zoh_version: int
         - date_utc: date
         - sensor_count: int
@@ -2942,7 +2986,7 @@ libs/io/contracts.py  [loc=225]
         - zoh_snapshot: dict[str, str]
         - close_reason: str
         - window_events: list[DetectedEventRow]
-    - class WindowFeatureRow(TypedDict)  [lines 86-103, loc=18]
+    - class WindowFeatureRow(TypedDict)  [lines 89-109, loc=21]
       attributes:
         - tail_id
         - flight_id
@@ -2953,8 +2997,11 @@ libs/io/contracts.py  [loc=225]
         - event_count
         - date_utc
         - event_type_counts
+        - continuous_vector_t_start
+        - continuous_vector_t_start_scaled
         - continuous_vector_t_end
         - continuous_vector_t_end_scaled
+        - categorical_state_t_start
         - categorical_state_t_end
         - drift_magnitude_profiled
         - phase_label
@@ -2971,34 +3018,49 @@ libs/io/contracts.py  [loc=225]
         - event_count: int
         - date_utc: date
         - event_type_counts: EventTypeCountByName
+        - continuous_vector_t_start: ParameterValueByName
+        - continuous_vector_t_start_scaled: ParameterValueByName
         - continuous_vector_t_end: ParameterValueByName
         - continuous_vector_t_end_scaled: ParameterValueByName
+        - categorical_state_t_start: ParameterStateByName
         - categorical_state_t_end: ParameterStateByName
         - drift_magnitude_profiled: float
         - phase_label: str | None
         - backbone_reconstruction_error: float
         - backbone_x_c: list[float]
         - backbone_residual_by_parameter: ResidualByParameter
-    - class PhaseAssignmentRow(TypedDict)  [lines 106-114, loc=9]
+    - class PhaseAssignmentRow(TypedDict)  [lines 112-126, loc=15]
       attributes:
         - tail_id
         - flight_id
         - win_id
         - phase_id_detected
         - phase_state_detected
+        - transition_from_phase_id_detected
+        - transition_to_phase_id_detected
         - phase_confidence_detected
         - distance_to_centroid_detected
         - phase_label
+        - truth_phase_label_primary
+        - truth_phase_state
+        - truth_transition_from_label
+        - truth_transition_to_label
       fields:
         - tail_id: str
         - flight_id: str
         - win_id: int
         - phase_id_detected: int
         - phase_state_detected: str
+        - transition_from_phase_id_detected: int | None
+        - transition_to_phase_id_detected: int | None
         - phase_confidence_detected: float
         - distance_to_centroid_detected: float | None
         - phase_label: str | None
-    - class PhaseBaselineRow(TypedDict)  [lines 117-136, loc=20]
+        - truth_phase_label_primary: str | None
+        - truth_phase_state: str | None
+        - truth_transition_from_label: str | None
+        - truth_transition_to_label: str | None
+    - class PhaseBaselineRow(TypedDict)  [lines 129-148, loc=20]
       attributes:
         - tail_id
         - phase_id_detected
@@ -3039,7 +3101,7 @@ libs/io/contracts.py  [loc=225]
         - backbone_all_sensors: list[str]
         - backbone_weights_b: list[list[float]]
         - version: int
-    - class PhaseWindowRow(TypedDict)  [lines 139-163, loc=25]
+    - class PhaseWindowRow(TypedDict)  [lines 151-177, loc=27]
       attributes:
         - tail_id
         - flight_id
@@ -3050,6 +3112,8 @@ libs/io/contracts.py  [loc=225]
         - event_count
         - phase_id_detected
         - phase_state_detected
+        - transition_from_phase_id_detected
+        - transition_to_phase_id_detected
         - phase_confidence_detected
         - distance_to_centroid_detected
         - drift_magnitude
@@ -3075,6 +3139,8 @@ libs/io/contracts.py  [loc=225]
         - event_count: int
         - phase_id_detected: int
         - phase_state_detected: str
+        - transition_from_phase_id_detected: int | None
+        - transition_to_phase_id_detected: int | None
         - phase_confidence_detected: float
         - distance_to_centroid_detected: float
         - drift_magnitude: float
@@ -3090,7 +3156,7 @@ libs/io/contracts.py  [loc=225]
         - selected_categorical_state_pairs: list[str]
         - selected_window_cooccurrence_pairs: list[str]
         - backbone_all_sensors: list[str]
-    - class WindowScoreRow(TypedDict)  [lines 166-185, loc=20]
+    - class WindowScoreRow(TypedDict)  [lines 180-200, loc=21]
       attributes:
         - tail_id
         - flight_id
@@ -3105,6 +3171,7 @@ libs/io/contracts.py  [loc=225]
         - p_value
         - severity
         - dominant_subsystem_id
+        - dominant_module_id
         - dominant_score_component
         - subsystem_scores
         - score_component_scores
@@ -3125,13 +3192,14 @@ libs/io/contracts.py  [loc=225]
         - p_value: float | None
         - severity: str
         - dominant_subsystem_id: str | None
+        - dominant_module_id: str | None
         - dominant_score_component: str
         - subsystem_scores: SubsystemScoreById
         - score_component_scores: ScoreComponentByName
         - date_utc: date
         - reconstruction_score: NotRequired[float]
         - structure_score: NotRequired[float | None]
-    - class DatatypeLabelRow(TypedDict)  [lines 188-193, loc=6]
+    - class DatatypeLabelRow(TypedDict)  [lines 203-208, loc=6]
       attributes:
         - tail_id
         - flight_id
@@ -3144,7 +3212,7 @@ libs/io/contracts.py  [loc=225]
         - parameter_name: str
         - timestamp_utc: datetime
         - parameter_datatype_label: str
-    - class DatatypeProfiledRow(TypedDict)  [lines 196-201, loc=6]
+    - class DatatypeProfiledRow(TypedDict)  [lines 211-216, loc=6]
       attributes:
         - tail_id
         - flight_id
@@ -3157,7 +3225,7 @@ libs/io/contracts.py  [loc=225]
         - parameter_name: str
         - timestamp_utc: datetime
         - parameter_datatype_profiled: str
-    - class EventValidatorSnapshot(TypedDict)  [lines 204-212, loc=9]
+    - class EventValidatorSnapshot(TypedDict)  [lines 219-227, loc=9]
       attributes:
         - tail_id
         - flight_id
@@ -3176,7 +3244,7 @@ libs/io/contracts.py  [loc=225]
         - fp: int
         - fn: int
         - tn: int
-    - class ProfilerValidatorSnapshot(TypedDict)  [lines 215-225, loc=11]
+    - class ProfilerValidatorSnapshot(TypedDict)  [lines 230-240, loc=11]
       attributes:
         - tail_id
         - flight_id
@@ -3258,15 +3326,15 @@ libs/io/schemas/__init__.py  [loc=178]
   constants:
     - ACTIVE_V2_TABLES
 
-libs/io/schemas/anomaly.py  [loc=168]
+libs/io/schemas/anomaly.py  [loc=195]
   constants:
     - ANOMALY_EVENT_ATTRIBUTION_COLUMNS
     - ANOMALY_TELEMETRY_ATTRIBUTION_COLUMNS
     - ANOMALY_WINDOW_ATTRIBUTION_COLUMNS
   functions:
-    - def ANOMALY_WINDOW_ATTRIBUTION_SCHEMA()  [lines 57-123, loc=67]
-    - def ANOMALY_TELEMETRY_ATTRIBUTION_SCHEMA()  [lines 126-145, loc=20]
-    - def ANOMALY_EVENT_ATTRIBUTION_SCHEMA()  [lines 148-168, loc=21]
+    - def ANOMALY_WINDOW_ATTRIBUTION_SCHEMA()  [lines 63-147, loc=85]
+    - def ANOMALY_TELEMETRY_ATTRIBUTION_SCHEMA()  [lines 150-172, loc=23]
+    - def ANOMALY_EVENT_ATTRIBUTION_SCHEMA()  [lines 175-195, loc=21]
 
 libs/io/schemas/backbone.py  [loc=48]
   constants:
@@ -3312,15 +3380,15 @@ libs/io/schemas/graph.py  [loc=178]
     - def GRAPH_PARAMETER_UNIVERSE_SCHEMA()  [lines 158-164, loc=7]
     - def HIERARCHY_SENSOR_MAP_SCHEMA()  [lines 167-178, loc=12]
 
-libs/io/schemas/phase.py  [loc=131]
+libs/io/schemas/phase.py  [loc=135]
   constants:
     - PHASE_BASELINES_COLUMNS
     - PHASE_LABEL_CENTROIDS_COLUMNS
     - PHASE_WINDOWS_COLUMNS
   functions:
-    - def PHASE_WINDOWS_SCHEMA()  [lines 52-82, loc=31]
-    - def PHASE_BASELINES_SCHEMA()  [lines 85-110, loc=26]
-    - def PHASE_LABEL_CENTROIDS_SCHEMA()  [lines 113-131, loc=19]
+    - def PHASE_WINDOWS_SCHEMA()  [lines 54-86, loc=33]
+    - def PHASE_BASELINES_SCHEMA()  [lines 89-114, loc=26]
+    - def PHASE_LABEL_CENTROIDS_SCHEMA()  [lines 117-135, loc=19]
 
 libs/io/schemas/profiling.py  [loc=251]
   constants:
@@ -3336,13 +3404,13 @@ libs/io/schemas/profiling.py  [loc=251]
     - def PARAMETER_BEHAVIOR_PROFILE_SCHEMA()  [lines 188-208, loc=21]
     - def PARAMETER_EVENT_PROFILE_SCHEMA()  [lines 211-251, loc=41]
 
-libs/io/schemas/scoring.py  [loc=65]
+libs/io/schemas/scoring.py  [loc=67]
   constants:
     - WINDOW_SCORES_CALIBRATED_COLUMNS
     - WINDOW_SCORES_RAW_COLUMNS
   functions:
-    - def WINDOW_SCORES_RAW_SCHEMA()  [lines 28-51, loc=24]
-    - def WINDOW_SCORES_CALIBRATED_SCHEMA()  [lines 54-65, loc=12]
+    - def WINDOW_SCORES_RAW_SCHEMA()  [lines 29-53, loc=25]
+    - def WINDOW_SCORES_CALIBRATED_SCHEMA()  [lines 56-67, loc=12]
 
 libs/io/schemas/telemetry.py  [loc=88]
   constants:
@@ -3351,14 +3419,14 @@ libs/io/schemas/telemetry.py  [loc=88]
   functions:
     - def SIMULATION_RAW_INPUT_SCHEMA()  [lines 49-88, loc=40]
 
-libs/io/schemas/windows.py  [loc=142]
+libs/io/schemas/windows.py  [loc=161]
   constants:
     - WINDOWS_COLUMNS
     - WINDOW_POLICY_PROFILE_COLUMNS
   functions:
-    - def WINDOWS_SCHEMA()  [lines 47-66, loc=20]
-    - def WINDOW_X_SCHEMA()  [lines 69-106, loc=38]
-    - def WINDOW_POLICY_PROFILE_SCHEMA()  [lines 109-142, loc=34]
+    - def WINDOWS_SCHEMA()  [lines 55-77, loc=23]
+    - def WINDOW_X_SCHEMA()  [lines 80-120, loc=41]
+    - def WINDOW_POLICY_PROFILE_SCHEMA()  [lines 123-161, loc=39]
 
 libs/io/transforms.py  [loc=72]
   doc: Spark DataFrame transforms for core table normalization.
@@ -3552,7 +3620,7 @@ libs/phase/analysis.py  [loc=75]
     - def _categorical_phase_separation_score(group: pd.DataFrame) -> float  [lines 24-34, loc=11]
     - def analyze_phase_behavior(telemetry_df: pd.DataFrame, *, top_k: int = 10) -> dict[str, list[dict[str, float | str]]]  [lines 37-75, loc=39]
 
-libs/phase/artifacts.py  [loc=93]
+libs/phase/artifacts.py  [loc=139]
   doc: Phase artifact assembly from decoded assignments.
   imports:
     - from __future__ import annotations
@@ -3563,7 +3631,7 @@ libs/phase/artifacts.py  [loc=93]
   functions:
     - def phase_output_literals(phase_config: PhaseFeatureConfig) -> dict[str, 'Column']  [lines 11-19, loc=9]
     - def join_phase_payload(assigned_df: 'DataFrame', *, payload_df: 'DataFrame') -> 'DataFrame'  [lines 22-23, loc=2]
-    - def select_phase_windows(*, enriched_df: 'DataFrame', phase_literals: dict[str, 'Column']) -> 'DataFrame'  [lines 26-91, loc=66]
+    - def select_phase_windows(*, enriched_df: 'DataFrame', phase_literals: dict[str, 'Column']) -> 'DataFrame'  [lines 26-137, loc=112]
 
 libs/phase/config_fit.py  [loc=81]
   imports:
@@ -3582,39 +3650,38 @@ libs/phase/config_fit.py  [loc=81]
     - def fit_phase_feature_config_from_window_features_spark(window_features_df: 'DataFrame', *, backbone_row: dict[str, Any], selection_policy: PhaseFeatureSelectionPolicy) -> PhaseFeatureConfig  [lines 21-31, loc=11]
     - def fit_phase_feature_config_with_diagnostics_from_window_features_spark(window_features_df: 'DataFrame', *, backbone_row: dict[str, Any], selection_policy: PhaseFeatureSelectionPolicy, logger: logging.Logger | None = None) -> tuple[PhaseFeatureConfig, PhaseFeatureSelectionDiagnostics]  [lines 34-75, loc=42]
 
-libs/phase/decode.py  [loc=491]
+libs/phase/decode.py  [loc=494]
   doc: Phase decoding logic: assignment inputs, segmented decoding, and dwell enforcement.
   imports:
     - from __future__ import annotations
     - from dataclasses import dataclass
     - from typing import TYPE_CHECKING
     - from libs.perf.annotations import hot_path
-    - from libs.phase.types import PhaseClusterModel, PhasePlanConfig
+    - from libs.phase.types import PhaseClusterModel, PhasePlanConfig, PhaseTransitionModel
+    - from libs.phase.utils import array_distance, with_progress_mass_coordinates
     - from libs.spark_sequence import SegmentedSequencePlan, SequenceOrderingPolicy
-    - from libs.phase.utils import array_distance
     - from pyspark.sql import Column, DataFrame
   functions:
-    - def build_phase_distance_candidates(feature_df: 'DataFrame', *, cluster_model: PhaseClusterModel) -> 'DataFrame'  [lines 85-102, loc=18]
-    - def summarize_phase_candidates(distance_candidates_df: 'DataFrame') -> 'DataFrame'  [lines 105-165, loc=61]
-    - def apply_phase_hint_smoothing(assignment_input_df: 'DataFrame', *, config: PhasePlanConfig) -> 'DataFrame'  [lines 168-192, loc=25]
+    - def build_phase_distance_candidates(feature_df: 'DataFrame', *, cluster_model: PhaseClusterModel) -> 'DataFrame'  [lines 89-129, loc=41]
+    - def summarize_phase_candidates(distance_candidates_df: 'DataFrame') -> 'DataFrame'  [lines 132-192, loc=61]
     - def _single_phase_assignments(assignment_input_df: 'DataFrame') -> 'DataFrame'  [lines 195-201, loc=7]
     - def _multi_phase_input(assignment_input_df: 'DataFrame') -> 'DataFrame'  [lines 204-207, loc=4]
-    - def _build_segmented_phase_frame(multi_phase_input_df: 'DataFrame', *, config: PhasePlanConfig) -> tuple[SegmentedSequencePlan, 'DataFrame', 'DataFrame']  [lines 210-237, loc=28]
-    - def _with_phase_carry(current_steps_df: 'DataFrame', *, carry_df: 'DataFrame | None') -> 'DataFrame'  [lines 240-248, loc=9]
-    - def _advance_phase_segment(current_steps_df: 'DataFrame', *, state: PhaseSequenceState, config: PhasePlanConfig) -> 'DataFrame'  [lines 251-265, loc=15]
-    - def _segment_carry(current_state_df: 'DataFrame', *, state: PhaseSequenceState) -> 'DataFrame'  [lines 268-274, loc=7]
-    - def _final_phase_paths(carry_df: 'DataFrame') -> 'DataFrame'  [lines 277-297, loc=21]
+    - def _build_segmented_phase_frame(multi_phase_input_df: 'DataFrame', *, config: PhasePlanConfig) -> tuple[SegmentedSequencePlan, 'DataFrame', 'DataFrame']  [lines 210-236, loc=27]
+    - def _with_phase_carry(current_steps_df: 'DataFrame', *, carry_df: 'DataFrame | None') -> 'DataFrame'  [lines 239-247, loc=9]
+    - def _advance_phase_segment(current_steps_df: 'DataFrame', *, state: PhaseSequenceState, transition_model: PhaseTransitionModel, config: PhasePlanConfig) -> 'DataFrame'  [lines 250-266, loc=17]
+    - def _segment_carry(current_state_df: 'DataFrame', *, state: PhaseSequenceState) -> 'DataFrame'  [lines 269-275, loc=7]
+    - def _final_phase_paths(carry_df: 'DataFrame') -> 'DataFrame'  [lines 278-298, loc=21]
     - @hot_path
-    - def build_assignment_input(feature_df: 'DataFrame', *, cluster_model: PhaseClusterModel, config: PhasePlanConfig) -> 'DataFrame'  [lines 301-324, loc=24]
+    - def build_assignment_input(feature_df: 'DataFrame', *, cluster_model: PhaseClusterModel) -> 'DataFrame'  [lines 302-323, loc=22]
     - @hot_path
-    - def assign_phases_segmented(assignment_input_df: 'DataFrame', *, config: PhasePlanConfig) -> 'DataFrame'  [lines 328-360, loc=33]
-    - def _phase_runs(assigned_df: 'DataFrame') -> 'DataFrame'  [lines 363-377, loc=15]
-    - def _phase_run_stats(with_runs_df: 'DataFrame') -> 'DataFrame'  [lines 380-396, loc=17]
-    - def _short_run_replacements(with_runs_df: 'DataFrame', run_stats_df: 'DataFrame') -> 'DataFrame'  [lines 399-452, loc=54]
-    - def _apply_phase_run_replacements(with_runs_df: 'DataFrame', replacements_df: 'DataFrame') -> 'DataFrame'  [lines 455-474, loc=20]
-    - def enforce_min_dwell(assigned_df: 'DataFrame', *, config: PhasePlanConfig) -> 'DataFrame'  [lines 477-487, loc=11]
+    - def assign_phases_segmented(assignment_input_df: 'DataFrame', *, cluster_model: PhaseClusterModel, config: PhasePlanConfig) -> 'DataFrame'  [lines 327-365, loc=39]
+    - def _phase_runs(assigned_df: 'DataFrame') -> 'DataFrame'  [lines 368-382, loc=15]
+    - def _phase_run_stats(with_runs_df: 'DataFrame') -> 'DataFrame'  [lines 385-401, loc=17]
+    - def _short_run_replacements(with_runs_df: 'DataFrame', run_stats_df: 'DataFrame') -> 'DataFrame'  [lines 404-455, loc=52]
+    - def _apply_phase_run_replacements(with_runs_df: 'DataFrame', replacements_df: 'DataFrame') -> 'DataFrame'  [lines 458-477, loc=20]
+    - def enforce_min_dwell(assigned_df: 'DataFrame', *, config: PhasePlanConfig) -> 'DataFrame'  [lines 480-490, loc=11]
   classes:
-    - @dataclass(frozen=True) class PhaseSequenceState  [lines 15-82, loc=68]
+    - @dataclass(frozen=True) class PhaseSequenceState  [lines 15-86, loc=72]
       attributes:
         - score_column
         - path_column
@@ -3625,9 +3692,9 @@ libs/phase/decode.py  [loc=491]
         - initialized_column: str = 'initialized'
       methods:
         - def initial_accumulator(self, *, phase_scores: 'Column', phase_paths: 'Column') -> 'Column'  [lines 20-27, loc=8]
-        - def aggregate_column(self, *, steps: 'Column', phase_scores: 'Column', phase_paths: 'Column', transition_penalty: float) -> 'Column'  [lines 29-82, loc=54]
+        - def aggregate_column(self, *, steps: 'Column', phase_scores: 'Column', phase_paths: 'Column', transition_model: PhaseTransitionModel, transition_penalty: float) -> 'Column'  [lines 29-86, loc=58]
 
-libs/phase/feature_config.py  [loc=118]
+libs/phase/feature_config.py  [loc=229]
   imports:
     - from __future__ import annotations
     - from dataclasses import dataclass
@@ -3636,8 +3703,10 @@ libs/phase/feature_config.py  [loc=118]
     - from libs.backbone import BackboneModel
     - from typing import TYPE_CHECKING
     - from pyspark.sql import DataFrame
+  constants:
+    - TEMPORAL_HISTORY_SCALES
   classes:
-    - @dataclass(frozen=True) class PhaseFeatureConfig  [lines 12-112, loc=101]
+    - @dataclass(frozen=True) class PhaseFeatureConfig  [lines 14-223, loc=210]
       attributes:
         - backbone_model
         - phase_selected_sensors
@@ -3652,43 +3721,65 @@ libs/phase/feature_config.py  [loc=118]
         - phase_selected_window_cooccurrence_pairs: list[tuple[str, str]]
       methods:
         - @property
-        - def feature_names(self) -> list[str]  [lines 20-34, loc=15]
+        - def level_feature_names(self) -> list[str]  [lines 22-23, loc=2]
         - @property
-        - def categorical_state_labels(self) -> list[str]  [lines 37-38, loc=2]
+        - def delta_feature_names(self) -> list[str]  [lines 26-31, loc=6]
         - @property
-        - def window_cooccurrence_labels(self) -> list[str]  [lines 41-42, loc=2]
+        - def event_feature_names(self) -> list[str]  [lines 34-37, loc=4]
         - @property
-        - def backbone_weights_rows(self) -> list[list[float]]  [lines 45-46, loc=2]
+        - def categorical_feature_names(self) -> list[str]  [lines 40-45, loc=6]
+        - @property
+        - def summary_feature_names(self) -> list[str]  [lines 48-65, loc=18]
+        - @property
+        - def temporal_history_scales(self) -> tuple[int, ...]  [lines 68-69, loc=2]
+        - @property
+        - def temporal_sensor_feature_names(self) -> list[str]  [lines 72-77, loc=6]
+        - @property
+        - def temporal_event_feature_names(self) -> list[str]  [lines 80-85, loc=6]
+        - @property
+        - def temporal_categorical_feature_names(self) -> list[str]  [lines 88-93, loc=6]
+        - @property
+        - def temporal_summary_feature_names(self) -> list[str]  [lines 96-119, loc=24]
+        - @property
+        - def temporal_feature_names(self) -> list[str]  [lines 122-128, loc=7]
+        - @property
+        - def feature_names(self) -> list[str]  [lines 131-139, loc=9]
+        - @property
+        - def categorical_state_labels(self) -> list[str]  [lines 142-143, loc=2]
+        - @property
+        - def window_cooccurrence_labels(self) -> list[str]  [lines 146-147, loc=2]
+        - @property
+        - def backbone_weights_rows(self) -> list[list[float]]  [lines 150-154, loc=5]
         - @classmethod
-        - def coerce(cls, value: 'PhaseFeatureConfig | dict[str, Any]') -> 'PhaseFeatureConfig'  [lines 49-52, loc=4]
+        - def coerce(cls, value: 'PhaseFeatureConfig | dict[str, Any]') -> 'PhaseFeatureConfig'  [lines 157-160, loc=4]
         - @classmethod
-        - def from_backbone_row(cls, backbone_row: dict[str, Any], *, phase_selected_sensors: list[str], phase_selected_event_types: list[str], phase_selected_categorical_state_pairs: list[tuple[str, str]]) -> 'PhaseFeatureConfig'  [lines 55-75, loc=21]
+        - def from_backbone_row(cls, backbone_row: dict[str, Any], *, phase_selected_sensors: list[str], phase_selected_event_types: list[str], phase_selected_categorical_state_pairs: list[tuple[str, str]]) -> 'PhaseFeatureConfig'  [lines 163-183, loc=21]
         - @classmethod
-        - def from_dict(cls, row: dict[str, Any]) -> 'PhaseFeatureConfig'  [lines 78-98, loc=21]
-        - def to_dict(self) -> dict[str, Any]  [lines 100-112, loc=13]
+        - def from_dict(cls, row: dict[str, Any]) -> 'PhaseFeatureConfig'  [lines 186-206, loc=21]
+        - def to_dict(self) -> dict[str, Any]  [lines 208-223, loc=16]
 
-libs/phase/fit.py  [loc=378]
+libs/phase/fit.py  [loc=463]
   doc: Phase fit logic: per-flight scaling, centroid fitting, and distance scales.
   imports:
     - from __future__ import annotations
     - from typing import TYPE_CHECKING
     - from libs.perf.annotations import hot_path
     - from libs.phase.frames import PhaseFeatureFrame, PhaseObservationFrame
-    - from libs.phase.types import PhaseClusterModel, PhasePlanConfig
-    - from libs.phase.utils import array_distance
+    - from libs.phase.types import PhaseClusterModel, PhasePlanConfig, PhaseTransitionModel
+    - from libs.phase.utils import array_distance, with_progress_mass_coordinates
     - from pyspark.sql import DataFrame
   functions:
     - def build_flight_stats(observation_frame: PhaseObservationFrame, *, feature_count: int, config: PhasePlanConfig) -> 'DataFrame'  [lines 13-107, loc=95]
-    - def build_scaled_phase_observations(*, feature_frame: PhaseFeatureFrame, feature_count: int, config: PhasePlanConfig) -> tuple[PhaseObservationFrame, 'DataFrame', 'DataFrame']  [lines 110-152, loc=43]
-    - def build_fit_source(scaled_df: 'DataFrame') -> 'DataFrame'  [lines 155-172, loc=18]
-    - def build_seed_centroids(fit_source_df: 'DataFrame') -> 'DataFrame'  [lines 175-189, loc=15]
-    - def build_fit_assignments(fit_source_df: 'DataFrame', centroids_df: 'DataFrame') -> 'DataFrame'  [lines 192-207, loc=16]
-    - def refine_centroids(*, stats_df: 'DataFrame', fit_source_df: 'DataFrame', centroids_df: 'DataFrame', feature_count: int, config: PhasePlanConfig) -> 'DataFrame'  [lines 210-263, loc=54]
-    - def build_cluster_outputs(centroids_df: 'DataFrame', fit_assignments_df: 'DataFrame') -> tuple['DataFrame', 'DataFrame']  [lines 266-344, loc=79]
+    - def build_scaled_phase_observations(*, feature_frame: PhaseFeatureFrame, feature_count: int, config: PhasePlanConfig) -> tuple[PhaseObservationFrame, 'DataFrame', 'DataFrame']  [lines 110-153, loc=44]
+    - def build_fit_source(scaled_df: 'DataFrame') -> 'DataFrame'  [lines 156-201, loc=46]
+    - def build_seed_centroids(fit_source_df: 'DataFrame', *, feature_count: int) -> tuple['DataFrame', 'DataFrame']  [lines 204-242, loc=39]
+    - def build_fit_assignments(fit_source_df: 'DataFrame', centroids_df: 'DataFrame') -> 'DataFrame'  [lines 245-260, loc=16]
+    - def refine_centroids(*, stats_df: 'DataFrame', fit_source_df: 'DataFrame', centroids_df: 'DataFrame', feature_count: int, config: PhasePlanConfig) -> 'DataFrame'  [lines 263-316, loc=54]
+    - def build_cluster_outputs(centroids_df: 'DataFrame', fit_source_df: 'DataFrame', fit_assignments_df: 'DataFrame') -> tuple['DataFrame', 'DataFrame', 'DataFrame']  [lines 319-414, loc=96]
     - @hot_path
-    - def fit_cluster_model(feature_frame: PhaseFeatureFrame, *, config: PhasePlanConfig) -> tuple['DataFrame', PhaseClusterModel]  [lines 348-374, loc=27]
+    - def fit_cluster_model(feature_frame: PhaseFeatureFrame, *, config: PhasePlanConfig) -> tuple['DataFrame', PhaseClusterModel]  [lines 418-459, loc=42]
 
-libs/phase/frames.py  [loc=362]
+libs/phase/frames.py  [loc=771]
   doc: Phase feature and observation frame builders.
   imports:
     - from __future__ import annotations
@@ -3701,39 +3792,88 @@ libs/phase/frames.py  [loc=362]
     - from libs.pyspark import Frame
     - from pyspark.sql import DataFrame
   classes:
-    - @dataclass(frozen=True) class PhaseFeatureFrame(Frame)  [lines 16-331, loc=316]
+    - @dataclass(frozen=True) class PhaseFeatureFrame(Frame)  [lines 16-740, loc=725]
       attributes:
+        - _SIGN_EPSILON
         - feature_names
       fields:
         - feature_names: list[str]
       methods:
         - @staticmethod
-        - def _continuous_count_columns() -> list['Column']  [lines 20-26, loc=7]
+        - def _continuous_count_columns() -> list['Column']  [lines 22-28, loc=7]
         - @staticmethod
-        - def _categorical_count_columns() -> list['Column']  [lines 29-35, loc=7]
+        - def _categorical_count_columns() -> list['Column']  [lines 31-37, loc=7]
         - @staticmethod
-        - def _map_value_sum(column_name: str, *, value_type: str = 'double') -> 'Column'  [lines 38-45, loc=8]
+        - def _map_value_sum(column_name: str, *, value_type: str = 'double') -> 'Column'  [lines 40-47, loc=8]
         - @classmethod
-        - def _summary_feature_columns(cls, *, active_sensor_denominator: int) -> list['Column']  [lines 48-94, loc=47]
+        - def _map_value_max(cls, column_name: str, *, value_type: str = 'double') -> 'Column'  [lines 50-57, loc=8]
         - @staticmethod
-        - def _reconstruction_columns(*, all_sensors: list[str], weights_b: list[list[float]]) -> tuple['Column', 'Column']  [lines 97-122, loc=26]
+        - def _selected_sensor_value_column(column_name: str, parameter_name: str) -> 'Column'  [lines 60-63, loc=4]
+        - @staticmethod
+        - def _duration_seconds_column() -> 'Column'  [lines 66-69, loc=4]
+        - @staticmethod
+        - def _event_count_column() -> 'Column'  [lines 72-75, loc=4]
         - @classmethod
-        - def _with_backbone_vectors(cls, window_features_df: 'DataFrame', *, selected_sensors_c_lit: 'Column', all_sensors_lit: 'Column') -> 'DataFrame'  [lines 125-155, loc=31]
+        - def _delta_abs_sum_column(cls, delta_array: 'Column') -> 'Column'  [lines 78-85, loc=8]
         - @classmethod
-        - def _with_backbone_reconstruction(cls, dataframe: 'DataFrame', *, all_sensors: list[str], all_sensors_lit: 'Column', weights_b: list[list[float]]) -> 'DataFrame'  [lines 158-189, loc=32]
+        - def _delta_signed_sum_column(cls, delta_array: 'Column') -> 'Column'  [lines 88-91, loc=4]
         - @classmethod
-        - def _phase_feature_vector_column(cls, *, phase_selected_sensors_lit: 'Column', phase_selected_event_types_lit: 'Column', phase_selected_categorical_state_pairs: list[tuple[str, str]], active_sensor_denominator: int) -> 'Column'  [lines 192-230, loc=39]
+        - def _delta_energy_column(cls, delta_array: 'Column', *, delta_count: int) -> 'Column'  [lines 94-103, loc=10]
         - @classmethod
-        - def _finalize_feature_frame(cls, dataframe: 'DataFrame', *, feature_names_lit: 'Column', selected_sensors_c_lit: 'Column', phase_selected_event_types_lit: 'Column', categorical_pairs_lit: 'Column', all_sensors_lit: 'Column', weights_b: list[list[float]]) -> 'DataFrame'  [lines 233-258, loc=26]
+        - def _delta_directionality_column(cls, delta_array: 'Column') -> 'Column'  [lines 106-112, loc=7]
         - @classmethod
-        - def from_window_features_df(cls, window_features_df: 'DataFrame', *, phase_config: PhaseFeatureConfig) -> 'PhaseFeatureFrame'  [lines 261-313, loc=53]
-        - def payload_dataframe(self) -> 'DataFrame'  [lines 315-331, loc=17]
-    - @dataclass(frozen=True) class PhaseObservationFrame(Frame)  [lines 335-358, loc=24]
+        - def _changed_sensor_fraction_column(cls, delta_array: 'Column', *, delta_count: int) -> 'Column'  [lines 115-126, loc=12]
+        - @staticmethod
+        - def _average_columns(columns: list['Column']) -> 'Column'  [lines 129-141, loc=13]
+        - @staticmethod
+        - def _event_rate_column(event_type: str) -> 'Column'  [lines 144-150, loc=7]
+        - @staticmethod
+        - def _categorical_state_indicator_column(column_name: str, parameter_name: str, state: str) -> 'Column'  [lines 153-159, loc=7]
+        - @classmethod
+        - def _categorical_changed_indicator_column(cls, parameter_name: str, state: str) -> 'Column'  [lines 162-170, loc=9]
+        - @staticmethod
+        - def _active_sensor_fraction_column(*, active_sensor_denominator: int) -> 'Column'  [lines 173-179, loc=7]
+        - @classmethod
+        - def _drift_rate_column(cls) -> 'Column'  [lines 182-188, loc=7]
+        - @classmethod
+        - def _reconstruction_error_per_sensor_column(cls) -> 'Column'  [lines 191-197, loc=7]
+        - @classmethod
+        - def _slope_directionality_column(cls) -> 'Column'  [lines 200-211, loc=12]
+        - @classmethod
+        - def _selected_sensor_delta_columns(cls, selected_sensors: list[str]) -> list['Column']  [lines 214-221, loc=8]
+        - @classmethod
+        - def _selected_sensor_delta_array(cls, selected_sensors: list[str]) -> 'Column'  [lines 224-228, loc=5]
+        - @classmethod
+        - def _level_feature_array(cls, selected_sensors: list[str]) -> 'Column'  [lines 231-238, loc=8]
+        - @classmethod
+        - def _delta_feature_array(cls, selected_sensors: list[str]) -> 'Column'  [lines 241-253, loc=13]
+        - @classmethod
+        - def _event_feature_array(cls, selected_event_types: list[str]) -> 'Column'  [lines 256-260, loc=5]
+        - @classmethod
+        - def _categorical_feature_array(cls, selected_pairs: list[tuple[str, str]]) -> 'Column'  [lines 263-279, loc=17]
+        - @classmethod
+        - def _summary_feature_array(cls, *, active_sensor_denominator: int) -> 'Column'  [lines 282-364, loc=83]
+        - @classmethod
+        - def _temporal_feature_array(cls, *, phase_selected_sensors: list[str], phase_selected_event_types: list[str], phase_selected_categorical_state_pairs: list[tuple[str, str]], active_sensor_denominator: int, temporal_history_scales: tuple[int, ...]) -> 'Column'  [lines 367-509, loc=143]
+        - @staticmethod
+        - def _reconstruction_columns(*, all_sensors: list[str], weights_b: list[list[float]]) -> tuple['Column', 'Column']  [lines 512-537, loc=26]
+        - @classmethod
+        - def _with_backbone_vectors(cls, window_features_df: 'DataFrame', *, selected_sensors_c_lit: 'Column', all_sensors_lit: 'Column') -> 'DataFrame'  [lines 540-570, loc=31]
+        - @classmethod
+        - def _with_backbone_reconstruction(cls, dataframe: 'DataFrame', *, all_sensors: list[str], all_sensors_lit: 'Column', weights_b: list[list[float]]) -> 'DataFrame'  [lines 573-604, loc=32]
+        - @classmethod
+        - def _phase_feature_vector_column(cls, *, phase_selected_sensors: list[str], phase_selected_event_types: list[str], phase_selected_categorical_state_pairs: list[tuple[str, str]], active_sensor_denominator: int, temporal_history_scales: tuple[int, ...]) -> 'Column'  [lines 607-633, loc=27]
+        - @classmethod
+        - def _finalize_feature_frame(cls, dataframe: 'DataFrame', *, feature_names_lit: 'Column', selected_sensors_c_lit: 'Column', phase_selected_event_types_lit: 'Column', categorical_pairs_lit: 'Column', all_sensors_lit: 'Column', weights_b: list[list[float]]) -> 'DataFrame'  [lines 636-667, loc=32]
+        - @classmethod
+        - def from_window_features_df(cls, window_features_df: 'DataFrame', *, phase_config: PhaseFeatureConfig) -> 'PhaseFeatureFrame'  [lines 670-722, loc=53]
+        - def payload_dataframe(self) -> 'DataFrame'  [lines 724-740, loc=17]
+    - @dataclass(frozen=True) class PhaseObservationFrame(Frame)  [lines 744-767, loc=24]
       methods:
         - @classmethod
-        - def from_feature_frame(cls, feature_frame: PhaseFeatureFrame) -> 'PhaseObservationFrame'  [lines 338-358, loc=21]
+        - def from_feature_frame(cls, feature_frame: PhaseFeatureFrame) -> 'PhaseObservationFrame'  [lines 747-767, loc=21]
 
-libs/phase/pipeline.py  [loc=204]
+libs/phase/pipeline.py  [loc=328]
   doc: Spark-first orchestration for phase fitting and artifact assembly.
   imports:
     - from __future__ import annotations
@@ -3749,34 +3889,38 @@ libs/phase/pipeline.py  [loc=204]
     - from libs.phase.types import PhaseArtifactSet, PhaseClusterModel, PhaseDetectionRun, PhaseFeatureSelectionDiagnostics, PhaseFeatureSelectionPolicy, PhasePlanConfig
     - from pyspark.sql import DataFrame
   functions:
+    - def _collect_grouped_phase_counts(df: 'DataFrame', *, phase_column: str) -> dict[tuple[str, str], list[dict[str, int]]]  [lines 28-50, loc=23]
+    - def _collect_phase_fit_diagnostics(*, cluster_model: PhaseClusterModel, assignment_input_df: 'DataFrame', assigned_df: 'DataFrame', merged_df: 'DataFrame') -> dict[str, object]  [lines 53-133, loc=81]
     - @hot_path
-    - def fit_phase_feature_config_from_spark(window_features_df: 'DataFrame', *, backbone_df: 'DataFrame', phase_detect_sensor_count: int = 8, phase_detect_event_type_count: int = 6, phase_detect_categorical_state_count: int = 6) -> dict[str, object]  [lines 170-183, loc=14]
+    - def fit_phase_feature_config_from_spark(window_features_df: 'DataFrame', *, backbone_df: 'DataFrame', phase_detect_sensor_count: int = 8, phase_detect_event_type_count: int = 6, phase_detect_categorical_state_count: int = 6) -> dict[str, object]  [lines 294-307, loc=14]
     - @hot_path
-    - def fit_phase_feature_config_with_diagnostics_from_spark(window_features_df: 'DataFrame', *, backbone_df: 'DataFrame', phase_detect_sensor_count: int = 8, phase_detect_event_type_count: int = 6, phase_detect_categorical_state_count: int = 6) -> tuple[dict[str, object], PhaseFeatureSelectionDiagnostics]  [lines 187-200, loc=14]
+    - def fit_phase_feature_config_with_diagnostics_from_spark(window_features_df: 'DataFrame', *, backbone_df: 'DataFrame', phase_detect_sensor_count: int = 8, phase_detect_event_type_count: int = 6, phase_detect_categorical_state_count: int = 6) -> tuple[dict[str, object], PhaseFeatureSelectionDiagnostics]  [lines 311-324, loc=14]
   classes:
-    - @dataclass(frozen=True) class PhaseDetectionPlan(PhasePlanConfig)  [lines 29-166, loc=138]
+    - @dataclass(frozen=True) class PhaseDetectionPlan(PhasePlanConfig)  [lines 137-290, loc=154]
       methods:
         - @staticmethod
-        - def _phase_config(value: 'PhaseFeatureConfig | dict[str, Any]') -> PhaseFeatureConfig  [lines 31-32, loc=2]
-        - def feature_selection_policy(self) -> PhaseFeatureSelectionPolicy  [lines 34-39, loc=6]
+        - def _phase_config(value: 'PhaseFeatureConfig | dict[str, Any]') -> PhaseFeatureConfig  [lines 139-140, loc=2]
+        - def feature_selection_policy(self) -> PhaseFeatureSelectionPolicy  [lines 142-147, loc=6]
         - @hot_path
-        - def fit_phase_feature_config(self, window_features_df: 'DataFrame', *, backbone_df: 'DataFrame') -> dict[str, object]  [lines 42-56, loc=15]
+        - def fit_phase_feature_config(self, window_features_df: 'DataFrame', *, backbone_df: 'DataFrame') -> dict[str, object]  [lines 150-164, loc=15]
         - @hot_path
-        - def fit_phase_feature_config_with_diagnostics(self, window_features_df: 'DataFrame', *, backbone_df: 'DataFrame') -> tuple[dict[str, object], PhaseFeatureSelectionDiagnostics]  [lines 59-74, loc=16]
-        - def build_feature_frame(self, window_features_df: 'DataFrame', *, phase_config: 'PhaseFeatureConfig | dict[str, Any]') -> PhaseFeatureFrame  [lines 76-85, loc=10]
-        - def build_observation_frame(self, feature_frame: PhaseFeatureFrame) -> PhaseObservationFrame  [lines 87-88, loc=2]
+        - def fit_phase_feature_config_with_diagnostics(self, window_features_df: 'DataFrame', *, backbone_df: 'DataFrame') -> tuple[dict[str, object], PhaseFeatureSelectionDiagnostics]  [lines 167-182, loc=16]
+        - def build_feature_frame(self, window_features_df: 'DataFrame', *, phase_config: 'PhaseFeatureConfig | dict[str, Any]') -> PhaseFeatureFrame  [lines 184-193, loc=10]
+        - def build_observation_frame(self, feature_frame: PhaseFeatureFrame) -> PhaseObservationFrame  [lines 195-196, loc=2]
         - @staticmethod
-        - def _checkpoint(df: 'DataFrame') -> 'DataFrame'  [lines 91-92, loc=2]
-        - def _fit_cluster_model(self, feature_frame: PhaseFeatureFrame) -> tuple['DataFrame', PhaseClusterModel]  [lines 94-95, loc=2]
+        - def _checkpoint(df: 'DataFrame') -> 'DataFrame'  [lines 199-200, loc=2]
+        - def _fit_cluster_model(self, feature_frame: PhaseFeatureFrame) -> tuple['DataFrame', PhaseClusterModel]  [lines 202-203, loc=2]
         - @hot_path
-        - def _run_detection(self, window_features_df: 'DataFrame', *, phase_config: PhaseFeatureConfig) -> PhaseDetectionRun  [lines 98-124, loc=27]
-        - def build_phase_baselines(self, phase_windows: 'PhaseWindowsTable | DataFrame', *, phase_config: 'PhaseFeatureConfig | dict[str, Any]') -> PhaseBaselinesTable  [lines 126-133, loc=8]
+        - def run_detection(self, window_features_df: 'DataFrame', *, phase_config: 'PhaseFeatureConfig | dict[str, Any]') -> PhaseDetectionRun  [lines 206-215, loc=10]
         - @hot_path
-        - def build_phase_windows(self, window_features_df: 'DataFrame', *, phase_config: 'PhaseFeatureConfig | dict[str, Any]') -> PhaseWindowsTable  [lines 136-145, loc=10]
+        - def _run_detection(self, window_features_df: 'DataFrame', *, phase_config: PhaseFeatureConfig) -> PhaseDetectionRun  [lines 218-251, loc=34]
+        - def build_phase_baselines(self, phase_windows: 'PhaseWindowsTable | DataFrame', *, phase_config: 'PhaseFeatureConfig | dict[str, Any]') -> PhaseBaselinesTable  [lines 253-260, loc=8]
         - @hot_path
-        - def build(self, window_features_df: 'DataFrame', *, backbone_df: 'DataFrame') -> PhaseArtifactSet  [lines 148-166, loc=19]
+        - def build_phase_windows(self, window_features_df: 'DataFrame', *, phase_config: 'PhaseFeatureConfig | dict[str, Any]') -> PhaseWindowsTable  [lines 263-269, loc=7]
+        - @hot_path
+        - def build(self, window_features_df: 'DataFrame', *, backbone_df: 'DataFrame') -> PhaseArtifactSet  [lines 272-290, loc=19]
 
-libs/phase/selectors.py  [loc=213]
+libs/phase/selectors.py  [loc=321]
   imports:
     - from __future__ import annotations
     - import time
@@ -3786,10 +3930,11 @@ libs/phase/selectors.py  [loc=213]
     - from pyspark.sql import DataFrame
   functions:
     - def event_counts_from_window_features_spark(window_features_df: 'DataFrame') -> 'DataFrame'  [lines 9-21, loc=13]
-    - def select_event_types_from_window_features_spark(window_features_df: 'DataFrame', *, k: int) -> list[str]  [lines 24-68, loc=45]
-    - def select_event_types_with_diagnostics_from_window_features_spark(window_features_df: 'DataFrame', *, k: int) -> tuple[list[str], PhaseSelectorDiagnostics]  [lines 71-136, loc=66]
-    - def select_categorical_state_pairs_from_window_features_spark(window_features_df: 'DataFrame', *, k: int) -> list[tuple[str, str]]  [lines 139-163, loc=25]
-    - def select_categorical_state_pairs_with_diagnostics_from_window_features_spark(window_features_df: 'DataFrame', *, k: int) -> tuple[list[tuple[str, str]], PhaseSelectorDiagnostics]  [lines 166-207, loc=42]
+    - def event_type_statistics_from_window_features_spark(window_features_df: 'DataFrame') -> 'DataFrame'  [lines 24-51, loc=28]
+    - def select_event_types_from_window_features_spark(window_features_df: 'DataFrame', *, k: int) -> list[str]  [lines 54-106, loc=53]
+    - def select_event_types_with_diagnostics_from_window_features_spark(window_features_df: 'DataFrame', *, k: int) -> tuple[list[str], PhaseSelectorDiagnostics]  [lines 109-182, loc=74]
+    - def select_categorical_state_pairs_from_window_features_spark(window_features_df: 'DataFrame', *, k: int) -> list[tuple[str, str]]  [lines 185-240, loc=56]
+    - def select_categorical_state_pairs_with_diagnostics_from_window_features_spark(window_features_df: 'DataFrame', *, k: int) -> tuple[list[tuple[str, str]], PhaseSelectorDiagnostics]  [lines 243-315, loc=73]
 
 libs/phase/tables.py  [loc=258]
   doc: Typed Spark tables for persisted phase artifacts.
@@ -3835,7 +3980,7 @@ libs/phase/tables.py  [loc=258]
         - @classmethod
         - def from_phase_windows_and_labels(cls, phase_windows_df: 'DataFrame', phase_labels_df: 'DataFrame') -> 'PhaseLabelCentroidsTable'  [lines 171-249, loc=79]
 
-libs/phase/types.py  [loc=113]
+libs/phase/types.py  [loc=131]
   doc: Phase artifact and plan dataclasses.
   imports:
     - from __future__ import annotations
@@ -3848,16 +3993,37 @@ libs/phase/types.py  [loc=113]
     - from libs.phase.feature_config import PhaseFeatureConfig
     - from libs.phase.frames import PhaseFeatureFrame
   classes:
-    - @dataclass(frozen=True) class PhaseClusterModel  [lines 14-17, loc=4]
+    - @dataclass(frozen=True) class PhaseTransitionModel  [lines 14-25, loc=12]
+      attributes:
+        - support_df
+        - policy_name
+        - canonical_order_source
+        - progress_support_source
+        - allowed_transition_offsets
+      fields:
+        - support_df: 'DataFrame'
+        - policy_name: str = 'monotone_progress_band'
+        - canonical_order_source: str = 'seed_bucket'
+        - progress_support_source: str = 'seed_progress_mass_position_span'
+        - allowed_transition_offsets: tuple[int, ...] = (0, 1)
+      methods:
+        - def transition_penalty_for_offset(self, offset: int, *, base_penalty: float) -> float  [lines 21-25, loc=5]
+    - @dataclass(frozen=True) class PhaseClusterModel  [lines 29-35, loc=7]
       attributes:
         - feature_stats_df
         - centroids_df
         - distance_scales_df
+        - transition_model
+        - fit_source_stats_df
+        - seed_bucket_counts_df
       fields:
         - feature_stats_df: 'DataFrame'
         - centroids_df: 'DataFrame'
         - distance_scales_df: 'DataFrame'
-    - @dataclass(frozen=True) class PhaseArtifactSet  [lines 21-26, loc=6]
+        - transition_model: PhaseTransitionModel
+        - fit_source_stats_df: 'DataFrame | None' = None
+        - seed_bucket_counts_df: 'DataFrame | None' = None
+    - @dataclass(frozen=True) class PhaseArtifactSet  [lines 39-44, loc=6]
       attributes:
         - phase_windows
         - phase_baselines
@@ -3870,18 +4036,20 @@ libs/phase/types.py  [loc=113]
         - phase_config: 'PhaseFeatureConfig'
         - feature_frame: 'PhaseFeatureFrame | None' = None
         - cluster_model: PhaseClusterModel | None = None
-    - @dataclass(frozen=True) class PhaseDetectionRun  [lines 30-34, loc=5]
+    - @dataclass(frozen=True) class PhaseDetectionRun  [lines 48-53, loc=6]
       attributes:
         - phase_config
         - feature_frame
         - cluster_model
         - phase_windows
+        - diagnostics
       fields:
         - phase_config: 'PhaseFeatureConfig'
         - feature_frame: 'PhaseFeatureFrame'
         - cluster_model: PhaseClusterModel
         - phase_windows: PhaseWindowsTable
-    - @dataclass(frozen=True) class PhaseFeatureSelectionPolicy  [lines 38-41, loc=4]
+        - diagnostics: dict[str, Any] | None = None
+    - @dataclass(frozen=True) class PhaseFeatureSelectionPolicy  [lines 57-60, loc=4]
       attributes:
         - sensor_count
         - event_type_count
@@ -3890,7 +4058,7 @@ libs/phase/types.py  [loc=113]
         - sensor_count: int = 8
         - event_type_count: int = 6
         - categorical_state_count: int = 6
-    - @dataclass(frozen=True) class PhaseSelectorDiagnostics  [lines 45-50, loc=6]
+    - @dataclass(frozen=True) class PhaseSelectorDiagnostics  [lines 64-69, loc=6]
       attributes:
         - selector_name
         - selected_count
@@ -3903,7 +4071,7 @@ libs/phase/types.py  [loc=113]
         - timing_ms: float
         - candidate_count: int | None = None
         - fallback_used: bool = False
-    - @dataclass(frozen=True) class PhaseFeatureSelectionDiagnostics  [lines 54-92, loc=39]
+    - @dataclass(frozen=True) class PhaseFeatureSelectionDiagnostics  [lines 73-111, loc=39]
       attributes:
         - sensors
         - event_types
@@ -3917,12 +4085,11 @@ libs/phase/types.py  [loc=113]
         - selected_event_types: list[str]
         - selected_categorical_state_pairs: list[tuple[str, str]]
       methods:
-        - def to_dict(self) -> dict[str, Any]  [lines 61-92, loc=32]
-    - @dataclass(frozen=True) class PhasePlanConfig  [lines 96-106, loc=11]
+        - def to_dict(self) -> dict[str, Any]  [lines 80-111, loc=32]
+    - @dataclass(frozen=True) class PhasePlanConfig  [lines 115-124, loc=10]
       attributes:
         - phase_count
         - phase_stable_drift_quantile
-        - phase_smoothing_radius
         - phase_transition_penalty
         - phase_min_dwell_windows
         - phase_detect_sensor_count
@@ -3933,7 +4100,6 @@ libs/phase/types.py  [loc=113]
       fields:
         - phase_count: int
         - phase_stable_drift_quantile: float = 0.35
-        - phase_smoothing_radius: int = 2
         - phase_transition_penalty: float = 1.5
         - phase_min_dwell_windows: int = 8
         - phase_detect_sensor_count: int = 8
@@ -3942,21 +4108,22 @@ libs/phase/types.py  [loc=113]
         - max_iter: int = 12
         - segment_policy: SequenceSegmentPolicy = field(default_factory=default_phase_segment_policy)
 
-libs/phase/utils.py  [loc=48]
+libs/phase/utils.py  [loc=97]
   doc: Phase utility helpers for Spark expressions and defaults.
   imports:
     - from __future__ import annotations
     - from typing import TYPE_CHECKING
     - from libs.common import empty_array
     - from libs.spark_sequence import SequenceSegmentPolicy, segment_policy_from_env
-    - from pyspark.sql import Column
+    - from pyspark.sql import Column, DataFrame
   functions:
     - def default_phase_segment_policy() -> SequenceSegmentPolicy  [lines 11-16, loc=6]
     - def string_array_literal(values: list[str]) -> 'Column'  [lines 19-24, loc=6]
     - def double_matrix_literal(values: list[list[float]]) -> 'Column'  [lines 27-32, loc=6]
     - def array_distance(left: 'Column', right: 'Column') -> 'Column'  [lines 35-44, loc=10]
+    - def with_progress_mass_coordinates(dataframe: 'DataFrame', *, value_column: str = 's_w_scaled', order_column: str = 'phase_row_number', flight_window_count_column: str = 'flight_window_count') -> 'DataFrame'  [lines 47-93, loc=47]
 
-libs/phase/validator.py  [loc=478]
+libs/phase/validator.py  [loc=907]
   doc: Phase-detection validation helpers over persisted tables.
   imports:
     - from __future__ import annotations
@@ -3965,16 +4132,27 @@ libs/phase/validator.py  [loc=478]
     - from typing import Any
     - import pandas as pd
   functions:
-    - def _normalize_timestamp_series(series: pd.Series) -> pd.Series  [lines 12-13, loc=2]
-    - def _majority_label(labels: pd.Series) -> str | None  [lines 16-21, loc=6]
-    - def build_phase_validation_assignments(*, phase_windows_df: pd.DataFrame, phase_labels_df: pd.DataFrame, windows_df: pd.DataFrame | None = None) -> list[dict[str, Any]]  [lines 24-86, loc=63]
-    - def _coerce_vector(value: Any) -> list[float]  [lines 89-98, loc=10]
-    - def _has_vector_values(value: Any) -> bool  [lines 101-102, loc=2]
-    - def _mean_vector(vectors: list[list[float]]) -> list[float]  [lines 105-114, loc=10]
-    - def _euclidean_distance(left: list[float], right: list[float]) -> float | None  [lines 117-121, loc=5]
-    - def build_phase_centroid_comparison_summary_from_tables(*, phase_windows_df: pd.DataFrame, phase_labels_df: pd.DataFrame, phase_baselines_df: pd.DataFrame, windows_df: pd.DataFrame | None = None) -> dict[str, Any]  [lines 124-282, loc=159]
-    - def validate_detected_phases_from_tables(*, phase_windows_df: pd.DataFrame, phase_labels_df: pd.DataFrame, windows_df: pd.DataFrame | None = None) -> dict[str, Any]  [lines 285-305, loc=21]
-    - def evaluate_detected_phases(assignments: list[dict[str, Any]]) -> dict[str, Any]  [lines 308-478, loc=171]
+    - def _clean_text(value: Any) -> str  [lines 12-15, loc=4]
+    - def _normalize_timestamp_series(series: pd.Series) -> pd.Series  [lines 18-19, loc=2]
+    - def _majority_label(labels: pd.Series) -> str | None  [lines 22-27, loc=6]
+    - def _ordered_nonempty_labels(labels_df: pd.DataFrame) -> list[str]  [lines 30-38, loc=9]
+    - def _truth_phase_context(overlapping_labels: pd.DataFrame) -> dict[str, str | None]  [lines 41-62, loc=22]
+    - def build_phase_validation_assignments(*, phase_windows_df: pd.DataFrame, phase_labels_df: pd.DataFrame, windows_df: pd.DataFrame | None = None) -> list[dict[str, Any]]  [lines 65-142, loc=78]
+    - def _coerce_vector(value: Any) -> list[float]  [lines 145-154, loc=10]
+    - def _has_vector_values(value: Any) -> bool  [lines 157-158, loc=2]
+    - def _mean_vector(vectors: list[list[float]]) -> list[float]  [lines 161-170, loc=10]
+    - def _euclidean_distance(left: list[float], right: list[float]) -> float | None  [lines 173-177, loc=5]
+    - def _feature_family_for_name(feature_name: str) -> str  [lines 180-194, loc=15]
+    - def _feature_family_index_ranges(feature_names: list[str]) -> dict[str, list[int]]  [lines 197-205, loc=9]
+    - def _distance_by_feature_family(left: list[float], right: list[float], feature_names: list[str]) -> dict[str, float | None]  [lines 208-217, loc=10]
+    - def _tail_phase_mapping(summary: dict[str, Any]) -> dict[str, dict[int, str]]  [lines 220-231, loc=12]
+    - def _count_rows(counter: Counter[tuple[str, str]], *, left_key: str, right_key: str) -> list[dict[str, Any]]  [lines 234-242, loc=9]
+    - def _collapse_transition_events(assignments: list[dict[str, Any]], *, truth: bool, tail_phase_mapping: dict[str, dict[int, str]]) -> list[dict[str, Any]]  [lines 245-310, loc=66]
+    - def _evaluate_transition_event_alignment(assignments: list[dict[str, Any]], *, tail_phase_mapping: dict[str, dict[int, str]]) -> dict[str, Any]  [lines 313-428, loc=116]
+    - def _evaluate_detected_phase_states(assignments: list[dict[str, Any]], *, tail_phase_mapping: dict[str, dict[int, str]]) -> dict[str, Any]  [lines 431-511, loc=81]
+    - def build_phase_centroid_comparison_summary_from_tables(*, phase_windows_df: pd.DataFrame, phase_labels_df: pd.DataFrame, phase_baselines_df: pd.DataFrame, windows_df: pd.DataFrame | None = None) -> dict[str, Any]  [lines 514-707, loc=194]
+    - def validate_detected_phases_from_tables(*, phase_windows_df: pd.DataFrame, phase_labels_df: pd.DataFrame, windows_df: pd.DataFrame | None = None) -> dict[str, Any]  [lines 710-734, loc=25]
+    - def evaluate_detected_phases(assignments: list[dict[str, Any]]) -> dict[str, Any]  [lines 737-907, loc=171]
 
 libs/plotting/__init__.py  [loc=85]
   imports:
@@ -4405,105 +4583,153 @@ libs/reporting/frame.py  [loc=59]
         - def select_available(self, columns: 'Sequence[str]') -> 'ReportFrame'  [lines 42-46, loc=5]
         - def normalize_timestamps(self, columns: 'Sequence[str]' = DEFAULT_TIMESTAMP_COLUMNS) -> 'ReportFrame'  [lines 48-55, loc=8]
 
-libs/scoring/__init__.py  [loc=27]
+libs/scoring/__init__.py  [loc=46]
   doc: Window scoring package for the active V2 pipeline.
   imports:
-    - from libs.scoring.artifacts import WindowScoreArtifacts
-    - from libs.scoring.rules import build_phase_window_score_baselines, score_phase_window_rows
+    - from libs.scoring.channels import BOUND_VIOLATION_CHANNEL, COHERENCE_BREAK_CHANNEL, EVENT_DISCORDANCE_CHANNEL, RECONSTRUCTION_ERROR_CHANNEL, REGIME_DEVIATION_CHANNEL, RESPONSE_VIOLATION_CHANNEL, SCORE_COMPONENT_NAMES, STATE_VIOLATION_CHANNEL, dominant_score_component, score_component_scores_with_updates, zero_score_component_scores
     - from libs.scoring.tables import WindowScoresCalibratedTable, WindowScoresRawTable
     - from libs.scoring.validator import extract_fault_truth_windows, extract_misbehavior_truth_windows, summarize_fault_window_detection, summarize_misbehavior_window_detection, validate_scores_against_fault_windows, validate_scores_against_misbehavior_windows
 
-libs/scoring/artifacts.py  [loc=165]
-  doc: In-memory window score artifact assembly.
+libs/scoring/channels.py  [loc=97]
+  doc: Canonical anomaly score channel names and shared helpers.
   imports:
     - from __future__ import annotations
-    - from dataclasses import dataclass
-    - from typing import Any
-    - import pandas as pd
-    - from libs.io.contracts import PhaseAssignmentRow, PhaseBaselineRow, PhaseWindowRow, WindowScoreRow
-    - from libs.scoring.rules import score_phase_window_rows
+    - from typing import Mapping
+  constants:
+    - BOUND_VIOLATION_CHANNEL
+    - COHERENCE_BREAK_CHANNEL
+    - EVENT_DISCORDANCE_CHANNEL
+    - RECONSTRUCTION_ERROR_CHANNEL
+    - REGIME_DEVIATION_CHANNEL
+    - RESPONSE_VIOLATION_CHANNEL
+    - SCORE_COMPONENT_NAMES
+    - STATE_VIOLATION_CHANNEL
   functions:
-    - def _as_list(value: Any) -> list[Any]  [lines 14-35, loc=22]
-    - def build_parameter_to_subsystem_map(hierarchy_rows: list[dict[str, Any]]) -> dict[str, str]  [lines 38-52, loc=15]
-  classes:
-    - @dataclass(frozen=True) class WindowScoreArtifacts  [lines 56-165, loc=110]
-      attributes:
-        - rows
-      fields:
-        - rows: list[WindowScoreRow]
-      methods:
-        - @classmethod
-        - def from_phase_rows(cls, phase_window_rows: list[dict[str, Any]], phase_baseline_rows: list[dict[str, Any]], hierarchy_rows: list[dict[str, Any]]) -> 'WindowScoreArtifacts'  [lines 60-162, loc=103]
-        - def to_df(self) -> pd.DataFrame  [lines 164-165, loc=2]
+    - def zero_score_component_scores() -> dict[str, float]  [lines 26-27, loc=2]
+    - def score_component_scores_with_updates(updates: Mapping[str, float | int | None] | None = None) -> dict[str, float]  [lines 30-38, loc=9]
+    - def dominant_score_component(scores: Mapping[str, float | int | None] | None) -> str  [lines 41-50, loc=10]
+    - def active_channel_mean(scores: Mapping[str, float | int | None] | None) -> float  [lines 53-58, loc=6]
+    - def score_component_map_expr(component_expr_by_name: Mapping[str, object]) -> object  [lines 61-72, loc=12]
+    - def dominant_score_component_expr(component_expr_by_name: Mapping[str, object]) -> object  [lines 75-85, loc=11]
+    - def active_channel_mean_expr(component_expr_by_name: Mapping[str, object]) -> object  [lines 88-97, loc=10]
 
-libs/scoring/rules.py  [loc=141]
-  doc: Low-level rules for phase-window anomaly scoring.
-  imports:
-    - from __future__ import annotations
-    - from collections import defaultdict
-    - from typing import Any
-    - import numpy as np
-    - from libs.io.contracts import PhaseAssignmentRow, PhaseBaselineRow, PhaseWindowRow, WindowScoreRow
-  functions:
-    - def build_phase_window_score_baselines(phase_window_rows: list[PhaseWindowRow], phase_assignments: list[PhaseAssignmentRow], *, min_stable_confidence: float = 0.5) -> list[PhaseBaselineRow]  [lines 13-67, loc=55]
-    - def score_phase_window_rows(phase_window_rows: list[PhaseWindowRow], phase_assignments: list[PhaseAssignmentRow], phase_baseline_rows: list[PhaseBaselineRow]) -> list[WindowScoreRow]  [lines 70-141, loc=72]
-
-libs/scoring/tables.py  [loc=273]
+libs/scoring/tables.py  [loc=1038]
   doc: Typed Spark tables for scoring artifacts.
   imports:
     - from __future__ import annotations
     - from dataclasses import dataclass
     - from typing import TYPE_CHECKING
+    - from libs.common.event_types import CATEGORICAL_EVENT_TYPES, CONTINUOUS_EVENT_TYPES, EventType
     - from libs.io.schemas.scoring import WINDOW_SCORES_CALIBRATED_SCHEMA, WINDOW_SCORES_RAW_SCHEMA
     - from libs.pyspark import Table
-    - from pyspark.sql import DataFrame
+    - from libs.scoring.channels import BOUND_VIOLATION_CHANNEL, COHERENCE_BREAK_CHANNEL, EVENT_DISCORDANCE_CHANNEL, RECONSTRUCTION_ERROR_CHANNEL, REGIME_DEVIATION_CHANNEL, RESPONSE_VIOLATION_CHANNEL, STATE_VIOLATION_CHANNEL, active_channel_mean_expr, dominant_score_component_expr, score_component_map_expr
+    - from pyspark.sql import Column, DataFrame
+    - from libs.events.tables import EventsTable
     - from libs.graph.tables import HierarchySensorMapTable
     - from libs.phase.tables import PhaseBaselinesTable, PhaseWindowsTable
+    - from libs.profiling.profiles import ParameterBehaviorProfile
+    - from libs.windows.tables import WindowsTable
+    - from libs.events.profiling import ParameterEventProfile
+  constants:
+    - EMIT_READY_P_VALUE_THRESHOLD
+    - HIGH_SEVERITY_LABEL
+    - LOW_SEVERITY_LABEL
+    - MEDIUM_SEVERITY_LABEL
+    - NORMAL_SEVERITY_LABEL
+    - _EVENT_WINDOW_KEYS
+    - _PHASE_GROUP_KEYS
+  functions:
+    - def _phase_metric_baselines(metric_df: 'DataFrame', *, metric_cols: tuple[str, ...]) -> 'DataFrame'  [lines 42-66, loc=25]
+    - def _normalized_positive_deviation(metric_name: str) -> 'Column'  [lines 69-79, loc=11]
+    - def _normalized_abs_deviation(metric_name: str) -> 'Column'  [lines 82-91, loc=10]
+    - def _metric_map_value(map_col: str, key: str) -> 'Column'  [lines 94-97, loc=4]
+    - def _normalized_clamped_avg(*columns: 'Column') -> 'Column'  [lines 100-108, loc=9]
+    - def _window_aligned_event_rows(events_df: 'DataFrame', *, windows_df: 'DataFrame | None') -> 'DataFrame'  [lines 111-182, loc=72]
+    - def _localized_hierarchy_support_frames(residual_rows_df: 'DataFrame', residual_totals_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', *, parameter_event_counts_df: 'DataFrame | None') -> _LocalizedHierarchySupportFrames  [lines 185-337, loc=153]
   classes:
-    - @dataclass(frozen=True) class WindowScoresRawTable(Table)  [lines 13-213, loc=201]
+    - @dataclass(frozen=True) class _LocalizedHierarchySupportFrames  [lines 35-39, loc=5]
+      attributes:
+        - module_ranked_df
+        - dominant_modules_df
+        - subsystem_ranked_df
+        - dominant_subsystems_df
+      fields:
+        - module_ranked_df: 'DataFrame'
+        - dominant_modules_df: 'DataFrame'
+        - subsystem_ranked_df: 'DataFrame'
+        - dominant_subsystems_df: 'DataFrame'
+    - @dataclass(frozen=True) class WindowScoresRawTable(Table)  [lines 341-952, loc=612]
       attributes:
         - partition_by
       fields:
         - partition_by: tuple[str, ...] = ('tail_id',)
       methods:
         - @classmethod
-        - def spark_schema(cls)  [lines 17-18, loc=2]
+        - def spark_schema(cls)  [lines 345-346, loc=2]
         - @classmethod
-        - def from_phase_tables(cls, phase_windows: 'PhaseWindowsTable', phase_baselines: 'PhaseBaselinesTable', hierarchy_sensor_map: 'HierarchySensorMapTable') -> 'WindowScoresRawTable'  [lines 21-31, loc=11]
+        - def from_phase_tables(cls, phase_windows: 'PhaseWindowsTable', phase_baselines: 'PhaseBaselinesTable', hierarchy_sensor_map: 'HierarchySensorMapTable', *, windows: 'WindowsTable | None' = None, events: 'EventsTable | None' = None, parameter_behavior_profile: 'ParameterBehaviorProfile | None' = None, parameter_event_profile: 'ParameterEventProfile | None' = None) -> 'WindowScoresRawTable'  [lines 349-372, loc=24]
         - @classmethod
-        - def from_phase_dataframes(cls, phase_windows_df: 'DataFrame', phase_baselines_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame') -> 'WindowScoresRawTable'  [lines 34-213, loc=180]
-    - @dataclass(frozen=True) class WindowScoresCalibratedTable(Table)  [lines 217-267, loc=51]
+        - def from_phase_dataframes(cls, phase_windows_df: 'DataFrame', phase_baselines_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', *, windows_df: 'DataFrame | None' = None, events_df: 'DataFrame | None' = None, parameter_behavior_profile_df: 'DataFrame | None' = None, parameter_event_profile_df: 'DataFrame | None' = None) -> 'WindowScoresRawTable'  [lines 375-952, loc=578]
+    - @dataclass(frozen=True) class WindowScoresCalibratedTable(Table)  [lines 956-1027, loc=72]
       attributes:
         - partition_by
       fields:
         - partition_by: tuple[str, ...] = ('tail_id',)
       methods:
         - @classmethod
-        - def spark_schema(cls)  [lines 221-222, loc=2]
+        - def spark_schema(cls)  [lines 960-961, loc=2]
+        - @staticmethod
+        - def emit_ready_expr()  [lines 964-975, loc=12]
         - @classmethod
-        - def from_scores(cls, scores_df: 'DataFrame', *, min_warm: int) -> 'WindowScoresCalibratedTable'  [lines 225-267, loc=43]
+        - def from_scores(cls, scores_df: 'DataFrame', *, min_warm: int) -> 'WindowScoresCalibratedTable'  [lines 978-1027, loc=50]
 
-libs/scoring/validator.py  [loc=368]
+libs/scoring/validator.py  [loc=904]
   doc: Score validation helpers against simulator misbehavior truth with fault wrappers.
   imports:
     - from __future__ import annotations
     - from typing import Any
     - import pandas as pd
+    - from libs.scoring.channels import SCORE_COMPONENT_NAMES, score_component_scores_with_updates
   constants:
+    - CALIBRATED_P_VALUE_THRESHOLDS
+    - DIAGNOSTIC_WINDOW_SAMPLE_LIMIT
+    - RAW_SCORE_TOP_K_BUDGETS
     - STRICT_MAX_EARLY_LEAD_SECONDS
     - STRICT_TRUTH_COVERAGE_MIN_RATIO
+    - STRICT_WINDOW_COVERAGE_MIN_RATIO
   functions:
-    - def _to_utc(series: pd.Series) -> pd.Series  [lines 13-14, loc=2]
-    - def _text_series(df: pd.DataFrame, primary: str, fallback: str | None = None) -> pd.Series  [lines 17-22, loc=6]
-    - def _bool_series(df: pd.DataFrame, primary: str, fallback: str | None = None) -> pd.Series  [lines 25-30, loc=6]
-    - def extract_misbehavior_truth_windows(raw_telemetry_df: pd.DataFrame) -> pd.DataFrame  [lines 33-64, loc=32]
-    - def extract_fault_truth_windows(raw_telemetry_df: pd.DataFrame) -> pd.DataFrame  [lines 67-80, loc=14]
-    - def build_truth_window_overlap_table(*, window_like_df: pd.DataFrame, truth_df: pd.DataFrame, start_field: str, end_field: str) -> pd.DataFrame  [lines 83-141, loc=59]
-    - def _strict_overlap_mask(df: pd.DataFrame) -> pd.Series  [lines 144-150, loc=7]
-    - def validate_scores_against_misbehavior_windows(*, raw_telemetry_df: pd.DataFrame, windows_df: pd.DataFrame, calibrated_scores_df: pd.DataFrame) -> dict[str, Any]  [lines 153-281, loc=129]
-    - def summarize_misbehavior_window_detection(*, raw_telemetry_df: pd.DataFrame, windows_df: pd.DataFrame, calibrated_scores_df: pd.DataFrame) -> dict[str, Any]  [lines 284-303, loc=20]
-    - def validate_scores_against_fault_windows(*, raw_telemetry_df: pd.DataFrame, windows_df: pd.DataFrame, calibrated_scores_df: pd.DataFrame) -> dict[str, Any]  [lines 306-338, loc=33]
-    - def summarize_fault_window_detection(*, raw_telemetry_df: pd.DataFrame, windows_df: pd.DataFrame, calibrated_scores_df: pd.DataFrame) -> dict[str, Any]  [lines 341-368, loc=28]
+    - def _to_utc(series: pd.Series) -> pd.Series  [lines 19-20, loc=2]
+    - def _text_series(df: pd.DataFrame, primary: str, fallback: str | None = None) -> pd.Series  [lines 23-28, loc=6]
+    - def _bool_series(df: pd.DataFrame, primary: str, fallback: str | None = None) -> pd.Series  [lines 31-36, loc=6]
+    - def _float_series(df: pd.DataFrame, primary: str, fallback: str | None = None) -> pd.Series  [lines 39-44, loc=6]
+    - def _score_join_keys(left_df: pd.DataFrame, right_df: pd.DataFrame) -> list[str]  [lines 47-51, loc=5]
+    - def _threshold_key(value: float) -> str  [lines 54-55, loc=2]
+    - def _top_k_key(value: int) -> str  [lines 58-59, loc=2]
+    - def _json_timestamp(value: Any) -> str | None  [lines 62-64, loc=3]
+    - def _non_empty_strings(values: pd.Series) -> list[str]  [lines 67-71, loc=5]
+    - def _score_component_map(value: Any) -> dict[str, float]  [lines 74-77, loc=4]
+    - def extract_misbehavior_truth_windows(raw_telemetry_df: pd.DataFrame) -> pd.DataFrame  [lines 80-111, loc=32]
+    - def extract_fault_truth_windows(raw_telemetry_df: pd.DataFrame) -> pd.DataFrame  [lines 114-127, loc=14]
+    - def build_truth_window_overlap_table(*, window_like_df: pd.DataFrame, truth_df: pd.DataFrame, start_field: str, end_field: str) -> pd.DataFrame  [lines 130-192, loc=63]
+    - def strict_overlap_mask(df: pd.DataFrame) -> pd.Series  [lines 195-201, loc=7]
+    - def _merge_scored_windows(*, windows_df: pd.DataFrame, raw_scores_df: pd.DataFrame | None, calibrated_scores_df: pd.DataFrame) -> pd.DataFrame  [lines 207-289, loc=83]
+    - def _build_overlap_window_summary(*, scored_windows_df: pd.DataFrame, overlaps_df: pd.DataFrame, truth_window_id_field: str) -> pd.DataFrame  [lines 292-361, loc=70]
+    - def _distribution_summary(values: pd.Series) -> dict[str, Any]  [lines 364-380, loc=17]
+    - def _score_distribution_by_overlap_bucket(*, scored_windows_df: pd.DataFrame, value_field: str) -> dict[str, dict[str, Any]]  [lines 383-392, loc=10]
+    - def _severity_distribution_by_overlap_bucket(scored_windows_df: pd.DataFrame) -> dict[str, dict[str, int]]  [lines 395-403, loc=9]
+    - def _channel_score_distribution_by_overlap_bucket(scored_windows_df: pd.DataFrame) -> dict[str, dict[str, dict[str, Any]]]  [lines 406-421, loc=16]
+    - def _dominant_channel_count_by_overlap_bucket(scored_windows_df: pd.DataFrame) -> dict[str, dict[str, int]]  [lines 424-430, loc=7]
+    - def _truth_window_recall_by_top_k_windows(*, scored_windows_df: pd.DataFrame, overlaps_df: pd.DataFrame, truth_df: pd.DataFrame, truth_window_id_field: str, sort_field: str, ascending: bool) -> dict[str, dict[str, float]]  [lines 433-480, loc=48]
+    - def _emit_ready_candidate_summary(scored_windows_df: pd.DataFrame) -> dict[str, dict[str, Any]]  [lines 483-507, loc=25]
+    - def _emit_ready_rate_by_top_k_rarity_windows(scored_windows_df: pd.DataFrame) -> dict[str, float | None]  [lines 510-523, loc=14]
+    - def _build_score_window_diagnostics(scored_windows_df: pd.DataFrame) -> list[dict[str, Any]]  [lines 526-582, loc=57]
+    - def _build_raw_score_validation_summary(*, scored_windows_df: pd.DataFrame, overlaps_df: pd.DataFrame, truth_df: pd.DataFrame, truth_window_id_field: str) -> dict[str, Any]  [lines 585-614, loc=30]
+    - def _build_calibrated_score_validation_summary(*, scored_windows_df: pd.DataFrame, overlaps_df: pd.DataFrame, truth_df: pd.DataFrame, truth_window_id_field: str) -> dict[str, Any]  [lines 617-637, loc=21]
+    - def _build_emission_validation_summary(scored_windows_df: pd.DataFrame) -> dict[str, Any]  [lines 640-645, loc=6]
+    - def validate_scores_against_misbehavior_windows(*, raw_telemetry_df: pd.DataFrame, windows_df: pd.DataFrame, raw_scores_df: pd.DataFrame | None = None, calibrated_scores_df: pd.DataFrame) -> dict[str, Any]  [lines 648-807, loc=160]
+    - def summarize_misbehavior_window_detection(*, raw_telemetry_df: pd.DataFrame, windows_df: pd.DataFrame, raw_scores_df: pd.DataFrame | None = None, calibrated_scores_df: pd.DataFrame) -> dict[str, Any]  [lines 810-831, loc=22]
+    - def validate_scores_against_fault_windows(*, raw_telemetry_df: pd.DataFrame, windows_df: pd.DataFrame, raw_scores_df: pd.DataFrame | None = None, calibrated_scores_df: pd.DataFrame) -> dict[str, Any]  [lines 834-872, loc=39]
+    - def summarize_fault_window_detection(*, raw_telemetry_df: pd.DataFrame, windows_df: pd.DataFrame, raw_scores_df: pd.DataFrame | None = None, calibrated_scores_df: pd.DataFrame) -> dict[str, Any]  [lines 875-904, loc=30]
 
 libs/simulation/__init__.py  [loc=88]
   imports:
@@ -5239,7 +5465,7 @@ libs/simulation/flight/spec.py  [loc=112]
       methods:
         - def __post_init__(self) -> None  [lines 102-112, loc=11]
 
-libs/simulation/full_run_report.py  [loc=364]
+libs/simulation/full_run_report.py  [loc=474]
   doc: Full-run engineering and modeling report rendering for simulation bundles.
   imports:
     - from __future__ import annotations
@@ -5247,33 +5473,39 @@ libs/simulation/full_run_report.py  [loc=364]
     - from dataclasses import dataclass
     - from pathlib import Path
     - from typing import Any
+    - from libs.simulation.report_tables import ArtifactView, RunArtifactBundle
     - from libs.simulation.run_bundle import load_json_if_exists, path_size_bytes
     - from libs.simulation.run_context import RunPaths, write_manifest
+    - from libs.windows import build_window_truth_phase_coverage_summary
   constants:
     - MARKDOWN_MODELING_KEYS
     - MODELING_SUMMARY_KEYS
     - STAGE_MODELING_SECTIONS
     - VALIDATION_REPORT_BY_KEY
+    - WINDOW_POLICY_PHASE_LABELS_VIEW
+    - WINDOW_POLICY_WINDOWS_VIEW
   functions:
-    - def _payload(validation_payloads: dict[str, Any] | None, report_key: str) -> dict[str, Any] | None  [lines 108-110, loc=3]
-    - def _stage_modeling_sections(validation_payloads: dict[str, Any] | None) -> dict[str, dict[str, Any]]  [lines 113-120, loc=8]
-    - def _build_modeling_performance_summary(validation_payloads: dict[str, Any] | None) -> dict[str, Any]  [lines 123-128, loc=6]
-    - def _build_stage_engineering_sections(*, paths: RunPaths, pipeline_summary: dict[str, Any], validation_payloads: dict[str, Any] | None) -> tuple[StageRunReport, ...]  [lines 131-168, loc=38]
-    - def _build_scale_signature(*, manifest: dict[str, Any], validation_payloads: dict[str, Any] | None, stage_sections: tuple[StageRunReport, ...]) -> dict[str, Any]  [lines 171-209, loc=39]
-    - def _build_engineering_performance_summary(*, paths: RunPaths, manifest: dict[str, Any], summary_artifact_path: str | None, validation_payloads: dict[str, Any] | None) -> EngineeringPerformanceReport  [lines 212-245, loc=34]
-    - def _build_window_policy_profile_summary(*, paths: RunPaths) -> dict[str, Any]  [lines 248-289, loc=42]
-    - def _append_json_section(lines: list[str], heading: str, payload: dict[str, Any] | None) -> None  [lines 292-295, loc=4]
-    - def _render_markdown(report: dict[str, Any]) -> str  [lines 298-338, loc=41]
-    - def write_full_run_report(*, paths: RunPaths, manifest: dict[str, Any], summary_artifact_path: str | None, validation_payloads: dict[str, Any] | None) -> dict[str, Any]  [lines 341-364, loc=24]
+    - def _payload(validation_payloads: dict[str, Any] | None, report_key: str) -> dict[str, Any] | None  [lines 121-123, loc=3]
+    - def _stage_modeling_sections(validation_payloads: dict[str, Any] | None) -> dict[str, dict[str, Any]]  [lines 126-133, loc=8]
+    - def _build_modeling_performance_summary(validation_payloads: dict[str, Any] | None) -> dict[str, Any]  [lines 136-141, loc=6]
+    - def _build_stage_engineering_sections(*, paths: RunPaths, pipeline_summary: dict[str, Any], validation_payloads: dict[str, Any] | None) -> tuple[StageRunReport, ...]  [lines 144-181, loc=38]
+    - def _build_scale_signature(*, manifest: dict[str, Any], validation_payloads: dict[str, Any] | None, stage_sections: tuple[StageRunReport, ...]) -> dict[str, Any]  [lines 184-222, loc=39]
+    - def _build_engineering_performance_summary(*, paths: RunPaths, manifest: dict[str, Any], summary_artifact_path: str | None, validation_payloads: dict[str, Any] | None) -> EngineeringPerformanceReport  [lines 225-258, loc=34]
+    - def _build_truth_phase_window_supply_summary(*, spark: Any | None, paths: RunPaths, table_format: str | None) -> dict[str, Any]  [lines 261-287, loc=27]
+    - def _build_window_policy_profile_summary_without_stage25(*, spark: Any | None, paths: RunPaths, table_format: str | None, reason: str) -> dict[str, Any]  [lines 290-335, loc=46]
+    - def _build_window_policy_profile_summary(*, spark: Any | None, paths: RunPaths, table_format: str | None) -> dict[str, Any]  [lines 338-393, loc=56]
+    - def _append_json_section(lines: list[str], heading: str, payload: dict[str, Any] | None) -> None  [lines 396-399, loc=4]
+    - def _render_markdown(report: dict[str, Any]) -> str  [lines 402-442, loc=41]
+    - def write_full_run_report(*, spark: Any | None = None, paths: RunPaths, manifest: dict[str, Any], summary_artifact_path: str | None, validation_payloads: dict[str, Any] | None, table_format: str | None = None) -> dict[str, Any]  [lines 445-474, loc=30]
   classes:
-    - @dataclass(frozen=True) class StageModelingSection  [lines 15-17, loc=3]
+    - @dataclass(frozen=True) class StageModelingSection  [lines 17-19, loc=3]
       attributes:
         - stage_script
         - report_keys
       fields:
         - stage_script: str
         - report_keys: tuple[str, ...]
-    - @dataclass(frozen=True) class StageRunReport  [lines 21-33, loc=13]
+    - @dataclass(frozen=True) class StageRunReport  [lines 23-35, loc=13]
       attributes:
         - stage_script
         - status
@@ -5285,8 +5517,8 @@ libs/simulation/full_run_report.py  [loc=364]
         - engineering_performance: dict[str, Any]
         - modeling_performance: dict[str, Any]
       methods:
-        - def to_payload(self) -> dict[str, Any]  [lines 27-33, loc=7]
-    - @dataclass(frozen=True) class EngineeringPerformanceReport  [lines 37-47, loc=11]
+        - def to_payload(self) -> dict[str, Any]  [lines 29-35, loc=7]
+    - @dataclass(frozen=True) class EngineeringPerformanceReport  [lines 39-49, loc=11]
       attributes:
         - overall
         - stages
@@ -5296,8 +5528,8 @@ libs/simulation/full_run_report.py  [loc=364]
         - stages: tuple[StageRunReport, ...]
         - scale_signature: dict[str, Any]
       methods:
-        - def to_payload(self) -> dict[str, Any]  [lines 42-47, loc=6]
-    - @dataclass(frozen=True) class FullRunReport  [lines 51-67, loc=17]
+        - def to_payload(self) -> dict[str, Any]  [lines 44-49, loc=6]
+    - @dataclass(frozen=True) class FullRunReport  [lines 53-69, loc=17]
       attributes:
         - report_version
         - status
@@ -5313,7 +5545,7 @@ libs/simulation/full_run_report.py  [loc=364]
         - window_policy_profile: dict[str, Any]
         - engineering_performance: EngineeringPerformanceReport
       methods:
-        - def to_payload(self) -> dict[str, Any]  [lines 59-67, loc=9]
+        - def to_payload(self) -> dict[str, Any]  [lines 61-69, loc=9]
 
 libs/simulation/module/__init__.py  [loc=16]
   imports:
@@ -5896,14 +6128,14 @@ libs/simulation/report_tables.py  [loc=76]
         - def report_frame(self, view: ArtifactView) -> ReportFrame  [lines 72-73, loc=2]
         - def pandas(self, view: ArtifactView) -> pd.DataFrame  [lines 75-76, loc=2]
 
-libs/simulation/reporting.py  [loc=580]
+libs/simulation/reporting.py  [loc=627]
   doc: Validation report generation for simulation pipeline runs.
   imports:
     - from __future__ import annotations
     - from dataclasses import dataclass
     - from typing import Any
     - import pandas as pd
-    - from libs.anomaly.validator import validate_attribution_against_misbehavior_truth
+    - from libs.anomaly.validator import build_fault_attribution_summary_from_misbehavior_summary, validate_attribution_against_misbehavior_truth
     - from libs.events.validator import build_event_validation_summary
     - from libs.graph import build_coupling_validation_summary, build_graph_validation_summary
     - from libs.io.schemas.profiling import PARAMETER_BEHAVIOR_PROFILE_COLUMNS, PARAMETER_BEHAVIOR_PRIMITIVE_PROFILE_COLUMNS
@@ -5935,40 +6167,42 @@ libs/simulation/reporting.py  [loc=580]
     - PRECISION_GRAPH_VIEW
     - PROFILE_BEHAVIOR_SCORE_COLUMNS
     - PROFILE_VALIDATION_PRIMITIVE_COLUMNS
+    - RAW_SCORES_VIEW
     - RAW_TELEMETRY_EVENT_LABEL_VIEW
     - RAW_TELEMETRY_PROFILE_VIEW
     - RAW_TELEMETRY_REPORT_COLUMNS
     - RAW_TELEMETRY_REPORT_VIEW
     - RAW_TELEMETRY_SCORE_VIEW
     - VALIDATION_ARTIFACT_VIEWS
+    - WINDOWS_SCORE_VIEW
     - WINDOWS_VIEW
   functions:
-    - def _records_frame(tables: RunArtifactBundle, view: ArtifactView) -> pd.DataFrame  [lines 278-279, loc=2]
-    - def _skipped_report(*, reason: str) -> dict[str, Any]  [lines 282-286, loc=5]
-    - def _has_artifact(tables: RunArtifactBundle, artifact_name: str) -> bool  [lines 289-290, loc=2]
-    - def _build_label_contract_summary(*, raw_telemetry_sdf: Any | None, events_sdf: Any | None) -> dict[str, Any]  [lines 293-342, loc=50]
-    - def _build_profile_validation_summary(tables: RunArtifactBundle) -> dict[str, Any]  [lines 345-351, loc=7]
-    - def _build_event_validation_summary(tables: RunArtifactBundle, *, tolerance_seconds: float = 0.5) -> dict[str, Any]  [lines 354-364, loc=11]
-    - def _build_phase_validation_summary(tables: RunArtifactBundle) -> dict[str, Any]  [lines 367-372, loc=6]
-    - def _build_graph_validation_summary(tables: RunArtifactBundle, *, expected_lag_edges: tuple[dict[str, str], ...], expected_fused_edges: tuple[dict[str, str], ...]) -> dict[str, Any]  [lines 375-388, loc=14]
-    - def _build_coupling_validation_summary(tables: RunArtifactBundle, *, expected_coupling_signatures: tuple[dict[str, Any], ...]) -> dict[str, Any]  [lines 391-402, loc=12]
-    - def _build_misbehavior_score_summary(tables: RunArtifactBundle) -> dict[str, Any]  [lines 405-410, loc=6]
-    - def _build_misbehavior_window_summary(summary: dict[str, Any]) -> dict[str, Any]  [lines 413-422, loc=10]
-    - def _remap_windows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]  [lines 425-434, loc=10]
-    - def build_fault_score_summary_from_misbehavior(summary: dict[str, Any]) -> dict[str, Any]  [lines 437-451, loc=15]
-    - def _build_fault_window_summary(summary: dict[str, Any]) -> dict[str, Any]  [lines 454-463, loc=10]
-    - def _build_misbehavior_attribution_summary(tables: RunArtifactBundle) -> dict[str, Any]  [lines 466-475, loc=10]
-    - def build_fault_attribution_summary_from_misbehavior(summary: dict[str, Any]) -> dict[str, Any]  [lines 478-495, loc=18]
-    - def write_validation_reports(*, spark: Any, paths: RunPaths, flight: Any, table_format: str) -> dict[str, Any]  [lines 498-580, loc=83]
+    - def _records_frame(tables: RunArtifactBundle, view: ArtifactView) -> pd.DataFrame  [lines 336-337, loc=2]
+    - def _skipped_report(*, reason: str) -> dict[str, Any]  [lines 340-344, loc=5]
+    - def _has_artifact(tables: RunArtifactBundle, artifact_name: str) -> bool  [lines 347-348, loc=2]
+    - def _build_label_contract_summary(*, raw_telemetry_sdf: Any | None, events_sdf: Any | None) -> dict[str, Any]  [lines 351-400, loc=50]
+    - def _build_profile_validation_summary(tables: RunArtifactBundle) -> dict[str, Any]  [lines 403-409, loc=7]
+    - def _build_event_validation_summary(tables: RunArtifactBundle, *, tolerance_seconds: float = 0.5) -> dict[str, Any]  [lines 412-422, loc=11]
+    - def _build_phase_validation_summary(tables: RunArtifactBundle) -> dict[str, Any]  [lines 425-430, loc=6]
+    - def _build_graph_validation_summary(tables: RunArtifactBundle, *, expected_lag_edges: tuple[dict[str, str], ...], expected_fused_edges: tuple[dict[str, str], ...]) -> dict[str, Any]  [lines 433-446, loc=14]
+    - def _build_coupling_validation_summary(tables: RunArtifactBundle, *, expected_coupling_signatures: tuple[dict[str, Any], ...]) -> dict[str, Any]  [lines 449-460, loc=12]
+    - def _build_misbehavior_score_summary(tables: RunArtifactBundle) -> dict[str, Any]  [lines 463-469, loc=7]
+    - def _build_misbehavior_window_summary(summary: dict[str, Any]) -> dict[str, Any]  [lines 472-481, loc=10]
+    - def _remap_windows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]  [lines 484-493, loc=10]
+    - def build_fault_score_summary_from_misbehavior(summary: dict[str, Any]) -> dict[str, Any]  [lines 496-514, loc=19]
+    - def _build_fault_window_summary(summary: dict[str, Any]) -> dict[str, Any]  [lines 517-526, loc=10]
+    - def _build_misbehavior_attribution_summary(tables: RunArtifactBundle) -> dict[str, Any]  [lines 529-538, loc=10]
+    - def build_fault_attribution_summary_from_misbehavior(summary: dict[str, Any]) -> dict[str, Any]  [lines 541-542, loc=2]
+    - def write_validation_reports(*, spark: Any, paths: RunPaths, flight: Any, table_format: str) -> dict[str, Any]  [lines 545-627, loc=83]
   classes:
-    - @dataclass(frozen=True) class ValidationReportSet  [lines 267-275, loc=9]
+    - @dataclass(frozen=True) class ValidationReportSet  [lines 325-333, loc=9]
       attributes:
         - payloads
       fields:
         - payloads: dict[str, dict[str, Any]]
       methods:
-        - def write(self, *, paths: RunPaths) -> None  [lines 270-272, loc=3]
-        - def to_payloads(self) -> dict[str, dict[str, Any]]  [lines 274-275, loc=2]
+        - def write(self, *, paths: RunPaths) -> None  [lines 328-330, loc=3]
+        - def to_payloads(self) -> dict[str, dict[str, Any]]  [lines 332-333, loc=2]
 
 libs/simulation/run_bundle.py  [loc=47]
   imports:
@@ -6159,7 +6393,7 @@ libs/simulation/run_context.py  [loc=577]
         - def write(self, data: str) -> int  [lines 384-391, loc=8]
         - def flush(self) -> None  [lines 393-398, loc=6]
 
-libs/simulation/runner.py  [loc=151]
+libs/simulation/runner.py  [loc=153]
   doc: Library entrypoint for persisted simulation pipeline runs.
   imports:
     - from __future__ import annotations
@@ -6181,7 +6415,7 @@ libs/simulation/runner.py  [loc=151]
   functions:
     - def _write_seed_tables(**kwargs)  [lines 37-38, loc=2]
     - def _load_existing_seed_counts(paths: RunPaths) -> dict[str, int]  [lines 41-51, loc=11]
-    - def run_pipeline(config: PipelineRunConfig) -> PipelineRunResult  [lines 54-151, loc=98]
+    - def run_pipeline(config: PipelineRunConfig) -> PipelineRunResult  [lines 54-153, loc=100]
 
 libs/simulation/scenarios/__init__.py  [loc=27]
   doc: Scenario-layer builders for realistic simulation presets.
@@ -6766,25 +7000,26 @@ libs/testing/assertions.py  [loc=65]
     - def assert_no_bare_detector_event_type(columns: Iterable[str]) -> None  [lines 54-57, loc=4]
     - def assert_profiler_validator_canonical_columns(columns: Iterable[str]) -> None  [lines 60-65, loc=6]
 
-libs/testing/data.py  [loc=346]
+libs/testing/data.py  [loc=372]
   doc: Deterministic sample DataFrame generators for local pipeline testing.
   imports:
     - from __future__ import annotations
     - from datetime import datetime, timedelta
+    - from libs.scoring.channels import RECONSTRUCTION_ERROR_CHANNEL, REGIME_DEVIATION_CHANNEL, score_component_scores_with_updates
     - from typing import TYPE_CHECKING
     - from pyspark.sql import SparkSession
   functions:
-    - def _base_time() -> datetime  [lines 9-10, loc=2]
-    - def create_sample_raw_input_df(spark: 'SparkSession') -> 'DataFrame'  [lines 13-45, loc=33]
-    - def create_scaled_raw_input_df(spark: 'SparkSession', tail_count: int, flights_per_tail: int, sensor_count: int, timestamp_count: int, step_ms: int) -> 'DataFrame'  [lines 48-92, loc=45]
-    - def create_sample_raw_table_df(spark: 'SparkSession') -> 'DataFrame'  [lines 95-103, loc=9]
-    - def create_sample_events_df(spark: 'SparkSession') -> 'DataFrame'  [lines 106-136, loc=31]
-    - def create_sample_windows_df(spark: 'SparkSession') -> 'DataFrame'  [lines 139-165, loc=27]
-    - def create_sample_phase_labels_df(spark: 'SparkSession') -> 'DataFrame'  [lines 168-188, loc=21]
-    - def create_sample_hierarchy_sensor_map_label_df(spark: 'SparkSession') -> 'DataFrame'  [lines 191-197, loc=7]
-    - def create_sample_phase_windows_df(spark: 'SparkSession') -> 'DataFrame'  [lines 200-244, loc=45]
-    - def create_sample_scores_df(spark: 'SparkSession') -> 'DataFrame'  [lines 247-289, loc=43]
-    - def create_sample_calibrated_df(spark: 'SparkSession') -> 'DataFrame'  [lines 292-340, loc=49]
+    - def _base_time() -> datetime  [lines 15-16, loc=2]
+    - def create_sample_raw_input_df(spark: 'SparkSession') -> 'DataFrame'  [lines 19-51, loc=33]
+    - def create_scaled_raw_input_df(spark: 'SparkSession', tail_count: int, flights_per_tail: int, sensor_count: int, timestamp_count: int, step_ms: int) -> 'DataFrame'  [lines 54-98, loc=45]
+    - def create_sample_raw_table_df(spark: 'SparkSession') -> 'DataFrame'  [lines 101-109, loc=9]
+    - def create_sample_events_df(spark: 'SparkSession') -> 'DataFrame'  [lines 112-142, loc=31]
+    - def create_sample_windows_df(spark: 'SparkSession') -> 'DataFrame'  [lines 145-171, loc=27]
+    - def create_sample_phase_labels_df(spark: 'SparkSession') -> 'DataFrame'  [lines 174-194, loc=21]
+    - def create_sample_hierarchy_sensor_map_label_df(spark: 'SparkSession') -> 'DataFrame'  [lines 197-203, loc=7]
+    - def create_sample_phase_windows_df(spark: 'SparkSession') -> 'DataFrame'  [lines 206-250, loc=45]
+    - def create_sample_scores_df(spark: 'SparkSession') -> 'DataFrame'  [lines 253-305, loc=53]
+    - def create_sample_calibrated_df(spark: 'SparkSession') -> 'DataFrame'  [lines 308-366, loc=59]
 
 libs/testing/evaluation.py  [loc=138]
   doc: Low-level utilities for tolerance-based event-detection evaluation.
@@ -7363,14 +7598,14 @@ libs/tuning/validation_panels.py  [loc=188]
     - def _select_prioritized_metric_names(results: list[Any], *, metric_names: tuple[str, ...]) -> list[str]  [lines 109-118, loc=10]
     - def build_validation_metric_panel(results: list[Any], *, mode: str, limit: int) -> list[dict[str, Any]]  [lines 121-188, loc=68]
 
-libs/windows/__init__.py  [loc=46]
+libs/windows/__init__.py  [loc=50]
   doc: Adaptive windowing package.
   imports:
     - from libs.windows.buffer import WindowSensorBuffer
     - from libs.windows.coverage import WindowCoverageSampler
     - from libs.windows.window import Window, WindowPolicy
-    - from libs.windows.pipeline import AdaptiveWindowArtifactSet, AdaptiveWindowPlan, AdaptiveWindowPolicy, AdaptiveWindowSegmentState, AdaptiveWindowTransition, OpenWindowState
-    - from libs.windows.policy_profile import WindowPolicyEvaluationSpec, WindowPolicyProfile, WindowPolicyProfileSpec, build_window_policy_profile_evaluation_report_spark
+    - from libs.windows.pipeline import AdaptiveWindowArtifactSet, AdaptiveWindowPlan, AdaptiveWindowPolicy, AdaptiveWindowSegmentState, AdaptiveWindowTransition, OpenWindowState, build_window_coverage_timestamps
+    - from libs.windows.policy_profile import WindowPolicyEvaluationSpec, WindowPolicyProfile, WindowPolicyProfileSpec, build_window_truth_phase_coverage_summary, build_window_policy_profile_evaluation_report_spark
     - from libs.windows.features import WindowFeaturesDiagnostics, WindowFeaturesPlan, WindowFeatureVectorSpec
     - from libs.windows.tables import WindowFeaturesTable, WindowPolicyProfileTable, WindowProfileRowsFrame, WindowsTable
 
@@ -7424,7 +7659,7 @@ libs/windows/coverage.py  [loc=147]
       methods:
         - def sample(self, windows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]  [lines 30-147, loc=118]
 
-libs/windows/features.py  [loc=709]
+libs/windows/features.py  [loc=792]
   doc: Class-oriented builders for the canonical ``window_features`` artifact.
   imports:
     - from __future__ import annotations
@@ -7469,7 +7704,7 @@ libs/windows/features.py  [loc=709]
         - total_timing_ms: float
       methods:
         - def to_dict(self) -> dict[str, object]  [lines 36-48, loc=13]
-    - @dataclass(frozen=True) class WindowFeaturesPlan  [lines 52-704, loc=653]
+    - @dataclass(frozen=True) class WindowFeaturesPlan  [lines 52-787, loc=736]
       attributes:
         - vector_spec
       fields:
@@ -7483,23 +7718,23 @@ libs/windows/features.py  [loc=709]
         - def _build_scaler_frame(self, prepared_raw_df: 'DataFrame', *, scaling_profile_df: 'DataFrame | None' = None) -> 'DataFrame'  [lines 130-161, loc=32]
         - def _base_windows(self, windows_df: 'DataFrame') -> 'DataFrame'  [lines 163-173, loc=11]
         - def _build_raw_intervals(self, prepared_raw_df: 'DataFrame') -> 'DataFrame'  [lines 175-188, loc=14]
-        - def _build_snapshot_rows(self, *, base_windows_df: 'DataFrame', raw_intervals_df: 'DataFrame') -> 'DataFrame'  [lines 190-214, loc=25]
-        - def _build_snapshot_feature_frames(self, *, snapshot_rows_df: 'DataFrame', scaler_df: 'DataFrame') -> tuple['DataFrame', 'DataFrame', 'DataFrame']  [lines 216-257, loc=42]
-        - def _build_events_in_windows(self, *, base_windows_df: 'DataFrame', events_df: 'DataFrame') -> 'DataFrame'  [lines 259-300, loc=42]
+        - def _build_snapshot_rows(self, *, base_windows_df: 'DataFrame', raw_intervals_df: 'DataFrame', anchor_column: str) -> 'DataFrame'  [lines 190-220, loc=31]
+        - def _build_snapshot_feature_frames(self, *, snapshot_rows_df: 'DataFrame', scaler_df: 'DataFrame', suffix: str) -> tuple['DataFrame', 'DataFrame', 'DataFrame']  [lines 222-264, loc=43]
+        - def _build_events_in_windows(self, *, base_windows_df: 'DataFrame', events_df: 'DataFrame') -> 'DataFrame'  [lines 266-307, loc=42]
         - @staticmethod
-        - def _empty_continuous_event_summary()  [lines 303-316, loc=14]
-        - def _build_event_feature_frames(self, *, events_in_windows_df: 'DataFrame') -> tuple['DataFrame', 'DataFrame']  [lines 318-446, loc=129]
-        - def _merge_feature_sources(self, *, base_windows_df: 'DataFrame', continuous_snapshot_df: 'DataFrame', continuous_snapshot_scaled_df: 'DataFrame', categorical_snapshot_df: 'DataFrame', event_type_counts_df: 'DataFrame', continuous_event_summary_df: 'DataFrame') -> 'DataFrame'  [lines 448-498, loc=51]
-        - def _with_drift_profile(self, combined_df: 'DataFrame') -> 'DataFrame'  [lines 500-530, loc=31]
-        - def _finalize_feature_frame(self, enriched_df: 'DataFrame') -> 'DataFrame'  [lines 532-556, loc=25]
-        - def _assemble_feature_frame(self, *, base_windows_df: 'DataFrame', continuous_snapshot_df: 'DataFrame', continuous_snapshot_scaled_df: 'DataFrame', categorical_snapshot_df: 'DataFrame', event_type_counts_df: 'DataFrame', continuous_event_summary_df: 'DataFrame') -> 'DataFrame'  [lines 558-576, loc=19]
-        - def _build_feature_frame(self, raw_df: 'DataFrame', events_df: 'DataFrame', windows_df: 'DataFrame', scaling_profile_df: 'DataFrame | None' = None, *, materialize: 'Callable[[str, Callable[[], DataFrame]], DataFrame] | None' = None) -> 'DataFrame'  [lines 578-660, loc=83]
+        - def _empty_continuous_event_summary()  [lines 310-323, loc=14]
+        - def _build_event_feature_frames(self, *, events_in_windows_df: 'DataFrame') -> tuple['DataFrame', 'DataFrame']  [lines 325-453, loc=129]
+        - def _merge_feature_sources(self, *, base_windows_df: 'DataFrame', continuous_snapshot_start_df: 'DataFrame', continuous_snapshot_start_scaled_df: 'DataFrame', continuous_snapshot_df: 'DataFrame', continuous_snapshot_scaled_df: 'DataFrame', categorical_snapshot_start_df: 'DataFrame', categorical_snapshot_df: 'DataFrame', event_type_counts_df: 'DataFrame', continuous_event_summary_df: 'DataFrame') -> 'DataFrame'  [lines 455-532, loc=78]
+        - def _with_drift_profile(self, combined_df: 'DataFrame') -> 'DataFrame'  [lines 534-564, loc=31]
+        - def _finalize_feature_frame(self, enriched_df: 'DataFrame') -> 'DataFrame'  [lines 566-596, loc=31]
+        - def _assemble_feature_frame(self, *, base_windows_df: 'DataFrame', continuous_snapshot_start_df: 'DataFrame', continuous_snapshot_start_scaled_df: 'DataFrame', continuous_snapshot_df: 'DataFrame', continuous_snapshot_scaled_df: 'DataFrame', categorical_snapshot_start_df: 'DataFrame', categorical_snapshot_df: 'DataFrame', event_type_counts_df: 'DataFrame', continuous_event_summary_df: 'DataFrame') -> 'DataFrame'  [lines 598-622, loc=25]
+        - def _build_feature_frame(self, raw_df: 'DataFrame', events_df: 'DataFrame', windows_df: 'DataFrame', scaling_profile_df: 'DataFrame | None' = None, *, materialize: 'Callable[[str, Callable[[], DataFrame]], DataFrame] | None' = None) -> 'DataFrame'  [lines 624-743, loc=120]
         - @hot_path
-        - def build(self, raw_df: 'DataFrame', events_df: 'DataFrame', windows_df: 'DataFrame', scaling_profile_df: 'DataFrame | None' = None) -> 'DataFrame'  [lines 663-675, loc=13]
+        - def build(self, raw_df: 'DataFrame', events_df: 'DataFrame', windows_df: 'DataFrame', scaling_profile_df: 'DataFrame | None' = None) -> 'DataFrame'  [lines 746-758, loc=13]
         - @hot_path
-        - def build_with_diagnostics(self, raw_df: 'DataFrame', events_df: 'DataFrame', windows_df: 'DataFrame', scaling_profile_df: 'DataFrame | None' = None) -> tuple['DataFrame', WindowFeaturesDiagnostics]  [lines 678-704, loc=27]
+        - def build_with_diagnostics(self, raw_df: 'DataFrame', events_df: 'DataFrame', windows_df: 'DataFrame', scaling_profile_df: 'DataFrame | None' = None) -> tuple['DataFrame', WindowFeaturesDiagnostics]  [lines 761-787, loc=27]
 
-libs/windows/pipeline.py  [loc=621]
+libs/windows/pipeline.py  [loc=794]
   doc: Class-oriented canonical windows-table builder.
   imports:
     - from __future__ import annotations
@@ -7508,14 +7743,16 @@ libs/windows/pipeline.py  [loc=621]
     - from libs.perf.annotations import hot_path
     - from libs.spark_sequence import SegmentedSequencePlan, SequenceOrderingPolicy, SequenceSegmentPolicy, segment_policy_from_env
     - from libs.windows.buffer import WindowSensorBuffer
-    - from libs.windows.window import WindowPolicy
+    - from libs.windows.window import WindowClosureBudgetPolicy, WindowPolicy
     - from typing import TYPE_CHECKING
     - from pyspark.sql import Column, DataFrame
     - from libs.spark_sequence import SegmentedSequenceFrame
   functions:
     - def _default_window_segment_policy() -> SequenceSegmentPolicy  [lines 19-24, loc=6]
+    - def build_window_coverage_timestamps(raw_df: 'DataFrame') -> 'DataFrame'  [lines 27-34, loc=8]
+    - def build_budget_threshold_steps(events_df: 'DataFrame', *, policy: WindowPolicy) -> 'DataFrame'  [lines 37-94, loc=58]
   classes:
-    - @dataclass(frozen=True) class OpenWindowState  [lines 28-34, loc=7]
+    - @dataclass(frozen=True) class OpenWindowState  [lines 98-104, loc=7]
       attributes:
         - win_id
         - t_start
@@ -7530,7 +7767,7 @@ libs/windows/pipeline.py  [loc=621]
         - start_event_seq_id: str = 'open_start_event_seq_id'
         - end_event_seq_id: str = 'open_end_event_seq_id'
         - event_count: str = 'open_event_count'
-    - @dataclass(frozen=True) class AdaptiveWindowSegmentState  [lines 38-124, loc=87]
+    - @dataclass(frozen=True) class AdaptiveWindowSegmentState  [lines 108-203, loc=96]
       attributes:
         - next_win_id
         - has_open_window
@@ -7542,12 +7779,12 @@ libs/windows/pipeline.py  [loc=621]
         - open_state: OpenWindowState = field(default_factory=OpenWindowState)
         - closed_windows: str = 'closed_windows'
       methods:
-        - def window_summary_array_type(self) -> str  [lines 44-58, loc=15]
-        - def empty_windows_column(self) -> 'Column'  [lines 60-63, loc=4]
-        - def window_summary_column(self, *, tail_id: 'Column', flight_id: 'Column', win_id: 'Column', t_start: 'Column', t_end: 'Column', start_event_seq_id: 'Column', end_event_seq_id: 'Column', event_count: 'Column', close_reason: 'Column', date_utc: 'Column') -> 'Column'  [lines 65-92, loc=28]
-        - def initial_state_column(self) -> 'Column'  [lines 94-108, loc=15]
-        - def carry_state_column(self, *, state: 'Column') -> 'Column'  [lines 110-124, loc=15]
-    - @dataclass(frozen=True) class AdaptiveWindowPolicy  [lines 128-141, loc=14]
+        - def window_summary_array_type(self) -> str  [lines 114-131, loc=18]
+        - def empty_windows_column(self) -> 'Column'  [lines 133-136, loc=4]
+        - def window_summary_column(self, *, tail_id: 'Column', flight_id: 'Column', win_id: 'Column', t_start: 'Column', t_end: 'Column', start_event_seq_id: 'Column', end_event_seq_id: 'Column', event_count: 'Column', real_event_count: 'Column', quiet_credit_end: 'Column', closure_budget_end: 'Column', close_reason: 'Column', date_utc: 'Column') -> 'Column'  [lines 138-171, loc=34]
+        - def initial_state_column(self) -> 'Column'  [lines 173-187, loc=15]
+        - def carry_state_column(self, *, state: 'Column') -> 'Column'  [lines 189-203, loc=15]
+    - @dataclass(frozen=True) class AdaptiveWindowPolicy  [lines 207-220, loc=14]
       attributes:
         - max_ms
         - event_threshold
@@ -7561,8 +7798,8 @@ libs/windows/pipeline.py  [loc=621]
         - inactivity_timeout_ms: int = 0
         - segment_policy: SequenceSegmentPolicy = field(default_factory=_default_window_segment_policy)
       methods:
-        - def to_window_policy(self) -> WindowPolicy  [lines 135-141, loc=7]
-    - @dataclass(frozen=True) class AdaptiveWindowTransition  [lines 145-296, loc=152]
+        - def to_window_policy(self) -> WindowPolicy  [lines 214-220, loc=7]
+    - @dataclass(frozen=True) class AdaptiveWindowTransition  [lines 224-420, loc=197]
       attributes:
         - policy
         - state
@@ -7570,42 +7807,50 @@ libs/windows/pipeline.py  [loc=621]
         - policy: WindowPolicy
         - state: AdaptiveWindowSegmentState = field(default_factory=AdaptiveWindowSegmentState)
       methods:
-        - def state_after_step_column(self, *, acc: 'Column', step: 'Column', tail_id: 'Column', flight_id: 'Column', max_ms: 'Column', event_threshold: 'Column', inactivity_timeout_ms: 'Column') -> 'Column'  [lines 149-268, loc=120]
-        - def end_of_stream_windows_column(self, *, state: 'Column', tail_id: 'Column', flight_id: 'Column', is_last_segment: 'Column') -> 'Column'  [lines 270-296, loc=27]
-    - @dataclass(frozen=True) class AdaptiveWindowArtifactSet  [lines 300-302, loc=3]
+        - def _budget_policy(self) -> WindowClosureBudgetPolicy  [lines 228-229, loc=2]
+        - def _elapsed_ms_expr(self, *, t_start: 'Column', t_end: 'Column') -> 'Column'  [lines 231-234, loc=4]
+        - def _window_summary_from_ms_column(self, *, tail_id: 'Column', flight_id: 'Column', win_id: 'Column', t_start_ms: 'Column', t_end_ms: 'Column', start_event_seq_id: 'Column', end_event_seq_id: 'Column', real_event_count: 'Column', close_reason: 'Column') -> 'Column'  [lines 236-274, loc=39]
+        - def state_after_step_column(self, *, acc: 'Column', step: 'Column', tail_id: 'Column', flight_id: 'Column') -> 'Column'  [lines 276-393, loc=118]
+        - def end_of_stream_windows_column(self, *, state: 'Column', tail_id: 'Column', flight_id: 'Column', is_last_segment: 'Column') -> 'Column'  [lines 395-420, loc=26]
+    - @dataclass(frozen=True) class AdaptiveWindowArtifactSet  [lines 424-426, loc=3]
       attributes:
         - windows_df
         - segments_df
       fields:
         - windows_df: 'DataFrame'
         - segments_df: 'DataFrame'
-    - @dataclass(frozen=True) class AdaptiveWindowPlan  [lines 306-613, loc=308]
+    - @dataclass(frozen=True) class AdaptiveWindowPlan  [lines 430-786, loc=357]
       attributes:
         - policy
         - sequence_plan
       fields:
         - policy: AdaptiveWindowPolicy
-        - sequence_plan: SegmentedSequencePlan = field(default_factory=lambda: SegmentedSequencePlan(ordering=SequenceOrderingPolicy(key_columns=('tail_id', 'flight_id'), order_columns=('event_seq_id',), timestamp_column='timestamp_utc'), policy=_default_window_segment_policy()))
+        - sequence_plan: SegmentedSequencePlan = field(default_factory=lambda: SegmentedSequencePlan(ordering=SequenceOrderingPolicy(key_columns=('tail_id', 'flight_id'), order_columns=('window_step_order',), timestamp_column='timestamp_utc'), policy=_default_window_segment_policy()))
       methods:
-        - def _active_sequence_plan(self) -> SegmentedSequencePlan  [lines 319-323, loc=5]
-        - def _validate_events(self, events_df: 'DataFrame') -> None  [lines 325-342, loc=18]
-        - def _build_segment_frame(self, events_df: 'DataFrame') -> 'SegmentedSequenceFrame'  [lines 344-373, loc=30]
-        - def _build_assignment_events(self, events_df: 'DataFrame') -> 'DataFrame'  [lines 375-383, loc=9]
-        - def _build_window_summaries(self, *, sequence_frame: 'SegmentedSequenceFrame') -> 'DataFrame'  [lines 385-483, loc=99]
+        - def _active_sequence_plan(self) -> SegmentedSequencePlan  [lines 443-447, loc=5]
+        - def _validate_events(self, events_df: 'DataFrame') -> None  [lines 449-466, loc=18]
+        - def _build_step_rows(self, events_df: 'DataFrame', *, coverage_timestamps_df: 'DataFrame | None' = None) -> 'DataFrame'  [lines 468-503, loc=36]
+        - def _build_segment_frame(self, events_df: 'DataFrame', *, coverage_timestamps_df: 'DataFrame | None' = None) -> 'SegmentedSequenceFrame'  [lines 505-535, loc=31]
+        - def _build_assignment_events(self, events_df: 'DataFrame') -> 'DataFrame'  [lines 537-545, loc=9]
+        - def _build_window_summaries(self, *, sequence_frame: 'SegmentedSequenceFrame') -> 'DataFrame'  [lines 547-641, loc=95]
         - @staticmethod
-        - def _empty_string_map_expr() -> 'Column'  [lines 486-487, loc=2]
+        - def _empty_string_map_expr() -> 'Column'  [lines 644-645, loc=2]
         - @staticmethod
-        - def _empty_int_map_expr() -> 'Column'  [lines 490-491, loc=2]
-        - def _build_assignments(self, *, event_rows_df: 'DataFrame', window_summaries_df: 'DataFrame') -> 'DataFrame'  [lines 493-524, loc=32]
-        - def _build_windows_from_summaries(self, *, event_rows_df: 'DataFrame', window_summaries_df: 'DataFrame') -> 'DataFrame'  [lines 526-594, loc=69]
+        - def _empty_int_map_expr() -> 'Column'  [lines 648-649, loc=2]
+        - def _build_assignments(self, *, event_rows_df: 'DataFrame', window_summaries_df: 'DataFrame') -> 'DataFrame'  [lines 651-682, loc=32]
+        - def _build_windows_from_summaries(self, *, event_rows_df: 'DataFrame', window_summaries_df: 'DataFrame') -> 'DataFrame'  [lines 684-758, loc=75]
         - @hot_path
-        - def build(self, events_df: 'DataFrame') -> AdaptiveWindowArtifactSet  [lines 597-613, loc=17]
+        - def build(self, events_df: 'DataFrame') -> AdaptiveWindowArtifactSet  [lines 761-762, loc=2]
+        - @hot_path
+        - def build_with_coverage(self, events_df: 'DataFrame', *, coverage_timestamps_df: 'DataFrame | None' = None) -> AdaptiveWindowArtifactSet  [lines 765-786, loc=22]
 
-libs/windows/policy_profile.py  [loc=879]
+libs/windows/policy_profile.py  [loc=1161]
   imports:
     - from __future__ import annotations
+    - import math
     - from dataclasses import dataclass
     - from typing import TYPE_CHECKING, Any
+    - import pandas as pd
     - from libs.io.schemas import WINDOW_POLICY_PROFILE_SCHEMA
     - from libs.perf import get_logger
     - from libs.windows.tables import WindowPolicyProfileTable, WindowProfileRowsFrame, WindowsTable
@@ -7614,11 +7859,17 @@ libs/windows/policy_profile.py  [loc=879]
   constants:
     - LOGGER
   functions:
-    - def _spark_functions()  [lines 18-21, loc=4]
-    - def _safe_unpersist(df: 'DataFrame | None', *, label: str) -> None  [lines 24-30, loc=7]
-    - def build_window_policy_profile_evaluation_report_spark(events_df: 'DataFrame', *, profile_df: 'DataFrame | None', profile_spec: WindowPolicyProfileSpec, evaluation_spec: WindowPolicyEvaluationSpec | None = None) -> dict[str, Any]  [lines 860-879, loc=20]
+    - def _spark_functions()  [lines 21-24, loc=4]
+    - def _safe_unpersist(df: 'DataFrame | None', *, label: str) -> None  [lines 27-33, loc=7]
+    - def _normalize_timestamp_series(series: pd.Series) -> pd.Series  [lines 36-37, loc=2]
+    - def _majority_phase_label(labels: pd.Series) -> str | None  [lines 40-45, loc=6]
+    - def compute_window_policy_penalty(*, pair_cost_proxy: float, same_window_pair_expansion_proxy: float, sampled_event_count: int, p95_event_count: float, end_of_stream_rate: float) -> float  [lines 48-63, loc=16]
+    - def _window_policy_penalty_expr(*, pair_cost_proxy_col: Any, same_window_pair_expansion_proxy_col: Any, sampled_event_count_col: Any, p95_event_count_col: Any, end_of_stream_close_rate_col: Any) -> Any  [lines 66-82, loc=17]
+    - def _window_policy_objective_score_expr(*, mean_event_type_count_col: Any, pair_cost_proxy_col: Any, same_window_pair_expansion_proxy_col: Any, sampled_event_count_col: Any, p95_event_count_col: Any, end_of_stream_close_rate_col: Any) -> Any  [lines 85-100, loc=16]
+    - def build_window_truth_phase_coverage_summary(*, windows_df: pd.DataFrame, phase_labels_df: pd.DataFrame, target_phase_label: str = 'cruise') -> dict[str, Any]  [lines 103-218, loc=116]
+    - def build_window_policy_profile_evaluation_report_spark(events_df: 'DataFrame', *, profile_df: 'DataFrame | None', profile_spec: WindowPolicyProfileSpec, evaluation_spec: WindowPolicyEvaluationSpec | None = None, coverage_timestamps_df: 'DataFrame | None' = None) -> dict[str, Any]  [lines 1140-1161, loc=22]
   classes:
-    - @dataclass(frozen=True) class WindowPolicyProfileSpec  [lines 34-86, loc=53]
+    - @dataclass(frozen=True) class WindowPolicyProfileSpec  [lines 222-272, loc=51]
       attributes:
         - min_sampling_rate_hz
         - configured_max_ms
@@ -7629,8 +7880,6 @@ libs/windows/policy_profile.py  [loc=879]
         - gap_quantiles
         - event_threshold_multipliers
         - max_profile_flights
-        - target_event_threshold_close_rate
-        - target_max_ms_close_rate
       fields:
         - min_sampling_rate_hz: float
         - configured_max_ms: int
@@ -7641,42 +7890,41 @@ libs/windows/policy_profile.py  [loc=879]
         - gap_quantiles: tuple[float, ...] = (0.5, 0.75, 0.9)
         - event_threshold_multipliers: tuple[float, ...] = (0.75, 1.0, 1.25, 1.5, 2.0)
         - max_profile_flights: int = 64
-        - target_event_threshold_close_rate: float = 0.75
-        - target_max_ms_close_rate: float = 0.25
       methods:
         - @property
-        - def resolved_max_ms(self) -> int  [lines 48-52, loc=5]
+        - def resolved_max_ms(self) -> int  [lines 234-238, loc=5]
         - @property
-        - def fallback_policy(self) -> WindowPolicy  [lines 55-61, loc=7]
-        - def candidate_policies(self, *, median_gap_ms: float, upper_gap_ms: tuple[float, ...]) -> tuple[WindowPolicy, ...]  [lines 63-86, loc=24]
-    - @dataclass(frozen=True) class WindowPolicyEvaluationSpec  [lines 90-97, loc=8]
+        - def fallback_policy(self) -> WindowPolicy  [lines 241-247, loc=7]
+        - def candidate_policies(self, *, median_gap_ms: float, upper_gap_ms: tuple[float, ...]) -> tuple[WindowPolicy, ...]  [lines 249-272, loc=24]
+    - @dataclass(frozen=True) class WindowPolicyEvaluationSpec  [lines 276-282, loc=7]
       attributes:
         - candidate_frontier_size
         - stability_sample_fraction
         - stability_sample_count
         - max_stability_flights
-        - warning_pair_cost_ratio
-        - warning_p95_event_ratio
+        - warning_policy_penalty_ratio
         - warning_min_boundary_jaccard
       fields:
         - candidate_frontier_size: int = 5
         - stability_sample_fraction: float = 0.8
         - stability_sample_count: int = 2
         - max_stability_flights: int = 64
-        - warning_pair_cost_ratio: float = 1.25
-        - warning_p95_event_ratio: float = 1.25
+        - warning_policy_penalty_ratio: float = 1.25
         - warning_min_boundary_jaccard: float = 0.5
-    - @dataclass(frozen=True) class WindowMetricsSummary  [lines 101-205, loc=105]
+    - @dataclass(frozen=True) class WindowMetricsSummary  [lines 286-401, loc=116]
       attributes:
         - window_count
         - event_threshold_rate
-        - max_ms_rate
-        - event_threshold_plus_max_ms_rate
+        - budget_threshold_rate
         - end_of_stream_rate
         - mean_duration_ms
         - p95_duration_ms
         - mean_event_count
         - p95_event_count
+        - mean_quiet_credit_end
+        - p95_quiet_credit_end
+        - mean_closure_budget_end
+        - p95_closure_budget_end
         - mean_sensor_count
         - p95_sensor_count
         - mean_event_type_count
@@ -7686,13 +7934,16 @@ libs/windows/policy_profile.py  [loc=879]
       fields:
         - window_count: int = 0
         - event_threshold_rate: float = 0.0
-        - max_ms_rate: float = 0.0
-        - event_threshold_plus_max_ms_rate: float = 0.0
+        - budget_threshold_rate: float = 0.0
         - end_of_stream_rate: float = 0.0
         - mean_duration_ms: float = 0.0
         - p95_duration_ms: float = 0.0
         - mean_event_count: float = 0.0
         - p95_event_count: float = 0.0
+        - mean_quiet_credit_end: float = 0.0
+        - p95_quiet_credit_end: float = 0.0
+        - mean_closure_budget_end: float = 0.0
+        - p95_closure_budget_end: float = 0.0
         - mean_sensor_count: float = 0.0
         - p95_sensor_count: float = 0.0
         - mean_event_type_count: float = 0.0
@@ -7701,38 +7952,43 @@ libs/windows/policy_profile.py  [loc=879]
         - same_window_pair_expansion_proxy: float = 0.0
       methods:
         - @classmethod
-        - def from_profile_row(cls, profile_row: dict[str, Any] | None) -> 'WindowMetricsSummary'  [lines 119-138, loc=20]
+        - def from_profile_row(cls, profile_row: dict[str, Any] | None) -> 'WindowMetricsSummary'  [lines 307-329, loc=23]
         - @classmethod
-        - def from_window_row(cls, metrics_row: Any) -> 'WindowMetricsSummary'  [lines 141-166, loc=26]
-        - def _close_reason_count(self, rate: float) -> int  [lines 168-169, loc=2]
-        - def to_report(self) -> dict[str, Any]  [lines 171-205, loc=35]
-    - @dataclass(frozen=True) class WindowPolicyProfile  [lines 209-858, loc=650]
+        - def from_window_row(cls, metrics_row: Any) -> 'WindowMetricsSummary'  [lines 332-360, loc=29]
+        - def _close_reason_count(self, rate: float) -> int  [lines 362-363, loc=2]
+        - def to_report(self) -> dict[str, Any]  [lines 365-401, loc=37]
+    - @dataclass(frozen=True) class WindowPolicyProfile  [lines 405-1138, loc=734]
       attributes:
         - spec
       fields:
         - spec: WindowPolicyProfileSpec
       methods:
-        - def _fallback_profile_row(self, *, sampled_event_count: int, sampled_flight_count: int) -> dict[str, Any]  [lines 212-247, loc=36]
-        - def _fallback_profile_dataframe(self, spark: Any, *, sampled_event_count: int, sampled_flight_count: int) -> 'DataFrame'  [lines 249-259, loc=11]
-        - def _skipped_evaluation_report(self, *, reason: str, profile_df: 'DataFrame | None') -> dict[str, Any]  [lines 261-294, loc=34]
-        - def _sample_event_flights(self, events_df: 'DataFrame') -> tuple['DataFrame', int]  [lines 296-303, loc=8]
-        - def _gap_statistics(self, events_df: 'DataFrame') -> tuple[float, tuple[float, ...]]  [lines 305-329, loc=25]
-        - def _evaluate_candidate(self, events_df: 'DataFrame', *, policy: WindowPolicy, sampled_event_count: int, sampled_flight_count: int) -> 'DataFrame'  [lines 331-396, loc=66]
-        - def _selected_profile_row(self, profile_df: 'DataFrame | None') -> dict[str, Any] | None  [lines 398-403, loc=6]
-        - def _candidate_frontier(self, profile_df: 'DataFrame', *, limit: int) -> list[dict[str, Any]]  [lines 405-430, loc=26]
-        - def _profile_row_for_policy(self, profile_df: 'DataFrame | None', *, policy: WindowPolicy) -> dict[str, Any] | None  [lines 432-445, loc=14]
+        - def _fallback_profile_row(self, *, sampled_event_count: int, sampled_flight_count: int) -> dict[str, Any]  [lines 408-448, loc=41]
+        - def _fallback_profile_dataframe(self, spark: Any, *, sampled_event_count: int, sampled_flight_count: int) -> 'DataFrame'  [lines 450-460, loc=11]
+        - def _skipped_evaluation_report(self, *, reason: str, profile_df: 'DataFrame | None') -> dict[str, Any]  [lines 462-495, loc=34]
+        - def _sample_event_flights(self, events_df: 'DataFrame') -> tuple['DataFrame', int]  [lines 497-504, loc=8]
+        - def _gap_statistics(self, events_df: 'DataFrame') -> tuple[float, tuple[float, ...]]  [lines 506-530, loc=25]
+        - def _evaluate_candidate(self, events_df: 'DataFrame', *, policy: WindowPolicy, sampled_event_count: int, sampled_flight_count: int) -> 'DataFrame'  [lines 532-539, loc=8]
+        - def _evaluate_candidate_with_coverage(self, events_df: 'DataFrame', *, policy: WindowPolicy, sampled_event_count: int, sampled_flight_count: int, coverage_timestamps_df: 'DataFrame | None') -> 'DataFrame'  [lines 541-637, loc=97]
+        - def _selected_profile_row(self, profile_df: 'DataFrame | None') -> dict[str, Any] | None  [lines 639-644, loc=6]
+        - def _candidate_frontier(self, profile_df: 'DataFrame', *, limit: int) -> list[dict[str, Any]]  [lines 646-670, loc=25]
         - @staticmethod
-        - def _metrics_from_profile_row(profile_row: dict[str, Any] | None) -> dict[str, Any]  [lines 448-449, loc=2]
-        - def _flight_subset_events(self, events_df: 'DataFrame', *, salt: int, sample_fraction: float, max_flights: int) -> tuple['DataFrame', int]  [lines 451-467, loc=17]
-        - def _window_metrics(self, windows_df: 'DataFrame') -> dict[str, Any]  [lines 469-497, loc=29]
-        - def _selection_delta_vs_configured(self, *, selected_policy: WindowPolicy, configured_policy: WindowPolicy, selected_metrics: dict[str, Any], configured_metrics: dict[str, Any]) -> dict[str, Any]  [lines 499-533, loc=35]
-        - def _edge_stability(self, events_df: 'DataFrame', *, selected_policy: WindowPolicy, full_windows_df: 'DataFrame', evaluation_spec: WindowPolicyEvaluationSpec) -> dict[str, Any]  [lines 535-630, loc=96]
-        - def build_evaluation_report(self, events_df: 'DataFrame', *, profile_df: 'DataFrame | None', evaluation_spec: WindowPolicyEvaluationSpec | None = None) -> dict[str, Any]  [lines 632-761, loc=130]
-        - def build_dataframe(self, events_df: 'DataFrame') -> 'DataFrame'  [lines 763-836, loc=74]
+        - def _public_profile_row(profile_row: dict[str, Any] | None) -> dict[str, Any] | None  [lines 673-677, loc=5]
+        - def _profile_row_for_policy(self, profile_df: 'DataFrame | None', *, policy: WindowPolicy) -> dict[str, Any] | None  [lines 679-692, loc=14]
+        - @staticmethod
+        - def _metrics_from_profile_row(profile_row: dict[str, Any] | None) -> dict[str, Any]  [lines 695-696, loc=2]
+        - def _flight_subset_events(self, events_df: 'DataFrame', *, salt: int, sample_fraction: float, max_flights: int) -> tuple['DataFrame', int]  [lines 698-714, loc=17]
+        - def _window_metrics(self, windows_df: 'DataFrame') -> dict[str, Any]  [lines 716-754, loc=39]
+        - def _selection_delta_vs_configured(self, *, selected_policy: WindowPolicy, configured_policy: WindowPolicy, selected_metrics: dict[str, Any], configured_metrics: dict[str, Any]) -> dict[str, Any]  [lines 756-790, loc=35]
+        - @staticmethod
+        - def _warning_reasons(*, selected_profile_row: dict[str, Any] | None, configured_profile_row: dict[str, Any] | None, edge_stability: dict[str, Any], evaluation_spec: WindowPolicyEvaluationSpec) -> list[str]  [lines 793-810, loc=18]
+        - def _edge_stability(self, events_df: 'DataFrame', *, selected_policy: WindowPolicy, full_windows_df: 'DataFrame', evaluation_spec: WindowPolicyEvaluationSpec) -> dict[str, Any]  [lines 812-907, loc=96]
+        - def build_evaluation_report(self, events_df: 'DataFrame', *, profile_df: 'DataFrame | None', evaluation_spec: WindowPolicyEvaluationSpec | None = None, coverage_timestamps_df: 'DataFrame | None' = None) -> dict[str, Any]  [lines 909-1028, loc=120]
+        - def build_dataframe(self, events_df: 'DataFrame', *, coverage_timestamps_df: 'DataFrame | None' = None) -> 'DataFrame'  [lines 1030-1116, loc=87]
         - @classmethod
-        - def resolve_selected_policy(cls, profile_df: 'DataFrame | None', *, fallback_policy: WindowPolicy) -> tuple[WindowPolicy, str]  [lines 839-858, loc=20]
+        - def resolve_selected_policy(cls, profile_df: 'DataFrame | None', *, fallback_policy: WindowPolicy) -> tuple[WindowPolicy, str]  [lines 1119-1138, loc=20]
 
-libs/windows/tables.py  [loc=173]
+libs/windows/tables.py  [loc=195]
   doc: Typed Spark windows artifacts.
   imports:
     - from __future__ import annotations
@@ -7744,35 +8000,36 @@ libs/windows/tables.py  [loc=173]
     - from libs.windows.features import WindowFeaturesDiagnostics
     - from libs.windows.policy_profile import WindowPolicyProfileSpec
   classes:
-    - @dataclass(frozen=True) class WindowProfileRowsFrame(Frame)  [lines 13-76, loc=64]
+    - @dataclass(frozen=True) class WindowProfileRowsFrame(Frame)  [lines 13-83, loc=71]
       methods:
         - @classmethod
-        - def from_events(cls, events_df: 'DataFrame', *, max_ms: int, event_threshold: int, min_ms: int, inactivity_timeout_ms: int = 0, strategy: str = 'segmented') -> 'WindowProfileRowsFrame'  [lines 15-76, loc=62]
-    - @dataclass(frozen=True) class WindowsTable(Table)  [lines 80-109, loc=30]
+        - def from_events(cls, events_df: 'DataFrame', *, max_ms: int, event_threshold: int, min_ms: int, inactivity_timeout_ms: int = 0, strategy: str = 'segmented', coverage_timestamps_df: 'DataFrame | None' = None) -> 'WindowProfileRowsFrame'  [lines 15-83, loc=69]
+    - @dataclass(frozen=True) class WindowsTable(Table)  [lines 87-120, loc=34]
       methods:
         - @classmethod
-        - def spark_schema(cls)  [lines 82-83, loc=2]
+        - def spark_schema(cls)  [lines 89-90, loc=2]
         - @classmethod
-        - def from_events(cls, events_df: 'DataFrame', *, max_ms: int, event_threshold: int, min_ms: int, inactivity_timeout_ms: int = 0, strategy: str = 'segmented') -> 'WindowsTable'  [lines 86-109, loc=24]
-    - @dataclass(frozen=True) class WindowFeaturesTable(Table)  [lines 113-153, loc=41]
+        - def from_events(cls, events_df: 'DataFrame', *, max_ms: int, event_threshold: int, min_ms: int, inactivity_timeout_ms: int = 0, strategy: str = 'segmented', coverage_timestamps_df: 'DataFrame | None' = None) -> 'WindowsTable'  [lines 93-120, loc=28]
+    - @dataclass(frozen=True) class WindowFeaturesTable(Table)  [lines 124-164, loc=41]
       methods:
         - @classmethod
-        - def spark_schema(cls)  [lines 115-116, loc=2]
+        - def spark_schema(cls)  [lines 126-127, loc=2]
         - @classmethod
-        - def from_raw_events_and_windows(cls, raw_df: 'DataFrame', events_df: 'DataFrame', windows_df: 'DataFrame', scaling_profile_df: 'DataFrame | None' = None) -> 'WindowFeaturesTable'  [lines 119-135, loc=17]
+        - def from_raw_events_and_windows(cls, raw_df: 'DataFrame', events_df: 'DataFrame', windows_df: 'DataFrame', scaling_profile_df: 'DataFrame | None' = None) -> 'WindowFeaturesTable'  [lines 130-146, loc=17]
         - @classmethod
-        - def from_raw_events_windows_with_diagnostics(cls, raw_df: 'DataFrame', events_df: 'DataFrame', windows_df: 'DataFrame', scaling_profile_df: 'DataFrame | None' = None) -> tuple['WindowFeaturesTable', 'WindowFeaturesDiagnostics']  [lines 138-153, loc=16]
-    - @dataclass(frozen=True) class WindowPolicyProfileTable(Table)  [lines 157-166, loc=10]
+        - def from_raw_events_windows_with_diagnostics(cls, raw_df: 'DataFrame', events_df: 'DataFrame', windows_df: 'DataFrame', scaling_profile_df: 'DataFrame | None' = None) -> tuple['WindowFeaturesTable', 'WindowFeaturesDiagnostics']  [lines 149-164, loc=16]
+    - @dataclass(frozen=True) class WindowPolicyProfileTable(Table)  [lines 168-188, loc=21]
       methods:
         - @classmethod
-        - def spark_schema(cls)  [lines 159-160, loc=2]
+        - def spark_schema(cls)  [lines 170-171, loc=2]
         - @classmethod
-        - def from_events(cls, events_df: 'DataFrame', *, spec: 'WindowPolicyProfileSpec') -> 'WindowPolicyProfileTable'  [lines 163-166, loc=4]
+        - def from_events(cls, events_df: 'DataFrame', *, spec: 'WindowPolicyProfileSpec', coverage_timestamps_df: 'DataFrame | None' = None) -> 'WindowPolicyProfileTable'  [lines 174-188, loc=15]
 
-libs/windows/window.py  [loc=160]
+libs/windows/window.py  [loc=232]
   doc: Window domain objects and closure policy.
   imports:
     - from __future__ import annotations
+    - import math
     - from dataclasses import dataclass, field
     - from datetime import date, datetime, timedelta
     - from typing import Any
@@ -7783,7 +8040,28 @@ libs/windows/window.py  [loc=160]
   constants:
     - DEFAULT_MIN_SAMPLING_RATE_HZ
   classes:
-    - @dataclass(frozen=True) class WindowPolicy  [lines 17-74, loc=58]
+    - @dataclass(frozen=True) class WindowClosureBudgetPolicy  [lines 18-99, loc=82]
+      attributes:
+        - quiet_horizon_ms
+        - event_threshold
+      fields:
+        - quiet_horizon_ms: int
+        - event_threshold: int
+      methods:
+        - @classmethod
+        - def from_window_policy(cls, policy: 'WindowPolicy') -> 'WindowClosureBudgetPolicy'  [lines 23-29, loc=7]
+        - def quiet_credit(self, *, duration_ms: int) -> float  [lines 31-32, loc=2]
+        - def closure_budget(self, *, duration_ms: int, real_event_count: int) -> float  [lines 34-35, loc=2]
+        - def should_close(self, *, duration_ms: int, real_event_count: int) -> bool  [lines 37-40, loc=4]
+        - def close_reason(self, *, real_event_count: int) -> str  [lines 42-43, loc=2]
+        - def budget_close_elapsed_ms(self, *, real_event_count: int) -> int  [lines 45-49, loc=5]
+        - def quiet_credit_expr(self, *, duration_ms: 'Column') -> 'Column'  [lines 51-56, loc=6]
+        - def closure_budget_expr(self, *, duration_ms: 'Column', real_event_count: 'Column') -> 'Column'  [lines 58-64, loc=7]
+        - def should_close_expr(self, *, duration_ms: 'Column', real_event_count: 'Column') -> 'Column'  [lines 66-77, loc=12]
+        - def close_reason_expr(self, *, real_event_count: 'Column') -> 'Column'  [lines 79-84, loc=6]
+        - def elapsed_ms_for_budget_units_expr(self, *, budget_units: 'Column') -> 'Column'  [lines 86-93, loc=8]
+        - def budget_close_elapsed_ms_expr(self, *, real_event_count: 'Column') -> 'Column'  [lines 95-99, loc=5]
+    - @dataclass(frozen=True) class WindowPolicy  [lines 103-140, loc=38]
       attributes:
         - max_ms
         - event_threshold
@@ -7796,17 +8074,14 @@ libs/windows/window.py  [loc=160]
         - inactivity_timeout_ms: int = 0
       methods:
         - @staticmethod
-        - def max_ms_from_min_sampling_rate(min_sampling_rate_hz: float) -> int  [lines 24-26, loc=3]
+        - def max_ms_from_min_sampling_rate(min_sampling_rate_hz: float) -> int  [lines 110-112, loc=3]
         - @classmethod
-        - def default(cls) -> 'WindowPolicy'  [lines 29-35, loc=7]
-        - def should_close(self, *, duration_ms: int, event_count: int) -> bool  [lines 37-38, loc=2]
-        - def close_reason(self, *, duration_ms: int, event_count: int) -> str  [lines 40-47, loc=8]
-        - def effective_duration_ms(self, duration_ms: int) -> int  [lines 49-50, loc=2]
-        - def duration_ms_expr(self, *, t_start: 'Column', t_end: 'Column') -> 'Column'  [lines 52-55, loc=4]
-        - def cap_timestamp_expr(self, *, t_start: 'Column') -> 'Column'  [lines 57-60, loc=4]
-        - def should_close_expr(self, *, duration_ms: 'Column', event_count: 'Column') -> 'Column'  [lines 62-63, loc=2]
-        - def close_reason_expr(self, *, duration_ms: 'Column', event_count: 'Column') -> 'Column'  [lines 65-74, loc=10]
-    - @dataclass class Window  [lines 78-154, loc=77]
+        - def default(cls) -> 'WindowPolicy'  [lines 115-121, loc=7]
+        - def should_close(self, *, duration_ms: int, event_count: int) -> bool  [lines 123-127, loc=5]
+        - def close_reason(self, *, duration_ms: int, event_count: int) -> str  [lines 129-132, loc=4]
+        - def effective_duration_ms(self, duration_ms: int) -> int  [lines 134-135, loc=2]
+        - def duration_ms_expr(self, *, t_start: 'Column', t_end: 'Column') -> 'Column'  [lines 137-140, loc=4]
+    - @dataclass class Window  [lines 144-226, loc=83]
       attributes:
         - t_start
         - t_end
@@ -7823,17 +8098,17 @@ libs/windows/window.py  [loc=160]
         - window_events: list[DetectedEventRow] | None = None
       methods:
         - @classmethod
-        - def open(cls, ts: datetime, *, include_window_events: bool = False) -> 'Window'  [lines 87-95, loc=9]
+        - def open(cls, ts: datetime, *, include_window_events: bool = False) -> 'Window'  [lines 153-161, loc=9]
         - @property
-        - def duration_ms(self) -> int  [lines 98-99, loc=2]
+        - def duration_ms(self) -> int  [lines 164-165, loc=2]
         - @property
-        - def date_utc(self) -> date  [lines 102-103, loc=2]
+        - def date_utc(self) -> date  [lines 168-169, loc=2]
         - @property
-        - def sensor_count(self) -> int  [lines 106-107, loc=2]
-        - def cap_timestamp(self, max_ms: int) -> datetime  [lines 109-110, loc=2]
-        - def ingest_event(self, event: DetectedEventRow) -> None  [lines 112-124, loc=13]
-        - def clone_capped(self, t_end: datetime) -> 'Window'  [lines 126-134, loc=9]
-        - def to_row(self, *, tail_id: str, flight_id: str, win_id: int, policy: WindowPolicy, close_reason: str) -> AdaptiveWindowRow  [lines 136-154, loc=19]
+        - def sensor_count(self) -> int  [lines 172-173, loc=2]
+        - def cap_timestamp(self, max_ms: int) -> datetime  [lines 175-176, loc=2]
+        - def ingest_event(self, event: DetectedEventRow) -> None  [lines 178-190, loc=13]
+        - def clone_capped(self, t_end: datetime) -> 'Window'  [lines 192-200, loc=9]
+        - def to_row(self, *, tail_id: str, flight_id: str, win_id: int, policy: WindowPolicy, close_reason: str) -> AdaptiveWindowRow  [lines 202-226, loc=25]
 
 pipelines/00_ingest_raw.py  [loc=106]
   doc: Ingest raw parquet telemetry into normalized Delta bronze/silver tables.
@@ -7919,7 +8194,7 @@ pipelines/20_events_extract.py  [loc=184]
     - @log_wall_time(logger=LOGGER)
     - def run() -> None  [lines 28-180, loc=153]
 
-pipelines/25_window_policy_profile.py  [loc=153]
+pipelines/25_window_policy_profile.py  [loc=157]
   doc: Fit a data-driven window policy profile from detected events.
   imports:
     - from __future__ import annotations
@@ -7934,9 +8209,9 @@ pipelines/25_window_policy_profile.py  [loc=153]
     - @track_mlflow_run(stage_name='25_window_policy_profile', logger=LOGGER)
     - @log_memory_usage(logger=LOGGER, label='25_window_policy_profile')
     - @log_wall_time(logger=LOGGER)
-    - def run() -> None  [lines 33-149, loc=117]
+    - def run() -> None  [lines 33-153, loc=121]
 
-pipelines/30_windows_adaptive.py  [loc=160]
+pipelines/30_windows_adaptive.py  [loc=164]
   doc: Build adaptive windows from event thresholds and max duration.
   imports:
     - from pathlib import Path
@@ -7951,7 +8226,7 @@ pipelines/30_windows_adaptive.py  [loc=160]
     - @track_mlflow_run(stage_name='30_windows_adaptive', logger=LOGGER)
     - @log_memory_usage(logger=LOGGER, label='30_windows_adaptive')
     - @log_wall_time(logger=LOGGER)
-    - def run() -> None  [lines 29-156, loc=128]
+    - def run() -> None  [lines 29-160, loc=132]
 
 pipelines/40_backbone_fit.py  [loc=282]
   doc: Fit backbone artifacts from adaptive windows and raw telemetry.
@@ -7997,7 +8272,7 @@ pipelines/50_build_graph.py  [loc=547]
     - @log_wall_time(logger=LOGGER)
     - def run() -> None  [lines 160-537, loc=378]
 
-pipelines/60_fit_hierarchy.py  [loc=141]
+pipelines/60_fit_hierarchy.py  [loc=163]
   doc: Fit hierarchy artifacts from fused graph and the persisted graph parameter universe.
   imports:
     - import time
@@ -8012,9 +8287,9 @@ pipelines/60_fit_hierarchy.py  [loc=141]
     - @track_mlflow_run(stage_name='60_fit_hierarchy', logger=LOGGER)
     - @log_memory_usage(logger=LOGGER, label='60_fit_hierarchy')
     - @log_wall_time(logger=LOGGER)
-    - def run() -> None  [lines 30-137, loc=108]
+    - def run() -> None  [lines 30-159, loc=130]
 
-pipelines/70_phase_fit.py  [loc=209]
+pipelines/70_phase_fit.py  [loc=214]
   doc: Fit phase baselines and assign detected phases to windows.
   imports:
     - from libs.io.delta import get_spark, read_table
@@ -8028,9 +8303,9 @@ pipelines/70_phase_fit.py  [loc=209]
     - @track_mlflow_run(stage_name='70_phase_fit', logger=LOGGER)
     - @log_memory_usage(logger=LOGGER, label='70_phase_fit')
     - @log_wall_time(logger=LOGGER)
-    - def run() -> None  [lines 51-205, loc=155]
+    - def run() -> None  [lines 51-210, loc=160]
 
-pipelines/72_phase_label_centroids.py  [loc=141]
+pipelines/72_phase_label_centroids.py  [loc=142]
   doc: Build validation-only centroids from truth-labeled phase windows.
   imports:
     - from libs.io.delta import get_spark, read_table
@@ -8042,26 +8317,30 @@ pipelines/72_phase_label_centroids.py  [loc=141]
   functions:
     - @track_mlflow_run(stage_name='72_phase_label_centroids', logger=LOGGER)
     - @log_wall_time(logger=LOGGER)
-    - def run() -> None  [lines 23-137, loc=115]
+    - def run() -> None  [lines 23-138, loc=116]
 
-pipelines/80_window_scores_raw.py  [loc=118]
+pipelines/80_window_scores_raw.py  [loc=172]
   doc: Build raw window scores from phase windows and phase baselines.
   imports:
+    - from libs.events import EventsTable, ParameterEventProfile
     - from libs.graph.tables import HierarchySensorMapTable
     - from libs.io.delta import get_spark
-    - from libs.perf import build_artifact_manifest, build_stage_manifest, get_logger, log_memory_usage, log_dict_artifact_if_active, log_params_if_active, log_stage_manifest_if_active, log_wall_time, track_mlflow_run
+    - from libs.perf import build_artifact_manifest, build_stage_manifest, get_logger, log_memory_usage, log_dict_artifact_if_active, log_stage_manifest_if_active, log_wall_time, track_mlflow_run
     - from libs.phase import PhaseBaselinesTable, PhaseWindowsTable
+    - from libs.profiling import ParameterBehaviorProfile
     - from libs.scoring import WindowScoresRawTable
+    - from libs.windows import WindowsTable
     - from pipelines.common import build_stage_runtime
   constants:
     - LOGGER
+    - _SCORE_ARTIFACT_PARTITION_BY
   functions:
     - @track_mlflow_run(stage_name='80_window_scores_raw', logger=LOGGER)
     - @log_memory_usage(logger=LOGGER, label='80_window_scores_raw')
     - @log_wall_time(logger=LOGGER)
-    - def run() -> None  [lines 27-114, loc=88]
+    - def run() -> None  [lines 30-168, loc=139]
 
-pipelines/85_window_scores_calibrate.py  [loc=93]
+pipelines/85_window_scores_calibrate.py  [loc=100]
   doc: Calibrate raw window scores with phase-conditioned conformal calibration.
   imports:
     - from libs.io.delta import get_spark
@@ -8070,11 +8349,12 @@ pipelines/85_window_scores_calibrate.py  [loc=93]
     - from pipelines.common import build_stage_runtime
   constants:
     - LOGGER
+    - _SCORE_ARTIFACT_PARTITION_BY
   functions:
     - @track_mlflow_run(stage_name='85_window_scores_calibrate', logger=LOGGER)
     - @log_memory_usage(logger=LOGGER, label='85_window_scores_calibrate')
     - @log_wall_time(logger=LOGGER)
-    - def run() -> None  [lines 26-89, loc=64]
+    - def run() -> None  [lines 27-96, loc=70]
 
 pipelines/90_anomaly_attribution.py  [loc=198]
   doc: Emit anomaly attribution tables for anomalous windows.

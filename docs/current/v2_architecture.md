@@ -8,12 +8,12 @@ For current ownership and implementation names, prefer:
 - [libs/phase/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/phase/README.md)
 - [libs/graph/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/graph/README.md)
 
-For the mathematical/statistical interpretation of the active representations and graph weights, see [theory_foundations.md](/home/jrs/code/S3NTINEL/sentinel/docs/theory_foundations.md).
-For the active code/data taxonomy and naming rules, see [glossary.md](/home/jrs/code/S3NTINEL/sentinel/docs/glossary.md).
-For the intended one-off fitting sequence for datatype profiling, robust scaling, behavior profiling, and backbone fitting, see [fitting_workflow.md](/home/jrs/code/S3NTINEL/sentinel/docs/fitting_workflow.md).
-For domain guidance on realistic avionics-system behavior and simulator priors, see [avionics_simulation_guidelines.md](/home/jrs/code/S3NTINEL/sentinel/docs/avionics_simulation_guidelines.md).
-For recommended simulator anomaly families and backbone-fit validation methods, see [anomaly_injection_and_backbone_validation.md](/home/jrs/code/S3NTINEL/sentinel/docs/anomaly_injection_and_backbone_validation.md).
-For replayable stage artifacts, caches, manifests, and MLflow lineage policy, see [artifact_replay_design.md](/home/jrs/code/S3NTINEL/sentinel/docs/artifact_replay_design.md).
+For the mathematical/statistical interpretation of the active representations and graph weights, see [theory_foundations.md](/home/jrs/code/S3NTINEL/sentinel/docs/reference/theory_foundations.md).
+For the active code/data taxonomy and naming rules, see [glossary.md](/home/jrs/code/S3NTINEL/sentinel/docs/reference/glossary.md).
+For the intended one-off fitting sequence for datatype profiling, robust scaling, behavior profiling, and backbone fitting, see [fitting_workflow.md](/home/jrs/code/S3NTINEL/sentinel/docs/current/fitting_workflow.md).
+For domain guidance on realistic avionics-system behavior and simulator priors, see [avionics_simulation_guidelines.md](/home/jrs/code/S3NTINEL/sentinel/docs/simulation/avionics_simulation_guidelines.md).
+For recommended simulator anomaly families and backbone-fit validation methods, see [anomaly_injection_and_backbone_validation.md](/home/jrs/code/S3NTINEL/sentinel/docs/research/anomaly_injection_and_backbone_validation.md).
+For replayable stage artifacts, caches, manifests, and MLflow lineage policy, see [artifact_replay_design.md](/home/jrs/code/S3NTINEL/sentinel/docs/design/artifact_replay_design.md).
 
 For local smoke and developer workflows, the active baseline is `sentinel-spark35` on Python `3.11` with Spark `3.5.1` and Delta `3.0.0`. Prefer `S3NTINEL_TABLE_FORMAT=parquet` unless the Spark runtime already has Delta JVM jars available. The `delta-spark` Python package does not bundle those jars.
 
