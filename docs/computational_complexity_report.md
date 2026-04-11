@@ -6,6 +6,7 @@ Use it for:
 - stage-by-stage cost reasoning
 - current hotspot identification
 - scale-driver discussion for parameters, rates, windows, phases, graph density, and anomaly fan-out
+- both time-complexity and space-complexity reasoning across the active pipeline
 
 For current stage ownership and entrypoints, see [pipelines/README.md](/home/jrs/code/S3NTINEL/sentinel/pipelines/README.md).
 For current implementation surfaces, the main builder modules are:
@@ -20,25 +21,29 @@ For current implementation surfaces, the main builder modules are:
 - [libs/phase/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/phase/pipeline.py)
 - [libs/phase/fit.py](/home/jrs/code/S3NTINEL/sentinel/libs/phase/fit.py)
 - [libs/phase/decode.py](/home/jrs/code/S3NTINEL/sentinel/libs/phase/decode.py)
-- [libs/scoring/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/scoring/pipeline.py)
-- [libs/conformal/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/conformal/pipeline.py)
-- [libs/anomaly/artifacts.py](/home/jrs/code/S3NTINEL/sentinel/libs/anomaly/artifacts.py)
+- [libs/scoring/tables.py](/home/jrs/code/S3NTINEL/sentinel/libs/scoring/tables.py)
+- [libs/anomaly/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/anomaly/pipeline.py)
+- [libs/anomaly/frames.py](/home/jrs/code/S3NTINEL/sentinel/libs/anomaly/frames.py)
+- [libs/anomaly/tables.py](/home/jrs/code/S3NTINEL/sentinel/libs/anomaly/tables.py)
 
 ## Scope And Basis
 
-This report uses the checked-in bundle:
+This report uses two references:
 
 - `data/simulation_runs/20260319T191636Z_power_pressurization_hierarchy_composite`
+- `/tmp/s3ntinel_single_path_verify/20260411T163245Z_power_pressurization_hierarchy_composite`
 
 It is grounded in:
 
-- the persisted stage manifests and stage summaries under that run directory
-- the persisted parquet artifacts under that run directory
+- the persisted stage manifests, stage summaries, and parquet artifacts under those run directories
 - the current code in `pipelines/` and `libs/*`
 
-The successful timing snapshot covers stages `00` through `90`.
+Use them differently:
 
-Stage `95_emit_explorer_bundle` is described qualitatively only. In the checked-in March 19, 2026 run it failed with an ambiguous `plot_median` reference, so its elapsed time is not a reliable modeling-stage benchmark.
+- the checked-in March 19, 2026 bundle is the stable workload-shape reference
+- the April 11, 2026 replay under `/tmp` is the current-head timing and artifact-shape reference
+
+The current-head timing snapshot covers stages `00` through `95` successfully.
 
 ## Complexity Symbols
 
@@ -54,20 +59,40 @@ Stage `95_emit_explorer_bundle` is described qualitatively only. In the checked-
 | `d_w` | active continuous sensors represented in one sparse window vector |
 | `F_phi` | phase feature width |
 | `H` | fused graph edges after graph construction |
+| `M` | retained `lag_profile` rows after aggregation |
 | `A` | emit-ready anomaly windows |
+| `A_tel` | anomaly telemetry attribution rows |
+| `A_evt` | anomaly event attribution rows |
 | `W_phase` | windows in one calibration partition `(tail, flight, phase)` |
 | `n_b` | event volume in one lag bucket |
 | `I` | phase centroid-refinement iterations |
+| `retained_edges` | fused edges retained into hierarchy rollup after neighbor pruning |
+| `B_drv` | explicitly collected driver-side rows, vectors, or small matrices |
 | `J_{R,W}` | raw-to-window interval join work |
 | `J_{E,W}` | event-to-window interval join work |
 | `J_{A,R}` | emit-ready-window-to-raw attribution join work |
 | `J_{A,E}` | emit-ready-window-to-event attribution join work |
 
-Most current stage costs are dominated by one of three shapes:
+Most current stage costs are dominated by four recurring shapes:
 
 - long ordered per-parameter or per-flight scans
 - pair expansion inside windows or lag buckets
 - rejoining emit-ready windows back to raw and event evidence
+- dense residual materialization or bounded driver-side bridges
+
+## Time And Space Reading Guide
+
+In this report:
+
+- time complexity means the dominant work to produce a stage's outputs
+- space complexity means the dominant live state, shuffle/state spill pressure, driver-collection pressure, and persisted output size that the stage creates
+
+Those are related but not identical in Spark.
+
+- sort-dominated stages usually have time proportional to sort plus scan, but their practical space pressure is the largest active partition plus spill
+- pair-expansion stages can have moderate final outputs while still hitting large transient local pair buffers
+- interval-join stages can have moderate compute but large materialized outputs when many windows overlap the same evidence
+- driver-bridge stages can look cheap in wall time until one collected matrix or edge universe exceeds its hard bound
 
 ## First-Principles Complexity Model
 
@@ -94,27 +119,31 @@ In particular:
 
 ### Stage Envelopes From Implemented Codepaths
 
-| Stage | Implemented dominant primitives | First-principles envelope |
-| --- | --- | --- |
-| `00` ingest | projection + persisted write | `O(R)` |
-| `10` profiles | grouped aggs, percentiles, per-parameter ordered lags | `O(R) + O(sum_p R_p log R_p)` |
-| `20` events | per-parameter ordered windows, segmented stateful folds | `O(sum_p R_p log R_p) + O(R)` |
-| `30` windows | per-flight event ordering, segmented fold, event-to-window assignment | `O(sum_f E_f log E_f) + O(E) + O(J_{E,W})` |
-| `40` window features + backbone | raw interval build, raw/event interval joins, sparse-map agg, small ridge solve | `O(J_{R,W} + J_{E,W} + W * d_w + W * C^2 + W * C * d_w + C^3)` |
-| `50` graphs | same-window pair expansion, candidate-pruned lag-bucket pair expansion, transition pass, small precision solve | `O(sum_w K_w^2) + O(E) + O(sum_b sum_v n_{b,v} * c_v * (m_{b,u} + m_{b-1,u})) + O(M) + O(W * C^2 + C^3)` |
-| `60` hierarchy | Spark neighbor ranking + bounded driver rollup | `O(H log k) + O(P + retained_edges)` |
-| `70` phase | dense residual reconstruction, per-flight scaling, centroid refinement, segmented decode | `O(W * P_n) + O(W * F_phi) + O(I * W * F_phi * phase_count)` |
-| `80` raw scores | small broadcast joins, dense residual explode, subsystem regroup | `O(W * F_phi) + O(W * P_n)` |
-| `85` calibration | per-phase partition ordering + window functions | `O(W log W_phase)` |
-| `90` attribution | emit-ready filter, raw/event interval joins, context regroup | `O(J_{A,R} + J_{A,E})`, with practical amplification from overlapping windows |
-| `95` explorer bundle | linear export over already-built artifacts | `O(R + E + anomaly_telemetry_rows + anomaly_event_rows + anomaly_window_rows)` |
+| Stage | Implemented dominant primitives | Time envelope | Space / materialization envelope |
+| --- | --- | --- | --- |
+| `00` ingest | projection + persisted write | `O(R)` | `O(R)` persisted output, `O(1)` live streaming state |
+| `10` profiles | grouped aggs, percentiles, per-parameter ordered lags | `O(R) + O(sum_p R_p log R_p)` | `O(max_p R_p)` partition sort state + `O(P)` outputs |
+| `12` behavior profiles | profiling-plan reuse plus primitive/family derivation | `O(R) + O(sum_p R_p log R_p)` | `O(max_p R_p)` ordered state + `O(P)` profile outputs + bounded Python-side family state |
+| `15` event profiles | per-parameter detector-policy profiling from raw telemetry | `O(R) + O(sum_p R_p log R_p)` | `O(max_p R_p)` ordered state + `O(P)` output profiles |
+| `20` events | per-parameter ordered windows, segmented stateful folds | `O(sum_p R_p log R_p) + O(R)` | `O(max_p R_p)` ordered partition state + `O(E)` persisted events |
+| `25` window policy profile | small candidate frontier replayed over ordered events | `O(K_policy * (sum_f E_f log E_f + E))` | `O(max_f E_f)` per-candidate ordered state + `O(K_policy)` profile rows |
+| `30` windows | per-flight event ordering, segmented fold, event-to-window assignment | `O(sum_f E_f log E_f) + O(E) + O(J_{E,W})` | `O(max_f E_f)` ordered / segmented state + `O(W)` persisted windows |
+| `40` window features + backbone | raw interval build, raw/event interval joins, sparse-map agg, small ridge solve | `O(J_{R,W} + J_{E,W} + W * d_w + W * C^2 + W * C * d_w + C^3)` | `O(W * d_w)` sparse features + `O(C^2 + C * d_w + B_drv)` driver-side matrices |
+| `50` graphs | same-window pair expansion, candidate-pruned lag-bucket pair expansion, transition pass, small precision solve | `O(sum_w K_w^2) + O(E) + O(sum_b sum_v n_{b,v} * c_v * (m_{b,u} + m_{b-1,u})) + O(M) + O(W * C^2 + C^3)` | `O(max_w K_w^2)` same-window pair state + `O(max_b sum_v n_{b,v} * c_v * (m_{b,u} + m_{b-1,u}))` lag-pair state + `O(H + M + P + B_drv)` persisted/driver graph state |
+| `60` hierarchy | Spark neighbor ranking + bounded driver rollup | `O(H log k) + O(P + retained_edges)` | `O(H + retained_edges)` distributed edge state + `O(P + retained_edges + B_drv)` driver rollup |
+| `70` phase | dense residual reconstruction, per-flight scaling, centroid refinement, segmented decode | `O(W * P_n) + O(W * F_phi) + O(I * W * F_phi * phase_count)` | `O(W * (P_n + F_phi + phase_count))` dense residual and decode state |
+| `72` phase-label centroids | truth-label assignment plus bounded centroid comparison | `O(W * F_phi)` plus bounded comparison work | `O(W * F_phi + B_drv)` because comparison materializes bounded pandas views |
+| `80` raw scores | small broadcast joins, dense residual explode, subsystem regroup | `O(W * F_phi) + O(W * P_n)` | `O(W * (F_phi + P_n))` dense residual state + `O(P)` bridge tables |
+| `85` calibration | per-phase partition ordering + window functions | `O(W log W_phase)` | `O(W_phase)` partition state + `O(W)` outputs |
+| `90` attribution | emit-ready filter, raw/event interval joins, context regroup | `O(J_{A,R} + J_{A,E})`, with practical amplification from overlapping windows | `O(A_tel + A_evt + A)` persisted attribution outputs + local interval-join fanout state |
+| `95` explorer bundle | linear export over already-built artifacts | `O(R + E + A_tel + A_evt + A)` | `O(R + E + A_tel + A_evt + A)` exported explorer materialization |
 
 The important first-principles conclusions are:
 
-- stages `10`, `20`, `30`, and `70` are sort-dominated
-- stages `50` and `90` are expansion-dominated
+- stages `10`, `12`, `15`, `20`, `25`, `30`, and `70` are sort- or replay-dominated
+- stages `50` and `90` are the only stages with serious local fan-out risk
 - stages `40`, `70`, and `80` hide dense `P_n` work behind otherwise sparse artifacts
-- stages `40`, `50`, `60`, and `80` still rely on bounded driver-side collections for at least one subproblem
+- stages `40`, `50`, `60`, `72`, and `80` still rely on bounded driver-side collections or bounded local materialization for at least one subproblem
 
 ### Codepath Notes By Stage
 
@@ -335,60 +364,68 @@ Implication:
 
 ## Current Hotspots
 
-Baseline stage timings from the March 19, 2026 composite run (`20260319T191636Z_power_pressurization_hierarchy_composite`):
+Current-head stage timings from the April 11, 2026 verification replay (`20260411T163245Z_power_pressurization_hierarchy_composite`):
 
 | Stage | Elapsed | Share of full run |
 | --- | --- | --- |
-| `50_build_graph` | `381.6 s` | `48.2%` |
-| `30_windows_adaptive` | `163.1 s` | `20.6%` |
-| `90_anomaly_attribution` | `85.6 s` | `10.8%` |
-| `20_events_extract` | `62.5 s` | `7.9%` |
-| `40_backbone_fit` | `34.2 s` | `4.3%` |
-| `70_phase_fit` | `28.0 s` | `3.5%` |
-| all other successful stages combined | `36.5 s` | `4.7%` |
+| `20_events_extract` | `125.2 s` | `18.6%` |
+| `50_build_graph` | `119.8 s` | `17.8%` |
+| `25_window_policy_profile` | `73.8 s` | `10.9%` |
+| `40_backbone_fit` | `69.4 s` | `10.3%` |
+| `70_phase_fit` | `66.8 s` | `9.9%` |
+| `90_anomaly_attribution` | `54.1 s` | `8.0%` |
+| `12_behavior_profiles_fit` | `52.0 s` | `7.7%` |
+| all other successful stages combined | `112.8 s` | `16.7%` |
 
-Inside `50_build_graph`, the measured baseline's dominant sub-step was `lag_graph_build`:
+This is a materially different hotspot picture from the older March run:
 
-- `lag_graph_build`: `333,980.8 ms`
-- `event_graph_build`: `40,429.6 ms`
-- `transition_graph_build`: `782.3 ms`
-- `precision_graph_build`: `294.6 ms`
+- `30_windows_adaptive` is no longer the second-largest stage because the current policy profile selects a much smaller emitted-window workload
+- `25_window_policy_profile` is now a real end-to-end hotspot
+- `90_anomaly_attribution` is still important, but it is no longer dominated by an all-emit-ready path
 
-This matches the baseline code path: lag construction was the only stage that could still create very large event-pair candidate sets inside a single flight even when the final edge table stayed small.
+Inside `50_build_graph`, the current dominant sub-step is no longer lag construction. It is graph evaluation reporting:
 
-Updated measurement from the current multi-band implementation on the same workload family (`20260319T230003Z_power_pressurization_hierarchy_composite`):
+- `graph_evaluation_report`: `91,264.0 ms`
+- `output_writes`: `6,300.3 ms`
+- `parameter_universe_build`: `4,686.0 ms`
+- `lag_profile_build`: `3,899.0 ms`
+- `event_graph_build`: `3,693.6 ms`
+- `output_counts`: `3,276.8 ms`
+- `fused_graph_build`: `2,877.8 ms`
+- `lag_graph_build`: `2,108.5 ms`
 
-- stage `50_build_graph`: `174,398.9 ms` vs `381,614.8 ms` before, about `54.3%` lower
-- lag work:
-  - old single-output `lag_graph_build`: `333,980.8 ms`
-  - new multi-band lag path: `146,581.5 ms` for `lag_profile_build` plus `1,304.6 ms` for `lag_graph_build`
-  - combined lag work: `147,886.1 ms`, about `55.7%` lower than the old lag builder
-- `event_graph_build`: `17,548.2 ms` vs `40,429.6 ms`
-- `transition_graph_build`: `403.7 ms` vs `782.3 ms`
+That means the current codebase has two distinct graph-stage stories:
 
-The relevant config changed too:
+- the asymptotic modeling risk is still pair expansion inside `event_graph` and `lag_profile`
+- the current wall-clock hotspot is the validation/reporting side of stage `50`, not the edge builders themselves
 
-- old run: single lag output, `lag_tau_max_seconds = 30.0`, no lag bands
-- new run: `lag_tau_max_seconds = 120.0` with `quick`, `medium`, `slow`, and `very_slow` bands persisted in `lag_profile`
+This distinction matters when deciding what to optimize:
 
-Important caveat:
+- for model-scale risk, the lag-profile and same-window pair builders still deserve the most attention
+- for current end-to-end runtime, graph evaluation reporting is now the largest single sub-step inside stage `50`
 
-- this is not artifact-identical
-- old run outputs:
-  - `event_edge_count = 494`
-  - `lag_edge_count = 371`
-  - `transition_edge_count = 253`
-  - `fused_edge_count = 641`
-- new run outputs:
-  - `event_edge_count = 494`
-  - `lag_profile_edge_count = 2249`
-  - `lag_edge_count = 384`
-  - `transition_edge_count = 253`
-  - `fused_edge_count = 516`
+## Current Space Hotspots
 
-So the measured wall-time improvement is real, but it comes with a semantic change: stage `50` now materializes a first-class per-band `lag_profile` and the legacy `lag_graph` is only the collapsed compatibility view.
+Current-head space pressure is concentrated in a different set of places than the raw timing table suggests.
+
+The most important current materialization facts are:
+
+- `window_scores_calibrated`: `307` rows
+- `emit_ready = true`: `76` rows
+- `anomaly_window_attribution`: `76` rows
+- `anomaly_telemetry_attribution`: `25,585` rows
+- `anomaly_event_attribution`: `180` rows
+
+So on current head:
+
+- stage `90` is no longer dominated by universal emission, but it still materializes a telemetry-attribution table that is large relative to `A`
+- stage `70` and stage `80` remain the main dense-vector stages because they reconstruct or explode all-numeric residual state
+- stage `50` remains the main transient pair-expansion risk even though its persisted edge tables are modest
+- stage `40`, stage `50`, stage `60`, stage `72`, and stage `80` still have bounded driver-side bridges that are safe only while the current bounds hold
 
 ## Empirical Stage-By-Stage Analysis
+
+Unless a section explicitly says otherwise, the artifact counts in this walkthrough still refer to the checked-in March 19 workload bundle. The current-head timing hotspots are summarized above.
 
 ### 00 Ingest Raw
 
@@ -435,6 +472,64 @@ Key scaling note:
 
 - high-rate channels dominate this stage disproportionately because `R_p` changes with sampling rate; a `2 Hz` channel contributes `4x` the ordered-row work of a `0.5 Hz` channel over the same flight duration
 
+### 12 Behavior Profiles Fit
+
+Primary code:
+
+- [pipelines/12_behavior_profiles_fit.py](/home/jrs/code/S3NTINEL/sentinel/pipelines/12_behavior_profiles_fit.py)
+- [libs/profiling/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/profiling/pipeline.py)
+- [libs/profiling/profiles.py](/home/jrs/code/S3NTINEL/sentinel/libs/profiling/profiles.py)
+
+Dominant work:
+
+- reuse raw telemetry plus datatype/scaling profiles
+- build behavior-primitive summaries
+- derive behavior-family assignments from those primitive summaries
+
+Time shape:
+
+- the primitive-profile side is still dominated by ordered per-parameter telemetry scans, so practical time stays near `O(R) + O(sum_p R_p log R_p)`
+
+Space shape:
+
+- `O(max_p R_p)` ordered partition state plus `O(P)` primitive/family outputs
+- additional Python-side family-state footprint stays bounded per parameter and does not scale with `R` once one parameter partition is in memory
+
+Current-head timing observation:
+
+- elapsed `52.0 s` in the April 11 verification replay
+
+Key scaling note:
+
+- this stage is still rate-skew-sensitive like stage `10`, but it now also pays for Python-side family reasoning after the Spark-side primitive pass
+
+### 15 Event Profiles Fit
+
+Primary code:
+
+- [pipelines/15_event_profiles_fit.py](/home/jrs/code/S3NTINEL/sentinel/pipelines/15_event_profiles_fit.py)
+- [libs/events/profiling.py](/home/jrs/code/S3NTINEL/sentinel/libs/events/profiling.py)
+
+Dominant work:
+
+- derive per-parameter event detector policy profiles from raw telemetry and datatype profiles
+
+Time shape:
+
+- approximately `O(R) + O(sum_p R_p log R_p)` because it still depends on per-parameter telemetry-order statistics
+
+Space shape:
+
+- `O(max_p R_p)` ordered state plus `O(P)` persisted detector-policy outputs
+
+Current-head timing observation:
+
+- elapsed `7.1 s` in the April 11 verification replay
+
+Key scaling note:
+
+- this stage is not a top hotspot now, but it scales with the same sampling-rate skew as the profiling stages before it
+
 ### 20 Events Extract
 
 Primary code:
@@ -465,6 +560,37 @@ Current observation:
 Key scaling note:
 
 - current event volume is controlled much more by continuous numeric dynamics than by categorical states, so any increase in numeric noise, rate, or oscillatory behavior hits this stage first
+
+### 25 Window Policy Profile
+
+Primary code:
+
+- [pipelines/25_window_policy_profile.py](/home/jrs/code/S3NTINEL/sentinel/pipelines/25_window_policy_profile.py)
+- [libs/windows/policy_profile.py](/home/jrs/code/S3NTINEL/sentinel/libs/windows/policy_profile.py)
+- [libs/windows/tables.py](/home/jrs/code/S3NTINEL/sentinel/libs/windows/tables.py)
+
+Dominant work:
+
+- derive a small candidate policy frontier from event gaps
+- replay candidate window policies against the ordered event stream
+- score candidates and emit a selected policy plus candidate frontier report
+
+Time shape:
+
+- approximately `O(K_policy * (sum_f E_f log E_f + E))`, where `K_policy` is the candidate frontier size and is intentionally kept small
+
+Space shape:
+
+- `O(max_f E_f)` ordered event state reused across candidate evaluation plus `O(K_policy)` persisted profile rows
+
+Current-head timing observation:
+
+- elapsed `73.8 s` in the April 11 verification replay
+- current run evaluated `5` candidates over `91` events and selected `max_ms=5000`, `event_threshold=15`
+
+Key scaling note:
+
+- the current candidate frontier is small by design, so this stage is not asymptotically dangerous; its current runtime comes from replaying the event stream several times plus coverage/reporting work
 
 ### 30 Windows Adaptive
 
@@ -640,12 +766,41 @@ Key scaling note:
 - long-flight skew matters here because the dominant partitions are `(tail_id, flight_id)`
 - flights-per-tail skew matters later for baseline support because baselines are aggregated per tail, not per flight
 
+### 72 Phase Label Centroids
+
+Primary code:
+
+- [pipelines/72_phase_label_centroids.py](/home/jrs/code/S3NTINEL/sentinel/pipelines/72_phase_label_centroids.py)
+- [libs/phase/tables.py](/home/jrs/code/S3NTINEL/sentinel/libs/phase/tables.py)
+- [libs/phase/validator.py](/home/jrs/code/S3NTINEL/sentinel/libs/phase/validator.py)
+
+Dominant work:
+
+- build truth-labeled validation centroids from `phase_windows`
+- compare detected centroids against truth-labeled centroids
+
+Time shape:
+
+- approximately linear in `W * F_phi` plus bounded centroid-comparison work
+
+Space shape:
+
+- `O(W * F_phi)` for the truth-centroid build plus bounded local pandas materialization for the comparison summary
+
+Current-head timing observation:
+
+- elapsed `5.1 s` in the April 11 verification replay
+
+Key scaling note:
+
+- this stage is validation-only and intentionally bounded, but it is still part of the end-to-end runtime because it materializes local comparison views
+
 ### 80 Window Scores Raw
 
 Primary code:
 
 - [pipelines/80_window_scores_raw.py](/home/jrs/code/S3NTINEL/sentinel/pipelines/80_window_scores_raw.py)
-- [libs/scoring/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/scoring/pipeline.py)
+- [libs/scoring/tables.py](/home/jrs/code/S3NTINEL/sentinel/libs/scoring/tables.py)
 
 Dominant work:
 
@@ -675,7 +830,7 @@ Driver-side bound:
 Primary code:
 
 - [pipelines/85_window_scores_calibrate.py](/home/jrs/code/S3NTINEL/sentinel/pipelines/85_window_scores_calibrate.py)
-- [libs/conformal/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/conformal/pipeline.py)
+- [libs/scoring/tables.py](/home/jrs/code/S3NTINEL/sentinel/libs/scoring/tables.py)
 
 Dominant work:
 
@@ -688,13 +843,13 @@ Cost shape:
 Current observation:
 
 - `min_warm = 1`
-- all `4,644` windows became `emit_ready`
-- elapsed `0.69 s`
+- `76` of `307` windows became `emit_ready` in the April 11 verification replay
+- elapsed `1.0 s`
 
 Key scaling note:
 
 - this stage is cheap now
-- the more important downstream effect is that `emit_ready = true` for all windows, which makes stage `90` expensive
+- the more important downstream effect is how aggressively it controls `A`, because that directly changes stage `90`
 
 ### 90 Anomaly Attribution
 
@@ -702,9 +857,8 @@ Primary code:
 
 - [pipelines/90_anomaly_attribution.py](/home/jrs/code/S3NTINEL/sentinel/pipelines/90_anomaly_attribution.py)
 - [libs/anomaly/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/anomaly/pipeline.py)
-- [libs/anomaly/artifacts.py](/home/jrs/code/S3NTINEL/sentinel/libs/anomaly/artifacts.py)
-- [libs/anomaly/subsystem_context.py](/home/jrs/code/S3NTINEL/sentinel/libs/anomaly/subsystem_context.py)
-- [libs/anomaly/panel_context.py](/home/jrs/code/S3NTINEL/sentinel/libs/anomaly/panel_context.py)
+- [libs/anomaly/frames.py](/home/jrs/code/S3NTINEL/sentinel/libs/anomaly/frames.py)
+- [libs/anomaly/tables.py](/home/jrs/code/S3NTINEL/sentinel/libs/anomaly/tables.py)
 
 Dominant work:
 
@@ -721,17 +875,17 @@ Cost shape:
 
 Current observation:
 
-- `A = 4,644` and every window is emit-ready
-- anomaly telemetry attribution rows: `509,616`
-- anomaly event attribution rows: `235,682`
-- anomaly window attribution rows: `4,644`
-- elapsed `85.6 s`
+- `A = 76` in the April 11 verification replay
+- anomaly telemetry attribution rows: `25,585`
+- anomaly event attribution rows: `180`
+- anomaly window attribution rows: `76`
+- elapsed `54.1 s`
 
 Amplification note:
 
-- telemetry attribution output is about `2.53x` the raw input row count
-- event attribution output is about `2.54x` the event input row count
-- this happens because overlapping anomaly windows re-materialize shared evidence
+- telemetry attribution output is about `21.8%` of the raw input row count in the current-head replay
+- event attribution output is about `1.98x` the event input row count in the current-head replay
+- the event side still amplifies because overlapping anomaly windows re-materialize shared event evidence even after emission became selective
 
 ### 95 Emit Explorer Bundle
 
@@ -850,14 +1004,19 @@ That implies:
 
 ## Practical Conclusions
 
-For the current codebase and current checked-in workload:
+For the current codebase:
 
-- the primary scaling risk is the lag graph in stage `50`, not the precision graph or hierarchy rollup
-- the next most important runtime drivers are event-volume-derived windowing in stage `30` and emit-ready fan-out in stage `90`
+- the primary asymptotic time-and-space risk is still pair expansion in stage `50`, especially the lag-profile builder when candidate pruning weakens
+- the current end-to-end wall-clock hotspots are broader: stages `20`, `25`, `40`, `50`, `70`, and `90` all matter now
+- stage `50` needs to be split mentally into two problems:
+  - graph construction complexity, which is still dominated by pair expansion
+  - graph evaluation/reporting complexity, which is currently the largest measured sub-step inside the stage
+- stage `90` is no longer dominated by universal emission, but it still creates large attribution materializations relative to `A`
 - sampling-rate skew already dominates raw-row cost, while flight-length skew is the most likely future partition-level hotspot once multi-flight fleet runs become common
 
 If the workload grows materially, the first places to rework are:
 
 - lag graph candidate generation in [libs/graph/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/graph/pipeline.py)
-- event-to-window and raw-to-window interval joins in [libs/windows/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/windows/pipeline.py), [libs/windows/features.py](/home/jrs/code/S3NTINEL/sentinel/libs/windows/features.py), and [libs/anomaly/artifacts.py](/home/jrs/code/S3NTINEL/sentinel/libs/anomaly/artifacts.py)
-- any stage that currently relies on bounded driver-side collection, especially backbone solve, graph parameter universe collection, hierarchy rollup, and raw-score bridge tables
+- event-to-window and raw-to-window interval joins in [libs/windows/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/windows/pipeline.py), [libs/windows/features.py](/home/jrs/code/S3NTINEL/sentinel/libs/windows/features.py), [libs/anomaly/frames.py](/home/jrs/code/S3NTINEL/sentinel/libs/anomaly/frames.py), and [libs/anomaly/tables.py](/home/jrs/code/S3NTINEL/sentinel/libs/anomaly/tables.py)
+- graph evaluation/reporting if end-to-end runtime matters as much as model-stage asymptotics
+- any stage that currently relies on bounded driver-side collection, especially backbone solve, graph parameter universe collection, hierarchy rollup, phase-label centroid comparison, and raw-score bridge tables

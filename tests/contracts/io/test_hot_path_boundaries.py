@@ -75,6 +75,7 @@ REMOVED_LOCAL_SCORING_SYMBOLS = [
 AUTHORITATIVE_DOC_FILES = [
     "README.md",
     "docs/README.md",
+    "docs/computational_complexity_report.md",
     "libs/README.md",
     "libs/scoring/README.md",
     "libs/graph/README.md",
@@ -165,3 +166,18 @@ def test_authoritative_docs_do_not_describe_removed_local_modeling_paths() -> No
 def test_dead_scoring_config_surface_is_removed() -> None:
     assert "combine_pvalues" not in _read_repo_file("conf/defaults.yaml")
     assert "pvalue_combine" not in _read_repo_file("pipelines/80_window_scores_raw.py")
+
+
+def test_computational_complexity_report_covers_time_and_space_and_current_paths() -> None:
+    content = _read_repo_file("docs/computational_complexity_report.md")
+    assert "time-complexity" in content
+    assert "space-complexity" in content
+    assert "Space / materialization envelope" in content
+    for stale_path in [
+        "libs/scoring/pipeline.py",
+        "libs/conformal/pipeline.py",
+        "libs/anomaly/artifacts.py",
+        "libs/anomaly/subsystem_context.py",
+        "libs/anomaly/panel_context.py",
+    ]:
+        assert stale_path not in content, f"computational complexity report still references stale path: {stale_path}"
