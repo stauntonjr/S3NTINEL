@@ -13,6 +13,9 @@ ANOMALY_WINDOW_ATTRIBUTION_COLUMNS = [
     "p_value",
     "severity",
     "dominant_subsystem_id",
+    "dominant_module_id",
+    "top_subsystem_candidates",
+    "top_module_candidates",
     "dominant_score_component",
     "panel_context",
     "subsystems",
@@ -34,6 +37,9 @@ ANOMALY_TELEMETRY_ATTRIBUTION_COLUMNS = [
     "module_id",
     "window_global_score",
     "severity",
+    "parameter_localization_support",
+    "parameter_support_rank_in_window",
+    "parameter_localization_selected",
     "date_utc",
 ]
 
@@ -75,6 +81,21 @@ def ANOMALY_WINDOW_ATTRIBUTION_SCHEMA():
             T.StructField("top_sensors", T.ArrayType(top_sensor, True), True),
         ]
     )
+    subsystem_candidate = T.StructType(
+        [
+            T.StructField("id", T.StringType(), True),
+            T.StructField("support", T.DoubleType(), True),
+            T.StructField("best_rank", T.IntegerType(), True),
+        ]
+    )
+    module_candidate = T.StructType(
+        [
+            T.StructField("id", T.StringType(), True),
+            T.StructField("subsystem_id", T.StringType(), True),
+            T.StructField("support", T.DoubleType(), True),
+            T.StructField("best_rank", T.IntegerType(), True),
+        ]
+    )
     panel_context = T.StructType(
         [
             T.StructField("text", T.ArrayType(T.StringType(), True), True),
@@ -113,6 +134,9 @@ def ANOMALY_WINDOW_ATTRIBUTION_SCHEMA():
             T.StructField("p_value", T.DoubleType(), True),
             T.StructField("severity", T.StringType(), True),
             T.StructField("dominant_subsystem_id", T.StringType(), True),
+            T.StructField("dominant_module_id", T.StringType(), True),
+            T.StructField("top_subsystem_candidates", T.ArrayType(subsystem_candidate, True), False),
+            T.StructField("top_module_candidates", T.ArrayType(module_candidate, True), False),
             T.StructField("dominant_score_component", T.StringType(), True),
             T.StructField("panel_context", panel_context, False),
             T.StructField("subsystems", T.ArrayType(subsystem, True), False),
@@ -140,6 +164,9 @@ def ANOMALY_TELEMETRY_ATTRIBUTION_SCHEMA():
             T.StructField("module_id", T.StringType(), True),
             T.StructField("window_global_score", T.DoubleType(), True),
             T.StructField("severity", T.StringType(), True),
+            T.StructField("parameter_localization_support", T.DoubleType(), True),
+            T.StructField("parameter_support_rank_in_window", T.IntegerType(), True),
+            T.StructField("parameter_localization_selected", T.BooleanType(), False),
             T.StructField("date_utc", T.DateType(), True),
         ]
     )

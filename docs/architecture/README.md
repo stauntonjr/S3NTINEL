@@ -31,3 +31,4 @@ Notes:
 - LOC is AST span LOC derived from syntax node line ranges.
 - Generated files should be regenerated, not edited manually.
 - The C4 DSL is intended for local preview with the installed Systemticks extension.
+- These generated snapshots can lag behind structural refactors. If a generated artifact disagrees with package READMEs or current code ownership, prefer the package README and regenerate the architecture artifacts before treating the snapshot as authoritative.

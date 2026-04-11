@@ -10,6 +10,9 @@ from libs.phase import build_phase_validation_assignments, validate_detected_pha
 from libs.simulation.report_tables import RunArtifactBundle
 from libs.simulation.reporting import _build_phase_validation_summary
 from libs.scoring import (
+    RECONSTRUCTION_ERROR_CHANNEL,
+    REGIME_DEVIATION_CHANNEL,
+    score_component_scores_with_updates,
     summarize_fault_window_detection,
     summarize_misbehavior_window_detection,
     validate_scores_against_fault_windows,
@@ -652,17 +655,46 @@ def test_anomaly_validator_compares_attribution_to_fault_truth():
     )
     anomaly_window_df = pd.DataFrame.from_records(
         [
-            {"tail_id": "T1", "flight_id": "F1", "win_id": 1, "dominant_subsystem_id": "SUB_AIR_BLEED"},
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 1,
+                "dominant_subsystem_id": "SUB_AIR_BLEED",
+                "dominant_module_id": "MOD_BLEED_SUPPLY",
+                "top_subsystem_candidates": [
+                    {"id": "SUB_AIR_BLEED", "support": 1.0, "best_rank": 1},
+                ],
+                "top_module_candidates": [
+                    {"id": "MOD_BLEED_SUPPLY", "subsystem_id": "SUB_AIR_BLEED", "support": 1.0, "best_rank": 1},
+                ],
+                "dominant_score_component": RECONSTRUCTION_ERROR_CHANNEL,
+            },
         ]
     )
     anomaly_telemetry_df = pd.DataFrame.from_records(
         [
-            {"tail_id": "T1", "flight_id": "F1", "win_id": 1, "parameter_name": "bleed_supply_psi"},
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 1,
+                "parameter_name": "bleed_supply_psi",
+                "parameter_localization_selected": True,
+            },
         ]
     )
     anomaly_event_df = pd.DataFrame.from_records(
         [
             {"tail_id": "T1", "flight_id": "F1", "win_id": 1, "parameter_name": "bleed_supply_psi"},
+        ]
+    )
+    hierarchy_map_df = pd.DataFrame.from_records(
+        [
+            {
+                "parameter_name": "bleed_supply_psi",
+                "system_id": "SYS_AIRFRAME",
+                "subsystem_id": "SUB_AIR_BLEED",
+                "module_id": "MOD_BLEED_SUPPLY",
+            }
         ]
     )
 
@@ -672,6 +704,8 @@ def test_anomaly_validator_compares_attribution_to_fault_truth():
         anomaly_window_attribution_df=anomaly_window_df,
         anomaly_telemetry_attribution_df=anomaly_telemetry_df,
         anomaly_event_attribution_df=anomaly_event_df,
+        hierarchy_sensor_map_df=hierarchy_map_df,
+        hierarchy_label_df=hierarchy_map_df,
     )
     misbehavior_summary = validate_attribution_against_misbehavior_truth(
         raw_telemetry_df=raw_telemetry_df,
@@ -679,17 +713,24 @@ def test_anomaly_validator_compares_attribution_to_fault_truth():
         anomaly_window_attribution_df=anomaly_window_df,
         anomaly_telemetry_attribution_df=anomaly_telemetry_df,
         anomaly_event_attribution_df=anomaly_event_df,
+        hierarchy_sensor_map_df=hierarchy_map_df,
+        hierarchy_label_df=hierarchy_map_df,
     )
 
     assert summary["status"] == "ok"
     assert summary["dominant_subsystem_match_rate"] == 1.0
     assert summary["dominant_subsystem_mappable_rate"] == 1.0
+    assert summary["top_subsystem_candidate_present_rate"] == 1.0
+    assert summary["dominant_module_match_rate"] == 1.0
+    assert summary["dominant_module_mappable_rate"] == 1.0
+    assert summary["top_module_candidate_present_rate"] == 1.0
     assert summary["telemetry_parameter_match_count"] == 1
     assert summary["event_parameter_match_count"] == 1
     assert summary["telemetry_parameter_match_rate"] == 1.0
     assert summary["event_parameter_match_rate"] == 1.0
     assert summary["parameter_localization_validation"]["exact_parameter_match_count_by_source"] == {
         "telemetry": 1,
+        "telemetry_selected": 1,
         "event": 1,
         "any": 1,
         "both": 1,
@@ -701,21 +742,179 @@ def test_anomaly_validator_compares_attribution_to_fault_truth():
             "fault_window_id": "FW1",
             "misbehavior_window_id": "MBW1",
             "subsystem_id": "SUB_AIR_BLEED",
+            "module_id": "MOD_BLEED_SUPPLY",
             "parameter_name": "bleed_supply_psi",
+            "dominant_score_component": RECONSTRUCTION_ERROR_CHANNEL,
             "overlapping_window_count": 1,
             "matched_attribution_window_count": 1,
             "telemetry_parameter_match": True,
+            "telemetry_selected_parameter_match": True,
             "event_parameter_match": True,
             "any_parameter_match": True,
             "both_sources_parameter_match": True,
-            "telemetry_truth_subsystem_present": False,
-            "event_truth_subsystem_present": False,
+            "telemetry_truth_subsystem_present": True,
+            "telemetry_selected_truth_subsystem_present": True,
+            "event_truth_subsystem_present": True,
+            "telemetry_truth_module_present": True,
+            "telemetry_selected_truth_module_present": True,
+            "event_truth_module_present": True,
             "telemetry_attributed_parameter_names": ["bleed_supply_psi"],
+            "telemetry_selected_attributed_parameter_names": ["bleed_supply_psi"],
             "event_attributed_parameter_names": ["bleed_supply_psi"],
         }
     ]
+    assert summary["channel_localization_validation"] == {
+        "status": "ok",
+        "truth_window_count": 1,
+        "truth_window_count_by_score_component": {RECONSTRUCTION_ERROR_CHANNEL: 1},
+        "dominant_subsystem_match_rate_by_score_component": {RECONSTRUCTION_ERROR_CHANNEL: 1.0},
+        "dominant_module_match_rate_by_score_component": {RECONSTRUCTION_ERROR_CHANNEL: 1.0},
+        "top_subsystem_candidate_present_rate_by_score_component": {RECONSTRUCTION_ERROR_CHANNEL: 1.0},
+        "top_module_candidate_present_rate_by_score_component": {RECONSTRUCTION_ERROR_CHANNEL: 1.0},
+        "telemetry_parameter_match_rate_by_score_component": {RECONSTRUCTION_ERROR_CHANNEL: 1.0},
+        "telemetry_selected_parameter_match_rate_by_score_component": {RECONSTRUCTION_ERROR_CHANNEL: 1.0},
+        "event_parameter_match_rate_by_score_component": {RECONSTRUCTION_ERROR_CHANNEL: 1.0},
+        "channel_localization_cases": [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "fault_window_id": "FW1",
+                "misbehavior_window_id": "MBW1",
+                "subsystem_id": "SUB_AIR_BLEED",
+                "module_id": "MOD_BLEED_SUPPLY",
+                "parameter_name": "bleed_supply_psi",
+                "dominant_score_component": RECONSTRUCTION_ERROR_CHANNEL,
+                "dominant_subsystem_match": True,
+                "dominant_subsystem_mappable": True,
+                "dominant_module_match": True,
+                "dominant_module_mappable": True,
+                "top_subsystem_candidate_present": True,
+                "top_module_candidate_present": True,
+                "top_subsystem_candidate_ids_detected": ["SUB_AIR_BLEED"],
+                "top_module_candidate_ids_detected": ["MOD_BLEED_SUPPLY"],
+                "telemetry_parameter_match": True,
+                "telemetry_selected_parameter_match": True,
+                "event_parameter_match": True,
+                "telemetry_selected_attributed_parameter_names": ["bleed_supply_psi"],
+            }
+        ],
+    }
+    assert summary["module_localization_validation"]["dominant_module_match_count"] == 1
+    assert summary["module_localization_validation"]["top_module_candidate_present_count"] == 1
+    assert summary["module_localization_validation"]["truth_module_present_rate_by_source"] == {
+        "telemetry": 1.0,
+        "event": 1.0,
+    }
     assert misbehavior_summary["misbehavior_window_count"] == 1
     assert misbehavior_summary["dominant_subsystem_match_rate"] == 1.0
+    assert misbehavior_summary["dominant_module_match_rate"] == 1.0
+    assert misbehavior_summary["top_subsystem_candidate_present_rate"] == 1.0
+    assert misbehavior_summary["top_module_candidate_present_rate"] == 1.0
+
+
+def test_anomaly_validator_reports_ranked_candidate_presence_when_dominant_winner_is_wrong():
+    raw_telemetry_df = pd.DataFrame.from_records(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "timestamp_utc": _ts(1),
+                "parameter_name": "bleed_supply_psi_aft",
+                "system_id": "SYS_AIRFRAME",
+                "subsystem_id": "SUB_AIR_BLEED_AFT",
+                "module_id": "MOD_BLEED_SUPPLY_AFT",
+                "misbehavior_active": True,
+                "misbehavior_family_label": "saturation",
+                "misbehavior_detail_label": "saturation",
+                "misbehavior_window_id": "MBW1",
+                "fault_active": True,
+                "fault_family_label": "regulated",
+                "fault_type": "saturation",
+                "fault_window_id": "FW1",
+            },
+        ]
+    )
+    windows_df = pd.DataFrame.from_records(
+        [
+            {"tail_id": "T1", "flight_id": "F1", "win_id": 1, "t_start": _ts(1), "t_end": _ts(1)},
+        ]
+    )
+    anomaly_window_df = pd.DataFrame.from_records(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 1,
+                "dominant_subsystem_id": "SUB_AIR_BLEED_FORWARD",
+                "dominant_module_id": "MOD_BLEED_SUPPLY",
+                "top_subsystem_candidates": [
+                    {"id": "SUB_AIR_BLEED_FORWARD", "support": 0.6, "best_rank": 1},
+                    {"id": "SUB_AIR_BLEED_AFT", "support": 0.55, "best_rank": 2},
+                ],
+                "top_module_candidates": [
+                    {"id": "MOD_BLEED_SUPPLY", "subsystem_id": "SUB_AIR_BLEED_FORWARD", "support": 0.6, "best_rank": 1},
+                    {"id": "MOD_BLEED_SUPPLY_AFT", "subsystem_id": "SUB_AIR_BLEED_AFT", "support": 0.55, "best_rank": 2},
+                ],
+                "dominant_score_component": RECONSTRUCTION_ERROR_CHANNEL,
+            },
+        ]
+    )
+    anomaly_telemetry_df = pd.DataFrame.from_records(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 1,
+                "parameter_name": "bleed_supply_psi",
+                "parameter_localization_selected": True,
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 1,
+                "parameter_name": "bleed_supply_psi_aft",
+                "parameter_localization_selected": True,
+            },
+        ]
+    )
+    anomaly_event_df = pd.DataFrame.from_records([])
+    hierarchy_map_df = pd.DataFrame.from_records(
+        [
+            {
+                "parameter_name": "bleed_supply_psi",
+                "system_id": "SYS_AIRFRAME",
+                "subsystem_id": "SUB_AIR_BLEED_FORWARD",
+                "module_id": "MOD_BLEED_SUPPLY",
+            },
+            {
+                "parameter_name": "bleed_supply_psi_aft",
+                "system_id": "SYS_AIRFRAME",
+                "subsystem_id": "SUB_AIR_BLEED_AFT",
+                "module_id": "MOD_BLEED_SUPPLY_AFT",
+            },
+        ]
+    )
+
+    summary = validate_attribution_against_misbehavior_truth(
+        raw_telemetry_df=raw_telemetry_df,
+        windows_df=windows_df,
+        anomaly_window_attribution_df=anomaly_window_df,
+        anomaly_telemetry_attribution_df=anomaly_telemetry_df,
+        anomaly_event_attribution_df=anomaly_event_df,
+        hierarchy_sensor_map_df=hierarchy_map_df,
+        hierarchy_label_df=hierarchy_map_df,
+    )
+
+    assert summary["dominant_subsystem_match_rate"] == 0.0
+    assert summary["top_subsystem_candidate_present_rate"] == 1.0
+    assert summary["dominant_module_match_rate"] == 0.0
+    assert summary["top_module_candidate_present_rate"] == 1.0
+    assert summary["channel_localization_validation"]["top_subsystem_candidate_present_rate_by_score_component"] == {
+        RECONSTRUCTION_ERROR_CHANNEL: 1.0
+    }
+    assert summary["channel_localization_validation"]["top_module_candidate_present_rate_by_score_component"] == {
+        RECONSTRUCTION_ERROR_CHANNEL: 1.0
+    }
 
 
 def test_score_validator_reports_raw_calibrated_and_emission_diagnostics():
@@ -808,7 +1007,12 @@ def test_score_validator_reports_raw_calibrated_and_emission_diagnostics():
                 "global_score": 12.0,
                 "severity": "high",
                 "dominant_subsystem_id": "SUB_AIR_BLEED",
-                "dominant_score_component": "reconstruction",
+                "dominant_score_component": RECONSTRUCTION_ERROR_CHANNEL,
+                "score_component_scores": score_component_scores_with_updates(
+                    {
+                        RECONSTRUCTION_ERROR_CHANNEL: 12.0,
+                    }
+                ),
             },
             {
                 "tail_id": "T1",
@@ -822,7 +1026,12 @@ def test_score_validator_reports_raw_calibrated_and_emission_diagnostics():
                 "global_score": 6.0,
                 "severity": "medium",
                 "dominant_subsystem_id": "SUB_AIR_BLEED",
-                "dominant_score_component": "structure",
+                "dominant_score_component": REGIME_DEVIATION_CHANNEL,
+                "score_component_scores": score_component_scores_with_updates(
+                    {
+                        REGIME_DEVIATION_CHANNEL: 6.0,
+                    }
+                ),
             },
             {
                 "tail_id": "T1",
@@ -836,7 +1045,12 @@ def test_score_validator_reports_raw_calibrated_and_emission_diagnostics():
                 "global_score": 0.1,
                 "severity": "normal",
                 "dominant_subsystem_id": "SUB_AIR_BLEED",
-                "dominant_score_component": "structure",
+                "dominant_score_component": REGIME_DEVIATION_CHANNEL,
+                "score_component_scores": score_component_scores_with_updates(
+                    {
+                        REGIME_DEVIATION_CHANNEL: 0.1,
+                    }
+                ),
             },
         ]
     )
@@ -890,6 +1104,7 @@ def test_score_validator_reports_raw_calibrated_and_emission_diagnostics():
     }
     assert summary["raw_score_validation"]["truth_window_recall_by_top_k_raw_score"]["any_overlap"]["top_1"] == 1.0
     assert summary["raw_score_validation"]["truth_window_recall_by_top_k_raw_score"]["strict_overlap"]["top_1"] == 1.0
+    assert "channel_validation" in summary["raw_score_validation"]
     assert summary["calibrated_score_validation"]["truth_window_recall_by_top_k_calibrated_rarity"]["any_overlap"][
         "top_1"
     ] == 1.0
@@ -975,7 +1190,13 @@ def test_anomaly_validator_credits_short_contained_window_alignment():
     )
     anomaly_window_df = pd.DataFrame.from_records(
         [
-            {"tail_id": "T1", "flight_id": "F1", "win_id": 5, "dominant_subsystem_id": "SUB_AIR_BLEED"},
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 5,
+                "dominant_subsystem_id": "SUB_AIR_BLEED",
+                "dominant_module_id": "MOD_BLEED_SUPPLY",
+            },
         ]
     )
     anomaly_telemetry_df = pd.DataFrame.from_records(
@@ -1126,3 +1347,4 @@ def test_attribution_validator_uses_earliest_qualifying_window_only():
     assert summary["telemetry_parameter_match_rate"] == 1.0
     assert summary["event_parameter_match_rate"] == 1.0
     assert summary["parameter_localization_validation"]["exact_parameter_match_count_by_source"]["both"] == 1
+    assert summary["parameter_localization_validation"]["exact_parameter_match_count_by_source"]["telemetry_selected"] == 0

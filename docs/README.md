@@ -37,3 +37,5 @@ Useful starting points:
 Notes:
 - These docs preserve conceptual material even where the code-level READMEs are now the primary implementation guide.
 - If a conceptual doc and a package README disagree on current implementation ownership, prefer the package README.
+- Production modeling semantics live in the canonical Spark `Table` / `Frame` owners; local pandas code is limited to bounded validation/reporting/evaluation and final test assertions.
+- `docs/architecture/` is a generated snapshot subtree. If it lags behind current code ownership, treat it as stale until regenerated and prefer the package READMEs plus current code.

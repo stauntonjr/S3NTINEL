@@ -1,0 +1,4 @@
+interface:
+  display_name: "Refactor Reporting"
+  short_description: "Refine report, summary, and manifest code"
+  default_prompt: "Use $refactor-reporting to refine this report, summary, manifest, or run-output code with precise naming and thin orchestration, while following the repository's general design rules."

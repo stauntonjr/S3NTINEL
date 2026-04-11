@@ -30,10 +30,17 @@ class AnomalyWindowAttributionTable(Table):
         phase_windows_df: "DataFrame",
         windows_df: "DataFrame",
         attribution_context_df: "DataFrame",
+        localization_targets_df: "DataFrame | None" = None,
     ) -> "AnomalyWindowAttributionTable":
         from pyspark.sql import functions as F
 
         empty_sensor_scores = F.expr("cast(map() as map<string,double>)")
+        empty_top_subsystem_candidates = F.expr(
+            "cast(array() as array<struct<id:string,support:double,best_rank:int>>)"
+        )
+        empty_top_module_candidates = F.expr(
+            "cast(array() as array<struct<id:string,subsystem_id:string,support:double,best_rank:int>>)"
+        )
         null_panel_context = F.lit(None).cast(
             "struct<text:array<string>,message_codes:array<string>,source:array<string>>"
         )
@@ -44,6 +51,12 @@ class AnomalyWindowAttributionTable(Table):
             .join(attribution_context_df.alias("a"), on=["tail_id", "flight_id", "win_id", "date_utc"], how="left")
             .where(F.col("c.emit_ready") == F.lit(True))
         )
+        if localization_targets_df is not None:
+            base = base.join(
+                localization_targets_df.alias("l"),
+                on=["tail_id", "flight_id", "win_id", "date_utc"],
+                how="left",
+            )
         return cls(
             dataframe=base.select(
                 F.col("c.tail_id").alias("tail_id"),
@@ -59,7 +72,33 @@ class AnomalyWindowAttributionTable(Table):
                 F.col("c.global_score").cast("double").alias("global_score"),
                 F.col("c.p_value").cast("double").alias("p_value"),
                 F.col("c.severity").alias("severity"),
-                F.col("c.dominant_subsystem_id").alias("dominant_subsystem_id"),
+                (
+                    F.coalesce(F.col("l.dominant_subsystem_id"), F.col("c.dominant_subsystem_id"))
+                    if localization_targets_df is not None
+                    else F.col("c.dominant_subsystem_id")
+                ).alias("dominant_subsystem_id"),
+                (
+                    F.coalesce(
+                        F.col("l.dominant_module_id"),
+                        F.col("c.dominant_module_id") if "dominant_module_id" in calibrated_df.columns else F.lit(None).cast("string"),
+                    )
+                    if localization_targets_df is not None
+                    else (
+                        F.col("c.dominant_module_id")
+                        if "dominant_module_id" in calibrated_df.columns
+                        else F.lit(None).cast("string")
+                    )
+                ).alias("dominant_module_id"),
+                (
+                    F.coalesce(F.col("l.top_subsystem_candidates"), empty_top_subsystem_candidates)
+                    if localization_targets_df is not None
+                    else empty_top_subsystem_candidates
+                ).alias("top_subsystem_candidates"),
+                (
+                    F.coalesce(F.col("l.top_module_candidates"), empty_top_module_candidates)
+                    if localization_targets_df is not None
+                    else empty_top_module_candidates
+                ).alias("top_module_candidates"),
                 F.col("c.dominant_score_component").alias("dominant_score_component"),
                 F.coalesce(F.col("a.panel_context"), null_panel_context).alias("panel_context"),
                 F.expr(
@@ -70,9 +109,9 @@ class AnomalyWindowAttributionTable(Table):
                         'id', x.key,
                         'name', x.key,
                         'score', cast(x.value as double),
-                        'score_component_contrib', map(
-                            'structure', cast(coalesce(c.score_component_scores['structure'], 0D) * x.value as double),
-                            'reconstruction', cast(coalesce(c.score_component_scores['reconstruction'], 0D) * x.value as double)
+                        'score_component_contrib', transform_values(
+                            coalesce(c.score_component_scores, cast(map() as map<string,double>)),
+                            (k, v) -> cast(coalesce(v, 0D) * x.value as double)
                         ),
                         'top_sensors', coalesce(
                             element_at(a.top_sensors_by_subsystem, x.key),
@@ -114,6 +153,7 @@ class AnomalyTelemetryAttributionTable(Table):
         windows_df: "DataFrame",
         raw_df: "DataFrame",
         hierarchy_sensor_map_df: "DataFrame",
+        parameter_localization_df: "DataFrame | None" = None,
     ) -> "AnomalyTelemetryAttributionTable":
         from pyspark.sql import functions as F
 
@@ -122,37 +162,64 @@ class AnomalyTelemetryAttributionTable(Table):
             if "parameter_datatype_label" in raw_df.columns
             else F.lit(None).cast("string")
         )
+        base = (
+            calibrated_df.alias("c")
+            .where(F.col("emit_ready") == F.lit(True))
+            .join(windows_df.alias("w"), on=["tail_id", "flight_id", "win_id", "date_utc"], how="inner")
+            .join(
+                raw_df.alias("r"),
+                on=(
+                    (F.col("c.tail_id") == F.col("r.tail_id"))
+                    & (F.col("c.flight_id") == F.col("r.flight_id"))
+                    & (F.col("r.timestamp_utc") >= F.col("w.t_start"))
+                    & (F.col("r.timestamp_utc") <= F.col("w.t_end"))
+                ),
+                how="inner",
+            )
+            .join(hierarchy_sensor_map_df.alias("h"), on=F.col("r.parameter_name") == F.col("h.parameter_name"), how="left")
+        )
+        if parameter_localization_df is not None:
+            base = base.join(
+                parameter_localization_df.alias("l"),
+                on=(
+                    (F.col("c.tail_id") == F.col("l.tail_id"))
+                    & (F.col("c.flight_id") == F.col("l.flight_id"))
+                    & (F.col("c.win_id") == F.col("l.win_id"))
+                    & (F.col("c.date_utc") == F.col("l.date_utc"))
+                    & (F.col("r.parameter_name") == F.col("l.parameter_name"))
+                ),
+                how="left",
+            )
         return cls(
-            dataframe=(
-                calibrated_df.alias("c")
-                .where(F.col("emit_ready") == F.lit(True))
-                .join(windows_df.alias("w"), on=["tail_id", "flight_id", "win_id", "date_utc"], how="inner")
-                .join(
-                    raw_df.alias("r"),
-                    on=(
-                        (F.col("c.tail_id") == F.col("r.tail_id"))
-                        & (F.col("c.flight_id") == F.col("r.flight_id"))
-                        & (F.col("r.timestamp_utc") >= F.col("w.t_start"))
-                        & (F.col("r.timestamp_utc") <= F.col("w.t_end"))
-                    ),
-                    how="inner",
-                )
-                .join(hierarchy_sensor_map_df.alias("h"), on=F.col("r.parameter_name") == F.col("h.parameter_name"), how="left")
-                .select(
-                    F.col("c.tail_id").alias("tail_id"),
-                    F.col("c.flight_id").alias("flight_id"),
-                    F.col("c.win_id").alias("win_id"),
-                    F.col("r.timestamp_utc").alias("timestamp_utc"),
-                    F.col("r.parameter_name").alias("parameter_name"),
-                    F.col("r.parameter_value").alias("parameter_value"),
-                    datatype_col.alias("parameter_datatype_label"),
-                    F.col("h.system_id").alias("system_id"),
-                    F.col("h.subsystem_id").alias("subsystem_id"),
-                    F.col("h.module_id").alias("module_id"),
-                    F.col("c.global_score").cast("double").alias("window_global_score"),
-                    F.col("c.severity").alias("severity"),
-                    F.col("c.date_utc").alias("date_utc"),
-                )
+            dataframe=base.select(
+                F.col("c.tail_id").alias("tail_id"),
+                F.col("c.flight_id").alias("flight_id"),
+                F.col("c.win_id").alias("win_id"),
+                F.col("r.timestamp_utc").alias("timestamp_utc"),
+                F.col("r.parameter_name").alias("parameter_name"),
+                F.col("r.parameter_value").alias("parameter_value"),
+                datatype_col.alias("parameter_datatype_label"),
+                F.col("h.system_id").alias("system_id"),
+                F.col("h.subsystem_id").alias("subsystem_id"),
+                F.col("h.module_id").alias("module_id"),
+                F.col("c.global_score").cast("double").alias("window_global_score"),
+                F.col("c.severity").alias("severity"),
+                (
+                    F.col("l.parameter_localization_support").cast("double")
+                    if parameter_localization_df is not None
+                    else F.lit(None).cast("double")
+                ).alias("parameter_localization_support"),
+                (
+                    F.col("l.parameter_support_rank_in_window").cast("int")
+                    if parameter_localization_df is not None
+                    else F.lit(None).cast("int")
+                ).alias("parameter_support_rank_in_window"),
+                (
+                    F.col("l.parameter_name").isNotNull()
+                    if parameter_localization_df is not None
+                    else F.lit(False)
+                ).alias("parameter_localization_selected"),
+                F.col("c.date_utc").alias("date_utc"),
             )
         )
 

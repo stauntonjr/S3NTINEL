@@ -7,6 +7,45 @@ from typing import TYPE_CHECKING
 
 from libs.perf.annotations import hot_path
 from libs.pyspark import Frame
+from libs.scoring.channels import (
+    BOUND_VIOLATION_CHANNEL,
+    COHERENCE_BREAK_CHANNEL,
+    EVENT_DISCORDANCE_CHANNEL,
+    RECONSTRUCTION_ERROR_CHANNEL,
+    REGIME_DEVIATION_CHANNEL,
+    RESPONSE_VIOLATION_CHANNEL,
+    STATE_VIOLATION_CHANNEL,
+)
+
+ANOMALY_LOCALIZATION_PARAMETER_TOP_K = 3
+ANOMALY_LOCALIZATION_TARGET_TOP_K = 3
+
+
+def _component_score_expr(component_scores_col: str, channel_name: str) -> "Column":
+    from pyspark.sql import functions as F
+
+    return F.coalesce(F.element_at(F.col(component_scores_col), F.lit(channel_name)), F.lit(0.0)).cast("double")
+
+
+def _log_component_weight_expr(component_scores_col: str, channel_name: str) -> "Column":
+    from pyspark.sql import functions as F
+
+    component_mass_cols = [
+        F.log1p(_component_score_expr(component_scores_col, REGIME_DEVIATION_CHANNEL)),
+        F.log1p(_component_score_expr(component_scores_col, RECONSTRUCTION_ERROR_CHANNEL)),
+        F.log1p(_component_score_expr(component_scores_col, EVENT_DISCORDANCE_CHANNEL)),
+        F.log1p(_component_score_expr(component_scores_col, BOUND_VIOLATION_CHANNEL)),
+        F.log1p(_component_score_expr(component_scores_col, RESPONSE_VIOLATION_CHANNEL)),
+        F.log1p(_component_score_expr(component_scores_col, STATE_VIOLATION_CHANNEL)),
+        F.log1p(_component_score_expr(component_scores_col, COHERENCE_BREAK_CHANNEL)),
+    ]
+    component_mass_total = component_mass_cols[0]
+    for component_mass_col in component_mass_cols[1:]:
+        component_mass_total = component_mass_total + component_mass_col
+    return F.when(
+        component_mass_total > F.lit(0.0),
+        F.log1p(_component_score_expr(component_scores_col, channel_name)) / component_mass_total,
+    ).otherwise(F.lit(0.0)).cast("double")
 
 
 def mapped_events_in_supported_windows(
@@ -333,6 +372,509 @@ class AnomalyPanelContextFrame(Frame):
                     F.array_sort(F.array_distinct(F.expr("transform(ordered_items, x -> x.source_name)"))).alias("source"),
                 ).alias("panel_context"),
             )
+        )
+
+
+@dataclass(frozen=True)
+class AnomalyParameterLocalizationFrame(Frame):
+    def _module_support_df(self) -> "DataFrame":
+        from pyspark.sql import functions as F
+
+        support_df = self.to_dataframe()
+        return support_df.groupBy(
+            "tail_id",
+            "flight_id",
+            "win_id",
+            "date_utc",
+            "subsystem_id",
+            "module_id",
+        ).agg(
+            F.sum("parameter_localization_support").cast("double").alias("module_support"),
+            F.sum(
+                F.col("parameter_localization_support")
+                / F.greatest(F.col("parameter_support_rank_in_window").cast("double"), F.lit(1.0))
+            )
+            .cast("double")
+            .alias("module_rank_weighted_support"),
+            F.max("parameter_localization_support").cast("double").alias("module_peak_support"),
+            F.min("parameter_support_rank_in_window").cast("int").alias("module_best_rank"),
+        )
+
+    @classmethod
+    @hot_path
+    def from_calibrated_phase_windows_events_and_hierarchy(
+        cls,
+        *,
+        calibrated_df: "DataFrame",
+        phase_windows_df: "DataFrame",
+        events_df: "DataFrame",
+        hierarchy_sensor_map_df: "DataFrame",
+        top_k_per_window: int = ANOMALY_LOCALIZATION_PARAMETER_TOP_K,
+    ) -> "AnomalyParameterLocalizationFrame":
+        from pyspark.sql import functions as F
+        from pyspark.sql.window import Window
+
+        empty_double_map = F.expr("cast(map() as map<string,double>)")
+        required_phase_window_cols = {"t_start", "t_end", "backbone_residual_by_parameter"}
+        if not required_phase_window_cols.issubset(set(phase_windows_df.columns)):
+            return cls(
+                dataframe=calibrated_df.select("tail_id", "flight_id", "win_id", "date_utc")
+                .where(F.lit(False))
+                .select(
+                    "tail_id",
+                    "flight_id",
+                    "win_id",
+                    "date_utc",
+                    F.lit(None).cast("string").alias("parameter_name"),
+                    F.lit(None).cast("string").alias("system_id"),
+                    F.lit(None).cast("string").alias("subsystem_id"),
+                    F.lit(None).cast("string").alias("module_id"),
+                    F.lit(None).cast("double").alias("parameter_localization_support"),
+                    F.lit(None).cast("int").alias("parameter_support_rank_in_window"),
+                )
+            )
+        emitted_score_context_df = calibrated_df.where(F.col("emit_ready") == F.lit(True)).groupBy(
+            "tail_id",
+            "flight_id",
+            "win_id",
+            "date_utc",
+        ).agg(
+            F.first(F.coalesce(F.col("score_component_scores"), empty_double_map), ignorenulls=True).alias(
+                "score_component_scores"
+            ),
+            F.first(F.col("dominant_score_component").cast("string"), ignorenulls=True).alias("dominant_score_component"),
+        )
+        emitted_phase_windows_df = emitted_score_context_df.join(
+            phase_windows_df.select(
+                "tail_id",
+                "flight_id",
+                "win_id",
+                "date_utc",
+                "t_start",
+                "t_end",
+                (
+                    F.coalesce(
+                        F.col("duration_ms").cast("long"),
+                        (F.unix_millis("t_end") - F.unix_millis("t_start")).cast("long"),
+                    )
+                ).alias("duration_ms"),
+                "backbone_residual_by_parameter",
+            ),
+            on=["tail_id", "flight_id", "win_id", "date_utc"],
+            how="inner",
+        )
+        hierarchy_localization_df = (
+            hierarchy_sensor_map_df.select(
+                F.col("parameter_name").cast("string").alias("parameter_name"),
+                F.col("system_id").cast("string").alias("system_id"),
+                F.col("subsystem_id").cast("string").alias("subsystem_id"),
+                F.coalesce(F.col("module_id").cast("string"), F.col("parameter_name").cast("string")).alias("module_id"),
+            )
+            .where(F.col("parameter_name").isNotNull() & F.col("subsystem_id").isNotNull())
+            .dropDuplicates(["parameter_name"])
+        )
+        module_size_df = hierarchy_localization_df.groupBy("subsystem_id", "module_id").agg(
+            F.countDistinct("parameter_name").cast("double").alias("module_parameter_count")
+        )
+        parameter_event_counts_df = (
+            mapped_events_in_supported_windows(
+                events_df=events_df,
+                windows_df=emitted_phase_windows_df.select(
+                    "tail_id",
+                    "flight_id",
+                    "win_id",
+                    "date_utc",
+                    "t_start",
+                    "t_end",
+                    "duration_ms",
+                ),
+                hierarchy_sensor_map_df=hierarchy_sensor_map_df,
+            )
+            .groupBy("tail_id", "flight_id", "win_id", "date_utc", "parameter_name")
+            .agg(
+                F.count("*").cast("double").alias("event_support_count"),
+                F.sum(
+                    F.when(
+                        F.col("event_type_detected").isin("threshold", "drift_guard"),
+                        F.lit(1.0),
+                    ).otherwise(F.lit(0.0))
+                )
+                .cast("double")
+                .alias("bound_event_count"),
+                F.sum(
+                    F.when(
+                        F.col("event_type_detected").isin(
+                            "threshold",
+                            "slope_pos",
+                            "slope_neg",
+                            "switch",
+                            "extrema",
+                            "oscillation",
+                            "drift_guard",
+                        ),
+                        F.lit(1.0),
+                    ).otherwise(F.lit(0.0))
+                )
+                .cast("double")
+                .alias("response_event_count"),
+                F.sum(
+                    F.when(
+                        F.col("event_type_detected").isin(
+                            "state_enter",
+                            "state_exit",
+                            "dropped",
+                            "dwell_bucket",
+                            "transition",
+                            "dwell_violation",
+                            "illegal_transition",
+                            "dwell_guard",
+                        ),
+                        F.lit(1.0),
+                    ).otherwise(F.lit(0.0))
+                )
+                .cast("double")
+                .alias("state_event_count"),
+            )
+        )
+        residual_rows_df = (
+            emitted_phase_windows_df.select(
+                "tail_id",
+                "flight_id",
+                "win_id",
+                "date_utc",
+                F.explode_outer(
+                    F.map_entries(
+                        F.coalesce(F.col("backbone_residual_by_parameter"), empty_double_map)
+                    )
+                ).alias("residual_entry"),
+            )
+            .select(
+                "tail_id",
+                "flight_id",
+                "win_id",
+                "date_utc",
+                F.col("residual_entry.key").cast("string").alias("parameter_name"),
+                F.abs(F.col("residual_entry.value").cast("double")).alias("residual_weight"),
+            )
+            .where(F.col("parameter_name").isNotNull() & (F.col("residual_weight") > F.lit(0.0)))
+        )
+        residual_totals_df = residual_rows_df.groupBy("tail_id", "flight_id", "win_id", "date_utc").agg(
+            F.sum("residual_weight").cast("double").alias("residual_total_weight")
+        )
+        candidate_parameter_df = (
+            residual_rows_df.select("tail_id", "flight_id", "win_id", "date_utc", "parameter_name")
+            .unionByName(parameter_event_counts_df.select("tail_id", "flight_id", "win_id", "date_utc", "parameter_name"))
+            .dropDuplicates(["tail_id", "flight_id", "win_id", "date_utc", "parameter_name"])
+        )
+        event_totals_df = parameter_event_counts_df.groupBy("tail_id", "flight_id", "win_id", "date_utc").agg(
+            F.sum("event_support_count").cast("double").alias("window_event_support_total"),
+            F.sum("bound_event_count").cast("double").alias("window_bound_event_total"),
+            F.sum("response_event_count").cast("double").alias("window_response_event_total"),
+            F.sum("state_event_count").cast("double").alias("window_state_event_total"),
+        )
+        parameter_support_df = (
+            candidate_parameter_df.join(
+                emitted_phase_windows_df.select(
+                    "tail_id",
+                    "flight_id",
+                    "win_id",
+                    "date_utc",
+                    "score_component_scores",
+                    "dominant_score_component",
+                ),
+                on=["tail_id", "flight_id", "win_id", "date_utc"],
+                how="inner",
+            )
+            .join(
+                residual_rows_df,
+                on=["tail_id", "flight_id", "win_id", "date_utc", "parameter_name"],
+                how="left",
+            )
+            .join(
+                residual_totals_df,
+                on=["tail_id", "flight_id", "win_id", "date_utc"],
+                how="left",
+            )
+            .join(F.broadcast(hierarchy_localization_df), on="parameter_name", how="left")
+            .where(F.col("subsystem_id").isNotNull())
+            .join(F.broadcast(module_size_df), on=["subsystem_id", "module_id"], how="left")
+            .join(
+                parameter_event_counts_df,
+                on=["tail_id", "flight_id", "win_id", "date_utc", "parameter_name"],
+                how="left",
+            )
+            .join(
+                event_totals_df,
+                on=["tail_id", "flight_id", "win_id", "date_utc"],
+                how="left",
+            )
+            .withColumn(
+                "residual_share",
+                F.coalesce(F.col("residual_weight"), F.lit(0.0))
+                / F.greatest(F.coalesce(F.col("residual_total_weight"), F.lit(0.0)), F.lit(1e-12)),
+            )
+            .withColumn(
+                "localized_residual_support",
+                (
+                    F.col("residual_share")
+                    / F.sqrt(F.greatest(F.coalesce(F.col("module_parameter_count"), F.lit(1.0)), F.lit(1.0)))
+                ).cast("double"),
+            )
+            .withColumn(
+                "localized_reconstruction_support",
+                F.col("localized_residual_support"),
+            )
+            .withColumn(
+                "event_support_share",
+                F.coalesce(F.col("event_support_count"), F.lit(0.0))
+                / F.greatest(F.coalesce(F.col("window_event_support_total"), F.lit(0.0)), F.lit(1e-12)),
+            )
+            .withColumn(
+                "bound_support_share",
+                F.coalesce(F.col("bound_event_count"), F.lit(0.0))
+                / F.greatest(F.coalesce(F.col("window_bound_event_total"), F.lit(0.0)), F.lit(1e-12)),
+            )
+            .withColumn(
+                "response_support_share",
+                F.coalesce(F.col("response_event_count"), F.lit(0.0))
+                / F.greatest(F.coalesce(F.col("window_response_event_total"), F.lit(0.0)), F.lit(1e-12)),
+            )
+            .withColumn(
+                "state_support_share",
+                F.coalesce(F.col("state_event_count"), F.lit(0.0))
+                / F.greatest(F.coalesce(F.col("window_state_event_total"), F.lit(0.0)), F.lit(1e-12)),
+            )
+            .withColumn("regime_weight", _log_component_weight_expr("score_component_scores", REGIME_DEVIATION_CHANNEL))
+            .withColumn(
+                "reconstruction_weight",
+                _log_component_weight_expr("score_component_scores", RECONSTRUCTION_ERROR_CHANNEL),
+            )
+            .withColumn("event_weight", _log_component_weight_expr("score_component_scores", EVENT_DISCORDANCE_CHANNEL))
+            .withColumn("bound_weight", _log_component_weight_expr("score_component_scores", BOUND_VIOLATION_CHANNEL))
+            .withColumn(
+                "response_weight",
+                _log_component_weight_expr("score_component_scores", RESPONSE_VIOLATION_CHANNEL),
+            )
+            .withColumn("state_weight", _log_component_weight_expr("score_component_scores", STATE_VIOLATION_CHANNEL))
+            .withColumn("coherence_weight", _log_component_weight_expr("score_component_scores", COHERENCE_BREAK_CHANNEL))
+            .withColumn(
+                "normalized_event_support",
+                F.col("event_support_share")
+                / F.sqrt(F.greatest(F.coalesce(F.col("module_parameter_count"), F.lit(1.0)), F.lit(1.0))),
+            )
+            .withColumn(
+                "normalized_bound_support",
+                F.col("bound_support_share")
+                / F.sqrt(F.greatest(F.coalesce(F.col("module_parameter_count"), F.lit(1.0)), F.lit(1.0))),
+            )
+            .withColumn(
+                "normalized_response_support",
+                F.col("response_support_share")
+                / F.sqrt(F.greatest(F.coalesce(F.col("module_parameter_count"), F.lit(1.0)), F.lit(1.0))),
+            )
+            .withColumn(
+                "normalized_state_support",
+                F.col("state_support_share")
+                / F.sqrt(F.greatest(F.coalesce(F.col("module_parameter_count"), F.lit(1.0)), F.lit(1.0))),
+            )
+            .withColumn(
+                "localized_reconstruction_support",
+                F.col("localized_residual_support"),
+            )
+            .withColumn(
+                "parameter_localization_support",
+                (
+                    F.col("localized_residual_support") * (F.col("regime_weight") + F.col("coherence_weight"))
+                    + F.col("localized_reconstruction_support") * F.col("reconstruction_weight")
+                    + F.col("normalized_event_support") * F.col("event_weight")
+                    + F.col("normalized_bound_support") * F.col("bound_weight")
+                    + F.col("normalized_response_support") * F.col("response_weight")
+                    + F.col("normalized_state_support") * F.col("state_weight")
+                ).cast("double"),
+            )
+        )
+        module_support_df = parameter_support_df.groupBy(
+            "tail_id",
+            "flight_id",
+            "win_id",
+            "date_utc",
+            "subsystem_id",
+            "module_id",
+        ).agg(
+            F.sqrt(F.sum(F.pow(F.col("parameter_localization_support"), F.lit(2.0)))).cast("double").alias("module_support"),
+            F.sum("parameter_localization_support").cast("double").alias("module_total_support"),
+            F.max("parameter_localization_support").cast("double").alias("module_peak_support"),
+        )
+        module_support_totals_df = module_support_df.groupBy("tail_id", "flight_id", "win_id", "date_utc").agg(
+            F.sum("module_support").cast("double").alias("module_support_total")
+        )
+        parameter_support_df = (
+            parameter_support_df.join(
+                module_support_df,
+                on=["tail_id", "flight_id", "win_id", "date_utc", "subsystem_id", "module_id"],
+                how="left",
+            )
+            .join(
+                module_support_totals_df,
+                on=["tail_id", "flight_id", "win_id", "date_utc"],
+                how="left",
+            )
+            .withColumn(
+                "module_support_share",
+                F.coalesce(F.col("module_support"), F.lit(0.0))
+                / F.greatest(F.coalesce(F.col("module_support_total"), F.lit(0.0)), F.lit(1e-12)),
+            )
+            .withColumn(
+                "parameter_localization_support",
+                (
+                    F.col("parameter_localization_support")
+                    * (F.lit(1.0) + F.coalesce(F.col("module_support_share"), F.lit(0.0)))
+                ).cast("double"),
+            )
+        )
+        support_rank_window = Window.partitionBy("tail_id", "flight_id", "win_id", "date_utc").orderBy(
+            F.col("parameter_localization_support").desc(),
+            F.col("module_support_share").desc(),
+            F.col("state_support_share").desc(),
+            F.col("response_support_share").desc(),
+            F.col("event_support_share").desc(),
+            F.col("residual_share").desc(),
+            F.col("parameter_name").asc(),
+        )
+        return cls(
+            dataframe=(
+                parameter_support_df.withColumn("parameter_support_rank_in_window", F.row_number().over(support_rank_window))
+                .where(F.col("parameter_support_rank_in_window") <= F.lit(max(int(top_k_per_window), 1)))
+                .select(
+                    "tail_id",
+                    "flight_id",
+                    "win_id",
+                    "date_utc",
+                    "parameter_name",
+                    "system_id",
+                    "subsystem_id",
+                    "module_id",
+                    "parameter_localization_support",
+                    "parameter_support_rank_in_window",
+                )
+            )
+        )
+
+    @hot_path
+    def localized_targets_df(self, *, top_k_per_window: int = ANOMALY_LOCALIZATION_TARGET_TOP_K) -> "DataFrame":
+        from pyspark.sql import functions as F
+        from pyspark.sql.window import Window
+
+        module_support_df = self._module_support_df()
+        subsystem_rank_window = Window.partitionBy("tail_id", "flight_id", "win_id", "date_utc").orderBy(
+            F.col("subsystem_best_module_support").desc(),
+            F.col("subsystem_rank_weighted_support").desc(),
+            F.col("subsystem_peak_support").desc(),
+            F.col("subsystem_best_rank").asc(),
+            F.col("subsystem_id").asc(),
+        )
+        subsystem_candidates_df = (
+            module_support_df.groupBy("tail_id", "flight_id", "win_id", "date_utc", "subsystem_id")
+            .agg(
+                F.max("module_rank_weighted_support").cast("double").alias("subsystem_best_module_support"),
+                F.sum("module_rank_weighted_support").cast("double").alias("subsystem_rank_weighted_support"),
+                F.max("module_peak_support").cast("double").alias("subsystem_peak_support"),
+                F.min("module_best_rank").cast("int").alias("subsystem_best_rank"),
+            )
+            .withColumn("rn", F.row_number().over(subsystem_rank_window))
+            .where(F.col("rn") <= F.lit(max(int(top_k_per_window), 1)))
+            .groupBy("tail_id", "flight_id", "win_id", "date_utc")
+            .agg(
+                F.expr(
+                    """
+                    transform(
+                      sort_array(
+                        collect_list(
+                          named_struct(
+                            'rank_position', rn,
+                            'id', subsystem_id,
+                            'support', subsystem_rank_weighted_support,
+                            'best_rank', subsystem_best_rank
+                          )
+                        )
+                      ),
+                      x -> named_struct(
+                        'id', x.id,
+                        'support', cast(x.support as double),
+                        'best_rank', cast(x.best_rank as int)
+                      )
+                    )
+                    """
+                ).alias("top_subsystem_candidates")
+            )
+            .select(
+                "tail_id",
+                "flight_id",
+                "win_id",
+                "date_utc",
+                F.element_at(F.col("top_subsystem_candidates"), F.lit(1)).getField("id").alias("dominant_subsystem_id"),
+                "top_subsystem_candidates",
+            )
+        )
+        module_rank_window = Window.partitionBy("tail_id", "flight_id", "win_id", "date_utc").orderBy(
+            F.col("module_rank_weighted_support").desc(),
+            F.col("module_peak_support").desc(),
+            F.col("module_best_rank").asc(),
+            F.col("module_id").asc(),
+        )
+        module_candidates_df = (
+            module_support_df.withColumn("rn", F.row_number().over(module_rank_window))
+            .where(F.col("rn") <= F.lit(max(int(top_k_per_window), 1)))
+            .groupBy("tail_id", "flight_id", "win_id", "date_utc")
+            .agg(
+                F.expr(
+                    """
+                    transform(
+                      sort_array(
+                        collect_list(
+                          named_struct(
+                            'rank_position', rn,
+                            'id', module_id,
+                            'subsystem_id', subsystem_id,
+                            'support', module_rank_weighted_support,
+                            'best_rank', module_best_rank
+                          )
+                        )
+                      ),
+                      x -> named_struct(
+                        'id', x.id,
+                        'subsystem_id', x.subsystem_id,
+                        'support', cast(x.support as double),
+                        'best_rank', cast(x.best_rank as int)
+                      )
+                    )
+                    """
+                ).alias("top_module_candidates")
+            )
+            .select(
+                "tail_id",
+                "flight_id",
+                "win_id",
+                "date_utc",
+                F.element_at(F.col("top_module_candidates"), F.lit(1)).getField("id").alias("dominant_module_id"),
+                "top_module_candidates",
+            )
+        )
+        return subsystem_candidates_df.join(
+            module_candidates_df,
+            on=["tail_id", "flight_id", "win_id", "date_utc"],
+            how="outer",
+        )
+
+    @hot_path
+    def dominant_targets_df(self) -> "DataFrame":
+        return self.localized_targets_df(top_k_per_window=1).select(
+            "tail_id",
+            "flight_id",
+            "win_id",
+            "date_utc",
+            "dominant_subsystem_id",
+            "dominant_module_id",
         )
 
 

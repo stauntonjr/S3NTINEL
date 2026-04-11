@@ -91,8 +91,8 @@ graph:
 
 hierarchy:
   top_k_per_parameter_name: 3
-  subsystem_min_edge_weight: 0.8
-  system_min_edge_weight: 0.6
+  subsystem_min_edge_weight: null
+  system_min_edge_weight: null
 
 phase:
   phase_count: 4
@@ -118,7 +118,6 @@ scoring:
     - jaccard
     - chi2
     - emd
-  combine_pvalues: cauchy
   block_weight_init: uniform
   max_bridge_reference_rows: 10000
 

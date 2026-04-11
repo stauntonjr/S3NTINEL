@@ -18,6 +18,7 @@ from pipelines.common import build_stage_runtime
 
 
 LOGGER = get_logger(__name__)
+_SCORE_ARTIFACT_PARTITION_BY: tuple[str, ...] = ()
 
 
 @track_mlflow_run(stage_name="85_window_scores_calibrate", logger=LOGGER)
@@ -38,12 +39,18 @@ def run() -> None:
     calibrated = WindowScoresCalibratedTable.from_scores(scores.to_dataframe(), min_warm=min_warm).bind(
         path=window_scores_calibrated_path,
         format=table_format,
-        partition_by=tuple(context.config["output"]["partition_by"]),
+        partition_by=_SCORE_ARTIFACT_PARTITION_BY,
     )
     calibrated.write(mode=write_mode)
     scores_df = scores.to_dataframe()
-    calibrated_df = calibrated.to_dataframe()
     scores_count = int(scores_df.count())
+    calibrated = WindowScoresCalibratedTable.read(
+        spark,
+        window_scores_calibrated_path,
+        format=table_format,
+        partition_by=_SCORE_ARTIFACT_PARTITION_BY,
+    )
+    calibrated_df = calibrated.to_dataframe()
     calibrated_count = int(calibrated_df.count())
 
     log_params_if_active({"min_warm": min_warm})
@@ -55,7 +62,7 @@ def run() -> None:
             "table_format": table_format,
             "write_mode": write_mode,
             "min_warm": min_warm,
-            "partition_by": list(context.config["output"]["partition_by"]),
+            "partition_by": list(_SCORE_ARTIFACT_PARTITION_BY),
         },
         runtime.report_paths.summary_artifact_path,
     )

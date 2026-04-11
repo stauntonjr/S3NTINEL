@@ -191,6 +191,7 @@ class WindowScoreRow(TypedDict, total=False):
     p_value: float | None
     severity: str
     dominant_subsystem_id: str | None
+    dominant_module_id: str | None
     dominant_score_component: str
     subsystem_scores: SubsystemScoreById
     score_component_scores: ScoreComponentByName

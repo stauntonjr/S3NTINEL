@@ -11,13 +11,9 @@ It does not own:
 
 ## How To Use
 
-- Use the graph nouns for in-memory reasoning where they still exist:
-  - `PrecisionGraph`
-  - `EventGraph`
-  - `FusedGraph`
-  - `GraphHierarchy`
-- Use `libs/graph/pipeline.py` as the canonical Spark implementation surface for graph fitting stages.
+- Use Spark `Table` / `Frame` owners plus `libs/graph/pipeline.py` as the canonical production modeling path.
 - Use `build_graph_components_with_diagnostics_spark_table(...)` during development when you need explicit per-component timings and row counts.
+- Treat any remaining local graph objects as bounded evaluation internals, not alternate production APIs or test oracles.
 
 ## Contents
 
@@ -27,7 +23,7 @@ It does not own:
 - `lag.py`
   - lag-band specs, multi-band lag profile construction, and collapse to legacy lag graph
 - `hierarchy_artifacts.py`
-  - first-class graph objects and hierarchy logic
+  - hierarchy rollup over fused graph evidence
 - `data.py`
   - graph data preparation helpers
 - `transition.py`
@@ -36,6 +32,8 @@ It does not own:
   - graph and hierarchy validation
 - `pipeline.py`
   - canonical Spark graph builders and diagnostics
+- `evaluation.py`
+  - bounded local analysis over persisted graph outputs
 
 ## Model / Concepts
 
@@ -68,8 +66,8 @@ This package turns local telemetry relationships into structural models that sup
 
 ## Testing / Validation
 
-- unit tests cover remaining graph objects and hierarchy behavior
-- integration tests cover Spark graph semantics, stage 50, and hierarchy validation
+- unit and integration tests target the Spark graph builders plus bounded evaluation consumers
+- tests do not use local graph builders as production-model oracles
 - hierarchy validation reports include:
   - exact match by system/subsystem/module
   - pairwise same-cluster precision/recall/F1
@@ -79,3 +77,4 @@ This package turns local telemetry relationships into structural models that sup
 
 - `pipeline.py` is the canonical implementation surface for stage-50 graph orchestration.
 - `lag.py` owns the first-class multi-band lag profile builder; `transition.py` owns immediate transition semantics.
+- `hierarchy_artifacts.py` still performs a bounded local clustering step inside the canonical hierarchy path; there is no second production hierarchy builder.

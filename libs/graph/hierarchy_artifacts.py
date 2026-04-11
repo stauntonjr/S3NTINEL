@@ -18,24 +18,126 @@ class HierarchySpec:
 
 
 @dataclass(frozen=True)
+class ModuleCompatibilityProfile:
+    datatype: str | None = None
+    behavior_family: str | None = None
+
+
+def _module_affinity_weight(row: dict[str, object]) -> float:
+    precision_weight = float(row.get("precision_weight", 0.0) or 0.0)
+    lag_weight = float(row.get("lag_weight", 0.0) or 0.0)
+    event_weight = float(row.get("event_weight", 0.0) or 0.0)
+    if precision_weight <= 0.0 and lag_weight <= 0.0 and event_weight <= 0.0:
+        return float(row.get("fused_weight", 0.0) or 0.0)
+    return precision_weight + (0.5 * lag_weight) + (0.25 * event_weight)
+
+
+def _normalized_datatype(value: object) -> str | None:
+    datatype = str(value or "").strip().lower()
+    if not datatype:
+        return None
+    if datatype == "constant":
+        return "numeric"
+    return datatype
+
+
+def _normalized_behavior_family(value: object) -> str | None:
+    family = str(value or "").strip().lower()
+    if not family or family == "mixed_unknown":
+        return None
+    return family
+
+
+def _module_compatibility_by_parameter(
+    *,
+    parameter_names: list[str],
+    datatype_profile_df: pd.DataFrame | None,
+    behavior_profile_df: pd.DataFrame | None,
+) -> dict[str, ModuleCompatibilityProfile]:
+    parameter_set = {str(item) for item in parameter_names if str(item)}
+    compatibility: dict[str, ModuleCompatibilityProfile] = {
+        parameter_name: ModuleCompatibilityProfile()
+        for parameter_name in sorted(parameter_set)
+    }
+    if datatype_profile_df is not None and not datatype_profile_df.empty:
+        for row in datatype_profile_df[["parameter_name", "parameter_datatype_profiled"]].dropna(
+            subset=["parameter_name"]
+        ).to_dict(orient="records"):
+            parameter_name = str(row["parameter_name"])
+            if parameter_name not in parameter_set:
+                continue
+            compatibility[parameter_name] = ModuleCompatibilityProfile(
+                datatype=_normalized_datatype(row.get("parameter_datatype_profiled")),
+                behavior_family=compatibility[parameter_name].behavior_family,
+            )
+    if behavior_profile_df is not None and not behavior_profile_df.empty:
+        for row in behavior_profile_df[["parameter_name", "behavior_family_profiled"]].dropna(
+            subset=["parameter_name"]
+        ).to_dict(orient="records"):
+            parameter_name = str(row["parameter_name"])
+            if parameter_name not in parameter_set:
+                continue
+            compatibility[parameter_name] = ModuleCompatibilityProfile(
+                datatype=compatibility[parameter_name].datatype,
+                behavior_family=_normalized_behavior_family(row.get("behavior_family_profiled")),
+            )
+    return compatibility
+
+
+def _module_edge_is_compatible(
+    left_parameter: str,
+    right_parameter: str,
+    *,
+    compatibility_by_parameter: dict[str, ModuleCompatibilityProfile],
+) -> bool:
+    left = compatibility_by_parameter.get(str(left_parameter))
+    right = compatibility_by_parameter.get(str(right_parameter))
+    if left is None or right is None:
+        return True
+    if left.datatype and right.datatype and left.datatype != right.datatype:
+        return False
+    if left.behavior_family and right.behavior_family and left.behavior_family != right.behavior_family:
+        return False
+    return True
+
+
+@dataclass(frozen=True)
 class GraphHierarchy:
     spec: HierarchySpec
     rows: pd.DataFrame
 
     @classmethod
-    def from_fused(cls, fused_df: pd.DataFrame, parameter_names: list[str], *, spec: HierarchySpec) -> GraphHierarchy:
+    def from_fused(
+        cls,
+        fused_df: pd.DataFrame,
+        parameter_names: list[str],
+        *,
+        spec: HierarchySpec,
+        datatype_profile_df: pd.DataFrame | None = None,
+        behavior_profile_df: pd.DataFrame | None = None,
+    ) -> GraphHierarchy:
         ranked_neighbors: defaultdict[str, list[tuple[float, str]]] = defaultdict(list)
         filtered_rows: list[dict[str, object]] = []
         parameter_set = {str(item) for item in parameter_names}
+        compatibility_by_parameter = _module_compatibility_by_parameter(
+            parameter_names=list(parameter_set),
+            datatype_profile_df=datatype_profile_df,
+            behavior_profile_df=behavior_profile_df,
+        )
         for row in fused_df.to_dict(orient="records"):
-            weight = float(row.get("fused_weight", 0.0) or 0.0)
+            weight = _module_affinity_weight(row)
             if weight < float(spec.min_edge_weight):
                 continue
             a = str(row.get("parameter_name_u", ""))
             b = str(row.get("parameter_name_v", ""))
             if not a or not b or a not in parameter_set or b not in parameter_set:
                 continue
-            filtered_rows.append(row)
+            filtered_rows.append(
+                {
+                    **row,
+                    "module_affinity_weight": float(weight),
+                }
+            )
             ranked_neighbors[a].append((weight, b))
             ranked_neighbors[b].append((weight, a))
 
@@ -48,8 +150,12 @@ class GraphHierarchy:
         for row in filtered_rows:
             a = str(row["parameter_name_u"])
             b = str(row["parameter_name_v"])
-            if b in keep_neighbors.get(a, set()) and a in keep_neighbors.get(b, set()):
-                retained_edges.append((a, b, float(row["fused_weight"])))
+            if (
+                b in keep_neighbors.get(a, set())
+                and a in keep_neighbors.get(b, set())
+                and _module_edge_is_compatible(a, b, compatibility_by_parameter=compatibility_by_parameter)
+            ):
+                retained_edges.append((a, b, float(row["module_affinity_weight"])))
         rollup_edges = [
             (str(row["parameter_name_u"]), str(row["parameter_name_v"]), float(row["fused_weight"]))
             for row in filtered_rows
@@ -84,6 +190,8 @@ class GraphHierarchy:
         *,
         parameter_names: list[str],
         spec: HierarchySpec,
+        datatype_profile_df: "DataFrame | None" = None,
+        behavior_profile_df: "DataFrame | None" = None,
     ) -> GraphHierarchy:
         from pyspark.sql import Window
         from pyspark.sql import functions as F
@@ -94,11 +202,38 @@ class GraphHierarchy:
             return cls(spec=spec, rows=cls.empty_rows())
         parameter_names_sorted = sorted(parameter_set)
         spark = fused_df.sparkSession
+        compatibility_by_parameter = _module_compatibility_by_parameter(
+            parameter_names=parameter_names_sorted,
+            datatype_profile_df=(
+                None
+                if datatype_profile_df is None
+                else datatype_profile_df.select("parameter_name", "parameter_datatype_profiled")
+                .where(F.col("parameter_name").isin(parameter_names_sorted))
+                .toPandas()
+            ),
+            behavior_profile_df=(
+                None
+                if behavior_profile_df is None
+                else behavior_profile_df.select("parameter_name", "behavior_family_profiled")
+                .where(F.col("parameter_name").isin(parameter_names_sorted))
+                .toPandas()
+            ),
+        )
 
-        filtered = fused_df.where(F.col("fused_weight") >= F.lit(float(spec.min_edge_weight))).select(
+        filtered = fused_df.select(
             F.col("parameter_name_u").cast("string").alias("parameter_name_u"),
             F.col("parameter_name_v").cast("string").alias("parameter_name_v"),
+            F.col("precision_weight").cast("double").alias("precision_weight"),
+            F.col("event_weight").cast("double").alias("event_weight"),
+            F.col("lag_weight").cast("double").alias("lag_weight"),
             F.col("fused_weight").cast("double").alias("fused_weight"),
+            (
+                F.coalesce(F.col("precision_weight").cast("double"), F.lit(0.0))
+                + (F.lit(0.5) * F.coalesce(F.col("lag_weight").cast("double"), F.lit(0.0)))
+                + (F.lit(0.25) * F.coalesce(F.col("event_weight").cast("double"), F.lit(0.0)))
+            ).cast("double").alias("module_affinity_weight"),
+        ).where(
+            F.col("module_affinity_weight") >= F.lit(float(spec.min_edge_weight))
         ).where(
             F.col("parameter_name_u").isin(parameter_names_sorted)
             & F.col("parameter_name_v").isin(parameter_names_sorted)
@@ -132,6 +267,7 @@ class GraphHierarchy:
             "parameter_name_u",
             "parameter_name_v",
             "fused_weight",
+            "module_affinity_weight",
             F.least("parameter_name_u", "parameter_name_v").alias("parameter_name_min"),
             F.greatest("parameter_name_u", "parameter_name_v").alias("parameter_name_max"),
         )
@@ -141,6 +277,7 @@ class GraphHierarchy:
             "parameter_name_min",
             "parameter_name_max",
             "fused_weight",
+            "module_affinity_weight",
         ).unionByName(
             edges.select(
                 F.col("parameter_name_v").alias("parameter_name"),
@@ -148,10 +285,11 @@ class GraphHierarchy:
                 "parameter_name_min",
                 "parameter_name_max",
                 "fused_weight",
+                "module_affinity_weight",
             )
         )
         rank_window = Window.partitionBy("parameter_name").orderBy(
-            F.col("fused_weight").desc(),
+            F.col("module_affinity_weight").desc(),
             F.col("parameter_name_min"),
             F.col("parameter_name_max"),
         )
@@ -170,7 +308,7 @@ class GraphHierarchy:
 
         retained_rows = (
             edges.join(mutual_pairs, on=["parameter_name_min", "parameter_name_max"], how="inner")
-            .select("parameter_name_u", "parameter_name_v", "fused_weight")
+            .select("parameter_name_u", "parameter_name_v", "module_affinity_weight")
             .limit(max_rollup_edge_universe + 1)
             .collect()
         )
@@ -180,8 +318,13 @@ class GraphHierarchy:
                 f"edge count exceeds S3NTINEL_MAX_HIERARCHY_ROLLUP_EDGE_UNIVERSE={max_rollup_edge_universe}."
             )
         retained_edges = [
-            (str(row["parameter_name_u"]), str(row["parameter_name_v"]), float(row["fused_weight"]))
+            (str(row["parameter_name_u"]), str(row["parameter_name_v"]), float(row["module_affinity_weight"]))
             for row in retained_rows
+            if _module_edge_is_compatible(
+                str(row["parameter_name_u"]),
+                str(row["parameter_name_v"]),
+                compatibility_by_parameter=compatibility_by_parameter,
+            )
         ]
         module_groups = _connected_components_from_edges(
             parameter_names_sorted,

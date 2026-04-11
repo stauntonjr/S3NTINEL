@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pandas as pd
+from libs.scoring.channels import SCORE_COMPONENT_NAMES, score_component_scores_with_updates
 
 STRICT_WINDOW_COVERAGE_MIN_RATIO = 0.5
 # Backward-compatible alias retained for generated-doc references that import this name.
@@ -68,6 +69,12 @@ def _non_empty_strings(values: pd.Series) -> list[str]:
         return []
     cleaned = values.fillna("").astype(str)
     return sorted({value for value in cleaned if value})
+
+
+def _score_component_map(value: Any) -> dict[str, float]:
+    if isinstance(value, dict):
+        return score_component_scores_with_updates(value)
+    return score_component_scores_with_updates()
 
 
 def extract_misbehavior_truth_windows(raw_telemetry_df: pd.DataFrame) -> pd.DataFrame:
@@ -222,6 +229,7 @@ def _merge_scored_windows(
                 "distance_to_centroid_detected",
                 "dominant_subsystem_id",
                 "dominant_score_component",
+                "score_component_scores",
             )
             if column in raw_scores.columns
         ]
@@ -270,6 +278,14 @@ def _merge_scored_windows(
     merged["p_value"] = _float_series(merged, "p_value")
     merged["severity"] = _text_series(merged, "severity_calibrated", "severity_raw")
     merged["emit_ready"] = _bool_series(merged, "emit_ready")
+    if "dominant_score_component" not in merged.columns:
+        merged["dominant_score_component"] = ""
+    else:
+        merged["dominant_score_component"] = merged["dominant_score_component"].fillna("").astype(str)
+    if "score_component_scores" not in merged.columns:
+        merged["score_component_scores"] = [score_component_scores_with_updates()] * len(merged)
+    else:
+        merged["score_component_scores"] = merged["score_component_scores"].apply(_score_component_map)
     return merged
 
 
@@ -384,6 +400,33 @@ def _severity_distribution_by_overlap_bucket(scored_windows_df: pd.DataFrame) ->
             str(label): int(count)
             for label, count in subset["severity"].fillna("normal").astype(str).value_counts(dropna=False).sort_index().items()
         }
+    return distributions
+
+
+def _channel_score_distribution_by_overlap_bucket(
+    scored_windows_df: pd.DataFrame,
+) -> dict[str, dict[str, dict[str, Any]]]:
+    distributions: dict[str, dict[str, dict[str, Any]]] = {}
+    component_maps = scored_windows_df.get("score_component_scores")
+    if component_maps is None:
+        component_maps = pd.Series([score_component_scores_with_updates()] * len(scored_windows_df), index=scored_windows_df.index)
+    normalized_maps = component_maps.apply(_score_component_map)
+    for channel_name in SCORE_COMPONENT_NAMES:
+        channel_scores = normalized_maps.apply(lambda value: float(value.get(channel_name, 0.0) or 0.0))
+        channel_df = scored_windows_df.assign(_channel_score=channel_scores)
+        distributions[channel_name] = _score_distribution_by_overlap_bucket(
+            scored_windows_df=channel_df,
+            value_field="_channel_score",
+        )
+    return distributions
+
+
+def _dominant_channel_count_by_overlap_bucket(scored_windows_df: pd.DataFrame) -> dict[str, dict[str, int]]:
+    distributions: dict[str, dict[str, int]] = {}
+    for bucket in ("strict_overlap", "soft_overlap", "no_overlap"):
+        subset = scored_windows_df[scored_windows_df["truth_overlap_bucket"] == bucket]
+        counts = subset["dominant_score_component"].fillna("").astype(str).value_counts(dropna=False).sort_index()
+        distributions[bucket] = {str(label): int(count) for label, count in counts.items() if str(label)}
     return distributions
 
 
@@ -525,6 +568,7 @@ def _build_score_window_diagnostics(scored_windows_df: pd.DataFrame) -> list[dic
                 "emit_ready": False if pd.isna(row.get("emit_ready")) else bool(row.get("emit_ready", False)),
                 "dominant_score_component": str(row.get("dominant_score_component", "") or ""),
                 "dominant_subsystem_id": str(row.get("dominant_subsystem_id", "") or ""),
+                "score_component_scores": _score_component_map(row.get("score_component_scores")),
                 "truth_overlap_bucket": str(row.get("truth_overlap_bucket", "no_overlap")),
                 "overlapping_truth_window_count": int(row.get("overlapping_truth_window_count", 0) or 0),
                 "strict_overlapping_truth_window_count": int(row.get("strict_overlapping_truth_window_count", 0) or 0),
@@ -563,6 +607,10 @@ def _build_raw_score_validation_summary(
             sort_field="global_score_raw",
             ascending=False,
         ),
+        "channel_validation": {
+            "score_distribution_by_truth_overlap_bucket": _channel_score_distribution_by_overlap_bucket(scored_windows_df),
+            "dominant_channel_count_by_truth_overlap_bucket": _dominant_channel_count_by_overlap_bucket(scored_windows_df),
+        },
     }
 
 

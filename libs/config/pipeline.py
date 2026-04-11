@@ -568,15 +568,13 @@ def load_pipeline_context_settings(config: dict[str, Any]) -> PipelineContextSet
                 "S3NTINEL_V2_HIERARCHY_TOP_K_PER_SENSOR",
                 _config_int(config, ["hierarchy", "top_k_per_parameter_name"], 3),
             ),
-            subsystem_min_edge_weight=(
-                None
-                if os.getenv("S3NTINEL_V2_HIERARCHY_SUBSYSTEM_MIN_EDGE_WEIGHT") in (None, "")
-                else _env_float("S3NTINEL_V2_HIERARCHY_SUBSYSTEM_MIN_EDGE_WEIGHT", 0.0)
+            subsystem_min_edge_weight=_env_optional_float(
+                "S3NTINEL_V2_HIERARCHY_SUBSYSTEM_MIN_EDGE_WEIGHT",
+                _config_optional_float(config, ["hierarchy", "subsystem_min_edge_weight"], None),
             ),
-            system_min_edge_weight=(
-                None
-                if os.getenv("S3NTINEL_V2_HIERARCHY_SYSTEM_MIN_EDGE_WEIGHT") in (None, "")
-                else _env_float("S3NTINEL_V2_HIERARCHY_SYSTEM_MIN_EDGE_WEIGHT", 0.0)
+            system_min_edge_weight=_env_optional_float(
+                "S3NTINEL_V2_HIERARCHY_SYSTEM_MIN_EDGE_WEIGHT",
+                _config_optional_float(config, ["hierarchy", "system_min_edge_weight"], None),
             ),
         ),
         phase=PhaseSettings(

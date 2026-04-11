@@ -3,6 +3,7 @@
 from libs.anomaly.frames import (
     AnomalyAttributionContextFrame,
     AnomalyPanelContextFrame,
+    AnomalyParameterLocalizationFrame,
     AnomalySubsystemContextFrame,
 )
 from libs.anomaly.pipeline import AnomalyArtifactSet, AnomalyAttributionPlan
@@ -22,6 +23,7 @@ __all__ = [
     "AnomalyAttributionContextFrame",
     "AnomalyEventAttributionTable",
     "AnomalyPanelContextFrame",
+    "AnomalyParameterLocalizationFrame",
     "AnomalySubsystemContextFrame",
     "AnomalyTelemetryAttributionTable",
     "AnomalyWindowAttributionTable",

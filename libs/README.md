@@ -16,6 +16,8 @@ Those live under [`pipelines/`](./../pipelines/README.md), [`scripts/`](./../scr
 - Import domain logic from the owning package.
 - Prefer package README files before drilling into individual modules.
 - Treat Spark-facing `pipeline.py` modules as adapter layers unless the package README says otherwise.
+- Keep production modeling semantics in the canonical Spark `Table` / `Frame` owners used by the stage entrypoints.
+- Use local pandas materialization only for bounded reporting, validation, evaluation, plotting, and final test assertions.
 
 ## Library Split
 

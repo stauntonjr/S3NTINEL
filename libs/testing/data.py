@@ -5,6 +5,12 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+from libs.scoring.channels import (
+    RECONSTRUCTION_ERROR_CHANNEL,
+    REGIME_DEVIATION_CHANNEL,
+    score_component_scores_with_updates,
+)
+
 
 def _base_time() -> datetime:
     return datetime(2026, 2, 28, 0, 0, 0)
@@ -261,9 +267,14 @@ def create_sample_scores_df(spark: "SparkSession") -> "DataFrame":
             "p_value": 0.65,
             "severity": "low",
             "dominant_subsystem_id": "",
-            "dominant_score_component": "structure",
+            "dominant_score_component": REGIME_DEVIATION_CHANNEL,
             "subsystem_scores": {"SUBSYS_0001": 0.8, "SUBSYS_0002": 0.2},
-            "score_component_scores": {"structure": 1.1, "reconstruction": 0.8},
+            "score_component_scores": score_component_scores_with_updates(
+                {
+                    REGIME_DEVIATION_CHANNEL: 1.1,
+                    RECONSTRUCTION_ERROR_CHANNEL: 0.8,
+                }
+            ),
             "date_utc": base.date(),
         },
         {
@@ -280,9 +291,14 @@ def create_sample_scores_df(spark: "SparkSession") -> "DataFrame":
             "p_value": 0.22,
             "severity": "medium",
             "dominant_subsystem_id": "",
-            "dominant_score_component": "reconstruction",
+            "dominant_score_component": RECONSTRUCTION_ERROR_CHANNEL,
             "subsystem_scores": {"SUBSYS_0002": 0.7, "SUBSYS_0001": 0.3},
-            "score_component_scores": {"structure": 2.1, "reconstruction": 3.0},
+            "score_component_scores": score_component_scores_with_updates(
+                {
+                    REGIME_DEVIATION_CHANNEL: 2.1,
+                    RECONSTRUCTION_ERROR_CHANNEL: 3.0,
+                }
+            ),
             "date_utc": base.date(),
         },
     ]
@@ -306,9 +322,14 @@ def create_sample_calibrated_df(spark: "SparkSession") -> "DataFrame":
             "p_value": 0.60,
             "severity": "low",
             "dominant_subsystem_id": "",
-            "dominant_score_component": "structure",
+            "dominant_score_component": REGIME_DEVIATION_CHANNEL,
             "subsystem_scores": {"SUBSYS_0001": 0.8, "SUBSYS_0002": 0.2},
-            "score_component_scores": {"structure": 1.1, "reconstruction": 0.8},
+            "score_component_scores": score_component_scores_with_updates(
+                {
+                    REGIME_DEVIATION_CHANNEL: 1.1,
+                    RECONSTRUCTION_ERROR_CHANNEL: 0.8,
+                }
+            ),
             "warm": True,
             "emit_ready": True,
             "min_warm": 1,
@@ -328,9 +349,14 @@ def create_sample_calibrated_df(spark: "SparkSession") -> "DataFrame":
             "p_value": 0.20,
             "severity": "medium",
             "dominant_subsystem_id": "",
-            "dominant_score_component": "reconstruction",
+            "dominant_score_component": RECONSTRUCTION_ERROR_CHANNEL,
             "subsystem_scores": {"SUBSYS_0002": 0.7, "SUBSYS_0001": 0.3},
-            "score_component_scores": {"structure": 2.1, "reconstruction": 3.0},
+            "score_component_scores": score_component_scores_with_updates(
+                {
+                    REGIME_DEVIATION_CHANNEL: 2.1,
+                    RECONSTRUCTION_ERROR_CHANNEL: 3.0,
+                }
+            ),
             "warm": True,
             "emit_ready": True,
             "min_warm": 1,

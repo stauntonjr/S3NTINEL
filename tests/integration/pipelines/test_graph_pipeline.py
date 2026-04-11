@@ -19,7 +19,6 @@ from libs.graph import (
     PrecisionGraphTable,
     TransitionGraphTable,
 )
-from libs.graph.precision import PrecisionGraph, PrecisionGraphSpec
 from libs.graph.evaluation import build_graph_stage_evaluation_report_spark
 from libs.graph.hierarchy_artifacts import HierarchySpec
 from libs.testing.data import create_sample_events_df, create_sample_raw_table_df, create_sample_windows_df
@@ -310,7 +309,7 @@ def test_build_precision_graph_from_window_features_spark_table_produces_expecte
     assert spark_precision_df.count() >= 0
 
 
-def test_build_precision_graph_accepts_parquet_style_map_values(spark):
+def test_build_precision_graph_accepts_window_x_map_values(spark):
     rows = [
         {
             "tail_id": "T001",
@@ -320,12 +319,19 @@ def test_build_precision_graph_accepts_parquet_style_map_values(spark):
             "t_end": datetime(2026, 3, 1, 0, 0, 5, tzinfo=timezone.utc),
             "duration_ms": 5000,
             "sensor_count": 2,
-            "continuous_vector_t_end": [("s1", 1.0), ("s2", 2.0)],
-            "continuous_vector_t_end_scaled": [("s1", 1.0), ("s2", 2.0)],
-            "categorical_state_t_end": [],
-            "event_type_counts": [],
+            "event_count": 0,
+            "continuous_vector_t_end": {"s1": 1.0, "s2": 2.0},
+            "continuous_vector_t_end_scaled": {"s1": 1.0, "s2": 2.0},
+            "continuous_vector_t_start": {},
+            "continuous_vector_t_start_scaled": {},
+            "categorical_state_t_start": {},
+            "categorical_state_t_end": {},
+            "event_type_counts": {},
             "continuous_event_summary": {
+                "slope_run_count_by_parameter": {},
+                "slope_signed_impulse_by_parameter": {},
                 "slope_abs_impulse_by_parameter": {},
+                "slope_peak_abs_delta_by_parameter": {},
                 "switch_count_by_parameter": {},
                 "threshold_count_by_parameter": {},
                 "oscillation_count_by_parameter": {},
@@ -333,9 +339,8 @@ def test_build_precision_graph_accepts_parquet_style_map_values(spark):
                 "slope_reinforcement_count_by_parameter": {},
             },
             "drift_magnitude_profiled": 0.0,
-            "zoh_snapshot": [],
-            "zoh_version": 1,
             "date_utc": datetime(2026, 3, 1, tzinfo=timezone.utc).date(),
+            "phase_label": None,
         },
         {
             "tail_id": "T001",
@@ -345,12 +350,19 @@ def test_build_precision_graph_accepts_parquet_style_map_values(spark):
             "t_end": datetime(2026, 3, 1, 0, 0, 10, tzinfo=timezone.utc),
             "duration_ms": 5000,
             "sensor_count": 2,
-            "continuous_vector_t_end": [("s1", 2.0), ("s2", 1.0)],
-            "continuous_vector_t_end_scaled": [("s1", 2.0), ("s2", 1.0)],
-            "categorical_state_t_end": [],
-            "event_type_counts": [],
+            "event_count": 0,
+            "continuous_vector_t_end": {"s1": 2.0, "s2": 1.0},
+            "continuous_vector_t_end_scaled": {"s1": 2.0, "s2": 1.0},
+            "continuous_vector_t_start": {},
+            "continuous_vector_t_start_scaled": {},
+            "categorical_state_t_start": {},
+            "categorical_state_t_end": {},
+            "event_type_counts": {},
             "continuous_event_summary": {
+                "slope_run_count_by_parameter": {},
+                "slope_signed_impulse_by_parameter": {},
                 "slope_abs_impulse_by_parameter": {},
+                "slope_peak_abs_delta_by_parameter": {},
                 "switch_count_by_parameter": {},
                 "threshold_count_by_parameter": {},
                 "oscillation_count_by_parameter": {},
@@ -358,50 +370,19 @@ def test_build_precision_graph_accepts_parquet_style_map_values(spark):
                 "slope_reinforcement_count_by_parameter": {},
             },
             "drift_magnitude_profiled": 0.0,
-            "zoh_snapshot": [],
-            "zoh_version": 1,
             "date_utc": datetime(2026, 3, 1, tzinfo=timezone.utc).date(),
+            "phase_label": None,
         },
     ]
 
     spark_precision_df = PrecisionGraphTable.from_window_features(
-        spark.createDataFrame(pandas_records_for_spark(rows), schema=WINDOW_X_SCHEMA()),
+        spark.createDataFrame(pandas_records_for_spark(pd.DataFrame(rows)), schema=WINDOW_X_SCHEMA()),
         selected_sensors=["s1", "s2"],
         ridge_lambda=1.0,
         min_abs_partial_corr=0.0,
     ).to_dataframe()
 
     assert spark_precision_df.count() == 1
-
-
-def test_precision_graph_pandas_builder_accepts_list_tuple_maps():
-    window_features_df = pd.DataFrame(
-        pandas_records_for_spark(
-            [
-                {
-                    "tail_id": "T001",
-                    "flight_id": "F001",
-                    "win_id": 1,
-                    "t_end": datetime(2026, 3, 1, 0, 0, 5, tzinfo=timezone.utc),
-                    "continuous_vector_t_end_scaled": [("s1", 1.0), ("s2", 2.0)],
-                },
-                {
-                    "tail_id": "T001",
-                    "flight_id": "F001",
-                    "win_id": 2,
-                    "t_end": datetime(2026, 3, 1, 0, 0, 10, tzinfo=timezone.utc),
-                    "continuous_vector_t_end_scaled": [("s1", 2.0), ("s2", 1.0)],
-                },
-            ]
-        )
-    )
-
-    graph = PrecisionGraph.from_window_features(
-        window_features_df,
-        spec=PrecisionGraphSpec(selected_sensors=("s1", "s2"), ridge_lambda=1.0, min_abs_partial_corr=0.0),
-    )
-
-    assert len(graph.edges) == 1
 
 
 def test_graph_window_features_fixture_keeps_event_type_counts(spark):
@@ -780,3 +761,88 @@ def test_hierarchy_assignment_respects_explicit_weight_thresholds():
 
     assert permissive["B"]["subsystem_id"] == permissive["C"]["subsystem_id"]
     assert strict["B"]["subsystem_id"] != strict["C"]["subsystem_id"]
+
+
+def test_hierarchy_assignment_splits_modules_on_profile_incompatibility():
+    from libs.graph.pipeline import _assign_hierarchy
+
+    fused_df = pd.DataFrame(
+        [
+            {"parameter_name_u": "A", "parameter_name_v": "B", "fused_weight": 0.95},
+            {"parameter_name_u": "B", "parameter_name_v": "C", "fused_weight": 0.92},
+            {"parameter_name_u": "A", "parameter_name_v": "C", "fused_weight": 0.90},
+        ]
+    )
+    datatype_profile_df = pd.DataFrame(
+        [
+            {"parameter_name": "A", "parameter_datatype_profiled": "numeric"},
+            {"parameter_name": "B", "parameter_datatype_profiled": "numeric"},
+            {"parameter_name": "C", "parameter_datatype_profiled": "numeric"},
+        ]
+    )
+    behavior_profile_df = pd.DataFrame(
+        [
+            {"parameter_name": "A", "behavior_family_profiled": "regulated"},
+            {"parameter_name": "B", "behavior_family_profiled": "regulated"},
+            {"parameter_name": "C", "behavior_family_profiled": "discrete_state"},
+        ]
+    )
+
+    hierarchy_df = _assign_hierarchy(
+        fused_df,
+        ["A", "B", "C"],
+        min_edge_weight=0.8,
+        top_k_per_parameter_name=2,
+        subsystem_min_edge_weight=0.3,
+        datatype_profile_df=datatype_profile_df,
+        behavior_profile_df=behavior_profile_df,
+    )
+    by_parameter = {row["parameter_name"]: row for row in hierarchy_df.to_dict(orient="records")}
+
+    assert by_parameter["A"]["module_id"] == by_parameter["B"]["module_id"]
+    assert by_parameter["C"]["module_id"] != by_parameter["A"]["module_id"]
+    assert by_parameter["C"]["subsystem_id"] == by_parameter["A"]["subsystem_id"]
+
+
+def test_hierarchy_assignment_discounts_broad_event_only_edges_for_modules():
+    from libs.graph.pipeline import _assign_hierarchy
+
+    fused_df = pd.DataFrame(
+        [
+            {
+                "parameter_name_u": "A",
+                "parameter_name_v": "B",
+                "precision_weight": 0.2,
+                "event_weight": 0.0,
+                "lag_weight": 0.2,
+                "fused_weight": 0.4,
+            },
+            {
+                "parameter_name_u": "A",
+                "parameter_name_v": "C",
+                "precision_weight": 0.0,
+                "event_weight": 1.0,
+                "lag_weight": 0.0,
+                "fused_weight": 1.0,
+            },
+            {
+                "parameter_name_u": "B",
+                "parameter_name_v": "C",
+                "precision_weight": 0.0,
+                "event_weight": 1.0,
+                "lag_weight": 0.0,
+                "fused_weight": 1.0,
+            },
+        ]
+    )
+
+    hierarchy_df = _assign_hierarchy(
+        fused_df,
+        ["A", "B", "C"],
+        min_edge_weight=0.05,
+        top_k_per_parameter_name=1,
+    )
+    by_parameter = {row["parameter_name"]: row for row in hierarchy_df.to_dict(orient="records")}
+
+    assert by_parameter["A"]["module_id"] == by_parameter["B"]["module_id"]
+    assert by_parameter["A"]["module_id"] != by_parameter["C"]["module_id"]

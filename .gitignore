@@ -54,7 +54,9 @@ mlflow.db
 mlruns/
 *.egg-info/
 repo_maps/
-.codex/
+.codex/*
+!.codex/skills/
+!.codex/skills/**
 sentinel.code-workspace
 
 # Applications

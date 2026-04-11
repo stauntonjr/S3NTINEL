@@ -1,0 +1,4 @@
+interface:
+  display_name: "Implement Python PySpark"
+  short_description: "Implement and refactor code to match repo design"
+  default_prompt: "Use $implement-python-pyspark to implement or revise this Python/PySpark code so it matches the repository's design language, naming discipline, object modeling, layering, and Spark rules. Treat structural refactoring as part of completing the task."

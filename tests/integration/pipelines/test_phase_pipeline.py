@@ -22,8 +22,7 @@ from libs.phase.selectors import (
 )
 from libs.phase.frames import PhaseFeatureFrame
 from libs.phase.types import PhaseTransitionModel
-from libs.scoring.artifacts import WindowScoreArtifacts
-from libs.scoring import WindowScoresRawTable
+from libs.scoring import SCORE_COMPONENT_NAMES, WindowScoresRawTable
 from libs.testing.data import create_sample_events_df, create_sample_raw_table_df, create_sample_windows_df
 from libs.windows import WindowFeaturesTable
 from datetime import date, datetime, timezone
@@ -1648,7 +1647,9 @@ def test_build_window_scores_raw_table_uses_phase_artifacts(spark):
     events_df = create_sample_events_df(spark).toPandas()
     windows_df = create_sample_windows_df(spark).toPandas()
 
-    phase_windows_df, phases_df = _build_phase_artifacts_pdf(raw_df, events_df, windows_df)
+    phase_windows_pdf, phases_pdf = _build_phase_artifacts_pdf(raw_df, events_df, windows_df)
+    phase_windows_df = spark.createDataFrame(pandas_records_for_spark(phase_windows_pdf), schema=PHASE_WINDOWS_SCHEMA())
+    phases_df = spark.createDataFrame(pandas_records_for_spark(phases_pdf), schema=PHASE_BASELINES_SCHEMA())
     hierarchy_sensor_map_df = pd.DataFrame(
         [
             {"parameter_name": "ENG_TEMP_1", "system_id": "SYS_0001", "subsystem_id": "SUBSYS_0001", "module_id": "MOD_0001"},
@@ -1656,16 +1657,20 @@ def test_build_window_scores_raw_table_uses_phase_artifacts(spark):
             {"parameter_name": "PUMP_STATE", "system_id": "SYS_0001", "subsystem_id": "SUBSYS_0002", "module_id": "MOD_0003"},
         ]
     )
-    scores_df = WindowScoreArtifacts.from_phase_rows(
-        phase_windows_df.to_dict(orient="records"),
-        phases_df.to_dict(orient="records"),
-        hierarchy_sensor_map_df.to_dict(orient="records"),
-    ).to_df()
+    scores_df = (
+        WindowScoresRawTable.from_phase_dataframes(
+            phase_windows_df,
+            phases_df,
+            spark.createDataFrame(pandas_records_for_spark(hierarchy_sensor_map_df)),
+        )
+        .to_dataframe()
+        .toPandas()
+    )
 
     assert not scores_df.empty
     assert set(["tail_id", "flight_id", "win_id", "global_score", "severity", "score_component_scores"]).issubset(scores_df.columns)
-    assert set(scores_df["dominant_score_component"].tolist()).issubset({"structure", "reconstruction"})
-    assert scores_df["subsystem_scores"].apply(lambda item: isinstance(item, dict)).all()
+    assert set(scores_df["dominant_score_component"].tolist()).issubset(set(SCORE_COMPONENT_NAMES))
+    assert scores_df["subsystem_scores"].apply(lambda item: isinstance(item, dict) and not item).all()
 
 
 def test_window_scores_raw_table_from_phase_tables_uses_phase_artifacts(spark):
@@ -1689,21 +1694,22 @@ def test_window_scores_raw_table_from_phase_tables_uses_phase_artifacts(spark):
         PhaseBaselinesTable(dataframe=phases_df),
         HierarchySensorMapTable(dataframe=hierarchy_sensor_map_df),
     ).to_dataframe().toPandas()
+    dataframe_scores_df = (
+        WindowScoresRawTable.from_phase_dataframes(
+            phase_windows_df,
+            phases_df,
+            hierarchy_sensor_map_df,
+        )
+        .to_dataframe()
+        .toPandas()
+    )
 
     assert not scores_df.empty
     assert set(["tail_id", "flight_id", "win_id", "global_score", "severity", "score_component_scores"]).issubset(scores_df.columns)
-    assert set(scores_df["dominant_score_component"].tolist()).issubset({"structure", "reconstruction"})
-    assert scores_df["subsystem_scores"].apply(lambda item: isinstance(item, dict)).all()
+    assert set(scores_df["dominant_score_component"].tolist()).issubset(set(SCORE_COMPONENT_NAMES))
+    assert scores_df["subsystem_scores"].apply(lambda item: isinstance(item, dict) and not item).all()
 
-    expected_scores_df = (
-        WindowScoreArtifacts.from_phase_rows(
-            phase_windows_pdf.to_dict(orient="records"),
-            phases_pdf.to_dict(orient="records"),
-            hierarchy_sensor_map_df.toPandas().to_dict(orient="records"),
-        ).to_df()
-        .sort_values(["tail_id", "flight_id", "win_id"], kind="stable")
-        .reset_index(drop=True)
-    )
+    expected_scores_df = dataframe_scores_df.sort_values(["tail_id", "flight_id", "win_id"], kind="stable").reset_index(drop=True)
     spark_scores_df = scores_df.sort_values(["tail_id", "flight_id", "win_id"], kind="stable").reset_index(drop=True)
     comparison_columns = [
         "tail_id",

@@ -163,9 +163,28 @@ def test_flatten_numeric_metric_records_includes_score_diagnostic_metric_paths()
 def test_flatten_numeric_metric_records_includes_parameter_localization_metric_paths():
     records = _flatten_numeric_metric_records(
         {
+            "channel_localization_validation": {
+                "dominant_subsystem_match_rate_by_score_component": {
+                    "reconstruction_error": 0.5,
+                },
+                "top_module_candidate_present_rate_by_score_component": {
+                    "reconstruction_error": 0.75,
+                },
+                "telemetry_selected_parameter_match_rate_by_score_component": {
+                    "event_discordance": 0.75,
+                },
+            },
+            "module_localization_validation": {
+                "dominant_module_match_rate": 0.5,
+                "top_module_candidate_present_rate": 0.75,
+                "truth_module_present_count_by_source": {
+                    "telemetry": 3,
+                },
+            },
             "parameter_localization_validation": {
                 "exact_parameter_match_rate_by_source": {
                     "telemetry": 0.8,
+                    "telemetry_selected": 0.6,
                     "event": 0.25,
                     "any": 0.9,
                 },
@@ -180,8 +199,15 @@ def test_flatten_numeric_metric_records_includes_parameter_localization_metric_p
     )
 
     assert [(record.metric_path, record.value) for record in records] == [
+        ("channel_localization_validation.dominant_subsystem_match_rate_by_score_component.reconstruction_error", 0.5),
+        ("channel_localization_validation.telemetry_selected_parameter_match_rate_by_score_component.event_discordance", 0.75),
+        ("channel_localization_validation.top_module_candidate_present_rate_by_score_component.reconstruction_error", 0.75),
+        ("module_localization_validation.dominant_module_match_rate", 0.5),
+        ("module_localization_validation.top_module_candidate_present_rate", 0.75),
+        ("module_localization_validation.truth_module_present_count_by_source.telemetry", 3),
         ("parameter_localization_validation.exact_parameter_match_rate_by_source.any", 0.9),
         ("parameter_localization_validation.exact_parameter_match_rate_by_source.event", 0.25),
         ("parameter_localization_validation.exact_parameter_match_rate_by_source.telemetry", 0.8),
+        ("parameter_localization_validation.exact_parameter_match_rate_by_source.telemetry_selected", 0.6),
         ("parameter_localization_validation.truth_subsystem_present_count_by_source.telemetry", 4),
     ]

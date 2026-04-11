@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Spark Hot Path"
+  short_description: "Review Spark execution semantics and performance risks"
+  default_prompt: "Use $review-spark-hot-path to review this PySpark code for Spark hot-path clarity, semantic risks, unnecessary Python-side execution, and plan/performance problems."

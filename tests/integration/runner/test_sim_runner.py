@@ -837,16 +837,29 @@ def test_runner_fault_wrappers_preserve_extended_validation_metrics():
         "dominant_subsystem_mappable_count": 2,
         "dominant_subsystem_match_rate": 0.5,
         "dominant_subsystem_mappable_rate": 1.0,
+        "dominant_module_match_count": 1,
+        "dominant_module_mappable_count": 2,
+        "dominant_module_match_rate": 0.5,
+        "dominant_module_mappable_rate": 1.0,
         "telemetry_parameter_match_count": 2,
         "event_parameter_match_count": 1,
         "telemetry_parameter_match_rate": 1.0,
         "event_parameter_match_rate": 0.5,
         "telemetry_truth_subsystem_present_rate": 1.0,
         "event_truth_subsystem_present_rate": 0.5,
+        "module_localization_validation": {
+            "truth_window_count": 2,
+            "dominant_module_match_count": 1,
+        },
+        "channel_localization_validation": {
+            "truth_window_count": 2,
+            "truth_window_count_by_score_component": {"reconstruction_error": 2},
+        },
         "parameter_localization_validation": {
             "truth_window_count": 2,
             "exact_parameter_match_count_by_source": {
                 "telemetry": 2,
+                "telemetry_selected": 1,
                 "event": 1,
                 "any": 2,
                 "both": 1,
@@ -869,10 +882,16 @@ def test_runner_fault_wrappers_preserve_extended_validation_metrics():
     assert fault_score_summary["emission_validation"]["blocked_candidate_window_count_by_p_value_threshold"]["p_le_0p05"] == 1
     assert fault_score_summary["score_window_diagnostics"] == [{"win_id": 7}]
     assert fault_attribution_summary["dominant_subsystem_match_count"] == 1
+    assert fault_attribution_summary["dominant_module_match_count"] == 1
     assert fault_attribution_summary["telemetry_parameter_match_count"] == 2
     assert fault_attribution_summary["event_parameter_match_count"] == 1
+    assert fault_attribution_summary["module_localization_validation"]["dominant_module_match_count"] == 1
+    assert fault_attribution_summary["channel_localization_validation"]["truth_window_count_by_score_component"] == {
+        "reconstruction_error": 2
+    }
     assert fault_attribution_summary["parameter_localization_validation"]["exact_parameter_match_count_by_source"] == {
         "telemetry": 2,
+        "telemetry_selected": 1,
         "event": 1,
         "any": 2,
         "both": 1,

@@ -3,6 +3,7 @@ from datetime import date, datetime
 import pytest
 
 from libs.anomaly import AnomalyAttributionPlan
+from libs.scoring import SCORE_COMPONENT_NAMES
 from libs.testing.data import (
     create_sample_calibrated_df,
     create_sample_events_df,
@@ -68,7 +69,7 @@ def test_anomaly_object_includes_panel_context_component_contrib_and_sensor_scor
 
     assert first["subsystems"]
     first_subsystem = first["subsystems"][0]
-    for key in ["structure", "reconstruction"]:
+    for key in SCORE_COMPONENT_NAMES:
         assert key in first_subsystem["score_component_contrib"]
 
     assert first["attribution_context"] is not None

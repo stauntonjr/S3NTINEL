@@ -252,7 +252,8 @@ Run with:
 	- `S3NTINEL_PHASE_BASELINES_TABLE_PATH` (default `data/delta/phase_baselines`)
 - `80_window_scores_raw` reads phase windows + phase baselines and writes:
 	- `S3NTINEL_WINDOW_SCORES_RAW_TABLE_PATH` (default `data/delta/window_scores_raw`)
-	- Stage 60 also emits `subsystem_scores` (map of subsystem evidence ratios), propagated through calibration and used by stage 80 to populate `anomaly_window_attribution.subsystems`.
+	- The canonical scorer is the Spark `WindowScoresRawTable` path; local in-memory score assembly is intentionally unsupported.
+	- The raw score schema preserves `subsystem_scores` for compatibility, but the current scorer writes it as an empty map and uses dominant localization fields instead.
 	- Severity thresholds are configurable for normalized score scale:
 		- `S3NTINEL_SEVERITY_LOW_THRESHOLD` (default `0.25`)
 		- `S3NTINEL_SEVERITY_MEDIUM_THRESHOLD` (default `0.75`)
@@ -269,8 +270,8 @@ Run with:
 		- `S3NTINEL_EVENTS_TABLE_PATH`
 		- `S3NTINEL_HIERARCHY_SENSOR_MAP_TABLE_PATH`
 		- `S3NTINEL_RAW_TABLE_PATH`
-	- Stage 80 populates `subsystems[].top_sensors` from windowed event evidence joined through `hierarchy_sensor_map`.
-	- Stage 80 populates `panel_context` from window-local ASCII/LCD text features.
+	- Stage 90 carries forward dominant and ranked subsystem/module localization targets and enriches them with window-local telemetry and event context.
+	- Stage 90 populates `panel_context` from window-local ASCII/LCD text features.
 	- `S3NTINEL_SUBSYSTEM_TOP_SENSORS_K` controls top sensors per subsystem in anomaly payload (default `5`).
 - `scripts/smoke_test_pipeline.py` synthetic seed scaling options:
 	- `--tail-count` (default `1`)

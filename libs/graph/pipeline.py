@@ -15,20 +15,16 @@ from dataclasses import dataclass
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-import numpy as np
 import pandas as pd
 
 from libs.io.schemas import PRECISION_GRAPH_SCHEMA
 from libs.perf.logger import get_logger
 from libs.perf.annotations import hot_path
 from libs.graph.data import (
-    parameter_name_union_from_component_tables,
     retain_top_k_directed,
     retain_top_k_undirected,
-    selected_backbone_sensors,
 )
 from libs.graph.event import EventGraph, EventGraphSpec
-from libs.graph.fused import FusedGraph, FusedGraphSpec
 from libs.graph.hierarchy_artifacts import GraphHierarchy, HierarchySpec
 from libs.graph.lag import LagBandSpec, LagProfileGraph
 from libs.graph.precision import PrecisionGraph, PrecisionGraphSpec
@@ -161,59 +157,6 @@ def retain_lag_graph_top_k(lag_df: pd.DataFrame, *, top_k_outgoing: int) -> pd.D
     if not rows:
         return pd.DataFrame(columns=lag_df.columns)
     return pd.DataFrame(rows, columns=lag_df.columns)
-
-
-def _build_precision_graph_from_covariance(
-    selected_sensors: list[str],
-    covariance: np.ndarray,
-    *,
-    ridge_lambda: float,
-    min_abs_partial_corr: float,
-) -> pd.DataFrame:
-    return PrecisionGraph.from_covariance(
-        covariance=covariance,
-        spec=PrecisionGraphSpec(
-            selected_sensors=tuple(selected_sensors),
-            ridge_lambda=ridge_lambda,
-            min_abs_partial_corr=min_abs_partial_corr,
-        ),
-    ).edges
-
-
-def _build_precision_graph(
-    window_features_df: pd.DataFrame,
-    selected_sensors: list[str],
-    *,
-    ridge_lambda: float,
-    min_abs_partial_corr: float,
-) -> pd.DataFrame:
-    return PrecisionGraph.from_window_features(
-        window_features_df,
-        spec=PrecisionGraphSpec(
-            selected_sensors=tuple(selected_sensors),
-            ridge_lambda=ridge_lambda,
-            min_abs_partial_corr=min_abs_partial_corr,
-        ),
-    ).edges
-
-
-def _build_event_graph(
-    events_df: pd.DataFrame,
-    windows_df: pd.DataFrame,
-    *,
-    min_count: int,
-    min_npmi: float,
-    top_k_per_parameter_name: int,
-) -> pd.DataFrame:
-    return EventGraph.from_events_and_windows(
-        events_df,
-        windows_df,
-        spec=EventGraphSpec(
-            min_count=min_count,
-            min_npmi=min_npmi,
-            top_k_per_parameter_name=top_k_per_parameter_name,
-        ),
-    ).edges
 
 
 @hot_path
@@ -380,6 +323,8 @@ def build_hierarchy_from_fused_spark_table(
     hierarchy_top_k_per_parameter_name: int,
     hierarchy_subsystem_min_edge_weight: float | None = None,
     hierarchy_system_min_edge_weight: float | None = None,
+    datatype_profile_df: DataFrame | None = None,
+    behavior_profile_df: DataFrame | None = None,
 ) -> pd.DataFrame:
     """Build hierarchy from a Spark fused-edge table using Spark pruning and small driver-side clustering."""
     return GraphHierarchy.from_fused_spark(
@@ -391,6 +336,8 @@ def build_hierarchy_from_fused_spark_table(
             subsystem_min_edge_weight=hierarchy_subsystem_min_edge_weight,
             system_min_edge_weight=hierarchy_system_min_edge_weight,
         ),
+        datatype_profile_df=datatype_profile_df,
+        behavior_profile_df=behavior_profile_df,
     ).rows
 
 
@@ -591,119 +538,3 @@ def build_precision_graph_from_window_features_spark_table(
             min_abs_partial_corr=min_abs_partial_corr,
         ),
     ).edges
-
-
-def _fuse_graphs(
-    precision_df: pd.DataFrame,
-    event_df: pd.DataFrame,
-    lag_df: pd.DataFrame,
-    *,
-    alpha: float,
-    beta: float,
-    gamma: float,
-) -> pd.DataFrame:
-    return FusedGraph.from_components(
-        precision_df,
-        event_df,
-        lag_df,
-        spec=FusedGraphSpec(alpha=alpha, beta=beta, gamma=gamma),
-    ).edges
-
-
-def _assign_hierarchy(
-    fused_df: pd.DataFrame,
-    parameter_names: list[str],
-    *,
-    min_edge_weight: float,
-    top_k_per_parameter_name: int = 3,
-    subsystem_min_edge_weight: float | None = None,
-    system_min_edge_weight: float | None = None,
-) -> pd.DataFrame:
-    return GraphHierarchy.from_fused(
-        fused_df,
-        parameter_names,
-        spec=HierarchySpec(
-            min_edge_weight=min_edge_weight,
-            top_k_per_parameter_name=top_k_per_parameter_name,
-            subsystem_min_edge_weight=subsystem_min_edge_weight,
-            system_min_edge_weight=system_min_edge_weight,
-        ),
-    ).rows
-
-
-@hot_path
-def build_graph_fusion_from_tables(
-    window_feature_df: pd.DataFrame,
-    event_df: pd.DataFrame,
-    lag_df: pd.DataFrame,
-    backbone_df: pd.DataFrame,
-    *,
-    precision_ridge_lambda: float = 1.0,
-    min_abs_partial_corr: float = 0.05,
-    alpha: float = 1.0,
-    beta: float = 1.0,
-    gamma: float = 1.0,
-    min_fused_edge_weight: float = 0.05,
-    hierarchy_top_k_per_parameter_name: int = 3,
-    hierarchy_subsystem_min_edge_weight: float | None = None,
-    hierarchy_system_min_edge_weight: float | None = None,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Build precision, fused graph, and hierarchy from pre-aggregated graph tables."""
-    selected_sensors = selected_backbone_sensors(backbone_df)
-    precision_df = _build_precision_graph(
-        window_feature_df,
-        selected_sensors,
-        ridge_lambda=precision_ridge_lambda,
-        min_abs_partial_corr=min_abs_partial_corr,
-    )
-    fused_df, hierarchy_df = build_graph_fusion_from_component_tables(
-        precision_df,
-        event_df,
-        lag_df,
-        backbone_df,
-        alpha=alpha,
-        beta=beta,
-        gamma=gamma,
-        min_fused_edge_weight=min_fused_edge_weight,
-        hierarchy_top_k_per_parameter_name=hierarchy_top_k_per_parameter_name,
-        hierarchy_subsystem_min_edge_weight=hierarchy_subsystem_min_edge_weight,
-        hierarchy_system_min_edge_weight=hierarchy_system_min_edge_weight,
-    )
-    return precision_df, fused_df, hierarchy_df
-
-
-@hot_path
-def build_graph_fusion_from_component_tables(
-    precision_df: pd.DataFrame,
-    event_df: pd.DataFrame,
-    lag_df: pd.DataFrame,
-    backbone_df: pd.DataFrame,
-    *,
-    alpha: float = 1.0,
-    beta: float = 1.0,
-    gamma: float = 1.0,
-    min_fused_edge_weight: float = 0.05,
-    hierarchy_top_k_per_parameter_name: int = 3,
-    hierarchy_subsystem_min_edge_weight: float | None = None,
-    hierarchy_system_min_edge_weight: float | None = None,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Build fused graph and hierarchy from already-computed component tables."""
-    selected_sensors = selected_backbone_sensors(backbone_df)
-    fused_df = _fuse_graphs(
-        precision_df,
-        event_df,
-        lag_df,
-        alpha=float(alpha),
-        beta=float(beta),
-        gamma=float(gamma),
-    )
-    parameter_name_union = parameter_name_union_from_component_tables(backbone_df, event_df, lag_df, selected_sensors)
-    hierarchy_df = _assign_hierarchy(
-        fused_df,
-        parameter_name_union,
-        min_edge_weight=min_fused_edge_weight,
-        top_k_per_parameter_name=hierarchy_top_k_per_parameter_name,
-        subsystem_min_edge_weight=hierarchy_subsystem_min_edge_weight,
-        system_min_edge_weight=hierarchy_system_min_edge_weight,
-    )
-    return fused_df, hierarchy_df

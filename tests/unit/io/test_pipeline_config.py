@@ -114,3 +114,26 @@ def test_load_pipeline_context_settings_uses_promoted_event_baseline_by_default(
     assert settings.events.repeatability_aggressiveness == 1.0
     assert settings.events.drift_conservatism == 1.0
     assert settings.events.chatter_suppression == 1.0
+
+
+def test_load_pipeline_context_settings_uses_hierarchy_defaults_from_config(monkeypatch):
+    for env_name in (
+        "S3NTINEL_V2_HIERARCHY_TOP_K_PER_SENSOR",
+        "S3NTINEL_V2_HIERARCHY_SUBSYSTEM_MIN_EDGE_WEIGHT",
+        "S3NTINEL_V2_HIERARCHY_SYSTEM_MIN_EDGE_WEIGHT",
+    ):
+        monkeypatch.delenv(env_name, raising=False)
+
+    settings = load_pipeline_context_settings(
+        {
+            "hierarchy": {
+                "top_k_per_parameter_name": 1,
+                "subsystem_min_edge_weight": 0.1,
+                "system_min_edge_weight": None,
+            }
+        }
+    )
+
+    assert settings.hierarchy.top_k_per_parameter_name == 1
+    assert settings.hierarchy.subsystem_min_edge_weight == 0.1
+    assert settings.hierarchy.system_min_edge_weight is None

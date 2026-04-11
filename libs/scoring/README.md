@@ -11,18 +11,16 @@ It does not own:
 
 ## How To Use
 
-- Use `WindowScoreArtifacts` for in-memory score assembly semantics.
-- Use `pipeline.py` for Spark-facing artifact construction.
-- Use `rules.py` for lower-level score computations.
+- Use `WindowScoresRawTable` and `WindowScoresCalibratedTable` as the canonical production scoring path.
+- Keep production scoring semantics in Spark-owned `Table` builders only.
+- Use local pandas materialization only after score artifacts already exist, for bounded validation/reporting/test assertions.
 
 ## Contents
 
-- `artifacts.py`
-  - score-domain nouns and rollup semantics
-- `rules.py`
-  - lower-level score calculations
-- `pipeline.py`
-  - persisted adapter
+- `channels.py`
+  - canonical score-component names and score-map helpers
+- `tables.py`
+  - canonical raw/calibrated score builders
 - `validator.py`
   - score-vs-truth validation helpers
 
@@ -54,8 +52,10 @@ Scoring answers: how unusual is this window relative to learned structure and cu
 ## Testing / Validation
 
 - unit tests cover score model behavior
-- integration tests cover stage 60 and stage 70
+- integration tests cover the stage-80 Spark scoring path
 
 ## Notes
 
+- Local score assembly APIs were intentionally removed to prevent Spark-vs-local model drift.
+- The raw score schema keeps `subsystem_scores` for compatibility, but the canonical scorer currently writes an empty map there.
 - Calibration implementation currently lives in `libs/conformal`.

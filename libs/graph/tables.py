@@ -235,6 +235,8 @@ class HierarchySensorMapTable(Table):
         hierarchy_top_k_per_parameter_name: int,
         hierarchy_subsystem_min_edge_weight: float | None = None,
         hierarchy_system_min_edge_weight: float | None = None,
+        datatype_profile_df: "DataFrame | None" = None,
+        behavior_profile_df: "DataFrame | None" = None,
     ) -> "HierarchySensorMapTable":
         from libs.graph.pipeline import build_hierarchy_from_fused_spark_table
 
@@ -246,6 +248,8 @@ class HierarchySensorMapTable(Table):
             hierarchy_top_k_per_parameter_name=hierarchy_top_k_per_parameter_name,
             hierarchy_subsystem_min_edge_weight=hierarchy_subsystem_min_edge_weight,
             hierarchy_system_min_edge_weight=hierarchy_system_min_edge_weight,
+            datatype_profile_df=datatype_profile_df,
+            behavior_profile_df=behavior_profile_df,
         )
         dataframe = spark.createDataFrame(rows) if not rows.empty else spark.createDataFrame([], schema=HIERARCHY_SENSOR_MAP_SCHEMA())
         return cls(dataframe=dataframe)

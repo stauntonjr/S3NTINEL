@@ -32,6 +32,8 @@ def run() -> None:
     spark = get_spark("s3ntinel.fit_hierarchy")
     fused_graph_path = runtime.artifacts.fused_graph
     graph_parameter_universe_path = runtime.artifacts.graph_parameter_universe
+    datatype_profile_path = runtime.artifacts.parameter_datatype_profile
+    behavior_profile_path = runtime.artifacts.parameter_behavior_profile
     hierarchy_map_path = runtime.artifacts.hierarchy_sensor_map
     table_format = runtime.execution.table_format
     write_mode = runtime.execution.fit_write_mode
@@ -42,6 +44,8 @@ def run() -> None:
 
     fused_df = read_table(spark, fused_graph_path, fmt=table_format)
     parameter_universe_df = read_table(spark, graph_parameter_universe_path, fmt=table_format)
+    datatype_profile_df = read_table(spark, datatype_profile_path, fmt=table_format)
+    behavior_profile_df = read_table(spark, behavior_profile_path, fmt=table_format)
 
     timing_ms: dict[str, float] = {}
     started = time.perf_counter()
@@ -60,6 +64,8 @@ def run() -> None:
         hierarchy_top_k_per_parameter_name=hierarchy_top_k_per_sensor,
         hierarchy_subsystem_min_edge_weight=hierarchy_subsystem_min_edge_weight,
         hierarchy_system_min_edge_weight=hierarchy_system_min_edge_weight,
+        datatype_profile_df=datatype_profile_df,
+        behavior_profile_df=behavior_profile_df,
     ).to_dataframe()
     timing_ms["hierarchy_build"] = _elapsed_ms(started)
 
@@ -69,6 +75,8 @@ def run() -> None:
 
     fused_count = int(fused_df.count())
     parameter_universe_count = int(parameter_universe_df.count())
+    datatype_profile_count = int(datatype_profile_df.count())
+    behavior_profile_count = int(behavior_profile_df.count())
     hierarchy_count = int(hierarchy_df.count())
 
     log_params_if_active(
@@ -84,9 +92,13 @@ def run() -> None:
             "stage": "60_fit_hierarchy",
             "fused_graph_path": fused_graph_path,
             "graph_parameter_universe_path": graph_parameter_universe_path,
+            "datatype_profile_path": datatype_profile_path,
+            "behavior_profile_path": behavior_profile_path,
             "hierarchy_map_path": hierarchy_map_path,
             "fused_edge_count": fused_count,
             "graph_parameter_universe_count": parameter_universe_count,
+            "datatype_profile_count": datatype_profile_count,
+            "behavior_profile_count": behavior_profile_count,
             "hierarchy_sensor_count": hierarchy_count,
             "min_fused_edge_weight": min_fused_edge_weight,
             "hierarchy_top_k_per_sensor": hierarchy_top_k_per_sensor,
@@ -115,6 +127,16 @@ def run() -> None:
                 dataframe=parameter_universe_df,
                 row_count=parameter_universe_count,
             ),
+            "parameter_datatype_profile": build_artifact_manifest(
+                path=datatype_profile_path,
+                dataframe=datatype_profile_df,
+                row_count=datatype_profile_count,
+            ),
+            "parameter_behavior_profile": build_artifact_manifest(
+                path=behavior_profile_path,
+                dataframe=behavior_profile_df,
+                row_count=behavior_profile_count,
+            ),
         },
         output_artifacts={
             "hierarchy_sensor_map": build_artifact_manifest(
@@ -123,7 +145,7 @@ def run() -> None:
                 row_count=hierarchy_count,
             ),
         },
-        replayable_from=["fused_graph", "graph_parameter_universe"],
+        replayable_from=["fused_graph", "graph_parameter_universe", "parameter_datatype_profile", "parameter_behavior_profile"],
     )
     log_stage_manifest_if_active(stage_manifest, runtime.report_paths.manifest_artifact_path)
     LOGGER.info(

@@ -260,18 +260,29 @@ RAW_SCORES_VIEW = ArtifactView(
         "global_score",
         "severity",
         "dominant_subsystem_id",
+        "dominant_module_id",
         "dominant_score_component",
+        "score_component_scores",
     ),
     ("tail_id", "flight_id", "win_id"),
 )
 ANOMALY_WINDOW_VIEW = ArtifactView(
     "anomaly_window_attribution",
-    ("tail_id", "flight_id", "win_id", "dominant_subsystem_id"),
+    (
+        "tail_id",
+        "flight_id",
+        "win_id",
+        "dominant_subsystem_id",
+        "dominant_module_id",
+        "top_subsystem_candidates",
+        "top_module_candidates",
+        "dominant_score_component",
+    ),
     ("tail_id", "flight_id", "win_id"),
 )
 ANOMALY_TELEMETRY_VIEW = ArtifactView(
     "anomaly_telemetry_attribution",
-    ("tail_id", "flight_id", "win_id", "parameter_name"),
+    ("tail_id", "flight_id", "win_id", "parameter_name", "parameter_localization_selected"),
     ("tail_id", "flight_id", "win_id"),
 )
 ANOMALY_EVENT_VIEW = ArtifactView(
@@ -522,8 +533,8 @@ def _build_misbehavior_attribution_summary(tables: RunArtifactBundle) -> dict[st
         anomaly_window_attribution_df=tables.pandas(ANOMALY_WINDOW_VIEW),
         anomaly_telemetry_attribution_df=tables.pandas(ANOMALY_TELEMETRY_VIEW),
         anomaly_event_attribution_df=tables.pandas(ANOMALY_EVENT_VIEW),
-        hierarchy_sensor_map_df=tables.pandas(HIERARCHY_SUBSYSTEM_VIEW),
-        hierarchy_label_df=tables.pandas(HIERARCHY_LABEL_SUBSYSTEM_VIEW),
+        hierarchy_sensor_map_df=tables.pandas(HIERARCHY_SENSOR_MAP_VIEW),
+        hierarchy_label_df=tables.pandas(HIERARCHY_LABEL_VIEW),
     )
 
 
