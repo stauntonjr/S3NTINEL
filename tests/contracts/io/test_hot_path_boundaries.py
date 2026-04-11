@@ -195,3 +195,34 @@ def test_docs_readme_lists_doc_subdirectories() -> None:
         "architecture/",
     ]:
         assert directory_name in content, f"docs/README.md is missing docs subdirectory section: {directory_name}"
+
+
+def test_plan_docs_have_index_and_status_headers() -> None:
+    plans_index = _read_repo_file("docs/plans/README.md")
+    for expected_plan in [
+        "anomaly_modeling_next_steps.md",
+        "simulation_medium_term_plan.md",
+        "phaseplan_2.1.md",
+        "behavior_simulation_improvements.md",
+        "v2_1_notes.md",
+    ]:
+        assert expected_plan in plans_index, f"docs/plans/README.md is missing plan reference: {expected_plan}"
+
+    plans_dir = REPO_ROOT / "docs" / "plans"
+    for path in sorted(plans_dir.glob("*.md")):
+        if path.name == "README.md":
+            continue
+        content = path.read_text()
+        assert "Status: Plan" in content, f"{path.relative_to(REPO_ROOT)} is missing plan status header"
+        assert "Authority: Non-authoritative roadmap." in content, (
+            f"{path.relative_to(REPO_ROOT)} is missing plan authority header"
+        )
+
+
+def test_simulation_medium_term_plan_does_not_reference_removed_duplicate_paths() -> None:
+    content = _read_repo_file("docs/plans/simulation_medium_term_plan.md")
+    for stale_path in [
+        "libs/scoring/pipeline.py",
+        "pandas and Spark boundaries are still duplicated across",
+    ]:
+        assert stale_path not in content, f"simulation medium-term plan still references stale path: {stale_path}"

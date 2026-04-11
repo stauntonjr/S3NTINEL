@@ -49,6 +49,8 @@ Useful starting points:
 - [reference/theory_foundations.md](/home/jrs/code/S3NTINEL/sentinel/docs/reference/theory_foundations.md)
 - [design/artifact_replay_design.md](/home/jrs/code/S3NTINEL/sentinel/docs/design/artifact_replay_design.md)
 - [simulation/simulation_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/simulation/simulation_architecture.md)
+- [plans/README.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/README.md)
+- [plans/anomaly_modeling_next_steps.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/anomaly_modeling_next_steps.md)
 - [plans/simulation_medium_term_plan.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/simulation_medium_term_plan.md)
 - [architecture/README.md](/home/jrs/code/S3NTINEL/sentinel/docs/architecture/README.md)
 

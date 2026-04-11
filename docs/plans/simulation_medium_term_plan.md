@@ -29,93 +29,19 @@ The plan below is grounded in the current repo shape:
 - `libs.simulation` has already been heavily reduced and reorganized around the
   current object model, but still has room for readability and realism
   improvements
-- pandas and Spark boundaries are still duplicated across:
-  - `pipelines/40_backbone_fit.py`
-  - `pipelines/50_build_graph.py`
-  - `libs/phase/pipeline.py`
-  - `libs/scoring/pipeline.py`
-- phase and anomaly logic now have cleaner ownership, but further realism and
-  performance work is still needed
+- the single-model-path refactor is now in place for the anomaly stack, so
+  future simulation work should not assume a second local modeling path exists
+- phase and anomaly logic now have cleaner ownership, but further simulation
+  realism, scenario curation, and performance work are still needed
 
 The next work should be organized into three workstreams and executed in this
 order:
 
-1. `A. Taxonomy and contraction`
-2. `B. Realism, phase context, and anomaly/violation integration`
-3. `C. Spark-boundary reduction and hot-path hardening`
+1. `A. Realism, phase context, and anomaly/violation integration`
+2. `B. Golden scenarios and validation discipline`
+3. `C. Remaining performance and hot-path profiling`
 
-## A. Taxonomy And Contraction
-
-### Objective
-
-Reduce the amount of stale, repetitive, or ambiguous code and make the repo
-layout reflect the actual execution model.
-
-### Target shape
-
-The simulation area should converge to four clear zones:
-
-- `simulation core`
-  - specs
-  - runtime
-  - stepping
-  - coupling
-  - flight orchestration
-- `simulation scenarios`
-  - authored flights
-  - reusable examples
-  - scenario builders
-- `simulation pipeline handoff`
-  - canonical telemetry row emission
-  - persisted-run orchestration
-  - simulation-to-pipeline handoff
-
-### Planned changes
-
-- reduce `libs.simulation` to a small obvious public surface
-- move remaining legacy-only helpers and scripts into clearly marked legacy
-  locations
-- collapse redundant simulation scripts behind `scripts.run_sim_pipeline`
-- remove duplicate event-labeling, experiment-setup, and demo glue where the
-  canonical path already exists
-- replace large procedural signatures with config dataclasses and orchestration
-  objects
-
-### Immediate cleanup targets
-
-- `libs/simulation/__init__.py`
-  - stop exposing a broad mixed surface as the default public API
-- `scripts/`
-  - keep `run_sim_pipeline` as the only canonical simulation entrypoint
-  - remove duplicate workflow scripts instead of retaining compatibility layers
-
-### Naming and placement rules
-
-- spec types should live in spec-oriented modules, not in convenience/helper
-  files
-- avoid new modules that mix:
-  - runtime state
-  - static specs
-  - pipeline handoff helpers
-  - stale compatibility code
-
-### Large-signature reduction rule
-
-Where workflows are stateful or configuration-heavy, stop adding more functions
-with large argument lists.
-
-Instead introduce small config/value objects for:
-
-- simulation run configuration
-- structural fitting configuration
-- graph fitting configuration
-- phase fitting configuration
-- scoring and calibration configuration
-
-Prefer methods on orchestration/context objects where the call sequence is
-stateful and the data naturally travels together.
-
-## B. Realism, Phase Context, And Anomaly/Violation Integration
+## A. Realism, Phase Context, And Anomaly/Violation Integration
 
 ### Objective
 
@@ -222,14 +148,51 @@ Each golden scenario should eventually include:
 - at least one violation family
 - expected graph/phase/anomaly downstream signals
 
-## C. Spark-Boundary Reduction And Hot-Path Hardening
+See also:
+- [phaseplan_2.1.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/phaseplan_2.1.md)
+- [behavior_simulation_improvements.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/behavior_simulation_improvements.md)
+
+## B. Golden Scenarios And Validation Discipline
 
 ### Objective
 
-Make the generator core, bridge layers, and persisted Spark stages visibly
-separate and enforce bounded behavior at their interfaces.
+Keep simulation realism work tied to downstream evidence instead of only to
+subjective waveform judgment.
 
-### Boundary rule
+### Golden-scenario rule
+
+At minimum, maintain long-lived scenario coverage for:
+
+- `power_chain`
+- `power_pressurization_hierarchy_composite`
+
+Each golden scenario should track:
+
+- expected phase behavior
+- expected event behavior
+- at least one violation family
+- expected downstream validation surfaces
+
+### Validation rule
+
+Simulation changes should be evaluated through the current validation harness,
+not only through ad hoc plots.
+
+When realism changes land, check:
+
+- phase quality
+- event quality
+- anomaly detection quality
+- parameter localization quality
+- subsystem/module localization when relevant
+
+## C. Remaining Performance And Hot-Path Profiling
+
+### Objective
+
+Keep the remaining generator and persisted-stage hotspots visible and bounded.
+
+### Current rule
 
 - generator core stays Python-only and independent of pandas/Spark
 - pandas is a bounded bridge only for:
@@ -237,18 +200,14 @@ separate and enforce bounded behavior at their interfaces.
   - small reference artifacts
   - local debug outputs
 - Spark owns persisted fact-table work
-- every remaining `toPandas()` and unbounded `collect()` in structural stages
-  must either be removed or explicitly guarded
+- every remaining bounded bridge should stay explicit and guarded
 
-### Concrete reduction targets
+### Current profiling targets
 
-- `pipelines/40_backbone_fit.py`
-- `pipelines/50_build_graph.py`
-- `libs/phase/pipeline.py`
-- `libs/scoring/pipeline.py`
-
-These are the places where the repo still visibly crosses the generator core,
-pandas, and Spark boundaries in repetitive or partially duplicated ways.
+- simulation generation wall time
+- graph-stage evaluation/reporting cost
+- full-run replay timing on the canonical simulation path
+- any bounded artifact/report bridges that still show up in performance traces
 
 ### Hot-path rules
 
@@ -268,26 +227,15 @@ pandas, and Spark boundaries in repetitive or partially duplicated ways.
 The hot path should be treated as a first-class acceptance surface, not an
 afterthought.
 
-For each milestone touching structural stages:
+For each milestone touching simulation or replay-heavy stages:
 
 - identify which bridges remain
-- identify which ones were removed
 - keep explicit row-limit guards where bridges still exist
 - record wall times on the full-run path
 
 ## Milestone Ordering
 
-### Milestone 1: contraction and ownership cleanup
-
-Deliverables:
-
-- reduced `libs.simulation` public surface
-- clear separation of core/scenario/bridge/legacy modules
-- deprecated or removed duplicate simulation entrypoints
-- phase spec placement plan executed or queued as a direct follow-up
-- config objects introduced for the worst large-signature seams
-
-### Milestone 2: realism and integrated violation model
+### Milestone 1: realism and integrated violation model
 
 Deliverables:
 
@@ -296,28 +244,29 @@ Deliverables:
 - authored golden scenarios expanded with explicit violation truth
 - downstream regression signals defined for phase and anomaly quality
 
-### Milestone 3: Spark-boundary and hot-path hardening
+### Milestone 2: scenario and validation discipline
 
 Deliverables:
 
-- narrowed pandas/Spark bridge points
-- improved reuse of intermediate structural artifacts
+- golden scenarios carry explicit downstream expectations
+- simulation changes are read through the validation harness
+- realism work is tied to named scenario coverage rather than one-off demos
+
+### Milestone 3: performance and hotspot hardening
+
+Deliverables:
+
 - documented remaining bounded bridge seams
 - full-run used as a repeatable local performance check
+- timing reports remain part of the simulation acceptance surface
 
 ## Test And Acceptance Plan
-
-### Cleanup gate
-
-- no stale wrapper exports
-- no duplicate simulation entrypoints documented as canonical
-- no ambiguous ownership between core/scenario/bridge/legacy modules
 
 ### Realism gate
 
 - golden runs for at least:
   - `power_chain`
-  - `pressurization`
+  - `power_pressurization_hierarchy_composite`
 - each scenario includes:
   - expected phase behavior
   - at least one injected violation family
@@ -334,8 +283,8 @@ Deliverables:
 
 - bounded-bridge thresholds remain enforced
 - full-run wall time and stage timing remain recorded
-- each bridge-reduction milestone documents which `toPandas()` or `collect()`
-  calls were removed or newly bounded
+- each performance milestone documents which remaining hotspots or bridge seams
+  were bounded, reduced, or accepted intentionally
 
 ## Assumptions
 
