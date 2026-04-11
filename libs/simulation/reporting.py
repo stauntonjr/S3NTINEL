@@ -282,7 +282,15 @@ ANOMALY_WINDOW_VIEW = ArtifactView(
 )
 ANOMALY_TELEMETRY_VIEW = ArtifactView(
     "anomaly_telemetry_attribution",
-    ("tail_id", "flight_id", "win_id", "parameter_name", "parameter_localization_selected"),
+    (
+        "tail_id",
+        "flight_id",
+        "win_id",
+        "parameter_name",
+        "parameter_localization_support",
+        "parameter_support_rank_in_window",
+        "parameter_localization_selected",
+    ),
     ("tail_id", "flight_id", "win_id"),
 )
 ANOMALY_EVENT_VIEW = ArtifactView(

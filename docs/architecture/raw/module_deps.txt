@@ -1227,6 +1227,7 @@ pipelines.90_anomaly_attribution  (pipelines/90_anomaly_attribution.py)
      - libs.anomaly
      - libs.io.delta
      - libs.perf
+     - libs.profiling
      - pipelines.common
 
 pipelines.95_emit_explorer_bundle  (pipelines/95_emit_explorer_bundle.py)

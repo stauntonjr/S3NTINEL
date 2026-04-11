@@ -9,6 +9,7 @@ from libs.common.event_types import CATEGORICAL_EVENT_TYPES, CONTINUOUS_EVENT_TY
 from libs.io.schemas.scoring import WINDOW_SCORES_CALIBRATED_SCHEMA, WINDOW_SCORES_RAW_SCHEMA
 from libs.pyspark import Table
 from libs.scoring.channels import (
+    ACCUMULATION_VIOLATION_CHANNEL,
     BOUND_VIOLATION_CHANNEL,
     COHERENCE_BREAK_CHANNEL,
     EVENT_DISCORDANCE_CHANNEL,
@@ -693,6 +694,8 @@ class WindowScoresRawTable(Table):
                     F.broadcast(
                         parameter_behavior_profile_df.select(
                             "parameter_name",
+                            "persistent_run_strength_profiled",
+                            "run_reinforcement_score_profiled",
                             "regulated_score_profiled",
                             "tracking_score_profiled",
                             "inertial_score_profiled",
@@ -702,6 +705,8 @@ class WindowScoresRawTable(Table):
                             "excursion_return_ratio_profiled",
                             "bound_occupancy_profiled",
                             "saturation_rate_profiled",
+                            "monotone_accumulation_score_profiled",
+                            "reset_drop_rate_profiled",
                             "oscillation_score_profiled",
                             "tracking_error_score_profiled",
                             "tracking_recovery_score_profiled",
@@ -718,6 +723,7 @@ class WindowScoresRawTable(Table):
                     F.broadcast(
                         parameter_event_profile_df.select(
                             "parameter_name",
+                            "drift_score_profiled",
                             "repeatability_score_profiled",
                             "smoothness_score_profiled",
                             "recommended_emit_threshold",
@@ -737,6 +743,18 @@ class WindowScoresRawTable(Table):
                 F.col("bound_occupancy_profiled"),
                 F.col("saturation_rate_profiled"),
                 F.col("excursion_rate_profiled"),
+                F.col("accumulative_score_profiled"),
+            )
+            accumulation_profile_relevance = _normalized_clamped_avg(
+                F.col("accumulative_score_profiled"),
+                F.col("monotone_accumulation_score_profiled"),
+                F.col("persistent_run_strength_profiled"),
+                F.col("run_reinforcement_score_profiled"),
+                F.col("drift_score_profiled"),
+            )
+            accumulation_reset_relevance = _normalized_clamped_avg(
+                F.col("reset_drop_rate_profiled"),
+                F.col("monotone_accumulation_score_profiled"),
                 F.col("accumulative_score_profiled"),
             )
             bound_event_novelty = _normalized_clamped_avg(
@@ -780,6 +798,13 @@ class WindowScoresRawTable(Table):
                     ).alias("bound_violation_raw"),
                     (
                         F.col("residual_share")
+                        * (
+                            (F.lit(0.7) * accumulation_profile_relevance)
+                            + (F.lit(0.3) * accumulation_reset_relevance)
+                        )
+                    ).alias("accumulation_violation_raw"),
+                    (
+                        F.col("residual_share")
                         * F.log1p(
                             F.coalesce(F.col("slope_event_count"), F.lit(0.0))
                             + F.coalesce(F.col("switch_event_count"), F.lit(0.0))
@@ -805,17 +830,24 @@ class WindowScoresRawTable(Table):
                 .groupBy(*_EVENT_WINDOW_KEYS, "phase_id_detected")
                 .agg(
                     F.sum("bound_violation_raw").cast("double").alias("bound_violation_raw"),
+                    F.sum("accumulation_violation_raw").cast("double").alias("accumulation_violation_raw"),
                     F.sum("response_violation_raw").cast("double").alias("response_violation_raw"),
                     F.sum("state_violation_raw").cast("double").alias("state_violation_raw"),
                 )
             )
-            behavior_metric_cols = ("bound_violation_raw", "response_violation_raw", "state_violation_raw")
+            behavior_metric_cols = (
+                "bound_violation_raw",
+                "accumulation_violation_raw",
+                "response_violation_raw",
+                "state_violation_raw",
+            )
             behavior_baselines_df = _phase_metric_baselines(behavior_activation_df, metric_cols=behavior_metric_cols)
             behavior_score_df = (
                 behavior_activation_df.join(F.broadcast(behavior_baselines_df), on=_PHASE_GROUP_KEYS, how="left")
                 .select(
                     *_EVENT_WINDOW_KEYS,
                     _normalized_positive_deviation("bound_violation_raw").alias(BOUND_VIOLATION_CHANNEL),
+                    _normalized_positive_deviation("accumulation_violation_raw").alias(ACCUMULATION_VIOLATION_CHANNEL),
                     _normalized_positive_deviation("response_violation_raw").alias(RESPONSE_VIOLATION_CHANNEL),
                     _normalized_positive_deviation("state_violation_raw").alias(STATE_VIOLATION_CHANNEL),
                 )
@@ -917,6 +949,7 @@ class WindowScoresRawTable(Table):
         for score_name in (
             EVENT_DISCORDANCE_CHANNEL,
             BOUND_VIOLATION_CHANNEL,
+            ACCUMULATION_VIOLATION_CHANNEL,
             RESPONSE_VIOLATION_CHANNEL,
             STATE_VIOLATION_CHANNEL,
             COHERENCE_BREAK_CHANNEL,
@@ -931,6 +964,7 @@ class WindowScoresRawTable(Table):
             RECONSTRUCTION_ERROR_CHANNEL: F.col(RECONSTRUCTION_ERROR_CHANNEL),
             EVENT_DISCORDANCE_CHANNEL: F.col(EVENT_DISCORDANCE_CHANNEL),
             BOUND_VIOLATION_CHANNEL: F.col(BOUND_VIOLATION_CHANNEL),
+            ACCUMULATION_VIOLATION_CHANNEL: F.col(ACCUMULATION_VIOLATION_CHANNEL),
             RESPONSE_VIOLATION_CHANNEL: F.col(RESPONSE_VIOLATION_CHANNEL),
             STATE_VIOLATION_CHANNEL: F.col(STATE_VIOLATION_CHANNEL),
             COHERENCE_BREAK_CHANNEL: F.col(COHERENCE_BREAK_CHANNEL),

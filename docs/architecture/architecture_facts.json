@@ -2798,6 +2798,10 @@
     },
     {
       "source_module": "pipelines.90_anomaly_attribution",
+      "target_module": "libs.profiling"
+    },
+    {
+      "source_module": "pipelines.90_anomaly_attribution",
       "target_module": "pipelines.common"
     },
     {
@@ -3284,12 +3288,12 @@
       "description": "Architecture view of the active pipeline, simulation, core library, and architecture-tooling surfaces.",
       "id": "s3ntinel",
       "kind": "software_system",
-      "loc_span": 54890,
+      "loc_span": 55315,
       "module_count": 238,
       "name": "S3NTINEL Architecture",
       "parent_id": null,
       "properties": {
-        "loc_span": "54890",
+        "loc_span": "55315",
         "module_count": "238"
       },
       "source_paths": [
@@ -3620,12 +3624,12 @@
       "description": "Persisted stage entrypoints and grouped runners for the active fitting and inference path.",
       "id": "pipeline_runtime",
       "kind": "container",
-      "loc_span": 3770,
+      "loc_span": 3786,
       "module_count": 23,
       "name": "Pipeline Runtime",
       "parent_id": "s3ntinel",
       "properties": {
-        "loc_span": "3770",
+        "loc_span": "3786",
         "module_count": "23"
       },
       "source_paths": [
@@ -3734,12 +3738,12 @@
       "description": "Entry points for phase fitting, scoring, calibration, attribution, and explorer output.",
       "id": "pipeline_runtime.inference_stages",
       "kind": "component",
-      "loc_span": 973,
+      "loc_span": 989,
       "module_count": 6,
       "name": "Inference Stages",
       "parent_id": "pipeline_runtime",
       "properties": {
-        "loc_span": "973",
+        "loc_span": "989",
         "module_count": "6"
       },
       "source_paths": [
@@ -4058,12 +4062,12 @@
       "description": "Reusable domain and infrastructure libraries behind the active runtime path.",
       "id": "core_libraries",
       "kind": "container",
-      "loc_span": 44669,
+      "loc_span": 45078,
       "module_count": 189,
       "name": "Core Libraries",
       "parent_id": "s3ntinel",
       "properties": {
-        "loc_span": "44669",
+        "loc_span": "45078",
         "module_count": "189"
       },
       "source_paths": [
@@ -4271,12 +4275,12 @@
       "description": "`libs/anomaly` owns downstream anomaly attribution artifacts and attribution-vs-truth validation.",
       "id": "core_libraries.anomaly",
       "kind": "component",
-      "loc_span": 2279,
+      "loc_span": 2642,
       "module_count": 5,
       "name": "Anomaly",
       "parent_id": "core_libraries",
       "properties": {
-        "loc_span": "2279",
+        "loc_span": "2642",
         "module_count": "5",
         "package_name": "libs.anomaly"
       },
@@ -4748,12 +4752,12 @@
       "description": "`libs/scoring` owns raw and calibrated anomaly scoring over fitted phase and structural artifacts.",
       "id": "core_libraries.scoring",
       "kind": "component",
-      "loc_span": 2085,
+      "loc_span": 2123,
       "module_count": 4,
       "name": "Scoring",
       "parent_id": "core_libraries",
       "properties": {
-        "loc_span": "2085",
+        "loc_span": "2123",
         "module_count": "4",
         "package_name": "libs.scoring"
       },
@@ -4836,12 +4840,12 @@
       "description": "This package contains the simulation domain model only. It does not own",
       "id": "core_libraries.simulation",
       "kind": "component",
-      "loc_span": 11666,
+      "loc_span": 11674,
       "module_count": 62,
       "name": "Simulation",
       "parent_id": "core_libraries",
       "properties": {
-        "loc_span": "11666",
+        "loc_span": "11674",
         "module_count": "62",
         "package_name": "libs.simulation"
       },
@@ -5127,10 +5131,10 @@
       {
         "container_id": "core_libraries",
         "id": "core_libraries.simulation",
-        "loc_span": 11666,
+        "loc_span": 11674,
         "module_count": 62,
         "name": "Simulation",
-        "system_loc_share": 0.2125
+        "system_loc_share": 0.211
       },
       {
         "container_id": "core_libraries",
@@ -5138,7 +5142,7 @@
         "loc_span": 4332,
         "module_count": 14,
         "name": "Phase",
-        "system_loc_share": 0.0789
+        "system_loc_share": 0.0783
       },
       {
         "container_id": "core_libraries",
@@ -5146,7 +5150,7 @@
         "loc_span": 3513,
         "module_count": 13,
         "name": "Graph",
-        "system_loc_share": 0.064
+        "system_loc_share": 0.0635
       },
       {
         "container_id": "core_libraries",
@@ -5154,7 +5158,7 @@
         "loc_span": 3493,
         "module_count": 9,
         "name": "Events",
-        "system_loc_share": 0.0636
+        "system_loc_share": 0.0631
       },
       {
         "container_id": "core_libraries",
@@ -5162,7 +5166,7 @@
         "loc_span": 3479,
         "module_count": 13,
         "name": "Tuning",
-        "system_loc_share": 0.0634
+        "system_loc_share": 0.0629
       },
       {
         "container_id": "core_libraries",
@@ -5170,7 +5174,7 @@
         "loc_span": 3442,
         "module_count": 8,
         "name": "Windows",
-        "system_loc_share": 0.0627
+        "system_loc_share": 0.0622
       },
       {
         "container_id": "architecture_tooling",
@@ -5178,23 +5182,23 @@
         "loc_span": 2881,
         "module_count": 7,
         "name": "Architecture Workflow",
-        "system_loc_share": 0.0525
+        "system_loc_share": 0.0521
       },
       {
         "container_id": "core_libraries",
         "id": "core_libraries.anomaly",
-        "loc_span": 2279,
+        "loc_span": 2642,
         "module_count": 5,
         "name": "Anomaly",
-        "system_loc_share": 0.0415
+        "system_loc_share": 0.0478
       },
       {
         "container_id": "core_libraries",
         "id": "core_libraries.scoring",
-        "loc_span": 2085,
+        "loc_span": 2123,
         "module_count": 4,
         "name": "Scoring",
-        "system_loc_share": 0.038
+        "system_loc_share": 0.0384
       },
       {
         "container_id": "core_libraries",
@@ -5202,7 +5206,7 @@
         "loc_span": 2073,
         "module_count": 16,
         "name": "Io",
-        "system_loc_share": 0.0378
+        "system_loc_share": 0.0375
       },
       {
         "container_id": "pipeline_runtime",
@@ -5210,7 +5214,7 @@
         "loc_span": 2066,
         "module_count": 10,
         "name": "Fitting Stages",
-        "system_loc_share": 0.0376
+        "system_loc_share": 0.0373
       },
       {
         "container_id": "core_libraries",
@@ -5218,7 +5222,7 @@
         "loc_span": 1910,
         "module_count": 12,
         "name": "Behavior",
-        "system_loc_share": 0.0348
+        "system_loc_share": 0.0345
       },
       {
         "container_id": "core_libraries",
@@ -5226,7 +5230,7 @@
         "loc_span": 1552,
         "module_count": 4,
         "name": "Profiling",
-        "system_loc_share": 0.0283
+        "system_loc_share": 0.0281
       },
       {
         "container_id": "core_libraries",
@@ -5234,7 +5238,7 @@
         "loc_span": 1088,
         "module_count": 6,
         "name": "Perf",
-        "system_loc_share": 0.0198
+        "system_loc_share": 0.0197
       },
       {
         "container_id": "architecture_tooling",
@@ -5242,15 +5246,15 @@
         "loc_span": 1029,
         "module_count": 2,
         "name": "Repo Mapping Tools",
-        "system_loc_share": 0.0187
+        "system_loc_share": 0.0186
       },
       {
         "container_id": "pipeline_runtime",
         "id": "pipeline_runtime.inference_stages",
-        "loc_span": 973,
+        "loc_span": 989,
         "module_count": 6,
         "name": "Inference Stages",
-        "system_loc_share": 0.0177
+        "system_loc_share": 0.0179
       },
       {
         "container_id": "simulation_clis",
@@ -5258,7 +5262,7 @@
         "loc_span": 885,
         "module_count": 3,
         "name": "Performance And Replay Utilities",
-        "system_loc_share": 0.0161
+        "system_loc_share": 0.016
       },
       {
         "container_id": "core_libraries",
@@ -5266,7 +5270,7 @@
         "loc_span": 817,
         "module_count": 5,
         "name": "Backbone",
-        "system_loc_share": 0.0149
+        "system_loc_share": 0.0148
       },
       {
         "container_id": "core_libraries",
@@ -5274,7 +5278,7 @@
         "loc_span": 642,
         "module_count": 2,
         "name": "Config",
-        "system_loc_share": 0.0117
+        "system_loc_share": 0.0116
       },
       {
         "container_id": "pipeline_runtime",
@@ -5282,7 +5286,7 @@
         "loc_span": 565,
         "module_count": 4,
         "name": "Grouped Pipeline Runners",
-        "system_loc_share": 0.0103
+        "system_loc_share": 0.0102
       },
       {
         "container_id": "core_libraries",
@@ -5298,7 +5302,7 @@
         "loc_span": 201,
         "module_count": 4,
         "name": "Pyspark",
-        "system_loc_share": 0.0037
+        "system_loc_share": 0.0036
       },
       {
         "container_id": "core_libraries",
@@ -5336,31 +5340,31 @@
     "container_size_table": [
       {
         "id": "core_libraries",
-        "loc_span": 44669,
+        "loc_span": 45078,
         "module_count": 189,
         "name": "Core Libraries",
-        "system_loc_share": 0.8138
+        "system_loc_share": 0.8149
       },
       {
         "id": "architecture_tooling",
         "loc_span": 3912,
         "module_count": 10,
         "name": "Architecture Tooling",
-        "system_loc_share": 0.0713
+        "system_loc_share": 0.0707
       },
       {
         "id": "pipeline_runtime",
-        "loc_span": 3770,
+        "loc_span": 3786,
         "module_count": 23,
         "name": "Pipeline Runtime",
-        "system_loc_share": 0.0687
+        "system_loc_share": 0.0684
       },
       {
         "id": "simulation_clis",
         "loc_span": 1829,
         "module_count": 11,
         "name": "Simulation And Utility CLIs",
-        "system_loc_share": 0.0333
+        "system_loc_share": 0.0331
       }
     ],
     "dependency_size_table": [
@@ -5369,7 +5373,7 @@
         "container_id": "core_libraries",
         "id": "core_libraries.simulation",
         "incoming_relationship_count": 3,
-        "loc_span": 11666,
+        "loc_span": 11674,
         "name": "Simulation",
         "outgoing_relationship_count": 13
       },
@@ -5405,7 +5409,7 @@
         "container_id": "core_libraries",
         "id": "core_libraries.scoring",
         "incoming_relationship_count": 3,
-        "loc_span": 2085,
+        "loc_span": 2123,
         "name": "Scoring",
         "outgoing_relationship_count": 8
       },
@@ -5441,7 +5445,7 @@
         "container_id": "pipeline_runtime",
         "id": "pipeline_runtime.inference_stages",
         "incoming_relationship_count": 0,
-        "loc_span": 973,
+        "loc_span": 989,
         "name": "Inference Stages",
         "outgoing_relationship_count": 10
       },
@@ -5477,7 +5481,7 @@
         "container_id": "core_libraries",
         "id": "core_libraries.anomaly",
         "incoming_relationship_count": 2,
-        "loc_span": 2279,
+        "loc_span": 2642,
         "name": "Anomaly",
         "outgoing_relationship_count": 4
       },
@@ -5622,7 +5626,7 @@
         "qualified_name": "libs.phase.frames.PhaseFeatureFrame"
       },
       {
-        "loc_span": 612,
+        "loc_span": 645,
         "module": "libs.scoring.tables",
         "name": "WindowScoresRawTable",
         "path": "libs/scoring/tables.py",
@@ -5636,7 +5640,7 @@
         "qualified_name": "libs.profiling.profiles.ParameterBehaviorPrimitiveProfile"
       },
       {
-        "loc_span": 500,
+        "loc_span": 547,
         "module": "libs.anomaly.frames",
         "name": "AnomalyParameterLocalizationFrame",
         "path": "libs/anomaly/frames.py",
@@ -5687,7 +5691,7 @@
         "qualified_name": "libs.simulation.scenarios.power_pressurization._build_module_templates"
       },
       {
-        "loc_span": 578,
+        "loc_span": 611,
         "module": "libs.scoring.tables",
         "name": "from_phase_dataframes",
         "path": "libs/scoring/tables.py",
@@ -5701,18 +5705,18 @@
         "qualified_name": "libs.events.profiling.ParameterEventProfile.from_raw_input"
       },
       {
+        "loc_span": 404,
+        "module": "libs.anomaly.frames",
+        "name": "from_calibrated_phase_windows_events_and_hierarchy",
+        "path": "libs/anomaly/frames.py",
+        "qualified_name": "libs.anomaly.frames.AnomalyParameterLocalizationFrame.from_calibrated_phase_windows_events_and_hierarchy"
+      },
+      {
         "loc_span": 378,
         "module": "pipelines.50_build_graph",
         "name": "run",
         "path": "pipelines/50_build_graph.py",
         "qualified_name": "pipelines.50_build_graph.run"
-      },
-      {
-        "loc_span": 357,
-        "module": "libs.anomaly.frames",
-        "name": "from_calibrated_phase_windows_events_and_hierarchy",
-        "path": "libs/anomaly/frames.py",
-        "qualified_name": "libs.anomaly.frames.AnomalyParameterLocalizationFrame.from_calibrated_phase_windows_events_and_hierarchy"
       },
       {
         "loc_span": 353,
@@ -5766,6 +5770,13 @@
         "path": "libs/architecture/render.py"
       },
       {
+        "component_id": "core_libraries.anomaly",
+        "container_id": "core_libraries",
+        "loc_span": 1175,
+        "module": "libs.anomaly.validator",
+        "path": "libs/anomaly/validator.py"
+      },
+      {
         "component_id": "core_libraries.windows",
         "container_id": "core_libraries",
         "loc_span": 1161,
@@ -5780,18 +5791,18 @@
         "path": "libs/plotting/simulation_artifacts.py"
       },
       {
+        "component_id": "core_libraries.scoring",
+        "container_id": "core_libraries",
+        "loc_span": 1072,
+        "module": "libs.scoring.tables",
+        "path": "libs/scoring/tables.py"
+      },
+      {
         "component_id": "core_libraries.simulation",
         "container_id": "core_libraries",
         "loc_span": 1066,
         "module": "libs.simulation.flight.examples",
         "path": "libs/simulation/flight/examples.py"
-      },
-      {
-        "component_id": "core_libraries.scoring",
-        "container_id": "core_libraries",
-        "loc_span": 1038,
-        "module": "libs.scoring.tables",
-        "path": "libs/scoring/tables.py"
       },
       {
         "component_id": "core_libraries.tuning",
@@ -5801,24 +5812,17 @@
         "path": "libs/tuning/objectives.py"
       },
       {
-        "component_id": "core_libraries.profiling",
-        "container_id": "core_libraries",
-        "loc_span": 959,
-        "module": "libs.profiling.profiles",
-        "path": "libs/profiling/profiles.py"
-      },
-      {
         "component_id": "core_libraries.anomaly",
         "container_id": "core_libraries",
-        "loc_span": 922,
+        "loc_span": 982,
         "module": "libs.anomaly.frames",
         "path": "libs/anomaly/frames.py"
       }
     ],
-    "system_loc_span": 54890,
-    "top_component_loc_share": 0.2125,
-    "top_module_loc_share": 0.0411,
-    "top_three_component_loc_share": 0.3555
+    "system_loc_span": 55315,
+    "top_component_loc_share": 0.211,
+    "top_module_loc_share": 0.0408,
+    "top_three_component_loc_share": 0.3529
   },
   "modules": [
     {
@@ -5893,16 +5897,16 @@
               "name": "from_events_and_windows",
               "signature": "def from_events_and_windows(cls, events_df: 'DataFrame', windows_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', *, top_k_per_subsystem: int) -> 'AnomalySubsystemContextFrame'",
               "span": {
-                "end_lineno": 237,
-                "lineno": 106,
+                "end_lineno": 250,
+                "lineno": 119,
                 "span_loc": 132
               }
             }
           ],
           "name": "AnomalySubsystemContextFrame",
           "span": {
-            "end_lineno": 237,
-            "lineno": 103,
+            "end_lineno": 250,
+            "lineno": 116,
             "span_loc": 135
           }
         },
@@ -5926,16 +5930,16 @@
               "name": "from_raw_and_windows",
               "signature": "def from_raw_and_windows(cls, raw_df: 'DataFrame', windows_df: 'DataFrame', *, max_items: int = 5) -> 'AnomalyPanelContextFrame'",
               "span": {
-                "end_lineno": 375,
-                "lineno": 244,
+                "end_lineno": 388,
+                "lineno": 257,
                 "span_loc": 132
               }
             }
           ],
           "name": "AnomalyPanelContextFrame",
           "span": {
-            "end_lineno": 375,
-            "lineno": 241,
+            "end_lineno": 388,
+            "lineno": 254,
             "span_loc": 135
           }
         },
@@ -5956,8 +5960,8 @@
               "name": "_module_support_df",
               "signature": "def _module_support_df(self) -> 'DataFrame'",
               "span": {
-                "end_lineno": 401,
-                "lineno": 380,
+                "end_lineno": 414,
+                "lineno": 393,
                 "span_loc": 22
               }
             },
@@ -5968,11 +5972,11 @@
               ],
               "doc": null,
               "name": "from_calibrated_phase_windows_events_and_hierarchy",
-              "signature": "def from_calibrated_phase_windows_events_and_hierarchy(cls, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', top_k_per_window: int = ANOMALY_LOCALIZATION_PARAMETER_TOP_K) -> 'AnomalyParameterLocalizationFrame'",
+              "signature": "def from_calibrated_phase_windows_events_and_hierarchy(cls, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', parameter_behavior_profile_df: 'DataFrame | None' = None, top_k_per_window: int = ANOMALY_LOCALIZATION_PARAMETER_TOP_K) -> 'AnomalyParameterLocalizationFrame'",
               "span": {
-                "end_lineno": 761,
-                "lineno": 405,
-                "span_loc": 357
+                "end_lineno": 821,
+                "lineno": 418,
+                "span_loc": 404
               }
             },
             {
@@ -5983,8 +5987,8 @@
               "name": "localized_targets_df",
               "signature": "def localized_targets_df(self, *, top_k_per_window: int = ANOMALY_LOCALIZATION_TARGET_TOP_K) -> 'DataFrame'",
               "span": {
-                "end_lineno": 867,
-                "lineno": 764,
+                "end_lineno": 927,
+                "lineno": 824,
                 "span_loc": 104
               }
             },
@@ -5996,17 +6000,17 @@
               "name": "dominant_targets_df",
               "signature": "def dominant_targets_df(self) -> 'DataFrame'",
               "span": {
-                "end_lineno": 878,
-                "lineno": 870,
+                "end_lineno": 938,
+                "lineno": 930,
                 "span_loc": 9
               }
             }
           ],
           "name": "AnomalyParameterLocalizationFrame",
           "span": {
-            "end_lineno": 878,
-            "lineno": 379,
-            "span_loc": 500
+            "end_lineno": 938,
+            "lineno": 392,
+            "span_loc": 547
           }
         },
         {
@@ -6029,16 +6033,16 @@
               "name": "from_context_frames",
               "signature": "def from_context_frames(cls, *, subsystem_context: AnomalySubsystemContextFrame, panel_context: AnomalyPanelContextFrame) -> 'AnomalyAttributionContextFrame'",
               "span": {
-                "end_lineno": 918,
-                "lineno": 885,
+                "end_lineno": 978,
+                "lineno": 945,
                 "span_loc": 34
               }
             }
           ],
           "name": "AnomalyAttributionContextFrame",
           "span": {
-            "end_lineno": 918,
-            "lineno": 882,
+            "end_lineno": 978,
+            "lineno": 942,
             "span_loc": 37
           }
         }
@@ -6052,11 +6056,22 @@
         {
           "decorators": [],
           "doc": null,
+          "name": "_normalized_clamped_avg_expr",
+          "signature": "def _normalized_clamped_avg_expr(*columns: 'Column') -> 'Column'",
+          "span": {
+            "end_lineno": 33,
+            "lineno": 25,
+            "span_loc": 9
+          }
+        },
+        {
+          "decorators": [],
+          "doc": null,
           "name": "_component_score_expr",
           "signature": "def _component_score_expr(component_scores_col: str, channel_name: str) -> 'Column'",
           "span": {
-            "end_lineno": 27,
-            "lineno": 24,
+            "end_lineno": 39,
+            "lineno": 36,
             "span_loc": 4
           }
         },
@@ -6066,9 +6081,9 @@
           "name": "_log_component_weight_expr",
           "signature": "def _log_component_weight_expr(component_scores_col: str, channel_name: str) -> 'Column'",
           "span": {
-            "end_lineno": 48,
-            "lineno": 30,
-            "span_loc": 19
+            "end_lineno": 61,
+            "lineno": 42,
+            "span_loc": 20
           }
         },
         {
@@ -6077,8 +6092,8 @@
           "name": "mapped_events_in_supported_windows",
           "signature": "def mapped_events_in_supported_windows(*, events_df: 'DataFrame', windows_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame') -> 'DataFrame'",
           "span": {
-            "end_lineno": 99,
-            "lineno": 51,
+            "end_lineno": 112,
+            "lineno": 64,
             "span_loc": 49
           }
         }
@@ -6089,7 +6104,7 @@
         "from typing import TYPE_CHECKING",
         "from libs.perf.annotations import hot_path",
         "from libs.pyspark import Frame",
-        "from libs.scoring.channels import BOUND_VIOLATION_CHANNEL, COHERENCE_BREAK_CHANNEL, EVENT_DISCORDANCE_CHANNEL, RECONSTRUCTION_ERROR_CHANNEL, REGIME_DEVIATION_CHANNEL, RESPONSE_VIOLATION_CHANNEL, STATE_VIOLATION_CHANNEL",
+        "from libs.scoring.channels import ACCUMULATION_VIOLATION_CHANNEL, BOUND_VIOLATION_CHANNEL, COHERENCE_BREAK_CHANNEL, EVENT_DISCORDANCE_CHANNEL, RECONSTRUCTION_ERROR_CHANNEL, REGIME_DEVIATION_CHANNEL, RESPONSE_VIOLATION_CHANNEL, STATE_VIOLATION_CHANNEL",
         "from pyspark.sql import DataFrame"
       ],
       "internal_dependencies": [
@@ -6102,9 +6117,9 @@
       "parse_error": null,
       "path": "libs/anomaly/frames.py",
       "span": {
-        "end_lineno": 922,
+        "end_lineno": 982,
         "lineno": 1,
-        "span_loc": 922
+        "span_loc": 982
       },
       "unresolved_imports": [
         "from __future__ import annotations",
@@ -6174,22 +6189,22 @@
               "decorators": [],
               "doc": null,
               "name": "build_window_attribution",
-              "signature": "def build_window_attribution(self, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame', windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', raw_df: 'DataFrame', localization_targets_df: 'DataFrame | None' = None) -> AnomalyWindowAttributionTable",
+              "signature": "def build_window_attribution(self, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame', windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', raw_df: 'DataFrame', parameter_behavior_profile_df: 'DataFrame | None' = None, localization_targets_df: 'DataFrame | None' = None) -> AnomalyWindowAttributionTable",
               "span": {
-                "end_lineno": 70,
+                "end_lineno": 72,
                 "lineno": 32,
-                "span_loc": 39
+                "span_loc": 41
               }
             },
             {
               "decorators": [],
               "doc": null,
               "name": "build_telemetry_attribution",
-              "signature": "def build_telemetry_attribution(self, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame | None' = None, windows_df: 'DataFrame', events_df: 'DataFrame | None' = None, raw_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', parameter_localization_df: 'DataFrame | None' = None) -> AnomalyTelemetryAttributionTable",
+              "signature": "def build_telemetry_attribution(self, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame | None' = None, windows_df: 'DataFrame', events_df: 'DataFrame | None' = None, raw_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', parameter_behavior_profile_df: 'DataFrame | None' = None, parameter_localization_df: 'DataFrame | None' = None) -> AnomalyTelemetryAttributionTable",
               "span": {
-                "end_lineno": 102,
-                "lineno": 72,
-                "span_loc": 31
+                "end_lineno": 106,
+                "lineno": 74,
+                "span_loc": 33
               }
             },
             {
@@ -6198,8 +6213,8 @@
               "name": "build_event_attribution",
               "signature": "def build_event_attribution(self, *, calibrated_df: 'DataFrame', windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame') -> AnomalyEventAttributionTable",
               "span": {
-                "end_lineno": 117,
-                "lineno": 104,
+                "end_lineno": 121,
+                "lineno": 108,
                 "span_loc": 14
               }
             },
@@ -6209,19 +6224,19 @@
               ],
               "doc": null,
               "name": "build",
-              "signature": "def build(self, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame', windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', raw_df: 'DataFrame') -> AnomalyArtifactSet",
+              "signature": "def build(self, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame', windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', raw_df: 'DataFrame', parameter_behavior_profile_df: 'DataFrame | None' = None) -> AnomalyArtifactSet",
               "span": {
-                "end_lineno": 162,
-                "lineno": 120,
-                "span_loc": 43
+                "end_lineno": 170,
+                "lineno": 124,
+                "span_loc": 47
               }
             }
           ],
           "name": "AnomalyAttributionPlan",
           "span": {
-            "end_lineno": 162,
+            "end_lineno": 170,
             "lineno": 29,
-            "span_loc": 134
+            "span_loc": 142
           }
         }
       ],
@@ -6247,9 +6262,9 @@
       "parse_error": null,
       "path": "libs/anomaly/pipeline.py",
       "span": {
-        "end_lineno": 168,
+        "end_lineno": 176,
         "lineno": 1,
-        "span_loc": 168
+        "span_loc": 176
       },
       "unresolved_imports": [
         "from __future__ import annotations",
@@ -6487,8 +6502,8 @@
               "name": "from_hierarchy_frames",
               "signature": "def from_hierarchy_frames(cls, *, hierarchy_sensor_map_df: pd.DataFrame | None, hierarchy_label_df: pd.DataFrame | None, detected_id_field: str, truth_id_field: str) -> 'DetectedLocalizationTruthMap'",
               "span": {
-                "end_lineno": 217,
-                "lineno": 174,
+                "end_lineno": 336,
+                "lineno": 293,
                 "span_loc": 44
               }
             },
@@ -6498,16 +6513,16 @@
               "name": "resolve",
               "signature": "def resolve(self, detected_id: str) -> tuple[str | None, bool]",
               "span": {
-                "end_lineno": 223,
-                "lineno": 219,
+                "end_lineno": 342,
+                "lineno": 338,
                 "span_loc": 5
               }
             }
           ],
           "name": "DetectedLocalizationTruthMap",
           "span": {
-            "end_lineno": 223,
-            "lineno": 169,
+            "end_lineno": 342,
+            "lineno": 288,
             "span_loc": 55
           }
         },
@@ -6614,21 +6629,23 @@
               "name": "from_truth_record",
               "signature": "def from_truth_record(cls, *, truth: dict[str, Any], windows_df: pd.DataFrame, anomaly_window_attribution_df: pd.DataFrame, anomaly_telemetry_attribution_df: pd.DataFrame, anomaly_event_attribution_df: pd.DataFrame, subsystem_truth_map: DetectedLocalizationTruthMap, module_truth_map: DetectedLocalizationTruthMap, truth_parameter_to_subsystem: dict[str, str], truth_parameter_to_module: dict[str, str], truth_window_id_field: str, truth_start_field: str, truth_end_field: str) -> '_TruthWindowAttributionMatch'",
               "span": {
-                "end_lineno": 449,
-                "lineno": 244,
-                "span_loc": 206
+                "end_lineno": 630,
+                "lineno": 363,
+                "span_loc": 268
               }
             }
           ],
           "name": "_TruthWindowAttributionMatch",
           "span": {
-            "end_lineno": 449,
-            "lineno": 227,
-            "span_loc": 223
+            "end_lineno": 630,
+            "lineno": 346,
+            "span_loc": 285
           }
         }
       ],
-      "constants": [],
+      "constants": [
+        "RECONSTRUCTION_ERROR_CHANNEL"
+      ],
       "doc": "Anomaly attribution validation against simulator misbehavior truth with fault wrappers.",
       "functions": [
         {
@@ -6637,8 +6654,8 @@
           "name": "_empty_parameter_localization_validation",
           "signature": "def _empty_parameter_localization_validation() -> dict[str, Any]",
           "span": {
-            "end_lineno": 49,
-            "lineno": 20,
+            "end_lineno": 51,
+            "lineno": 22,
             "span_loc": 30
           }
         },
@@ -6648,8 +6665,8 @@
           "name": "_empty_module_localization_validation",
           "signature": "def _empty_module_localization_validation() -> dict[str, Any]",
           "span": {
-            "end_lineno": 71,
-            "lineno": 52,
+            "end_lineno": 73,
+            "lineno": 54,
             "span_loc": 20
           }
         },
@@ -6659,9 +6676,20 @@
           "name": "_empty_channel_localization_validation",
           "signature": "def _empty_channel_localization_validation() -> dict[str, Any]",
           "span": {
-            "end_lineno": 87,
-            "lineno": 74,
+            "end_lineno": 89,
+            "lineno": 76,
             "span_loc": 14
+          }
+        },
+        {
+          "decorators": [],
+          "doc": null,
+          "name": "_empty_reconstruction_localization_validation",
+          "signature": "def _empty_reconstruction_localization_validation() -> dict[str, Any]",
+          "span": {
+            "end_lineno": 115,
+            "lineno": 92,
+            "span_loc": 24
           }
         },
         {
@@ -6670,8 +6698,8 @@
           "name": "_sorted_non_empty_string_values",
           "signature": "def _sorted_non_empty_string_values(df: pd.DataFrame, column: str) -> list[str]",
           "span": {
-            "end_lineno": 99,
-            "lineno": 90,
+            "end_lineno": 127,
+            "lineno": 118,
             "span_loc": 10
           }
         },
@@ -6681,8 +6709,8 @@
           "name": "_records_with_none_for_missing",
           "signature": "def _records_with_none_for_missing(df: pd.DataFrame) -> list[dict[str, Any]]",
           "span": {
-            "end_lineno": 103,
-            "lineno": 102,
+            "end_lineno": 131,
+            "lineno": 130,
             "span_loc": 2
           }
         },
@@ -6692,8 +6720,8 @@
           "name": "_sorted_detected_candidate_ids",
           "signature": "def _sorted_detected_candidate_ids(df: pd.DataFrame, column: str) -> list[str]",
           "span": {
-            "end_lineno": 130,
-            "lineno": 106,
+            "end_lineno": 158,
+            "lineno": 134,
             "span_loc": 25
           }
         },
@@ -6703,9 +6731,31 @@
           "name": "_resolve_truth_candidate_ids",
           "signature": "def _resolve_truth_candidate_ids(detected_candidate_ids: list[str], truth_map: 'DetectedLocalizationTruthMap') -> list[str]",
           "span": {
-            "end_lineno": 142,
-            "lineno": 133,
+            "end_lineno": 170,
+            "lineno": 161,
             "span_loc": 10
+          }
+        },
+        {
+          "decorators": [],
+          "doc": null,
+          "name": "_top_ranked_selected_parameter_details",
+          "signature": "def _top_ranked_selected_parameter_details(telemetry_selected_hits: pd.DataFrame, *, truth_parameter_to_subsystem: dict[str, str], truth_parameter_to_module: dict[str, str]) -> dict[str, Any]",
+          "span": {
+            "end_lineno": 218,
+            "lineno": 173,
+            "span_loc": 46
+          }
+        },
+        {
+          "decorators": [],
+          "doc": null,
+          "name": "_classify_reconstruction_localization_failure",
+          "signature": "def _classify_reconstruction_localization_failure(*, dominant_score_component: str, truth_parameter: str, truth_subsystem: str, truth_module: str, dominant_subsystem_match: bool, dominant_module_match: bool, telemetry_selected_truth_subsystem_present: bool, telemetry_selected_truth_module_present: bool, top_subsystem_candidate_present: bool, top_module_candidate_present: bool, top_ranked_selected_parameter_name: str | None, top_ranked_selected_parameter_truth_subsystem: str | None, top_ranked_selected_parameter_truth_module: str | None) -> str | None",
+          "span": {
+            "end_lineno": 261,
+            "lineno": 221,
+            "span_loc": 41
           }
         },
         {
@@ -6714,8 +6764,8 @@
           "name": "_rate_by_score_component",
           "signature": "def _rate_by_score_component(per_truth_df: pd.DataFrame, *, value_column: str, require_mappable_column: str | None = None) -> dict[str, float]",
           "span": {
-            "end_lineno": 165,
-            "lineno": 145,
+            "end_lineno": 284,
+            "lineno": 264,
             "span_loc": 21
           }
         },
@@ -6725,8 +6775,8 @@
           "name": "_truth_parameter_to_subsystem_map",
           "signature": "def _truth_parameter_to_subsystem_map(hierarchy_label_df: pd.DataFrame | None) -> dict[str, str]",
           "span": {
-            "end_lineno": 458,
-            "lineno": 452,
+            "end_lineno": 639,
+            "lineno": 633,
             "span_loc": 7
           }
         },
@@ -6736,8 +6786,8 @@
           "name": "_truth_parameter_to_module_map",
           "signature": "def _truth_parameter_to_module_map(hierarchy_label_df: pd.DataFrame | None) -> dict[str, str]",
           "span": {
-            "end_lineno": 467,
-            "lineno": 461,
+            "end_lineno": 648,
+            "lineno": 642,
             "span_loc": 7
           }
         },
@@ -6747,9 +6797,9 @@
           "name": "_build_parameter_localization_validation",
           "signature": "def _build_parameter_localization_validation(per_truth_df: pd.DataFrame) -> dict[str, Any]",
           "span": {
-            "end_lineno": 545,
-            "lineno": 470,
-            "span_loc": 76
+            "end_lineno": 734,
+            "lineno": 651,
+            "span_loc": 84
           }
         },
         {
@@ -6758,8 +6808,8 @@
           "name": "_build_module_localization_validation",
           "signature": "def _build_module_localization_validation(per_truth_df: pd.DataFrame) -> dict[str, Any]",
           "span": {
-            "end_lineno": 603,
-            "lineno": 548,
+            "end_lineno": 792,
+            "lineno": 737,
             "span_loc": 56
           }
         },
@@ -6769,9 +6819,20 @@
           "name": "_build_channel_localization_validation",
           "signature": "def _build_channel_localization_validation(per_truth_df: pd.DataFrame) -> dict[str, Any]",
           "span": {
-            "end_lineno": 680,
-            "lineno": 606,
-            "span_loc": 75
+            "end_lineno": 876,
+            "lineno": 795,
+            "span_loc": 82
+          }
+        },
+        {
+          "decorators": [],
+          "doc": null,
+          "name": "_build_reconstruction_localization_validation",
+          "signature": "def _build_reconstruction_localization_validation(per_truth_df: pd.DataFrame) -> dict[str, Any]",
+          "span": {
+            "end_lineno": 968,
+            "lineno": 879,
+            "span_loc": 90
           }
         },
         {
@@ -6780,9 +6841,9 @@
           "name": "build_fault_attribution_summary_from_misbehavior_summary",
           "signature": "def build_fault_attribution_summary_from_misbehavior_summary(summary: dict[str, Any]) -> dict[str, Any]",
           "span": {
-            "end_lineno": 728,
-            "lineno": 683,
-            "span_loc": 46
+            "end_lineno": 1020,
+            "lineno": 971,
+            "span_loc": 50
           }
         },
         {
@@ -6791,9 +6852,9 @@
           "name": "validate_attribution_against_misbehavior_truth",
           "signature": "def validate_attribution_against_misbehavior_truth(*, raw_telemetry_df: pd.DataFrame, windows_df: pd.DataFrame, anomaly_window_attribution_df: pd.DataFrame, anomaly_telemetry_attribution_df: pd.DataFrame, anomaly_event_attribution_df: pd.DataFrame, hierarchy_sensor_map_df: pd.DataFrame | None = None, hierarchy_label_df: pd.DataFrame | None = None) -> dict[str, Any]",
           "span": {
-            "end_lineno": 857,
-            "lineno": 731,
-            "span_loc": 127
+            "end_lineno": 1152,
+            "lineno": 1023,
+            "span_loc": 130
           }
         },
         {
@@ -6802,8 +6863,8 @@
           "name": "validate_attribution_against_fault_truth",
           "signature": "def validate_attribution_against_fault_truth(*, raw_telemetry_df: pd.DataFrame, windows_df: pd.DataFrame, anomaly_window_attribution_df: pd.DataFrame, anomaly_telemetry_attribution_df: pd.DataFrame, anomaly_event_attribution_df: pd.DataFrame, hierarchy_sensor_map_df: pd.DataFrame | None = None, hierarchy_label_df: pd.DataFrame | None = None) -> dict[str, Any]",
           "span": {
-            "end_lineno": 880,
-            "lineno": 860,
+            "end_lineno": 1175,
+            "lineno": 1155,
             "span_loc": 21
           }
         }
@@ -6823,9 +6884,9 @@
       "parse_error": null,
       "path": "libs/anomaly/validator.py",
       "span": {
-        "end_lineno": 880,
+        "end_lineno": 1175,
         "lineno": 1,
-        "span_loc": 880
+        "span_loc": 1175
       },
       "unresolved_imports": [
         "from __future__ import annotations",
@@ -27702,7 +27763,7 @@
       "doc": "Window scoring package for the active V2 pipeline.",
       "functions": [],
       "imports": [
-        "from libs.scoring.channels import BOUND_VIOLATION_CHANNEL, COHERENCE_BREAK_CHANNEL, EVENT_DISCORDANCE_CHANNEL, RECONSTRUCTION_ERROR_CHANNEL, REGIME_DEVIATION_CHANNEL, RESPONSE_VIOLATION_CHANNEL, SCORE_COMPONENT_NAMES, STATE_VIOLATION_CHANNEL, dominant_score_component, score_component_scores_with_updates, zero_score_component_scores",
+        "from libs.scoring.channels import ACCUMULATION_VIOLATION_CHANNEL, BOUND_VIOLATION_CHANNEL, COHERENCE_BREAK_CHANNEL, EVENT_DISCORDANCE_CHANNEL, RECONSTRUCTION_ERROR_CHANNEL, REGIME_DEVIATION_CHANNEL, RESPONSE_VIOLATION_CHANNEL, SCORE_COMPONENT_NAMES, STATE_VIOLATION_CHANNEL, dominant_score_component, score_component_scores_with_updates, zero_score_component_scores",
         "from libs.scoring.tables import WindowScoresCalibratedTable, WindowScoresRawTable",
         "from libs.scoring.validator import extract_fault_truth_windows, extract_misbehavior_truth_windows, summarize_fault_window_detection, summarize_misbehavior_window_detection, validate_scores_against_fault_windows, validate_scores_against_misbehavior_windows"
       ],
@@ -27716,15 +27777,16 @@
       "parse_error": null,
       "path": "libs/scoring/__init__.py",
       "span": {
-        "end_lineno": 46,
+        "end_lineno": 48,
         "lineno": 1,
-        "span_loc": 46
+        "span_loc": 48
       },
       "unresolved_imports": []
     },
     {
       "classes": [],
       "constants": [
+        "ACCUMULATION_VIOLATION_CHANNEL",
         "BOUND_VIOLATION_CHANNEL",
         "COHERENCE_BREAK_CHANNEL",
         "EVENT_DISCORDANCE_CHANNEL",
@@ -27742,8 +27804,8 @@
           "name": "zero_score_component_scores",
           "signature": "def zero_score_component_scores() -> dict[str, float]",
           "span": {
-            "end_lineno": 27,
-            "lineno": 26,
+            "end_lineno": 29,
+            "lineno": 28,
             "span_loc": 2
           }
         },
@@ -27753,8 +27815,8 @@
           "name": "score_component_scores_with_updates",
           "signature": "def score_component_scores_with_updates(updates: Mapping[str, float | int | None] | None = None) -> dict[str, float]",
           "span": {
-            "end_lineno": 38,
-            "lineno": 30,
+            "end_lineno": 40,
+            "lineno": 32,
             "span_loc": 9
           }
         },
@@ -27764,8 +27826,8 @@
           "name": "dominant_score_component",
           "signature": "def dominant_score_component(scores: Mapping[str, float | int | None] | None) -> str",
           "span": {
-            "end_lineno": 50,
-            "lineno": 41,
+            "end_lineno": 52,
+            "lineno": 43,
             "span_loc": 10
           }
         },
@@ -27775,8 +27837,8 @@
           "name": "active_channel_mean",
           "signature": "def active_channel_mean(scores: Mapping[str, float | int | None] | None) -> float",
           "span": {
-            "end_lineno": 58,
-            "lineno": 53,
+            "end_lineno": 60,
+            "lineno": 55,
             "span_loc": 6
           }
         },
@@ -27786,8 +27848,8 @@
           "name": "score_component_map_expr",
           "signature": "def score_component_map_expr(component_expr_by_name: Mapping[str, object]) -> object",
           "span": {
-            "end_lineno": 72,
-            "lineno": 61,
+            "end_lineno": 74,
+            "lineno": 63,
             "span_loc": 12
           }
         },
@@ -27797,8 +27859,8 @@
           "name": "dominant_score_component_expr",
           "signature": "def dominant_score_component_expr(component_expr_by_name: Mapping[str, object]) -> object",
           "span": {
-            "end_lineno": 85,
-            "lineno": 75,
+            "end_lineno": 87,
+            "lineno": 77,
             "span_loc": 11
           }
         },
@@ -27808,8 +27870,8 @@
           "name": "active_channel_mean_expr",
           "signature": "def active_channel_mean_expr(component_expr_by_name: Mapping[str, object]) -> object",
           "span": {
-            "end_lineno": 97,
-            "lineno": 88,
+            "end_lineno": 99,
+            "lineno": 90,
             "span_loc": 10
           }
         }
@@ -27824,9 +27886,9 @@
       "parse_error": null,
       "path": "libs/scoring/channels.py",
       "span": {
-        "end_lineno": 97,
+        "end_lineno": 99,
         "lineno": 1,
-        "span_loc": 97
+        "span_loc": 99
       },
       "unresolved_imports": [
         "from __future__ import annotations",
@@ -27873,8 +27935,8 @@
           "methods": [],
           "name": "_LocalizedHierarchySupportFrames",
           "span": {
-            "end_lineno": 39,
-            "lineno": 35,
+            "end_lineno": 40,
+            "lineno": 36,
             "span_loc": 5
           }
         },
@@ -27905,8 +27967,8 @@
               "name": "spark_schema",
               "signature": "def spark_schema(cls)",
               "span": {
-                "end_lineno": 346,
-                "lineno": 345,
+                "end_lineno": 347,
+                "lineno": 346,
                 "span_loc": 2
               }
             },
@@ -27918,8 +27980,8 @@
               "name": "from_phase_tables",
               "signature": "def from_phase_tables(cls, phase_windows: 'PhaseWindowsTable', phase_baselines: 'PhaseBaselinesTable', hierarchy_sensor_map: 'HierarchySensorMapTable', *, windows: 'WindowsTable | None' = None, events: 'EventsTable | None' = None, parameter_behavior_profile: 'ParameterBehaviorProfile | None' = None, parameter_event_profile: 'ParameterEventProfile | None' = None) -> 'WindowScoresRawTable'",
               "span": {
-                "end_lineno": 372,
-                "lineno": 349,
+                "end_lineno": 373,
+                "lineno": 350,
                 "span_loc": 24
               }
             },
@@ -27931,17 +27993,17 @@
               "name": "from_phase_dataframes",
               "signature": "def from_phase_dataframes(cls, phase_windows_df: 'DataFrame', phase_baselines_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', *, windows_df: 'DataFrame | None' = None, events_df: 'DataFrame | None' = None, parameter_behavior_profile_df: 'DataFrame | None' = None, parameter_event_profile_df: 'DataFrame | None' = None) -> 'WindowScoresRawTable'",
               "span": {
-                "end_lineno": 952,
-                "lineno": 375,
-                "span_loc": 578
+                "end_lineno": 986,
+                "lineno": 376,
+                "span_loc": 611
               }
             }
           ],
           "name": "WindowScoresRawTable",
           "span": {
-            "end_lineno": 952,
-            "lineno": 341,
-            "span_loc": 612
+            "end_lineno": 986,
+            "lineno": 342,
+            "span_loc": 645
           }
         },
         {
@@ -27971,8 +28033,8 @@
               "name": "spark_schema",
               "signature": "def spark_schema(cls)",
               "span": {
-                "end_lineno": 961,
-                "lineno": 960,
+                "end_lineno": 995,
+                "lineno": 994,
                 "span_loc": 2
               }
             },
@@ -27984,8 +28046,8 @@
               "name": "emit_ready_expr",
               "signature": "def emit_ready_expr()",
               "span": {
-                "end_lineno": 975,
-                "lineno": 964,
+                "end_lineno": 1009,
+                "lineno": 998,
                 "span_loc": 12
               }
             },
@@ -27997,16 +28059,16 @@
               "name": "from_scores",
               "signature": "def from_scores(cls, scores_df: 'DataFrame', *, min_warm: int) -> 'WindowScoresCalibratedTable'",
               "span": {
-                "end_lineno": 1027,
-                "lineno": 978,
+                "end_lineno": 1061,
+                "lineno": 1012,
                 "span_loc": 50
               }
             }
           ],
           "name": "WindowScoresCalibratedTable",
           "span": {
-            "end_lineno": 1027,
-            "lineno": 956,
+            "end_lineno": 1061,
+            "lineno": 990,
             "span_loc": 72
           }
         }
@@ -28028,8 +28090,8 @@
           "name": "_phase_metric_baselines",
           "signature": "def _phase_metric_baselines(metric_df: 'DataFrame', *, metric_cols: tuple[str, ...]) -> 'DataFrame'",
           "span": {
-            "end_lineno": 66,
-            "lineno": 42,
+            "end_lineno": 67,
+            "lineno": 43,
             "span_loc": 25
           }
         },
@@ -28039,8 +28101,8 @@
           "name": "_normalized_positive_deviation",
           "signature": "def _normalized_positive_deviation(metric_name: str) -> 'Column'",
           "span": {
-            "end_lineno": 79,
-            "lineno": 69,
+            "end_lineno": 80,
+            "lineno": 70,
             "span_loc": 11
           }
         },
@@ -28050,8 +28112,8 @@
           "name": "_normalized_abs_deviation",
           "signature": "def _normalized_abs_deviation(metric_name: str) -> 'Column'",
           "span": {
-            "end_lineno": 91,
-            "lineno": 82,
+            "end_lineno": 92,
+            "lineno": 83,
             "span_loc": 10
           }
         },
@@ -28061,8 +28123,8 @@
           "name": "_metric_map_value",
           "signature": "def _metric_map_value(map_col: str, key: str) -> 'Column'",
           "span": {
-            "end_lineno": 97,
-            "lineno": 94,
+            "end_lineno": 98,
+            "lineno": 95,
             "span_loc": 4
           }
         },
@@ -28072,8 +28134,8 @@
           "name": "_normalized_clamped_avg",
           "signature": "def _normalized_clamped_avg(*columns: 'Column') -> 'Column'",
           "span": {
-            "end_lineno": 108,
-            "lineno": 100,
+            "end_lineno": 109,
+            "lineno": 101,
             "span_loc": 9
           }
         },
@@ -28083,8 +28145,8 @@
           "name": "_window_aligned_event_rows",
           "signature": "def _window_aligned_event_rows(events_df: 'DataFrame', *, windows_df: 'DataFrame | None') -> 'DataFrame'",
           "span": {
-            "end_lineno": 182,
-            "lineno": 111,
+            "end_lineno": 183,
+            "lineno": 112,
             "span_loc": 72
           }
         },
@@ -28094,8 +28156,8 @@
           "name": "_localized_hierarchy_support_frames",
           "signature": "def _localized_hierarchy_support_frames(residual_rows_df: 'DataFrame', residual_totals_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', *, parameter_event_counts_df: 'DataFrame | None') -> _LocalizedHierarchySupportFrames",
           "span": {
-            "end_lineno": 337,
-            "lineno": 185,
+            "end_lineno": 338,
+            "lineno": 186,
             "span_loc": 153
           }
         }
@@ -28107,7 +28169,7 @@
         "from libs.common.event_types import CATEGORICAL_EVENT_TYPES, CONTINUOUS_EVENT_TYPES, EventType",
         "from libs.io.schemas.scoring import WINDOW_SCORES_CALIBRATED_SCHEMA, WINDOW_SCORES_RAW_SCHEMA",
         "from libs.pyspark import Table",
-        "from libs.scoring.channels import BOUND_VIOLATION_CHANNEL, COHERENCE_BREAK_CHANNEL, EVENT_DISCORDANCE_CHANNEL, RECONSTRUCTION_ERROR_CHANNEL, REGIME_DEVIATION_CHANNEL, RESPONSE_VIOLATION_CHANNEL, STATE_VIOLATION_CHANNEL, active_channel_mean_expr, dominant_score_component_expr, score_component_map_expr",
+        "from libs.scoring.channels import ACCUMULATION_VIOLATION_CHANNEL, BOUND_VIOLATION_CHANNEL, COHERENCE_BREAK_CHANNEL, EVENT_DISCORDANCE_CHANNEL, RECONSTRUCTION_ERROR_CHANNEL, REGIME_DEVIATION_CHANNEL, RESPONSE_VIOLATION_CHANNEL, STATE_VIOLATION_CHANNEL, active_channel_mean_expr, dominant_score_component_expr, score_component_map_expr",
         "from pyspark.sql import Column, DataFrame",
         "from libs.events.tables import EventsTable",
         "from libs.graph.tables import HierarchySensorMapTable",
@@ -28134,9 +28196,9 @@
       "parse_error": null,
       "path": "libs/scoring/tables.py",
       "span": {
-        "end_lineno": 1038,
+        "end_lineno": 1072,
         "lineno": 1,
-        "span_loc": 1038
+        "span_loc": 1072
       },
       "unresolved_imports": [
         "from __future__ import annotations",
@@ -34874,8 +34936,8 @@
               "name": "write",
               "signature": "def write(self, *, paths: RunPaths) -> None",
               "span": {
-                "end_lineno": 330,
-                "lineno": 328,
+                "end_lineno": 338,
+                "lineno": 336,
                 "span_loc": 3
               }
             },
@@ -34885,16 +34947,16 @@
               "name": "to_payloads",
               "signature": "def to_payloads(self) -> dict[str, dict[str, Any]]",
               "span": {
-                "end_lineno": 333,
-                "lineno": 332,
+                "end_lineno": 341,
+                "lineno": 340,
                 "span_loc": 2
               }
             }
           ],
           "name": "ValidationReportSet",
           "span": {
-            "end_lineno": 333,
-            "lineno": 325,
+            "end_lineno": 341,
+            "lineno": 333,
             "span_loc": 9
           }
         }
@@ -34939,8 +35001,8 @@
           "name": "_records_frame",
           "signature": "def _records_frame(tables: RunArtifactBundle, view: ArtifactView) -> pd.DataFrame",
           "span": {
-            "end_lineno": 337,
-            "lineno": 336,
+            "end_lineno": 345,
+            "lineno": 344,
             "span_loc": 2
           }
         },
@@ -34950,8 +35012,8 @@
           "name": "_skipped_report",
           "signature": "def _skipped_report(*, reason: str) -> dict[str, Any]",
           "span": {
-            "end_lineno": 344,
-            "lineno": 340,
+            "end_lineno": 352,
+            "lineno": 348,
             "span_loc": 5
           }
         },
@@ -34961,8 +35023,8 @@
           "name": "_has_artifact",
           "signature": "def _has_artifact(tables: RunArtifactBundle, artifact_name: str) -> bool",
           "span": {
-            "end_lineno": 348,
-            "lineno": 347,
+            "end_lineno": 356,
+            "lineno": 355,
             "span_loc": 2
           }
         },
@@ -34972,8 +35034,8 @@
           "name": "_build_label_contract_summary",
           "signature": "def _build_label_contract_summary(*, raw_telemetry_sdf: Any | None, events_sdf: Any | None) -> dict[str, Any]",
           "span": {
-            "end_lineno": 400,
-            "lineno": 351,
+            "end_lineno": 408,
+            "lineno": 359,
             "span_loc": 50
           }
         },
@@ -34983,8 +35045,8 @@
           "name": "_build_profile_validation_summary",
           "signature": "def _build_profile_validation_summary(tables: RunArtifactBundle) -> dict[str, Any]",
           "span": {
-            "end_lineno": 409,
-            "lineno": 403,
+            "end_lineno": 417,
+            "lineno": 411,
             "span_loc": 7
           }
         },
@@ -34994,8 +35056,8 @@
           "name": "_build_event_validation_summary",
           "signature": "def _build_event_validation_summary(tables: RunArtifactBundle, *, tolerance_seconds: float = 0.5) -> dict[str, Any]",
           "span": {
-            "end_lineno": 422,
-            "lineno": 412,
+            "end_lineno": 430,
+            "lineno": 420,
             "span_loc": 11
           }
         },
@@ -35005,8 +35067,8 @@
           "name": "_build_phase_validation_summary",
           "signature": "def _build_phase_validation_summary(tables: RunArtifactBundle) -> dict[str, Any]",
           "span": {
-            "end_lineno": 430,
-            "lineno": 425,
+            "end_lineno": 438,
+            "lineno": 433,
             "span_loc": 6
           }
         },
@@ -35016,8 +35078,8 @@
           "name": "_build_graph_validation_summary",
           "signature": "def _build_graph_validation_summary(tables: RunArtifactBundle, *, expected_lag_edges: tuple[dict[str, str], ...], expected_fused_edges: tuple[dict[str, str], ...]) -> dict[str, Any]",
           "span": {
-            "end_lineno": 446,
-            "lineno": 433,
+            "end_lineno": 454,
+            "lineno": 441,
             "span_loc": 14
           }
         },
@@ -35027,8 +35089,8 @@
           "name": "_build_coupling_validation_summary",
           "signature": "def _build_coupling_validation_summary(tables: RunArtifactBundle, *, expected_coupling_signatures: tuple[dict[str, Any], ...]) -> dict[str, Any]",
           "span": {
-            "end_lineno": 460,
-            "lineno": 449,
+            "end_lineno": 468,
+            "lineno": 457,
             "span_loc": 12
           }
         },
@@ -35038,8 +35100,8 @@
           "name": "_build_misbehavior_score_summary",
           "signature": "def _build_misbehavior_score_summary(tables: RunArtifactBundle) -> dict[str, Any]",
           "span": {
-            "end_lineno": 469,
-            "lineno": 463,
+            "end_lineno": 477,
+            "lineno": 471,
             "span_loc": 7
           }
         },
@@ -35049,8 +35111,8 @@
           "name": "_build_misbehavior_window_summary",
           "signature": "def _build_misbehavior_window_summary(summary: dict[str, Any]) -> dict[str, Any]",
           "span": {
-            "end_lineno": 481,
-            "lineno": 472,
+            "end_lineno": 489,
+            "lineno": 480,
             "span_loc": 10
           }
         },
@@ -35060,8 +35122,8 @@
           "name": "_remap_windows",
           "signature": "def _remap_windows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]",
           "span": {
-            "end_lineno": 493,
-            "lineno": 484,
+            "end_lineno": 501,
+            "lineno": 492,
             "span_loc": 10
           }
         },
@@ -35071,8 +35133,8 @@
           "name": "build_fault_score_summary_from_misbehavior",
           "signature": "def build_fault_score_summary_from_misbehavior(summary: dict[str, Any]) -> dict[str, Any]",
           "span": {
-            "end_lineno": 514,
-            "lineno": 496,
+            "end_lineno": 522,
+            "lineno": 504,
             "span_loc": 19
           }
         },
@@ -35082,8 +35144,8 @@
           "name": "_build_fault_window_summary",
           "signature": "def _build_fault_window_summary(summary: dict[str, Any]) -> dict[str, Any]",
           "span": {
-            "end_lineno": 526,
-            "lineno": 517,
+            "end_lineno": 534,
+            "lineno": 525,
             "span_loc": 10
           }
         },
@@ -35093,8 +35155,8 @@
           "name": "_build_misbehavior_attribution_summary",
           "signature": "def _build_misbehavior_attribution_summary(tables: RunArtifactBundle) -> dict[str, Any]",
           "span": {
-            "end_lineno": 538,
-            "lineno": 529,
+            "end_lineno": 546,
+            "lineno": 537,
             "span_loc": 10
           }
         },
@@ -35104,8 +35166,8 @@
           "name": "build_fault_attribution_summary_from_misbehavior",
           "signature": "def build_fault_attribution_summary_from_misbehavior(summary: dict[str, Any]) -> dict[str, Any]",
           "span": {
-            "end_lineno": 542,
-            "lineno": 541,
+            "end_lineno": 550,
+            "lineno": 549,
             "span_loc": 2
           }
         },
@@ -35115,8 +35177,8 @@
           "name": "write_validation_reports",
           "signature": "def write_validation_reports(*, spark: Any, paths: RunPaths, flight: Any, table_format: str) -> dict[str, Any]",
           "span": {
-            "end_lineno": 627,
-            "lineno": 545,
+            "end_lineno": 635,
+            "lineno": 553,
             "span_loc": 83
           }
         }
@@ -35154,9 +35216,9 @@
       "parse_error": null,
       "path": "libs/simulation/reporting.py",
       "span": {
-        "end_lineno": 627,
+        "end_lineno": 635,
         "lineno": 1,
-        "span_loc": 627
+        "span_loc": 635
       },
       "unresolved_imports": [
         "from __future__ import annotations",
@@ -44984,15 +45046,16 @@
           "name": "run",
           "signature": "def run() -> None",
           "span": {
-            "end_lineno": 194,
-            "lineno": 26,
-            "span_loc": 169
+            "end_lineno": 210,
+            "lineno": 27,
+            "span_loc": 184
           }
         }
       ],
       "imports": [
         "from libs.anomaly import AnomalyAttributionPlan",
         "from libs.io.delta import get_spark, read_table",
+        "from libs.profiling import ParameterBehaviorProfile",
         "from libs.perf import build_artifact_manifest, build_stage_manifest, get_logger, log_memory_usage, log_dict_artifact_if_active, log_params_if_active, log_stage_manifest_if_active, log_wall_time, track_mlflow_run",
         "from pipelines.common import build_stage_runtime"
       ],
@@ -45000,6 +45063,7 @@
         "libs.anomaly",
         "libs.io.delta",
         "libs.perf",
+        "libs.profiling",
         "pipelines.common"
       ],
       "module": "pipelines.90_anomaly_attribution",
@@ -45007,9 +45071,9 @@
       "parse_error": null,
       "path": "pipelines/90_anomaly_attribution.py",
       "span": {
-        "end_lineno": 198,
+        "end_lineno": 214,
         "lineno": 1,
-        "span_loc": 198
+        "span_loc": 214
       },
       "unresolved_imports": []
     },
@@ -48224,7 +48288,7 @@
     {
       "description": "Uses",
       "destination_id": "core_libraries",
-      "import_edge_count": 66,
+      "import_edge_count": 67,
       "source_id": "pipeline_runtime",
       "tags": [
         "internal"
@@ -49057,7 +49121,7 @@
     {
       "description": "Uses",
       "destination_id": "core_libraries.profiling",
-      "import_edge_count": 1,
+      "import_edge_count": 2,
       "source_id": "pipeline_runtime.inference_stages",
       "tags": [
         "internal",

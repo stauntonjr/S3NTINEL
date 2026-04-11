@@ -20,6 +20,22 @@ The standing priorities are:
 3. keep the hot path bounded and performant
 4. keep phase detection and anomaly channels moving forward together
 
+## Generality Constraint
+
+Plans here may use simulator scenarios to expose weaknesses, but detection
+improvements must not overfit to simulator specifics.
+
+That means:
+
+- golden scenarios are validation harnesses, not templates for bespoke detector
+  rules
+- avoid scenario-name, parameter-name, or injected-label-specific detection
+  logic
+- prefer improvements that generalize through operating context, behavior
+  families, coupling structure, and stable feature semantics
+- treat simulator realism work as a way to improve signal quality, not as a
+  justification for adding scenario-specific downstream fixes
+
 Related library coverage:
 
 - `libs/simulation`
@@ -194,6 +210,9 @@ When realism changes land, check:
 - anomaly detection quality
 - parameter localization quality
 - subsystem/module localization when relevant
+
+But do not accept a change just because it improves one golden scenario through
+scenario-specific tuning. The intended target is broader detector generality.
 
 ## D. Behavior-Family Observability
 

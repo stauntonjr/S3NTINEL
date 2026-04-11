@@ -191,7 +191,16 @@ def test_flatten_numeric_metric_records_includes_parameter_localization_metric_p
                 "truth_subsystem_present_count_by_source": {
                     "telemetry": 4,
                 },
-            }
+            },
+            "reconstruction_localization_validation": {
+                "reconstruction_truth_window_count": 4,
+                "reconstruction_failure_count": 3,
+                "failure_count_by_bucket": {
+                    "missing_truth_local_candidate": 1,
+                    "shared_source_won": 2,
+                },
+                "top_ranked_selected_parameter_in_truth_subsystem_rate": 0.25,
+            },
         },
         category="validation",
         scope_name="overall",
@@ -210,4 +219,9 @@ def test_flatten_numeric_metric_records_includes_parameter_localization_metric_p
         ("parameter_localization_validation.exact_parameter_match_rate_by_source.telemetry", 0.8),
         ("parameter_localization_validation.exact_parameter_match_rate_by_source.telemetry_selected", 0.6),
         ("parameter_localization_validation.truth_subsystem_present_count_by_source.telemetry", 4),
+        ("reconstruction_localization_validation.failure_count_by_bucket.missing_truth_local_candidate", 1),
+        ("reconstruction_localization_validation.failure_count_by_bucket.shared_source_won", 2),
+        ("reconstruction_localization_validation.reconstruction_failure_count", 3),
+        ("reconstruction_localization_validation.reconstruction_truth_window_count", 4),
+        ("reconstruction_localization_validation.top_ranked_selected_parameter_in_truth_subsystem_rate", 0.25),
     ]

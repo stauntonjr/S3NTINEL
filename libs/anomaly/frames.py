@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from libs.perf.annotations import hot_path
 from libs.pyspark import Frame
 from libs.scoring.channels import (
+    ACCUMULATION_VIOLATION_CHANNEL,
     BOUND_VIOLATION_CHANNEL,
     COHERENCE_BREAK_CHANNEL,
     EVENT_DISCORDANCE_CHANNEL,
@@ -19,6 +20,17 @@ from libs.scoring.channels import (
 
 ANOMALY_LOCALIZATION_PARAMETER_TOP_K = 3
 ANOMALY_LOCALIZATION_TARGET_TOP_K = 3
+
+
+def _normalized_clamped_avg_expr(*columns: "Column") -> "Column":
+    from pyspark.sql import functions as F
+
+    if not columns:
+        return F.lit(0.0).cast("double")
+    total = F.lit(0.0)
+    for column in columns:
+        total = total + F.least(F.lit(1.0), F.greatest(F.coalesce(column.cast("double"), F.lit(0.0)), F.lit(0.0)))
+    return (total / F.lit(float(len(columns)))).cast("double")
 
 
 def _component_score_expr(component_scores_col: str, channel_name: str) -> "Column":
@@ -35,6 +47,7 @@ def _log_component_weight_expr(component_scores_col: str, channel_name: str) -> 
         F.log1p(_component_score_expr(component_scores_col, RECONSTRUCTION_ERROR_CHANNEL)),
         F.log1p(_component_score_expr(component_scores_col, EVENT_DISCORDANCE_CHANNEL)),
         F.log1p(_component_score_expr(component_scores_col, BOUND_VIOLATION_CHANNEL)),
+        F.log1p(_component_score_expr(component_scores_col, ACCUMULATION_VIOLATION_CHANNEL)),
         F.log1p(_component_score_expr(component_scores_col, RESPONSE_VIOLATION_CHANNEL)),
         F.log1p(_component_score_expr(component_scores_col, STATE_VIOLATION_CHANNEL)),
         F.log1p(_component_score_expr(component_scores_col, COHERENCE_BREAK_CHANNEL)),
@@ -409,6 +422,7 @@ class AnomalyParameterLocalizationFrame(Frame):
         phase_windows_df: "DataFrame",
         events_df: "DataFrame",
         hierarchy_sensor_map_df: "DataFrame",
+        parameter_behavior_profile_df: "DataFrame | None" = None,
         top_k_per_window: int = ANOMALY_LOCALIZATION_PARAMETER_TOP_K,
     ) -> "AnomalyParameterLocalizationFrame":
         from pyspark.sql import functions as F
@@ -608,7 +622,33 @@ class AnomalyParameterLocalizationFrame(Frame):
                 on=["tail_id", "flight_id", "win_id", "date_utc"],
                 how="left",
             )
-            .withColumn(
+        )
+        if parameter_behavior_profile_df is not None:
+            parameter_support_df = parameter_support_df.join(
+                F.broadcast(
+                    parameter_behavior_profile_df.select(
+                        "parameter_name",
+                        "persistent_run_strength_profiled",
+                        "run_reinforcement_score_profiled",
+                        "accumulative_score_profiled",
+                        "monotone_accumulation_score_profiled",
+                        "reset_drop_rate_profiled",
+                    )
+                ),
+                on="parameter_name",
+                how="left",
+            )
+        for column_name in (
+            "persistent_run_strength_profiled",
+            "run_reinforcement_score_profiled",
+            "accumulative_score_profiled",
+            "monotone_accumulation_score_profiled",
+            "reset_drop_rate_profiled",
+        ):
+            if column_name not in parameter_support_df.columns:
+                parameter_support_df = parameter_support_df.withColumn(column_name, F.lit(0.0).cast("double"))
+        parameter_support_df = (
+            parameter_support_df.withColumn(
                 "residual_share",
                 F.coalesce(F.col("residual_weight"), F.lit(0.0))
                 / F.greatest(F.coalesce(F.col("residual_total_weight"), F.lit(0.0)), F.lit(1e-12)),
@@ -635,6 +675,16 @@ class AnomalyParameterLocalizationFrame(Frame):
                 / F.greatest(F.coalesce(F.col("window_bound_event_total"), F.lit(0.0)), F.lit(1e-12)),
             )
             .withColumn(
+                "accumulation_profile_relevance",
+                _normalized_clamped_avg_expr(
+                    F.col("accumulative_score_profiled"),
+                    F.col("monotone_accumulation_score_profiled"),
+                    F.col("persistent_run_strength_profiled"),
+                    F.col("run_reinforcement_score_profiled"),
+                    F.col("reset_drop_rate_profiled"),
+                ),
+            )
+            .withColumn(
                 "response_support_share",
                 F.coalesce(F.col("response_event_count"), F.lit(0.0))
                 / F.greatest(F.coalesce(F.col("window_response_event_total"), F.lit(0.0)), F.lit(1e-12)),
@@ -652,6 +702,10 @@ class AnomalyParameterLocalizationFrame(Frame):
             .withColumn("event_weight", _log_component_weight_expr("score_component_scores", EVENT_DISCORDANCE_CHANNEL))
             .withColumn("bound_weight", _log_component_weight_expr("score_component_scores", BOUND_VIOLATION_CHANNEL))
             .withColumn(
+                "accumulation_weight",
+                _log_component_weight_expr("score_component_scores", ACCUMULATION_VIOLATION_CHANNEL),
+            )
+            .withColumn(
                 "response_weight",
                 _log_component_weight_expr("score_component_scores", RESPONSE_VIOLATION_CHANNEL),
             )
@@ -666,6 +720,10 @@ class AnomalyParameterLocalizationFrame(Frame):
                 "normalized_bound_support",
                 F.col("bound_support_share")
                 / F.sqrt(F.greatest(F.coalesce(F.col("module_parameter_count"), F.lit(1.0)), F.lit(1.0))),
+            )
+            .withColumn(
+                "normalized_accumulation_support",
+                (F.col("localized_residual_support") * F.col("accumulation_profile_relevance")).cast("double"),
             )
             .withColumn(
                 "normalized_response_support",
@@ -688,6 +746,7 @@ class AnomalyParameterLocalizationFrame(Frame):
                     + F.col("localized_reconstruction_support") * F.col("reconstruction_weight")
                     + F.col("normalized_event_support") * F.col("event_weight")
                     + F.col("normalized_bound_support") * F.col("bound_weight")
+                    + F.col("normalized_accumulation_support") * F.col("accumulation_weight")
                     + F.col("normalized_response_support") * F.col("response_weight")
                     + F.col("normalized_state_support") * F.col("state_weight")
                 ).cast("double"),
@@ -737,6 +796,7 @@ class AnomalyParameterLocalizationFrame(Frame):
             F.col("module_support_share").desc(),
             F.col("state_support_share").desc(),
             F.col("response_support_share").desc(),
+            F.col("accumulation_profile_relevance").desc(),
             F.col("event_support_share").desc(),
             F.col("residual_share").desc(),
             F.col("parameter_name").asc(),

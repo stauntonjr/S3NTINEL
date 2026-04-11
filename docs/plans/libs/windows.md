@@ -35,6 +35,20 @@ and continuous coupling estimation can miss important dynamics.
 
 ## Proposed V2.1 direction
 
+### Generality rule
+
+If this work is used to improve downstream detection, it should do so through
+generic continuous-time structure rather than simulation-specific waveform
+recipes.
+
+That means:
+
+- use rate-aware summaries that are broadly meaningful across domains
+- do not add summaries keyed to one scenario or one parameter family just
+  because they help the current simulator bundle
+- validate gains on downstream detection without turning the continuous feature
+  layer into a simulator-specific encoding
+
 ### 1. Keep event/categorical logic out of the continuous backbone
 
 Do not put raw categorical or sparse event channels into the continuous backbone fit.

@@ -29,8 +29,15 @@ The current kept baseline is good enough to support targeted anomaly work:
 - emit-ready fault window rate: `0.7777777777777778`
 - telemetry parameter match rate: `0.7777777777777778`
 - event parameter match rate: `0.16666666666666666`
-- dominant subsystem match rate: `0.25`
+- dominant subsystem match rate: `0.3333333333333333`
 - dominant module match rate: `0.0`
+
+Fresh replay confirming the current working-tree baseline and diagnostic surface:
+
+- replay bundle:
+  `/tmp/s3ntinel_accumulation_channel_v1/20260411T213154Z_power_pressurization_hierarchy_composite`
+- attribution summary:
+  `/tmp/s3ntinel_accumulation_channel_v1/20260411T213154Z_power_pressurization_hierarchy_composite/reports/attribution_validation_summary.json`
 
 Interpretation:
 
@@ -59,6 +66,7 @@ The canonical raw channel surface now includes:
 - `reconstruction_error`
 - `event_discordance`
 - `bound_violation`
+- `accumulation_violation`
 - `response_violation`
 - `state_violation`
 - `coherence_break`
@@ -94,11 +102,65 @@ The system therefore needs:
 - then targeted candidate-generation changes
 - and only then a decision about whether to revisit hierarchy quality upstream
 
+## Generality Constraint
+
+Detection improvements in this plan must maintain generality and must not
+overfit to simulation-specific artifacts.
+
+That means:
+
+- do not key scoring or localization logic to simulator scenario names,
+  parameter names, fault labels, or handcrafted truth families
+- do not optimize for one replay by adding special-case branches for the exact
+  current miss set
+- prefer generic mechanisms such as local support concentration, source versus
+  consequence asymmetry, regime-conditioned baselines, and channel-aware
+  evidence
+- treat simulator replays as acceptance harnesses and diagnostic sources, not
+  as the target taxonomy to memorize
+
+Success for anomaly-detection improvement is:
+
+- better replay metrics without degrading the current baseline
+- while keeping the implementation plausible for real telemetry and unseen
+  simulator scenarios
+
 ## Workstream A: Reconstruction Failure Taxonomy
 
 ### Objective
 
 Stop guessing why reconstruction-led localization misses.
+
+### Current status
+
+The validator/reporting surface is now implemented and populated from a fresh
+replay on current head.
+
+Observed reconstruction-localization mix on the current replay:
+
+- reconstruction truth windows: `10`
+- reconstruction failures: `10`
+- failure count by bucket:
+  - `missing_truth_local_candidate`: `4`
+  - `shared_source_won`: `3`
+  - `sibling_consequence_won`: `1`
+  - `truth_module_present_but_lost`: `2`
+- candidate-quality rates:
+  - truth subsystem present in selected telemetry: `0.6`
+  - truth module present in selected telemetry: `0.5`
+  - truth subsystem present in top subsystem candidates: `0.2`
+  - truth module present in top module candidates: `0.2`
+  - top-ranked selected parameter exact match: `0.1`
+  - top-ranked selected parameter in truth subsystem: `0.2`
+  - top-ranked selected parameter in truth module: `0.1`
+
+Implication:
+
+- the dominant failure is still candidate generation, not final rollup
+- shared-source ranking is the second-order failure mode inside the generated
+  candidate set
+- there was no dominant `truth_subsystem_present_but_lost` bucket on this
+  replay, so another winner-rollup pass should not be the next move
 
 ### Add a validator breakdown for misses
 
@@ -137,27 +199,82 @@ Improve the selected local candidate set before subsystem/module rollup.
 
 Only start this pass after Workstream A shows which failure mode dominates.
 
-- if `missing_truth_local_candidate` dominates:
-  - work candidate generation first
-- if `truth_subsystem_present_but_lost` dominates:
-  - work aggregation and ranking first
-- if truth presence stays weak even with good parameter evidence:
-  - move upstream into hierarchy/module quality
+Current decision from the fresh replay:
+
+- `missing_truth_local_candidate` is the dominant bucket
+- `shared_source_won` is the next largest bucket
+- proceed with candidate generation first
+- treat shared-source suppression as a coupled ranking constraint inside that
+  pass, not as a separate first move
+- keep the upstream `accumulation_violation` channel; it improved the replay
+  without regressing detection or parameter-localization metrics
 
 ### Candidate-generation direction
 
 Prefer targeted, generic signals over another large heuristic pile:
 
-- reconstruction-local source vs consequence cues
-- local support concentration over broad shared utility parameters
+- reconstruction-local source vs consequence cues that improve candidate recall
+  for the true local subsystem/module
+- local support concentration over broad shared utility parameters such as power
+  or bleed-supply sources
 - channel-aware support that keeps `reconstruction_error` distinct from
   event-driven evidence
+
+Immediate next implementation target:
+
+- improve reconstruction-led selected telemetry candidate recall so the truth
+  subsystem/module appears in the selected set more often than the current
+  `0.5455` / `0.4545`
+- while doing that, reduce the frequency of shared-source winners so the top
+  ranked selected parameter lands in the truth subsystem more often than the
+  current `0.1818`
+- do both through generic locality/ranking signals rather than simulator- or
+  scenario-specific exception handling
+
+Current implementation note:
+
+- the next upstream pass should prefer generic mechanism channels over more
+  stage-`90` rerank complexity when a failure mode is missing a real score
+  surface
+- `accumulation_violation` is the first concrete example: quiet accumulative
+  drift windows should not rely on event-gated behavior channels to become
+  distinguishable from generic `reconstruction_error`
+- the first kept `accumulation_violation` pass improved dominant subsystem
+  match rate from `0.25` to `0.3333`, top subsystem candidate presence from
+  `0.0556` to `0.1111`, top module candidate presence from `0.1111` to
+  `0.1667`, and reduced the dominant `missing_truth_local_candidate` bucket
+  from `5` to `4`
+
+Rejected near-term direction:
+
+- a broader reconstruction candidate-retention pass plus stronger residual
+  cluster boosting did not move the replay metrics and pushed stage `90`
+  runtime from about `22s` to about `98s` on replay
+- a reconstruction reranking pass using phase-selected sensor/state metadata
+  plus parameter behavior profiles also did not move the replay metrics or
+  failure-bucket mix, and it pushed stage `90` runtime to about `89s`
+- seeding stage `90` localization from the existing stage-`80` dominant
+  subsystem/module winner does not look promising on the current replay;
+  for the checked reconstruction misses, stage `80` and stage `90` were
+  already collapsing onto the same wrong detected winners
+- do not keep pursuing wider selected sets or heavier reconstruction-cluster
+  amplification on the hot path without new evidence
+- do not add phase-feature or parameter-profile reranking to stage `90`
+  unless a future design can show a materially cheaper path or a clearly
+  stronger generic signal
 
 Do not reintroduce:
 
 - a second local scoring path
 - simulator-specific anomaly rules
+- simulator-scenario heuristics or parameter-name allow/deny lists
 - broad graph penalties that slow stage 90 without moving the target metric
+- broad reconstruction-retention heuristics that increase stage-90 runtime
+  without improving candidate quality
+- expensive reconstruction rerankers that only change which wrong winner
+  appears at the top
+- stage-`80` winner carry-forward as a substitute for better reconstruction
+  candidate generation
 
 ## Workstream C: Channel Maturation
 
@@ -204,6 +321,35 @@ Go back to stage `60` only if:
 
 If those conditions are not met, keep working in stage `90`.
 
+Current gate result:
+
+- do not revisit stage `60` yet
+- candidate quality is still too weak for hierarchy retuning to be the primary
+  next move
+
+## Next Narrowing Step
+
+The next anomaly improvement should stay in stage `90`, but it should be
+narrower than the rejected broad-retention pass.
+
+Focus on reconstruction cases where the selected set is dominated by:
+
+- shared upstream utility parameters
+- sibling module copies of the same signal family
+- shared control-state or environmental consequence parameters
+
+The next implementation should therefore target high-precision filtering or
+re-ranking of reconstruction candidates before broadening retention again.
+
+Desired direction:
+
+- suppress generic shared-source and shared-consequence parameters when more
+  local module evidence is already present
+- do this with generic structure-aware cues, not simulator-specific identifier
+  rules
+- keep stage-90 runtime near the current replay baseline rather than trading a
+  4x slowdown for no quality gain
+
 ## Test And Acceptance Plan
 
 ### Diagnostic pass
@@ -211,6 +357,8 @@ If those conditions are not met, keep working in stage `90`.
 - new reconstruction miss taxonomy appears in attribution validation
 - candidate-quality counters are emitted by report and harness paths
 - no regression in current headline anomaly metrics
+- no new detection rule should depend on simulator-specific identifiers or truth
+  labels
 
 ### Modeling pass after the diagnostics
 

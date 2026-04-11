@@ -11,7 +11,7 @@ libs/anomaly/__init__.py  [loc=32]
     - from libs.anomaly.tables import AnomalyEventAttributionTable, AnomalyTelemetryAttributionTable, AnomalyWindowAttributionTable
     - from libs.anomaly.validator import validate_attribution_against_fault_truth, validate_attribution_against_misbehavior_truth
 
-libs/anomaly/frames.py  [loc=922]
+libs/anomaly/frames.py  [loc=982]
   doc: Typed Spark frames for reusable anomaly attribution context.
   imports:
     - from __future__ import annotations
@@ -19,43 +19,44 @@ libs/anomaly/frames.py  [loc=922]
     - from typing import TYPE_CHECKING
     - from libs.perf.annotations import hot_path
     - from libs.pyspark import Frame
-    - from libs.scoring.channels import BOUND_VIOLATION_CHANNEL, COHERENCE_BREAK_CHANNEL, EVENT_DISCORDANCE_CHANNEL, RECONSTRUCTION_ERROR_CHANNEL, REGIME_DEVIATION_CHANNEL, RESPONSE_VIOLATION_CHANNEL, STATE_VIOLATION_CHANNEL
+    - from libs.scoring.channels import ACCUMULATION_VIOLATION_CHANNEL, BOUND_VIOLATION_CHANNEL, COHERENCE_BREAK_CHANNEL, EVENT_DISCORDANCE_CHANNEL, RECONSTRUCTION_ERROR_CHANNEL, REGIME_DEVIATION_CHANNEL, RESPONSE_VIOLATION_CHANNEL, STATE_VIOLATION_CHANNEL
     - from pyspark.sql import DataFrame
   constants:
     - ANOMALY_LOCALIZATION_PARAMETER_TOP_K
     - ANOMALY_LOCALIZATION_TARGET_TOP_K
   functions:
-    - def _component_score_expr(component_scores_col: str, channel_name: str) -> 'Column'  [lines 24-27, loc=4]
-    - def _log_component_weight_expr(component_scores_col: str, channel_name: str) -> 'Column'  [lines 30-48, loc=19]
-    - def mapped_events_in_supported_windows(*, events_df: 'DataFrame', windows_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame') -> 'DataFrame'  [lines 51-99, loc=49]
+    - def _normalized_clamped_avg_expr(*columns: 'Column') -> 'Column'  [lines 25-33, loc=9]
+    - def _component_score_expr(component_scores_col: str, channel_name: str) -> 'Column'  [lines 36-39, loc=4]
+    - def _log_component_weight_expr(component_scores_col: str, channel_name: str) -> 'Column'  [lines 42-61, loc=20]
+    - def mapped_events_in_supported_windows(*, events_df: 'DataFrame', windows_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame') -> 'DataFrame'  [lines 64-112, loc=49]
   classes:
-    - @dataclass(frozen=True) class AnomalySubsystemContextFrame(Frame)  [lines 103-237, loc=135]
+    - @dataclass(frozen=True) class AnomalySubsystemContextFrame(Frame)  [lines 116-250, loc=135]
       methods:
         - @classmethod
         - @hot_path
-        - def from_events_and_windows(cls, events_df: 'DataFrame', windows_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', *, top_k_per_subsystem: int) -> 'AnomalySubsystemContextFrame'  [lines 106-237, loc=132]
-    - @dataclass(frozen=True) class AnomalyPanelContextFrame(Frame)  [lines 241-375, loc=135]
+        - def from_events_and_windows(cls, events_df: 'DataFrame', windows_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', *, top_k_per_subsystem: int) -> 'AnomalySubsystemContextFrame'  [lines 119-250, loc=132]
+    - @dataclass(frozen=True) class AnomalyPanelContextFrame(Frame)  [lines 254-388, loc=135]
       methods:
         - @classmethod
         - @hot_path
-        - def from_raw_and_windows(cls, raw_df: 'DataFrame', windows_df: 'DataFrame', *, max_items: int = 5) -> 'AnomalyPanelContextFrame'  [lines 244-375, loc=132]
-    - @dataclass(frozen=True) class AnomalyParameterLocalizationFrame(Frame)  [lines 379-878, loc=500]
+        - def from_raw_and_windows(cls, raw_df: 'DataFrame', windows_df: 'DataFrame', *, max_items: int = 5) -> 'AnomalyPanelContextFrame'  [lines 257-388, loc=132]
+    - @dataclass(frozen=True) class AnomalyParameterLocalizationFrame(Frame)  [lines 392-938, loc=547]
       methods:
-        - def _module_support_df(self) -> 'DataFrame'  [lines 380-401, loc=22]
+        - def _module_support_df(self) -> 'DataFrame'  [lines 393-414, loc=22]
         - @classmethod
         - @hot_path
-        - def from_calibrated_phase_windows_events_and_hierarchy(cls, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', top_k_per_window: int = ANOMALY_LOCALIZATION_PARAMETER_TOP_K) -> 'AnomalyParameterLocalizationFrame'  [lines 405-761, loc=357]
+        - def from_calibrated_phase_windows_events_and_hierarchy(cls, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', parameter_behavior_profile_df: 'DataFrame | None' = None, top_k_per_window: int = ANOMALY_LOCALIZATION_PARAMETER_TOP_K) -> 'AnomalyParameterLocalizationFrame'  [lines 418-821, loc=404]
         - @hot_path
-        - def localized_targets_df(self, *, top_k_per_window: int = ANOMALY_LOCALIZATION_TARGET_TOP_K) -> 'DataFrame'  [lines 764-867, loc=104]
+        - def localized_targets_df(self, *, top_k_per_window: int = ANOMALY_LOCALIZATION_TARGET_TOP_K) -> 'DataFrame'  [lines 824-927, loc=104]
         - @hot_path
-        - def dominant_targets_df(self) -> 'DataFrame'  [lines 870-878, loc=9]
-    - @dataclass(frozen=True) class AnomalyAttributionContextFrame(Frame)  [lines 882-918, loc=37]
+        - def dominant_targets_df(self) -> 'DataFrame'  [lines 930-938, loc=9]
+    - @dataclass(frozen=True) class AnomalyAttributionContextFrame(Frame)  [lines 942-978, loc=37]
       methods:
         - @classmethod
         - @hot_path
-        - def from_context_frames(cls, *, subsystem_context: AnomalySubsystemContextFrame, panel_context: AnomalyPanelContextFrame) -> 'AnomalyAttributionContextFrame'  [lines 885-918, loc=34]
+        - def from_context_frames(cls, *, subsystem_context: AnomalySubsystemContextFrame, panel_context: AnomalyPanelContextFrame) -> 'AnomalyAttributionContextFrame'  [lines 945-978, loc=34]
 
-libs/anomaly/pipeline.py  [loc=168]
+libs/anomaly/pipeline.py  [loc=176]
   doc: Spark adapters for anomaly attribution artifacts.
   imports:
     - from __future__ import annotations
@@ -75,17 +76,17 @@ libs/anomaly/pipeline.py  [loc=168]
         - window_attribution: AnomalyWindowAttributionTable
         - telemetry_attribution: AnomalyTelemetryAttributionTable
         - event_attribution: AnomalyEventAttributionTable
-    - @dataclass(frozen=True) class AnomalyAttributionPlan  [lines 29-162, loc=134]
+    - @dataclass(frozen=True) class AnomalyAttributionPlan  [lines 29-170, loc=142]
       attributes:
         - top_k_per_subsystem
       fields:
         - top_k_per_subsystem: int = 5
       methods:
-        - def build_window_attribution(self, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame', windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', raw_df: 'DataFrame', localization_targets_df: 'DataFrame | None' = None) -> AnomalyWindowAttributionTable  [lines 32-70, loc=39]
-        - def build_telemetry_attribution(self, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame | None' = None, windows_df: 'DataFrame', events_df: 'DataFrame | None' = None, raw_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', parameter_localization_df: 'DataFrame | None' = None) -> AnomalyTelemetryAttributionTable  [lines 72-102, loc=31]
-        - def build_event_attribution(self, *, calibrated_df: 'DataFrame', windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame') -> AnomalyEventAttributionTable  [lines 104-117, loc=14]
+        - def build_window_attribution(self, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame', windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', raw_df: 'DataFrame', parameter_behavior_profile_df: 'DataFrame | None' = None, localization_targets_df: 'DataFrame | None' = None) -> AnomalyWindowAttributionTable  [lines 32-72, loc=41]
+        - def build_telemetry_attribution(self, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame | None' = None, windows_df: 'DataFrame', events_df: 'DataFrame | None' = None, raw_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', parameter_behavior_profile_df: 'DataFrame | None' = None, parameter_localization_df: 'DataFrame | None' = None) -> AnomalyTelemetryAttributionTable  [lines 74-106, loc=33]
+        - def build_event_attribution(self, *, calibrated_df: 'DataFrame', windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame') -> AnomalyEventAttributionTable  [lines 108-121, loc=14]
         - @hot_path
-        - def build(self, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame', windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', raw_df: 'DataFrame') -> AnomalyArtifactSet  [lines 120-162, loc=43]
+        - def build(self, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame', windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', raw_df: 'DataFrame', parameter_behavior_profile_df: 'DataFrame | None' = None) -> AnomalyArtifactSet  [lines 124-170, loc=47]
 
 libs/anomaly/tables.py  [loc=277]
   doc: Typed Spark tables for anomaly attribution artifacts.
@@ -129,7 +130,7 @@ libs/anomaly/tables.py  [loc=277]
         - @classmethod
         - def from_calibrated_windows_events_and_hierarchy(cls, *, calibrated_df: 'DataFrame', windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame') -> 'AnomalyEventAttributionTable'  [lines 236-273, loc=38]
 
-libs/anomaly/validator.py  [loc=880]
+libs/anomaly/validator.py  [loc=1175]
   doc: Anomaly attribution validation against simulator misbehavior truth with fault wrappers.
   imports:
     - from __future__ import annotations
@@ -137,25 +138,31 @@ libs/anomaly/validator.py  [loc=880]
     - from typing import Any
     - import pandas as pd
     - from libs.scoring.validator import STRICT_MAX_EARLY_LEAD_SECONDS, STRICT_WINDOW_COVERAGE_MIN_RATIO, build_truth_window_overlap_table, extract_fault_truth_windows, extract_misbehavior_truth_windows, strict_overlap_mask
+  constants:
+    - RECONSTRUCTION_ERROR_CHANNEL
   functions:
-    - def _empty_parameter_localization_validation() -> dict[str, Any]  [lines 20-49, loc=30]
-    - def _empty_module_localization_validation() -> dict[str, Any]  [lines 52-71, loc=20]
-    - def _empty_channel_localization_validation() -> dict[str, Any]  [lines 74-87, loc=14]
-    - def _sorted_non_empty_string_values(df: pd.DataFrame, column: str) -> list[str]  [lines 90-99, loc=10]
-    - def _records_with_none_for_missing(df: pd.DataFrame) -> list[dict[str, Any]]  [lines 102-103, loc=2]
-    - def _sorted_detected_candidate_ids(df: pd.DataFrame, column: str) -> list[str]  [lines 106-130, loc=25]
-    - def _resolve_truth_candidate_ids(detected_candidate_ids: list[str], truth_map: 'DetectedLocalizationTruthMap') -> list[str]  [lines 133-142, loc=10]
-    - def _rate_by_score_component(per_truth_df: pd.DataFrame, *, value_column: str, require_mappable_column: str | None = None) -> dict[str, float]  [lines 145-165, loc=21]
-    - def _truth_parameter_to_subsystem_map(hierarchy_label_df: pd.DataFrame | None) -> dict[str, str]  [lines 452-458, loc=7]
-    - def _truth_parameter_to_module_map(hierarchy_label_df: pd.DataFrame | None) -> dict[str, str]  [lines 461-467, loc=7]
-    - def _build_parameter_localization_validation(per_truth_df: pd.DataFrame) -> dict[str, Any]  [lines 470-545, loc=76]
-    - def _build_module_localization_validation(per_truth_df: pd.DataFrame) -> dict[str, Any]  [lines 548-603, loc=56]
-    - def _build_channel_localization_validation(per_truth_df: pd.DataFrame) -> dict[str, Any]  [lines 606-680, loc=75]
-    - def build_fault_attribution_summary_from_misbehavior_summary(summary: dict[str, Any]) -> dict[str, Any]  [lines 683-728, loc=46]
-    - def validate_attribution_against_misbehavior_truth(*, raw_telemetry_df: pd.DataFrame, windows_df: pd.DataFrame, anomaly_window_attribution_df: pd.DataFrame, anomaly_telemetry_attribution_df: pd.DataFrame, anomaly_event_attribution_df: pd.DataFrame, hierarchy_sensor_map_df: pd.DataFrame | None = None, hierarchy_label_df: pd.DataFrame | None = None) -> dict[str, Any]  [lines 731-857, loc=127]
-    - def validate_attribution_against_fault_truth(*, raw_telemetry_df: pd.DataFrame, windows_df: pd.DataFrame, anomaly_window_attribution_df: pd.DataFrame, anomaly_telemetry_attribution_df: pd.DataFrame, anomaly_event_attribution_df: pd.DataFrame, hierarchy_sensor_map_df: pd.DataFrame | None = None, hierarchy_label_df: pd.DataFrame | None = None) -> dict[str, Any]  [lines 860-880, loc=21]
+    - def _empty_parameter_localization_validation() -> dict[str, Any]  [lines 22-51, loc=30]
+    - def _empty_module_localization_validation() -> dict[str, Any]  [lines 54-73, loc=20]
+    - def _empty_channel_localization_validation() -> dict[str, Any]  [lines 76-89, loc=14]
+    - def _empty_reconstruction_localization_validation() -> dict[str, Any]  [lines 92-115, loc=24]
+    - def _sorted_non_empty_string_values(df: pd.DataFrame, column: str) -> list[str]  [lines 118-127, loc=10]
+    - def _records_with_none_for_missing(df: pd.DataFrame) -> list[dict[str, Any]]  [lines 130-131, loc=2]
+    - def _sorted_detected_candidate_ids(df: pd.DataFrame, column: str) -> list[str]  [lines 134-158, loc=25]
+    - def _resolve_truth_candidate_ids(detected_candidate_ids: list[str], truth_map: 'DetectedLocalizationTruthMap') -> list[str]  [lines 161-170, loc=10]
+    - def _top_ranked_selected_parameter_details(telemetry_selected_hits: pd.DataFrame, *, truth_parameter_to_subsystem: dict[str, str], truth_parameter_to_module: dict[str, str]) -> dict[str, Any]  [lines 173-218, loc=46]
+    - def _classify_reconstruction_localization_failure(*, dominant_score_component: str, truth_parameter: str, truth_subsystem: str, truth_module: str, dominant_subsystem_match: bool, dominant_module_match: bool, telemetry_selected_truth_subsystem_present: bool, telemetry_selected_truth_module_present: bool, top_subsystem_candidate_present: bool, top_module_candidate_present: bool, top_ranked_selected_parameter_name: str | None, top_ranked_selected_parameter_truth_subsystem: str | None, top_ranked_selected_parameter_truth_module: str | None) -> str | None  [lines 221-261, loc=41]
+    - def _rate_by_score_component(per_truth_df: pd.DataFrame, *, value_column: str, require_mappable_column: str | None = None) -> dict[str, float]  [lines 264-284, loc=21]
+    - def _truth_parameter_to_subsystem_map(hierarchy_label_df: pd.DataFrame | None) -> dict[str, str]  [lines 633-639, loc=7]
+    - def _truth_parameter_to_module_map(hierarchy_label_df: pd.DataFrame | None) -> dict[str, str]  [lines 642-648, loc=7]
+    - def _build_parameter_localization_validation(per_truth_df: pd.DataFrame) -> dict[str, Any]  [lines 651-734, loc=84]
+    - def _build_module_localization_validation(per_truth_df: pd.DataFrame) -> dict[str, Any]  [lines 737-792, loc=56]
+    - def _build_channel_localization_validation(per_truth_df: pd.DataFrame) -> dict[str, Any]  [lines 795-876, loc=82]
+    - def _build_reconstruction_localization_validation(per_truth_df: pd.DataFrame) -> dict[str, Any]  [lines 879-968, loc=90]
+    - def build_fault_attribution_summary_from_misbehavior_summary(summary: dict[str, Any]) -> dict[str, Any]  [lines 971-1020, loc=50]
+    - def validate_attribution_against_misbehavior_truth(*, raw_telemetry_df: pd.DataFrame, windows_df: pd.DataFrame, anomaly_window_attribution_df: pd.DataFrame, anomaly_telemetry_attribution_df: pd.DataFrame, anomaly_event_attribution_df: pd.DataFrame, hierarchy_sensor_map_df: pd.DataFrame | None = None, hierarchy_label_df: pd.DataFrame | None = None) -> dict[str, Any]  [lines 1023-1152, loc=130]
+    - def validate_attribution_against_fault_truth(*, raw_telemetry_df: pd.DataFrame, windows_df: pd.DataFrame, anomaly_window_attribution_df: pd.DataFrame, anomaly_telemetry_attribution_df: pd.DataFrame, anomaly_event_attribution_df: pd.DataFrame, hierarchy_sensor_map_df: pd.DataFrame | None = None, hierarchy_label_df: pd.DataFrame | None = None) -> dict[str, Any]  [lines 1155-1175, loc=21]
   classes:
-    - @dataclass(frozen=True) class DetectedLocalizationTruthMap  [lines 169-223, loc=55]
+    - @dataclass(frozen=True) class DetectedLocalizationTruthMap  [lines 288-342, loc=55]
       attributes:
         - detected_to_truth_id
         - ambiguous_detected_ids
@@ -164,9 +171,9 @@ libs/anomaly/validator.py  [loc=880]
         - ambiguous_detected_ids: set[str]
       methods:
         - @classmethod
-        - def from_hierarchy_frames(cls, *, hierarchy_sensor_map_df: pd.DataFrame | None, hierarchy_label_df: pd.DataFrame | None, detected_id_field: str, truth_id_field: str) -> 'DetectedLocalizationTruthMap'  [lines 174-217, loc=44]
-        - def resolve(self, detected_id: str) -> tuple[str | None, bool]  [lines 219-223, loc=5]
-    - @dataclass(frozen=True) class _TruthWindowAttributionMatch  [lines 227-449, loc=223]
+        - def from_hierarchy_frames(cls, *, hierarchy_sensor_map_df: pd.DataFrame | None, hierarchy_label_df: pd.DataFrame | None, detected_id_field: str, truth_id_field: str) -> 'DetectedLocalizationTruthMap'  [lines 293-336, loc=44]
+        - def resolve(self, detected_id: str) -> tuple[str | None, bool]  [lines 338-342, loc=5]
+    - @dataclass(frozen=True) class _TruthWindowAttributionMatch  [lines 346-630, loc=285]
       attributes:
         - truth_window_id
         - dominant_subsystem_match
@@ -199,7 +206,7 @@ libs/anomaly/validator.py  [loc=880]
         - payload: dict[str, Any]
       methods:
         - @classmethod
-        - def from_truth_record(cls, *, truth: dict[str, Any], windows_df: pd.DataFrame, anomaly_window_attribution_df: pd.DataFrame, anomaly_telemetry_attribution_df: pd.DataFrame, anomaly_event_attribution_df: pd.DataFrame, subsystem_truth_map: DetectedLocalizationTruthMap, module_truth_map: DetectedLocalizationTruthMap, truth_parameter_to_subsystem: dict[str, str], truth_parameter_to_module: dict[str, str], truth_window_id_field: str, truth_start_field: str, truth_end_field: str) -> '_TruthWindowAttributionMatch'  [lines 244-449, loc=206]
+        - def from_truth_record(cls, *, truth: dict[str, Any], windows_df: pd.DataFrame, anomaly_window_attribution_df: pd.DataFrame, anomaly_telemetry_attribution_df: pd.DataFrame, anomaly_event_attribution_df: pd.DataFrame, subsystem_truth_map: DetectedLocalizationTruthMap, module_truth_map: DetectedLocalizationTruthMap, truth_parameter_to_subsystem: dict[str, str], truth_parameter_to_module: dict[str, str], truth_window_id_field: str, truth_start_field: str, truth_end_field: str) -> '_TruthWindowAttributionMatch'  [lines 363-630, loc=268]
 
 libs/architecture/__init__.py  [loc=14]
   doc: Architecture extraction and rendering helpers.
@@ -4583,19 +4590,20 @@ libs/reporting/frame.py  [loc=59]
         - def select_available(self, columns: 'Sequence[str]') -> 'ReportFrame'  [lines 42-46, loc=5]
         - def normalize_timestamps(self, columns: 'Sequence[str]' = DEFAULT_TIMESTAMP_COLUMNS) -> 'ReportFrame'  [lines 48-55, loc=8]
 
-libs/scoring/__init__.py  [loc=46]
+libs/scoring/__init__.py  [loc=48]
   doc: Window scoring package for the active V2 pipeline.
   imports:
-    - from libs.scoring.channels import BOUND_VIOLATION_CHANNEL, COHERENCE_BREAK_CHANNEL, EVENT_DISCORDANCE_CHANNEL, RECONSTRUCTION_ERROR_CHANNEL, REGIME_DEVIATION_CHANNEL, RESPONSE_VIOLATION_CHANNEL, SCORE_COMPONENT_NAMES, STATE_VIOLATION_CHANNEL, dominant_score_component, score_component_scores_with_updates, zero_score_component_scores
+    - from libs.scoring.channels import ACCUMULATION_VIOLATION_CHANNEL, BOUND_VIOLATION_CHANNEL, COHERENCE_BREAK_CHANNEL, EVENT_DISCORDANCE_CHANNEL, RECONSTRUCTION_ERROR_CHANNEL, REGIME_DEVIATION_CHANNEL, RESPONSE_VIOLATION_CHANNEL, SCORE_COMPONENT_NAMES, STATE_VIOLATION_CHANNEL, dominant_score_component, score_component_scores_with_updates, zero_score_component_scores
     - from libs.scoring.tables import WindowScoresCalibratedTable, WindowScoresRawTable
     - from libs.scoring.validator import extract_fault_truth_windows, extract_misbehavior_truth_windows, summarize_fault_window_detection, summarize_misbehavior_window_detection, validate_scores_against_fault_windows, validate_scores_against_misbehavior_windows
 
-libs/scoring/channels.py  [loc=97]
+libs/scoring/channels.py  [loc=99]
   doc: Canonical anomaly score channel names and shared helpers.
   imports:
     - from __future__ import annotations
     - from typing import Mapping
   constants:
+    - ACCUMULATION_VIOLATION_CHANNEL
     - BOUND_VIOLATION_CHANNEL
     - COHERENCE_BREAK_CHANNEL
     - EVENT_DISCORDANCE_CHANNEL
@@ -4605,15 +4613,15 @@ libs/scoring/channels.py  [loc=97]
     - SCORE_COMPONENT_NAMES
     - STATE_VIOLATION_CHANNEL
   functions:
-    - def zero_score_component_scores() -> dict[str, float]  [lines 26-27, loc=2]
-    - def score_component_scores_with_updates(updates: Mapping[str, float | int | None] | None = None) -> dict[str, float]  [lines 30-38, loc=9]
-    - def dominant_score_component(scores: Mapping[str, float | int | None] | None) -> str  [lines 41-50, loc=10]
-    - def active_channel_mean(scores: Mapping[str, float | int | None] | None) -> float  [lines 53-58, loc=6]
-    - def score_component_map_expr(component_expr_by_name: Mapping[str, object]) -> object  [lines 61-72, loc=12]
-    - def dominant_score_component_expr(component_expr_by_name: Mapping[str, object]) -> object  [lines 75-85, loc=11]
-    - def active_channel_mean_expr(component_expr_by_name: Mapping[str, object]) -> object  [lines 88-97, loc=10]
+    - def zero_score_component_scores() -> dict[str, float]  [lines 28-29, loc=2]
+    - def score_component_scores_with_updates(updates: Mapping[str, float | int | None] | None = None) -> dict[str, float]  [lines 32-40, loc=9]
+    - def dominant_score_component(scores: Mapping[str, float | int | None] | None) -> str  [lines 43-52, loc=10]
+    - def active_channel_mean(scores: Mapping[str, float | int | None] | None) -> float  [lines 55-60, loc=6]
+    - def score_component_map_expr(component_expr_by_name: Mapping[str, object]) -> object  [lines 63-74, loc=12]
+    - def dominant_score_component_expr(component_expr_by_name: Mapping[str, object]) -> object  [lines 77-87, loc=11]
+    - def active_channel_mean_expr(component_expr_by_name: Mapping[str, object]) -> object  [lines 90-99, loc=10]
 
-libs/scoring/tables.py  [loc=1038]
+libs/scoring/tables.py  [loc=1072]
   doc: Typed Spark tables for scoring artifacts.
   imports:
     - from __future__ import annotations
@@ -4622,7 +4630,7 @@ libs/scoring/tables.py  [loc=1038]
     - from libs.common.event_types import CATEGORICAL_EVENT_TYPES, CONTINUOUS_EVENT_TYPES, EventType
     - from libs.io.schemas.scoring import WINDOW_SCORES_CALIBRATED_SCHEMA, WINDOW_SCORES_RAW_SCHEMA
     - from libs.pyspark import Table
-    - from libs.scoring.channels import BOUND_VIOLATION_CHANNEL, COHERENCE_BREAK_CHANNEL, EVENT_DISCORDANCE_CHANNEL, RECONSTRUCTION_ERROR_CHANNEL, REGIME_DEVIATION_CHANNEL, RESPONSE_VIOLATION_CHANNEL, STATE_VIOLATION_CHANNEL, active_channel_mean_expr, dominant_score_component_expr, score_component_map_expr
+    - from libs.scoring.channels import ACCUMULATION_VIOLATION_CHANNEL, BOUND_VIOLATION_CHANNEL, COHERENCE_BREAK_CHANNEL, EVENT_DISCORDANCE_CHANNEL, RECONSTRUCTION_ERROR_CHANNEL, REGIME_DEVIATION_CHANNEL, RESPONSE_VIOLATION_CHANNEL, STATE_VIOLATION_CHANNEL, active_channel_mean_expr, dominant_score_component_expr, score_component_map_expr
     - from pyspark.sql import Column, DataFrame
     - from libs.events.tables import EventsTable
     - from libs.graph.tables import HierarchySensorMapTable
@@ -4639,15 +4647,15 @@ libs/scoring/tables.py  [loc=1038]
     - _EVENT_WINDOW_KEYS
     - _PHASE_GROUP_KEYS
   functions:
-    - def _phase_metric_baselines(metric_df: 'DataFrame', *, metric_cols: tuple[str, ...]) -> 'DataFrame'  [lines 42-66, loc=25]
-    - def _normalized_positive_deviation(metric_name: str) -> 'Column'  [lines 69-79, loc=11]
-    - def _normalized_abs_deviation(metric_name: str) -> 'Column'  [lines 82-91, loc=10]
-    - def _metric_map_value(map_col: str, key: str) -> 'Column'  [lines 94-97, loc=4]
-    - def _normalized_clamped_avg(*columns: 'Column') -> 'Column'  [lines 100-108, loc=9]
-    - def _window_aligned_event_rows(events_df: 'DataFrame', *, windows_df: 'DataFrame | None') -> 'DataFrame'  [lines 111-182, loc=72]
-    - def _localized_hierarchy_support_frames(residual_rows_df: 'DataFrame', residual_totals_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', *, parameter_event_counts_df: 'DataFrame | None') -> _LocalizedHierarchySupportFrames  [lines 185-337, loc=153]
+    - def _phase_metric_baselines(metric_df: 'DataFrame', *, metric_cols: tuple[str, ...]) -> 'DataFrame'  [lines 43-67, loc=25]
+    - def _normalized_positive_deviation(metric_name: str) -> 'Column'  [lines 70-80, loc=11]
+    - def _normalized_abs_deviation(metric_name: str) -> 'Column'  [lines 83-92, loc=10]
+    - def _metric_map_value(map_col: str, key: str) -> 'Column'  [lines 95-98, loc=4]
+    - def _normalized_clamped_avg(*columns: 'Column') -> 'Column'  [lines 101-109, loc=9]
+    - def _window_aligned_event_rows(events_df: 'DataFrame', *, windows_df: 'DataFrame | None') -> 'DataFrame'  [lines 112-183, loc=72]
+    - def _localized_hierarchy_support_frames(residual_rows_df: 'DataFrame', residual_totals_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', *, parameter_event_counts_df: 'DataFrame | None') -> _LocalizedHierarchySupportFrames  [lines 186-338, loc=153]
   classes:
-    - @dataclass(frozen=True) class _LocalizedHierarchySupportFrames  [lines 35-39, loc=5]
+    - @dataclass(frozen=True) class _LocalizedHierarchySupportFrames  [lines 36-40, loc=5]
       attributes:
         - module_ranked_df
         - dominant_modules_df
@@ -4658,30 +4666,30 @@ libs/scoring/tables.py  [loc=1038]
         - dominant_modules_df: 'DataFrame'
         - subsystem_ranked_df: 'DataFrame'
         - dominant_subsystems_df: 'DataFrame'
-    - @dataclass(frozen=True) class WindowScoresRawTable(Table)  [lines 341-952, loc=612]
+    - @dataclass(frozen=True) class WindowScoresRawTable(Table)  [lines 342-986, loc=645]
       attributes:
         - partition_by
       fields:
         - partition_by: tuple[str, ...] = ('tail_id',)
       methods:
         - @classmethod
-        - def spark_schema(cls)  [lines 345-346, loc=2]
+        - def spark_schema(cls)  [lines 346-347, loc=2]
         - @classmethod
-        - def from_phase_tables(cls, phase_windows: 'PhaseWindowsTable', phase_baselines: 'PhaseBaselinesTable', hierarchy_sensor_map: 'HierarchySensorMapTable', *, windows: 'WindowsTable | None' = None, events: 'EventsTable | None' = None, parameter_behavior_profile: 'ParameterBehaviorProfile | None' = None, parameter_event_profile: 'ParameterEventProfile | None' = None) -> 'WindowScoresRawTable'  [lines 349-372, loc=24]
+        - def from_phase_tables(cls, phase_windows: 'PhaseWindowsTable', phase_baselines: 'PhaseBaselinesTable', hierarchy_sensor_map: 'HierarchySensorMapTable', *, windows: 'WindowsTable | None' = None, events: 'EventsTable | None' = None, parameter_behavior_profile: 'ParameterBehaviorProfile | None' = None, parameter_event_profile: 'ParameterEventProfile | None' = None) -> 'WindowScoresRawTable'  [lines 350-373, loc=24]
         - @classmethod
-        - def from_phase_dataframes(cls, phase_windows_df: 'DataFrame', phase_baselines_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', *, windows_df: 'DataFrame | None' = None, events_df: 'DataFrame | None' = None, parameter_behavior_profile_df: 'DataFrame | None' = None, parameter_event_profile_df: 'DataFrame | None' = None) -> 'WindowScoresRawTable'  [lines 375-952, loc=578]
-    - @dataclass(frozen=True) class WindowScoresCalibratedTable(Table)  [lines 956-1027, loc=72]
+        - def from_phase_dataframes(cls, phase_windows_df: 'DataFrame', phase_baselines_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', *, windows_df: 'DataFrame | None' = None, events_df: 'DataFrame | None' = None, parameter_behavior_profile_df: 'DataFrame | None' = None, parameter_event_profile_df: 'DataFrame | None' = None) -> 'WindowScoresRawTable'  [lines 376-986, loc=611]
+    - @dataclass(frozen=True) class WindowScoresCalibratedTable(Table)  [lines 990-1061, loc=72]
       attributes:
         - partition_by
       fields:
         - partition_by: tuple[str, ...] = ('tail_id',)
       methods:
         - @classmethod
-        - def spark_schema(cls)  [lines 960-961, loc=2]
+        - def spark_schema(cls)  [lines 994-995, loc=2]
         - @staticmethod
-        - def emit_ready_expr()  [lines 964-975, loc=12]
+        - def emit_ready_expr()  [lines 998-1009, loc=12]
         - @classmethod
-        - def from_scores(cls, scores_df: 'DataFrame', *, min_warm: int) -> 'WindowScoresCalibratedTable'  [lines 978-1027, loc=50]
+        - def from_scores(cls, scores_df: 'DataFrame', *, min_warm: int) -> 'WindowScoresCalibratedTable'  [lines 1012-1061, loc=50]
 
 libs/scoring/validator.py  [loc=904]
   doc: Score validation helpers against simulator misbehavior truth with fault wrappers.
@@ -6128,7 +6136,7 @@ libs/simulation/report_tables.py  [loc=76]
         - def report_frame(self, view: ArtifactView) -> ReportFrame  [lines 72-73, loc=2]
         - def pandas(self, view: ArtifactView) -> pd.DataFrame  [lines 75-76, loc=2]
 
-libs/simulation/reporting.py  [loc=627]
+libs/simulation/reporting.py  [loc=635]
   doc: Validation report generation for simulation pipeline runs.
   imports:
     - from __future__ import annotations
@@ -6177,32 +6185,32 @@ libs/simulation/reporting.py  [loc=627]
     - WINDOWS_SCORE_VIEW
     - WINDOWS_VIEW
   functions:
-    - def _records_frame(tables: RunArtifactBundle, view: ArtifactView) -> pd.DataFrame  [lines 336-337, loc=2]
-    - def _skipped_report(*, reason: str) -> dict[str, Any]  [lines 340-344, loc=5]
-    - def _has_artifact(tables: RunArtifactBundle, artifact_name: str) -> bool  [lines 347-348, loc=2]
-    - def _build_label_contract_summary(*, raw_telemetry_sdf: Any | None, events_sdf: Any | None) -> dict[str, Any]  [lines 351-400, loc=50]
-    - def _build_profile_validation_summary(tables: RunArtifactBundle) -> dict[str, Any]  [lines 403-409, loc=7]
-    - def _build_event_validation_summary(tables: RunArtifactBundle, *, tolerance_seconds: float = 0.5) -> dict[str, Any]  [lines 412-422, loc=11]
-    - def _build_phase_validation_summary(tables: RunArtifactBundle) -> dict[str, Any]  [lines 425-430, loc=6]
-    - def _build_graph_validation_summary(tables: RunArtifactBundle, *, expected_lag_edges: tuple[dict[str, str], ...], expected_fused_edges: tuple[dict[str, str], ...]) -> dict[str, Any]  [lines 433-446, loc=14]
-    - def _build_coupling_validation_summary(tables: RunArtifactBundle, *, expected_coupling_signatures: tuple[dict[str, Any], ...]) -> dict[str, Any]  [lines 449-460, loc=12]
-    - def _build_misbehavior_score_summary(tables: RunArtifactBundle) -> dict[str, Any]  [lines 463-469, loc=7]
-    - def _build_misbehavior_window_summary(summary: dict[str, Any]) -> dict[str, Any]  [lines 472-481, loc=10]
-    - def _remap_windows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]  [lines 484-493, loc=10]
-    - def build_fault_score_summary_from_misbehavior(summary: dict[str, Any]) -> dict[str, Any]  [lines 496-514, loc=19]
-    - def _build_fault_window_summary(summary: dict[str, Any]) -> dict[str, Any]  [lines 517-526, loc=10]
-    - def _build_misbehavior_attribution_summary(tables: RunArtifactBundle) -> dict[str, Any]  [lines 529-538, loc=10]
-    - def build_fault_attribution_summary_from_misbehavior(summary: dict[str, Any]) -> dict[str, Any]  [lines 541-542, loc=2]
-    - def write_validation_reports(*, spark: Any, paths: RunPaths, flight: Any, table_format: str) -> dict[str, Any]  [lines 545-627, loc=83]
+    - def _records_frame(tables: RunArtifactBundle, view: ArtifactView) -> pd.DataFrame  [lines 344-345, loc=2]
+    - def _skipped_report(*, reason: str) -> dict[str, Any]  [lines 348-352, loc=5]
+    - def _has_artifact(tables: RunArtifactBundle, artifact_name: str) -> bool  [lines 355-356, loc=2]
+    - def _build_label_contract_summary(*, raw_telemetry_sdf: Any | None, events_sdf: Any | None) -> dict[str, Any]  [lines 359-408, loc=50]
+    - def _build_profile_validation_summary(tables: RunArtifactBundle) -> dict[str, Any]  [lines 411-417, loc=7]
+    - def _build_event_validation_summary(tables: RunArtifactBundle, *, tolerance_seconds: float = 0.5) -> dict[str, Any]  [lines 420-430, loc=11]
+    - def _build_phase_validation_summary(tables: RunArtifactBundle) -> dict[str, Any]  [lines 433-438, loc=6]
+    - def _build_graph_validation_summary(tables: RunArtifactBundle, *, expected_lag_edges: tuple[dict[str, str], ...], expected_fused_edges: tuple[dict[str, str], ...]) -> dict[str, Any]  [lines 441-454, loc=14]
+    - def _build_coupling_validation_summary(tables: RunArtifactBundle, *, expected_coupling_signatures: tuple[dict[str, Any], ...]) -> dict[str, Any]  [lines 457-468, loc=12]
+    - def _build_misbehavior_score_summary(tables: RunArtifactBundle) -> dict[str, Any]  [lines 471-477, loc=7]
+    - def _build_misbehavior_window_summary(summary: dict[str, Any]) -> dict[str, Any]  [lines 480-489, loc=10]
+    - def _remap_windows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]  [lines 492-501, loc=10]
+    - def build_fault_score_summary_from_misbehavior(summary: dict[str, Any]) -> dict[str, Any]  [lines 504-522, loc=19]
+    - def _build_fault_window_summary(summary: dict[str, Any]) -> dict[str, Any]  [lines 525-534, loc=10]
+    - def _build_misbehavior_attribution_summary(tables: RunArtifactBundle) -> dict[str, Any]  [lines 537-546, loc=10]
+    - def build_fault_attribution_summary_from_misbehavior(summary: dict[str, Any]) -> dict[str, Any]  [lines 549-550, loc=2]
+    - def write_validation_reports(*, spark: Any, paths: RunPaths, flight: Any, table_format: str) -> dict[str, Any]  [lines 553-635, loc=83]
   classes:
-    - @dataclass(frozen=True) class ValidationReportSet  [lines 325-333, loc=9]
+    - @dataclass(frozen=True) class ValidationReportSet  [lines 333-341, loc=9]
       attributes:
         - payloads
       fields:
         - payloads: dict[str, dict[str, Any]]
       methods:
-        - def write(self, *, paths: RunPaths) -> None  [lines 328-330, loc=3]
-        - def to_payloads(self) -> dict[str, dict[str, Any]]  [lines 332-333, loc=2]
+        - def write(self, *, paths: RunPaths) -> None  [lines 336-338, loc=3]
+        - def to_payloads(self) -> dict[str, dict[str, Any]]  [lines 340-341, loc=2]
 
 libs/simulation/run_bundle.py  [loc=47]
   imports:
@@ -8356,11 +8364,12 @@ pipelines/85_window_scores_calibrate.py  [loc=100]
     - @log_wall_time(logger=LOGGER)
     - def run() -> None  [lines 27-96, loc=70]
 
-pipelines/90_anomaly_attribution.py  [loc=198]
+pipelines/90_anomaly_attribution.py  [loc=214]
   doc: Emit anomaly attribution tables for anomalous windows.
   imports:
     - from libs.anomaly import AnomalyAttributionPlan
     - from libs.io.delta import get_spark, read_table
+    - from libs.profiling import ParameterBehaviorProfile
     - from libs.perf import build_artifact_manifest, build_stage_manifest, get_logger, log_memory_usage, log_dict_artifact_if_active, log_params_if_active, log_stage_manifest_if_active, log_wall_time, track_mlflow_run
     - from pipelines.common import build_stage_runtime
   constants:
@@ -8369,7 +8378,7 @@ pipelines/90_anomaly_attribution.py  [loc=198]
     - @track_mlflow_run(stage_name='90_anomaly_attribution', logger=LOGGER)
     - @log_memory_usage(logger=LOGGER, label='90_anomaly_attribution')
     - @log_wall_time(logger=LOGGER)
-    - def run() -> None  [lines 26-194, loc=169]
+    - def run() -> None  [lines 27-210, loc=184]
 
 pipelines/95_emit_explorer_bundle.py  [loc=147]
   doc: Emit a thin explorer-ready bundle for notebook and UI consumers.

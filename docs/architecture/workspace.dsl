@@ -30,13 +30,13 @@ workspace "S3NTINEL Architecture" "Architecture view of the active pipeline, sim
       }
       core_libraries = container "Core Libraries" "Reusable domain and infrastructure libraries behind the active runtime path." "Python + PySpark" {
         properties {
-          "loc_span" "44669"
+          "loc_span" "45078"
           "module_count" "189"
           "source_paths" "libs/__init__.py,libs/anomaly/__init__.py,libs/anomaly/frames.py,libs/anomaly/pipeline.py,libs/anomaly/tables.py,libs/anomaly/validator.py,libs/backbone/__init__.py,libs/backbone/artifacts.py,libs/backbone/energy.py,libs/backbone/fit.py,libs/backbone/tables.py,libs/behavior/__init__.py,libs/behavior/accumulative.py,libs/behavior/base.py,libs/behavior/discrete_state.py,libs/behavior/inertial.py,libs/behavior/primitives.py,libs/behavior/registry.py,libs/behavior/regulated.py,libs/behavior/tick.py,libs/behavior/tracking.py,libs/behavior/utils.py,libs/behavior/validation.py,libs/common/__init__.py,libs/common/event_types.py,libs/common/parameter_datatypes.py,libs/common/spark_exprs.py,libs/config/__init__.py,libs/config/pipeline.py,libs/events/__init__.py,libs/events/calibration.py,libs/events/categorical.py,libs/events/continuous.py,libs/events/pipeline.py,libs/events/profiling.py,libs/events/tables.py,libs/events/types.py,libs/events/validator.py,libs/graph/__init__.py,libs/graph/data.py,libs/graph/evaluation.py,libs/graph/event.py,libs/graph/fused.py,libs/graph/hierarchy.py,libs/graph/hierarchy_artifacts.py,libs/graph/lag.py,libs/graph/pipeline.py,libs/graph/precision.py,libs/graph/tables.py,libs/graph/transition.py,libs/graph/validator.py,libs/io/__init__.py,libs/io/contracts.py,libs/io/delta.py,libs/io/pandas_spark.py,libs/io/schemas/__init__.py,libs/io/schemas/anomaly.py,libs/io/schemas/backbone.py,libs/io/schemas/events.py,libs/io/schemas/explorer.py,libs/io/schemas/graph.py,libs/io/schemas/phase.py,libs/io/schemas/profiling.py,libs/io/schemas/scoring.py,libs/io/schemas/telemetry.py,libs/io/schemas/windows.py,libs/io/transforms.py,libs/perf/__init__.py,libs/perf/annotations.py,libs/perf/logger.py,libs/perf/memory.py,libs/perf/mlflow.py,libs/perf/stage_manifest.py,libs/phase/__init__.py,libs/phase/analysis.py,libs/phase/artifacts.py,libs/phase/config_fit.py,libs/phase/decode.py,libs/phase/feature_config.py,libs/phase/fit.py,libs/phase/frames.py,libs/phase/pipeline.py,libs/phase/selectors.py,libs/phase/tables.py,libs/phase/types.py,libs/phase/utils.py,libs/phase/validator.py,libs/plotting/__init__.py,libs/plotting/explorer_bundle.py,libs/plotting/simulation_artifacts.py,libs/profiling/__init__.py,libs/profiling/pipeline.py,libs/profiling/profiles.py,libs/profiling/validator.py,libs/pyspark/__init__.py,libs/pyspark/frame.py,libs/pyspark/schema.py,libs/pyspark/table.py,libs/reporting/__init__.py,libs/reporting/frame.py,libs/scoring/__init__.py,libs/scoring/channels.py,libs/scoring/tables.py,libs/scoring/validator.py,libs/simulation/__init__.py,libs/simulation/aircraft/__init__.py,libs/simulation/aircraft/examples.py,libs/simulation/aircraft/runtime.py,libs/simulation/aircraft/spec.py,libs/simulation/cli.py,libs/simulation/coupling/__init__.py,libs/simulation/coupling/examples.py,libs/simulation/coupling/runtime.py,libs/simulation/coupling/spec.py,libs/simulation/event_truth.py,libs/simulation/fault/__init__.py,libs/simulation/fault/examples.py,libs/simulation/fault/runtime.py,libs/simulation/fault/spec.py,libs/simulation/fleet/__init__.py,libs/simulation/fleet/examples.py,libs/simulation/fleet/runtime.py,libs/simulation/flight/__init__.py,libs/simulation/flight/examples.py,libs/simulation/flight/runtime.py,libs/simulation/flight/spec.py,libs/simulation/full_run_report.py,libs/simulation/module/__init__.py,libs/simulation/module/examples.py,libs/simulation/module/runtime.py,libs/simulation/module/spec.py,libs/simulation/parameter/__init__.py,libs/simulation/parameter/examples.py,libs/simulation/parameter/runtime.py,libs/simulation/parameter/spec.py,libs/simulation/phase/__init__.py,libs/simulation/phase/catalog.py,libs/simulation/phase/examples.py,libs/simulation/phase/runtime.py,libs/simulation/phase/spec.py,libs/simulation/port/__init__.py,libs/simulation/port/examples.py,libs/simulation/port/runtime.py,libs/simulation/port/spec.py,libs/simulation/replay_report.py,libs/simulation/report_tables.py,libs/simulation/reporting.py,libs/simulation/run_bundle.py,libs/simulation/run_cli.py,libs/simulation/run_context.py,libs/simulation/runner.py,libs/simulation/scenarios/__init__.py,libs/simulation/scenarios/power_pressurization.py,libs/simulation/seed_bundle.py,libs/simulation/subsystem/__init__.py,libs/simulation/subsystem/examples.py,libs/simulation/subsystem/runtime.py,libs/simulation/subsystem/spec.py,libs/simulation/system/__init__.py,libs/simulation/system/examples.py,libs/simulation/system/runtime.py,libs/simulation/system/spec.py,libs/simulation/tail/__init__.py,libs/simulation/tail/examples.py,libs/simulation/tail/runtime.py,libs/simulation/validation_harness.py,libs/spark_sequence/__init__.py,libs/spark_sequence/plan.py,libs/tuning/__init__.py,libs/tuning/benchmark_execution.py,libs/tuning/benchmark_invocation.py,libs/tuning/benchmark_planning.py,libs/tuning/benchmark_reporting.py,libs/tuning/benchmark_runner.py,libs/tuning/benchmark_runtime.py,libs/tuning/benchmark_search.py,libs/tuning/benchmark_variants.py,libs/tuning/objectives.py,libs/tuning/presets.py,libs/tuning/reporting.py,libs/tuning/validation_panels.py,libs/windows/__init__.py,libs/windows/buffer.py,libs/windows/coverage.py,libs/windows/features.py,libs/windows/pipeline.py,libs/windows/policy_profile.py,libs/windows/tables.py,libs/windows/window.py"
         }
         anomaly = component "Anomaly" "libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation" "Python + PySpark" {
         properties {
-          "loc_span" "2279"
+          "loc_span" "2642"
           "module_count" "5"
           "package_name" "libs.anomaly"
           "source_paths" "libs/anomaly/__init__.py,libs/anomaly/frames.py,libs/anomaly/pipeline.py,libs/anomaly/tables.py,libs/anomaly/validator.py"
@@ -140,7 +140,7 @@ workspace "S3NTINEL Architecture" "Architecture view of the active pipeline, sim
         }
         scoring = component "Scoring" "libs/scoring owns raw and calibrated anomaly scoring over fitted phase and structural artifacts" "Python + PySpark" {
         properties {
-          "loc_span" "2085"
+          "loc_span" "2123"
           "module_count" "4"
           "package_name" "libs.scoring"
           "source_paths" "libs/scoring/__init__.py,libs/scoring/channels.py,libs/scoring/tables.py,libs/scoring/validator.py"
@@ -148,7 +148,7 @@ workspace "S3NTINEL Architecture" "Architecture view of the active pipeline, sim
         }
         simulation = component "Simulation" "Owns the simulation domain model: aircraft, coupling, faults, fleets, phases, and runtime bundles" "Python + PySpark" {
         properties {
-          "loc_span" "11666"
+          "loc_span" "11674"
           "module_count" "62"
           "package_name" "libs.simulation"
           "source_paths" "libs/simulation/__init__.py,libs/simulation/aircraft/__init__.py,libs/simulation/aircraft/examples.py,libs/simulation/aircraft/runtime.py,libs/simulation/aircraft/spec.py,libs/simulation/cli.py,libs/simulation/coupling/__init__.py,libs/simulation/coupling/examples.py,libs/simulation/coupling/runtime.py,libs/simulation/coupling/spec.py,libs/simulation/event_truth.py,libs/simulation/fault/__init__.py,libs/simulation/fault/examples.py,libs/simulation/fault/runtime.py,libs/simulation/fault/spec.py,libs/simulation/fleet/__init__.py,libs/simulation/fleet/examples.py,libs/simulation/fleet/runtime.py,libs/simulation/flight/__init__.py,libs/simulation/flight/examples.py,libs/simulation/flight/runtime.py,libs/simulation/flight/spec.py,libs/simulation/full_run_report.py,libs/simulation/module/__init__.py,libs/simulation/module/examples.py,libs/simulation/module/runtime.py,libs/simulation/module/spec.py,libs/simulation/parameter/__init__.py,libs/simulation/parameter/examples.py,libs/simulation/parameter/runtime.py,libs/simulation/parameter/spec.py,libs/simulation/phase/__init__.py,libs/simulation/phase/catalog.py,libs/simulation/phase/examples.py,libs/simulation/phase/runtime.py,libs/simulation/phase/spec.py,libs/simulation/port/__init__.py,libs/simulation/port/examples.py,libs/simulation/port/runtime.py,libs/simulation/port/spec.py,libs/simulation/replay_report.py,libs/simulation/report_tables.py,libs/simulation/reporting.py,libs/simulation/run_bundle.py,libs/simulation/run_cli.py,libs/simulation/run_context.py,libs/simulation/runner.py,libs/simulation/scenarios/__init__.py,libs/simulation/scenarios/power_pressurization.py,libs/simulation/seed_bundle.py,libs/simulation/subsystem/__init__.py,libs/simulation/subsystem/examples.py,libs/simulation/subsystem/runtime.py,libs/simulation/subsystem/spec.py,libs/simulation/system/__init__.py,libs/simulation/system/examples.py,libs/simulation/system/runtime.py,libs/simulation/system/spec.py,libs/simulation/tail/__init__.py,libs/simulation/tail/examples.py,libs/simulation/tail/runtime.py,libs/simulation/validation_harness.py"
@@ -181,7 +181,7 @@ workspace "S3NTINEL Architecture" "Architecture view of the active pipeline, sim
       }
       pipeline_runtime = container "Pipeline Runtime" "Persisted stage entrypoints and grouped runners for the active fitting and inference path." "Python CLI + PySpark" {
         properties {
-          "loc_span" "3770"
+          "loc_span" "3786"
           "module_count" "23"
           "source_paths" "pipelines/00_ingest_raw.py,pipelines/10_parameter_profiles_fit.py,pipelines/12_behavior_profiles_fit.py,pipelines/15_event_profiles_fit.py,pipelines/20_events_extract.py,pipelines/25_window_policy_profile.py,pipelines/30_windows_adaptive.py,pipelines/40_backbone_fit.py,pipelines/50_build_graph.py,pipelines/60_fit_hierarchy.py,pipelines/70_phase_fit.py,pipelines/72_phase_label_centroids.py,pipelines/80_window_scores_raw.py,pipelines/85_window_scores_calibrate.py,pipelines/90_anomaly_attribution.py,pipelines/95_emit_explorer_bundle.py,pipelines/97_run_fitting_pipeline.py,pipelines/98_run_inference_pipeline.py,pipelines/99_run_full_pipeline.py,pipelines/__init__.py,pipelines/_pipeline_runner.py,pipelines/common.py,pipelines/plans.py"
         }
@@ -201,7 +201,7 @@ workspace "S3NTINEL Architecture" "Architecture view of the active pipeline, sim
         }
         inference_stages = component "Inference Stages" "Entry points for phase fitting, scoring, calibration, attribution, and explorer output." "Python CLI + PySpark" {
         properties {
-          "loc_span" "973"
+          "loc_span" "989"
           "module_count" "6"
           "source_paths" "pipelines/70_phase_fit.py,pipelines/72_phase_label_centroids.py,pipelines/80_window_scores_raw.py,pipelines/85_window_scores_calibrate.py,pipelines/90_anomaly_attribution.py,pipelines/95_emit_explorer_bundle.py"
         }
@@ -385,9 +385,9 @@ workspace "S3NTINEL Architecture" "Architecture view of the active pipeline, sim
         properties {
           "class_count" "0"
           "function_count" "1"
-          "library_layer_summary" "Anomaly: libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation; Perf: libs/perf owns operational instrumentation helpers: MLflow integration; wall-time logging; memory observability snapshots; stage-manifest generation; Io: libs/io owns artifact schemas, row contracts, and persistence/bridge utilities; Scoring: libs/scoring owns raw and calibrated anomaly scoring over fitted phase and structural artifacts"
-          "library_layers" "Anomaly, Perf, Io, Scoring, Config, Pyspark"
-          "loc_span" "198"
+          "library_layer_summary" "Anomaly: libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation; Io: libs/io owns artifact schemas, row contracts, and persistence/bridge utilities; Profiling: libs/profiling owns parameter profiling over canonical telemetry: datatype profiling; continuous scaling/profile statistics; behavior-family profiling; Perf: libs/perf owns operational instrumentation helpers: MLflow integration; wall-time logging; memory observability snapshots; stage-manifest generation"
+          "library_layers" "Anomaly, Io, Profiling, Perf, Scoring, Behavior, Config, Pyspark, Common"
+          "loc_span" "214"
           "module_name" "pipelines.90_anomaly_attribution"
           "purpose" "Emit anomaly attribution tables for anomalous windows."
           "source_paths" "pipelines/90_anomaly_attribution.py"

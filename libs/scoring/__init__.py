@@ -1,6 +1,7 @@
 """Window scoring package for the active V2 pipeline."""
 
 from libs.scoring.channels import (
+    ACCUMULATION_VIOLATION_CHANNEL,
     BOUND_VIOLATION_CHANNEL,
     COHERENCE_BREAK_CHANNEL,
     EVENT_DISCORDANCE_CHANNEL,
@@ -24,6 +25,7 @@ from libs.scoring.validator import (
 )
 
 __all__ = [
+    "ACCUMULATION_VIOLATION_CHANNEL",
     "BOUND_VIOLATION_CHANNEL",
     "COHERENCE_BREAK_CHANNEL",
     "EVENT_DISCORDANCE_CHANNEL",

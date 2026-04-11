@@ -4,6 +4,7 @@ from datetime import date, datetime
 
 from libs.io.schemas.scoring import WINDOW_SCORES_RAW_SCHEMA
 from libs.scoring import (
+    ACCUMULATION_VIOLATION_CHANNEL,
     EVENT_DISCORDANCE_CHANNEL,
     RECONSTRUCTION_ERROR_CHANNEL,
     REGIME_DEVIATION_CHANNEL,
@@ -527,11 +528,15 @@ def test_window_scores_raw_table_aligns_null_win_id_events_by_timestamp(spark):
                 "tracking_score_profiled": 0.9,
                 "inertial_score_profiled": 0.2,
                 "accumulative_score_profiled": 0.0,
+                "persistent_run_strength_profiled": 0.0,
+                "run_reinforcement_score_profiled": 0.0,
                 "discrete_state_score_profiled": 0.0,
                 "excursion_rate_profiled": 0.0,
                 "excursion_return_ratio_profiled": 0.0,
                 "bound_occupancy_profiled": 0.0,
                 "saturation_rate_profiled": 0.0,
+                "monotone_accumulation_score_profiled": 0.0,
+                "reset_drop_rate_profiled": 0.0,
                 "oscillation_score_profiled": 0.4,
                 "tracking_error_score_profiled": 0.8,
                 "tracking_recovery_score_profiled": 0.6,
@@ -546,6 +551,7 @@ def test_window_scores_raw_table_aligns_null_win_id_events_by_timestamp(spark):
         [
             {
                 "parameter_name": "p1",
+                "drift_score_profiled": 0.1,
                 "repeatability_score_profiled": 0.2,
                 "smoothness_score_profiled": 0.3,
                 "recommended_emit_threshold": False,
@@ -570,3 +576,208 @@ def test_window_scores_raw_table_aligns_null_win_id_events_by_timestamp(spark):
 
     assert float(scores[3][EVENT_DISCORDANCE_CHANNEL]) > 0.0
     assert float(scores[3][RESPONSE_VIOLATION_CHANNEL]) > 0.0
+
+
+def test_window_scores_raw_table_activates_accumulation_violation_for_accumulative_residual_windows(spark):
+    phase_windows_df = spark.createDataFrame(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 1,
+                "s_w": [0.0, 0.0],
+                "backbone_reconstruction_error": 0.1,
+                "backbone_residual_by_parameter": {"p_ctx": 0.1},
+                "phase_id_detected": 0,
+                "phase_state_detected": "stable",
+                "phase_confidence_detected": 0.9,
+                "distance_to_centroid_detected": 0.1,
+                "drift_magnitude": 0.1,
+                "breadth": 0.2,
+                "date_utc": date(2025, 1, 1),
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 2,
+                "s_w": [0.1, 0.0],
+                "backbone_reconstruction_error": 0.2,
+                "backbone_residual_by_parameter": {"p_ctx": 0.2},
+                "phase_id_detected": 0,
+                "phase_state_detected": "stable",
+                "phase_confidence_detected": 0.8,
+                "distance_to_centroid_detected": 0.2,
+                "drift_magnitude": 0.1,
+                "breadth": 0.2,
+                "date_utc": date(2025, 1, 1),
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 3,
+                "s_w": [0.1, 0.1],
+                "backbone_reconstruction_error": 2.0,
+                "backbone_residual_by_parameter": {"p_accum": 2.0, "p_ctx": 0.1},
+                "phase_id_detected": 0,
+                "phase_state_detected": "stable",
+                "phase_confidence_detected": 0.7,
+                "distance_to_centroid_detected": 0.3,
+                "drift_magnitude": 0.9,
+                "breadth": 0.4,
+                "date_utc": date(2025, 1, 1),
+            },
+        ]
+    )
+    phase_baselines_df = spark.createDataFrame(
+        [
+            {
+                "tail_id": "T1",
+                "phase_id_detected": 0,
+                "s_w_centroid": [0.0, 0.0],
+                "reconstruction_median": 0.1,
+                "reconstruction_mad": 0.1,
+                "distance_median": 0.1,
+                "distance_mad": 0.1,
+            }
+        ]
+    )
+    hierarchy_sensor_map_df = spark.createDataFrame(
+        [
+            {"parameter_name": "p_accum", "subsystem_id": "SUB1", "module_id": "MOD1"},
+            {"parameter_name": "p_ctx", "subsystem_id": "SUB2", "module_id": "MOD2"},
+        ]
+    )
+    windows_df = spark.createDataFrame(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": win_id,
+                "date_utc": date(2025, 1, 1),
+                "t_start": datetime(2025, 1, 1, 0, 0, win_id - 1),
+                "t_end": datetime(2025, 1, 1, 0, 0, win_id),
+                "duration_ms": 1000,
+                "event_count": 0,
+                "real_event_count": 0,
+                "event_type_counts": {},
+                "close_reason": "budget_threshold",
+            }
+            for win_id in (1, 2, 3)
+        ],
+        schema=T.StructType(
+            [
+                T.StructField("tail_id", T.StringType(), False),
+                T.StructField("flight_id", T.StringType(), False),
+                T.StructField("win_id", T.IntegerType(), False),
+                T.StructField("date_utc", T.DateType(), True),
+                T.StructField("t_start", T.TimestampType(), True),
+                T.StructField("t_end", T.TimestampType(), True),
+                T.StructField("duration_ms", T.LongType(), True),
+                T.StructField("event_count", T.IntegerType(), True),
+                T.StructField("real_event_count", T.IntegerType(), True),
+                T.StructField("event_type_counts", T.MapType(T.StringType(), T.IntegerType(), True), True),
+                T.StructField("close_reason", T.StringType(), True),
+            ]
+        ),
+    )
+    events_df = spark.createDataFrame(
+        [],
+        schema=T.StructType(
+            [
+                T.StructField("event_seq_id", T.IntegerType(), True),
+                T.StructField("tail_id", T.StringType(), True),
+                T.StructField("flight_id", T.StringType(), True),
+                T.StructField("win_id", T.IntegerType(), True),
+                T.StructField("date_utc", T.DateType(), True),
+                T.StructField("timestamp_utc", T.TimestampType(), True),
+                T.StructField("parameter_name", T.StringType(), True),
+                T.StructField("event_type_detected", T.StringType(), True),
+            ]
+        ),
+    )
+    parameter_behavior_profile_df = spark.createDataFrame(
+        [
+            {
+                "parameter_name": "p_accum",
+                "persistent_run_strength_profiled": 0.9,
+                "run_reinforcement_score_profiled": 0.8,
+                "regulated_score_profiled": 0.1,
+                "tracking_score_profiled": 0.1,
+                "inertial_score_profiled": 0.1,
+                "accumulative_score_profiled": 0.95,
+                "discrete_state_score_profiled": 0.0,
+                "excursion_rate_profiled": 0.0,
+                "excursion_return_ratio_profiled": 0.0,
+                "bound_occupancy_profiled": 0.0,
+                "saturation_rate_profiled": 0.0,
+                "monotone_accumulation_score_profiled": 0.9,
+                "reset_drop_rate_profiled": 0.4,
+                "oscillation_score_profiled": 0.0,
+                "tracking_error_score_profiled": 0.0,
+                "tracking_recovery_score_profiled": 0.0,
+                "lagged_response_score_profiled": 0.0,
+                "transition_rate_profiled": 0.0,
+                "dominant_state_ratio_profiled": 0.0,
+                "state_chatter_rate_profiled": 0.0,
+            },
+            {
+                "parameter_name": "p_ctx",
+                "persistent_run_strength_profiled": 0.1,
+                "run_reinforcement_score_profiled": 0.1,
+                "regulated_score_profiled": 0.2,
+                "tracking_score_profiled": 0.2,
+                "inertial_score_profiled": 0.2,
+                "accumulative_score_profiled": 0.0,
+                "discrete_state_score_profiled": 0.0,
+                "excursion_rate_profiled": 0.0,
+                "excursion_return_ratio_profiled": 0.0,
+                "bound_occupancy_profiled": 0.0,
+                "saturation_rate_profiled": 0.0,
+                "monotone_accumulation_score_profiled": 0.0,
+                "reset_drop_rate_profiled": 0.0,
+                "oscillation_score_profiled": 0.0,
+                "tracking_error_score_profiled": 0.0,
+                "tracking_recovery_score_profiled": 0.0,
+                "lagged_response_score_profiled": 0.0,
+                "transition_rate_profiled": 0.0,
+                "dominant_state_ratio_profiled": 0.0,
+                "state_chatter_rate_profiled": 0.0,
+            },
+        ]
+    )
+    parameter_event_profile_df = spark.createDataFrame(
+        [
+            {
+                "parameter_name": "p_accum",
+                "drift_score_profiled": 0.9,
+                "repeatability_score_profiled": 0.1,
+                "smoothness_score_profiled": 0.2,
+                "recommended_emit_threshold": False,
+                "recommended_emit_oscillation": False,
+            },
+            {
+                "parameter_name": "p_ctx",
+                "drift_score_profiled": 0.0,
+                "repeatability_score_profiled": 0.7,
+                "smoothness_score_profiled": 0.7,
+                "recommended_emit_threshold": False,
+                "recommended_emit_oscillation": False,
+            },
+        ]
+    )
+
+    scores_df = WindowScoresRawTable.from_phase_dataframes(
+        phase_windows_df,
+        phase_baselines_df,
+        hierarchy_sensor_map_df,
+        windows_df=windows_df,
+        events_df=events_df,
+        parameter_behavior_profile_df=parameter_behavior_profile_df,
+        parameter_event_profile_df=parameter_event_profile_df,
+    ).to_dataframe()
+    scores = {
+        int(row["win_id"]): row["score_component_scores"]
+        for row in scores_df.select("win_id", "score_component_scores").collect()
+    }
+
+    assert float(scores[3][ACCUMULATION_VIOLATION_CHANNEL]) > 0.0

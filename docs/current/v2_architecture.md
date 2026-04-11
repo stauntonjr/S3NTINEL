@@ -44,20 +44,23 @@ Then the active structural stages are:
 
 1. `pipelines/00_ingest_raw.py`
 2. `pipelines/10_parameter_profiles_fit.py`
-3. `pipelines/20_events_extract.py`
-4. `pipelines/25_window_policy_profile.py`
-5. `pipelines/30_windows_adaptive.py`
-6. `pipelines/40_backbone_fit.py`
-7. `pipelines/50_build_graph.py`
-8. `pipelines/60_fit_hierarchy.py`
+3. `pipelines/12_behavior_profiles_fit.py`
+4. `pipelines/15_event_profiles_fit.py`
+5. `pipelines/20_events_extract.py`
+6. `pipelines/25_window_policy_profile.py`
+7. `pipelines/30_windows_adaptive.py`
+8. `pipelines/40_backbone_fit.py`
+9. `pipelines/50_build_graph.py`
+10. `pipelines/60_fit_hierarchy.py`
 
 ### Inference
 
 1. `pipelines/70_phase_fit.py`
-2. `pipelines/80_window_scores_raw.py`
-3. `pipelines/85_window_scores_calibrate.py`
-4. `pipelines/90_anomaly_attribution.py`
-5. `pipelines/95_emit_explorer_bundle.py`
+2. `pipelines/72_phase_label_centroids.py`
+3. `pipelines/80_window_scores_raw.py`
+4. `pipelines/85_window_scores_calibrate.py`
+5. `pipelines/90_anomaly_attribution.py`
+6. `pipelines/95_emit_explorer_bundle.py`
 
 ## Core representations
 
@@ -115,7 +118,16 @@ Then the active structural stages are:
   - per-tail detected phase baselines in `window_s` space
 
 - `window_scores_raw`
-  - raw V2 structure/reconstruction scoring outputs
+  - raw V2 anomaly scoring outputs
+  - current canonical score-channel contract:
+    - `regime_deviation`
+    - `reconstruction_error`
+    - `event_discordance`
+    - `bound_violation`
+    - `accumulation_violation`
+    - `response_violation`
+    - `state_violation`
+    - `coherence_break`
 
 - `window_scores_calibrated`
   - calibrated window scores used for emission

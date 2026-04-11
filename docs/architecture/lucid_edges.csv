@@ -1,6 +1,6 @@
 source_id,destination_id,description,technology,import_edge_count,tags
 core_libraries,pipeline_runtime,Uses,Python imports,2,internal
-pipeline_runtime,core_libraries,Uses,Python imports,66,internal
+pipeline_runtime,core_libraries,Uses,Python imports,67,internal
 simulation_clis,core_libraries,Uses,Python imports,16,internal
 simulation_clis,pipeline_runtime,Uses,Python imports,1,internal
 architecture_tooling.workflow,architecture_tooling.repo_maps,Uses,Python imports,4,"internal,component"
@@ -76,7 +76,7 @@ pipeline_runtime.inference_stages,core_libraries.graph,Uses,Python imports,1,"in
 pipeline_runtime.inference_stages,core_libraries.io,Uses,Python imports,6,"internal,component"
 pipeline_runtime.inference_stages,core_libraries.perf,Uses,Python imports,7,"internal,component"
 pipeline_runtime.inference_stages,core_libraries.phase,Uses,Python imports,3,"internal,component"
-pipeline_runtime.inference_stages,core_libraries.profiling,Uses,Python imports,1,"internal,component"
+pipeline_runtime.inference_stages,core_libraries.profiling,Uses,Python imports,2,"internal,component"
 pipeline_runtime.inference_stages,core_libraries.scoring,Uses,Python imports,2,"internal,component"
 pipeline_runtime.inference_stages,core_libraries.windows,Uses,Python imports,1,"internal,component"
 pipeline_runtime.inference_stages,pipeline_runtime.pipeline_common,Uses,Python imports,6,"internal,component"

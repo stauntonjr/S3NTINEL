@@ -678,6 +678,8 @@ def test_anomaly_validator_compares_attribution_to_fault_truth():
                 "flight_id": "F1",
                 "win_id": 1,
                 "parameter_name": "bleed_supply_psi",
+                "parameter_localization_support": 1.0,
+                "parameter_support_rank_in_window": 1,
                 "parameter_localization_selected": True,
             },
         ]
@@ -758,6 +760,14 @@ def test_anomaly_validator_compares_attribution_to_fault_truth():
             "telemetry_truth_module_present": True,
             "telemetry_selected_truth_module_present": True,
             "event_truth_module_present": True,
+            "top_ranked_selected_parameter_name": "bleed_supply_psi",
+            "top_ranked_selected_parameter_rank": 1,
+            "top_ranked_selected_parameter_support": 1.0,
+            "top_ranked_selected_parameter_truth_subsystem": "SUB_AIR_BLEED",
+            "top_ranked_selected_parameter_truth_module": "MOD_BLEED_SUPPLY",
+            "top_ranked_selected_parameter_exact_match": True,
+            "top_ranked_selected_parameter_in_truth_subsystem": True,
+            "top_ranked_selected_parameter_in_truth_module": True,
             "telemetry_attributed_parameter_names": ["bleed_supply_psi"],
             "telemetry_selected_attributed_parameter_names": ["bleed_supply_psi"],
             "event_attributed_parameter_names": ["bleed_supply_psi"],
@@ -795,6 +805,13 @@ def test_anomaly_validator_compares_attribution_to_fault_truth():
                 "telemetry_parameter_match": True,
                 "telemetry_selected_parameter_match": True,
                 "event_parameter_match": True,
+                "reconstruction_failure_bucket": None,
+                "top_ranked_selected_parameter_name": "bleed_supply_psi",
+                "top_ranked_selected_parameter_rank": 1,
+                "top_ranked_selected_parameter_truth_subsystem": "SUB_AIR_BLEED",
+                "top_ranked_selected_parameter_truth_module": "MOD_BLEED_SUPPLY",
+                "top_ranked_selected_parameter_in_truth_subsystem": True,
+                "top_ranked_selected_parameter_in_truth_module": True,
                 "telemetry_selected_attributed_parameter_names": ["bleed_supply_psi"],
             }
         ],
@@ -804,6 +821,58 @@ def test_anomaly_validator_compares_attribution_to_fault_truth():
     assert summary["module_localization_validation"]["truth_module_present_rate_by_source"] == {
         "telemetry": 1.0,
         "event": 1.0,
+    }
+    assert summary["reconstruction_localization_validation"] == {
+        "status": "ok",
+        "truth_window_count": 1,
+        "reconstruction_truth_window_count": 1,
+        "reconstruction_failure_count": 0,
+        "failure_count_by_bucket": {},
+        "failure_rate_by_bucket": {},
+        "truth_subsystem_present_in_selected_telemetry_count": 1,
+        "truth_subsystem_present_in_selected_telemetry_rate": 1.0,
+        "truth_module_present_in_selected_telemetry_count": 1,
+        "truth_module_present_in_selected_telemetry_rate": 1.0,
+        "truth_subsystem_present_in_top_subsystem_candidates_count": 1,
+        "truth_subsystem_present_in_top_subsystem_candidates_rate": 1.0,
+        "truth_module_present_in_top_module_candidates_count": 1,
+        "truth_module_present_in_top_module_candidates_rate": 1.0,
+        "top_ranked_selected_parameter_exact_match_count": 1,
+        "top_ranked_selected_parameter_exact_match_rate": 1.0,
+        "top_ranked_selected_parameter_in_truth_subsystem_count": 1,
+        "top_ranked_selected_parameter_in_truth_subsystem_rate": 1.0,
+        "top_ranked_selected_parameter_in_truth_module_count": 1,
+        "top_ranked_selected_parameter_in_truth_module_rate": 1.0,
+        "reconstruction_localization_cases": [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "fault_window_id": "FW1",
+                "misbehavior_window_id": "MBW1",
+                "subsystem_id": "SUB_AIR_BLEED",
+                "module_id": "MOD_BLEED_SUPPLY",
+                "parameter_name": "bleed_supply_psi",
+                "dominant_score_component": RECONSTRUCTION_ERROR_CHANNEL,
+                "reconstruction_failure_bucket": None,
+                "dominant_subsystem_match": True,
+                "dominant_module_match": True,
+                "telemetry_selected_truth_subsystem_present": True,
+                "telemetry_selected_truth_module_present": True,
+                "top_subsystem_candidate_present": True,
+                "top_module_candidate_present": True,
+                "top_ranked_selected_parameter_name": "bleed_supply_psi",
+                "top_ranked_selected_parameter_rank": 1,
+                "top_ranked_selected_parameter_support": 1.0,
+                "top_ranked_selected_parameter_truth_subsystem": "SUB_AIR_BLEED",
+                "top_ranked_selected_parameter_truth_module": "MOD_BLEED_SUPPLY",
+                "top_ranked_selected_parameter_exact_match": True,
+                "top_ranked_selected_parameter_in_truth_subsystem": True,
+                "top_ranked_selected_parameter_in_truth_module": True,
+                "telemetry_selected_attributed_parameter_names": ["bleed_supply_psi"],
+                "top_subsystem_candidate_truth_ids": ["SUB_AIR_BLEED"],
+                "top_module_candidate_truth_ids": ["MOD_BLEED_SUPPLY"],
+            }
+        ],
     }
     assert misbehavior_summary["misbehavior_window_count"] == 1
     assert misbehavior_summary["dominant_subsystem_match_rate"] == 1.0
@@ -866,6 +935,8 @@ def test_anomaly_validator_reports_ranked_candidate_presence_when_dominant_winne
                 "flight_id": "F1",
                 "win_id": 1,
                 "parameter_name": "bleed_supply_psi",
+                "parameter_localization_support": 0.6,
+                "parameter_support_rank_in_window": 1,
                 "parameter_localization_selected": True,
             },
             {
@@ -873,6 +944,8 @@ def test_anomaly_validator_reports_ranked_candidate_presence_when_dominant_winne
                 "flight_id": "F1",
                 "win_id": 1,
                 "parameter_name": "bleed_supply_psi_aft",
+                "parameter_localization_support": 0.55,
+                "parameter_support_rank_in_window": 2,
                 "parameter_localization_selected": True,
             },
         ]
@@ -915,6 +988,40 @@ def test_anomaly_validator_reports_ranked_candidate_presence_when_dominant_winne
     assert summary["channel_localization_validation"]["top_module_candidate_present_rate_by_score_component"] == {
         RECONSTRUCTION_ERROR_CHANNEL: 1.0
     }
+    assert summary["reconstruction_localization_validation"]["failure_count_by_bucket"] == {
+        "sibling_consequence_won": 1,
+    }
+    assert summary["reconstruction_localization_validation"]["top_ranked_selected_parameter_in_truth_subsystem_rate"] == 0.0
+    assert summary["reconstruction_localization_validation"]["reconstruction_localization_cases"] == [
+        {
+            "tail_id": "T1",
+            "flight_id": "F1",
+            "fault_window_id": "FW1",
+            "misbehavior_window_id": "MBW1",
+            "subsystem_id": "SUB_AIR_BLEED_AFT",
+            "module_id": "MOD_BLEED_SUPPLY_AFT",
+            "parameter_name": "bleed_supply_psi_aft",
+            "dominant_score_component": RECONSTRUCTION_ERROR_CHANNEL,
+            "reconstruction_failure_bucket": "sibling_consequence_won",
+            "dominant_subsystem_match": False,
+            "dominant_module_match": False,
+            "telemetry_selected_truth_subsystem_present": True,
+            "telemetry_selected_truth_module_present": True,
+            "top_subsystem_candidate_present": True,
+            "top_module_candidate_present": True,
+            "top_ranked_selected_parameter_name": "bleed_supply_psi",
+            "top_ranked_selected_parameter_rank": 1,
+            "top_ranked_selected_parameter_support": 0.6,
+            "top_ranked_selected_parameter_truth_subsystem": "SUB_AIR_BLEED_FORWARD",
+            "top_ranked_selected_parameter_truth_module": "MOD_BLEED_SUPPLY",
+            "top_ranked_selected_parameter_exact_match": False,
+            "top_ranked_selected_parameter_in_truth_subsystem": False,
+            "top_ranked_selected_parameter_in_truth_module": False,
+            "telemetry_selected_attributed_parameter_names": ["bleed_supply_psi", "bleed_supply_psi_aft"],
+            "top_subsystem_candidate_truth_ids": ["SUB_AIR_BLEED_AFT", "SUB_AIR_BLEED_FORWARD"],
+            "top_module_candidate_truth_ids": ["MOD_BLEED_SUPPLY", "MOD_BLEED_SUPPLY_AFT"],
+        }
+    ]
 
 
 def test_score_validator_reports_raw_calibrated_and_emission_diagnostics():

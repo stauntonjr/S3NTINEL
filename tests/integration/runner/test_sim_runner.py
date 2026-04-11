@@ -855,6 +855,11 @@ def test_runner_fault_wrappers_preserve_extended_validation_metrics():
             "truth_window_count": 2,
             "truth_window_count_by_score_component": {"reconstruction_error": 2},
         },
+        "reconstruction_localization_validation": {
+            "reconstruction_truth_window_count": 2,
+            "reconstruction_failure_count": 1,
+            "failure_count_by_bucket": {"shared_source_won": 1},
+        },
         "parameter_localization_validation": {
             "truth_window_count": 2,
             "exact_parameter_match_count_by_source": {
@@ -888,6 +893,9 @@ def test_runner_fault_wrappers_preserve_extended_validation_metrics():
     assert fault_attribution_summary["module_localization_validation"]["dominant_module_match_count"] == 1
     assert fault_attribution_summary["channel_localization_validation"]["truth_window_count_by_score_component"] == {
         "reconstruction_error": 2
+    }
+    assert fault_attribution_summary["reconstruction_localization_validation"]["failure_count_by_bucket"] == {
+        "shared_source_won": 1
     }
     assert fault_attribution_summary["parameter_localization_validation"]["exact_parameter_match_count_by_source"] == {
         "telemetry": 2,

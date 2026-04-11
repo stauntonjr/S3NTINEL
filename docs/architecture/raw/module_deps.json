@@ -1825,6 +1825,7 @@
         "libs.anomaly",
         "libs.io.delta",
         "libs.perf",
+        "libs.profiling",
         "pipelines.common"
       ],
       "module": "pipelines.90_anomaly_attribution",

@@ -32,7 +32,7 @@ flowchart TB
     layer_12 --> layer_13
     layer_14["Layer 14: 85 Window Scores Calibrate<br/>Purpose: Calibrate raw window scores with phase-conditioned conformal calibration.<br/>Module: pipelines.85_window_scores_calibrate<br/>LOC: 100 | Functions: 1 | Classes: 0"]
     layer_13 --> layer_14
-    layer_15["Layer 15: 90 Anomaly Attribution<br/>Purpose: Emit anomaly attribution tables for anomalous windows.<br/>Module: pipelines.90_anomaly_attribution<br/>LOC: 198 | Functions: 1 | Classes: 0"]
+    layer_15["Layer 15: 90 Anomaly Attribution<br/>Purpose: Emit anomaly attribution tables for anomalous windows.<br/>Module: pipelines.90_anomaly_attribution<br/>LOC: 214 | Functions: 1 | Classes: 0"]
     layer_14 --> layer_15
     layer_16["Layer 16: 95 Emit Explorer Bundle<br/>Purpose: Emit a thin explorer-ready bundle for notebook and UI consumers.<br/>Module: pipelines.95_emit_explorer_bundle<br/>LOC: 147 | Functions: 1 | Classes: 0"]
     layer_15 --> layer_16

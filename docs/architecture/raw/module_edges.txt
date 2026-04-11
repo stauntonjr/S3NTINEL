@@ -583,6 +583,7 @@ pipelines.85_window_scores_calibrate -> pipelines.common
 pipelines.90_anomaly_attribution -> libs.anomaly
 pipelines.90_anomaly_attribution -> libs.io.delta
 pipelines.90_anomaly_attribution -> libs.perf
+pipelines.90_anomaly_attribution -> libs.profiling
 pipelines.90_anomaly_attribution -> pipelines.common
 pipelines.95_emit_explorer_bundle -> libs.io.delta
 pipelines.95_emit_explorer_bundle -> libs.perf

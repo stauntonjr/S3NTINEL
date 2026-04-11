@@ -8,6 +8,7 @@ from libs.anomaly import (
     AnomalySubsystemContextFrame,
 )
 from libs.scoring.channels import (
+    ACCUMULATION_VIOLATION_CHANNEL,
     EVENT_DISCORDANCE_CHANNEL,
     RECONSTRUCTION_ERROR_CHANNEL,
     REGIME_DEVIATION_CHANNEL,
@@ -455,3 +456,106 @@ def test_parameter_localization_boosts_coherent_module_over_isolated_context_par
     assert localized_targets["top_subsystem_candidates"][1]["id"] == "SUBSYS_CONTEXT"
     assert localized_targets["top_module_candidates"][0]["id"] == "MOD_SRC"
     assert localized_targets["top_module_candidates"][1]["id"] == "MOD_CTX"
+
+
+def test_parameter_localization_uses_accumulation_channel_to_promote_accumulative_parameters(spark):
+    calibrated_df = spark.createDataFrame(
+        [
+            {
+                "tail_id": "T001",
+                "flight_id": "F001",
+                "win_id": 1,
+                "phase_state_detected": "stable",
+                "phase_id_detected": 0,
+                "phase_confidence_detected": 0.9,
+                "distance_to_centroid_detected": 0.1,
+                "drift_magnitude": 0.1,
+                "breadth": 0.2,
+                "global_score": 5.0,
+                "p_value": 0.01,
+                "severity": "high",
+                "dominant_subsystem_id": "SUBSYS_CONTEXT",
+                "dominant_score_component": ACCUMULATION_VIOLATION_CHANNEL,
+                "subsystem_scores": {"SUBSYS_CONTEXT": 1.0},
+                "score_component_scores": score_component_scores_with_updates({ACCUMULATION_VIOLATION_CHANNEL: 100.0}),
+                "warm": True,
+                "emit_ready": True,
+                "min_warm": 1,
+                "date_utc": date(2026, 2, 28),
+            }
+        ]
+    )
+    phase_windows_df = spark.createDataFrame(
+        [
+            {
+                "tail_id": "T001",
+                "flight_id": "F001",
+                "win_id": 1,
+                "t_start": datetime(2026, 2, 28, 0, 0, 0, 100000),
+                "t_end": datetime(2026, 2, 28, 0, 0, 0, 900000),
+                "duration_ms": 800,
+                "backbone_residual_by_parameter": {
+                    "CTX_PARAM": 4.0,
+                    "ACC_PARAM_A": 3.0,
+                    "ACC_PARAM_B": 3.0,
+                },
+                "date_utc": date(2026, 2, 28),
+            }
+        ]
+    )
+    events_df = spark.createDataFrame([], schema=create_sample_events_df(spark).schema)
+    hierarchy_df = spark.createDataFrame(
+        [
+            {"parameter_name": "CTX_PARAM", "system_id": "SYS_1", "subsystem_id": "SUBSYS_CONTEXT", "module_id": "MOD_CTX"},
+            {"parameter_name": "ACC_PARAM_A", "system_id": "SYS_1", "subsystem_id": "SUBSYS_ACC", "module_id": "MOD_ACC"},
+            {"parameter_name": "ACC_PARAM_B", "system_id": "SYS_1", "subsystem_id": "SUBSYS_ACC", "module_id": "MOD_ACC"},
+        ]
+    )
+    parameter_behavior_profile_df = spark.createDataFrame(
+        [
+            {
+                "parameter_name": "CTX_PARAM",
+                "persistent_run_strength_profiled": 0.1,
+                "run_reinforcement_score_profiled": 0.1,
+                "accumulative_score_profiled": 0.0,
+                "monotone_accumulation_score_profiled": 0.0,
+                "reset_drop_rate_profiled": 0.0,
+            },
+            {
+                "parameter_name": "ACC_PARAM_A",
+                "persistent_run_strength_profiled": 0.9,
+                "run_reinforcement_score_profiled": 0.8,
+                "accumulative_score_profiled": 1.0,
+                "monotone_accumulation_score_profiled": 0.9,
+                "reset_drop_rate_profiled": 0.4,
+            },
+            {
+                "parameter_name": "ACC_PARAM_B",
+                "persistent_run_strength_profiled": 0.85,
+                "run_reinforcement_score_profiled": 0.8,
+                "accumulative_score_profiled": 1.0,
+                "monotone_accumulation_score_profiled": 0.9,
+                "reset_drop_rate_profiled": 0.35,
+            },
+        ]
+    )
+
+    localization_df = AnomalyParameterLocalizationFrame.from_calibrated_phase_windows_events_and_hierarchy(
+        calibrated_df=calibrated_df,
+        phase_windows_df=phase_windows_df,
+        events_df=events_df,
+        hierarchy_sensor_map_df=hierarchy_df,
+        parameter_behavior_profile_df=parameter_behavior_profile_df,
+        top_k_per_window=3,
+    ).to_dataframe()
+
+    ranked = localization_df.orderBy("parameter_support_rank_in_window").select(
+        "parameter_name",
+        "subsystem_id",
+        "parameter_support_rank_in_window",
+    ).collect()
+    assert [row["parameter_name"] for row in ranked] == ["ACC_PARAM_A", "ACC_PARAM_B", "CTX_PARAM"]
+
+    dominant_targets = AnomalyParameterLocalizationFrame(dataframe=localization_df).dominant_targets_df().collect()[0]
+    assert dominant_targets["dominant_subsystem_id"] == "SUBSYS_ACC"
+    assert dominant_targets["dominant_module_id"] == "MOD_ACC"

@@ -62,3 +62,5 @@ This package answers: given an anomalous window, which subsystem, parameters, an
 - Use `anomaly` for the downstream attribution domain.
 - Attribution validation uses the same window-local strict-overlap semantics as score validation, so short emitted windows can still be credited against long truth intervals when they are well-aligned.
 - Attribution validation now also emits a dedicated `parameter_localization_validation` block plus per-truth attributed-parameter name lists, so reports make exact parameter localization visible even when subsystem localization stays coarse.
+- Reconstruction-dominated misses now also emit a dedicated `reconstruction_localization_validation` block, including failure buckets and candidate-quality diagnostics so stage-90 localization work can distinguish missing local candidates from rollup losses.
+- Stage-90 parameter localization now also accepts behavior-profile context for mechanism-specific channels that need residual-backed parameter ranking without relying on nearby events, such as `accumulation_violation`.

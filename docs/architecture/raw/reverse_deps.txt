@@ -500,6 +500,7 @@ libs.profiling
   <- pipelines.10_parameter_profiles_fit
   <- pipelines.12_behavior_profiles_fit
   <- pipelines.80_window_scores_raw
+  <- pipelines.90_anomaly_attribution
 
 libs.profiling.pipeline
   <- libs.profiling

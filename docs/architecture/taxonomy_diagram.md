@@ -9,9 +9,9 @@ flowchart TB
     architecture_tooling --> architecture_tooling_repo_maps
     architecture_tooling_workflow["Architecture Workflow\nLOC 2881"]
     architecture_tooling --> architecture_tooling_workflow
-    core_libraries["Core Libraries\nLOC 44669"]
+    core_libraries["Core Libraries\nLOC 45078"]
     system --> core_libraries
-    core_libraries_anomaly["Anomaly\nLOC 2279"]
+    core_libraries_anomaly["Anomaly\nLOC 2642"]
     core_libraries --> core_libraries_anomaly
     core_libraries_backbone["Backbone\nLOC 817"]
     core_libraries --> core_libraries_backbone
@@ -37,9 +37,9 @@ flowchart TB
     core_libraries --> core_libraries_pyspark
     core_libraries_reporting["Reporting\nLOC 64"]
     core_libraries --> core_libraries_reporting
-    core_libraries_scoring["Scoring\nLOC 2085"]
+    core_libraries_scoring["Scoring\nLOC 2123"]
     core_libraries --> core_libraries_scoring
-    core_libraries_simulation["Simulation\nLOC 11666"]
+    core_libraries_simulation["Simulation\nLOC 11674"]
     core_libraries --> core_libraries_simulation
     core_libraries_spark_sequence["Spark Sequence\nLOC 274"]
     core_libraries --> core_libraries_spark_sequence
@@ -47,13 +47,13 @@ flowchart TB
     core_libraries --> core_libraries_tuning
     core_libraries_windows["Windows\nLOC 3442"]
     core_libraries --> core_libraries_windows
-    pipeline_runtime["Pipeline Runtime\nLOC 3770"]
+    pipeline_runtime["Pipeline Runtime\nLOC 3786"]
     system --> pipeline_runtime
     pipeline_runtime_fitting_stages["Fitting Stages\nLOC 2066"]
     pipeline_runtime --> pipeline_runtime_fitting_stages
     pipeline_runtime_grouped_runners["Grouped Pipeline Runners\nLOC 565"]
     pipeline_runtime --> pipeline_runtime_grouped_runners
-    pipeline_runtime_inference_stages["Inference Stages\nLOC 973"]
+    pipeline_runtime_inference_stages["Inference Stages\nLOC 989"]
     pipeline_runtime --> pipeline_runtime_inference_stages
     pipeline_runtime_pipeline_common["Pipeline Shared Runtime\nLOC 123"]
     pipeline_runtime --> pipeline_runtime_pipeline_common

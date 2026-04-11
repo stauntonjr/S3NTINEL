@@ -63,6 +63,20 @@ So the intended representation is:
 
 The first taxonomy should stay compact and map onto existing score channels.
 
+Current behavior-mechanism score channels are:
+
+- `bound_violation`
+- `accumulation_violation`
+- `response_violation`
+- `state_violation`
+
+Those sit alongside broader context/structure channels such as:
+
+- `regime_deviation`
+- `reconstruction_error`
+- `event_discordance`
+- `coherence_break`
+
 Recommended primary families:
 
 - `offset`

@@ -433,12 +433,24 @@ Canonical table:
 
 Important fields include:
 - `global_score`
-- `reconstruction_score`
-- `graph_violation_score`
+- `dominant_score_component`
+- `score_component_scores`
 - `subsystem_scores`
 - `dominant_subsystem_id`
-- `score_component_scores`
-- `dominant_score_component`
+- `dominant_module_id`
+
+Current canonical score components are:
+- `regime_deviation`
+- `reconstruction_error`
+- `event_discordance`
+- `bound_violation`
+- `accumulation_violation`
+- `response_violation`
+- `state_violation`
+- `coherence_break`
+
+`subsystem_scores` remains in the schema for compatibility, but the canonical
+Spark scorer currently writes an empty map there.
 
 ### calibrated window scores
 

@@ -16,6 +16,8 @@ from libs.scoring.validator import (
     strict_overlap_mask,
 )
 
+RECONSTRUCTION_ERROR_CHANNEL = "reconstruction_error"
+
 
 def _empty_parameter_localization_validation() -> dict[str, Any]:
     return {
@@ -87,6 +89,32 @@ def _empty_channel_localization_validation() -> dict[str, Any]:
     }
 
 
+def _empty_reconstruction_localization_validation() -> dict[str, Any]:
+    return {
+        "status": "ok",
+        "truth_window_count": 0,
+        "reconstruction_truth_window_count": 0,
+        "reconstruction_failure_count": 0,
+        "failure_count_by_bucket": {},
+        "failure_rate_by_bucket": {},
+        "truth_subsystem_present_in_selected_telemetry_count": 0,
+        "truth_subsystem_present_in_selected_telemetry_rate": None,
+        "truth_module_present_in_selected_telemetry_count": 0,
+        "truth_module_present_in_selected_telemetry_rate": None,
+        "truth_subsystem_present_in_top_subsystem_candidates_count": 0,
+        "truth_subsystem_present_in_top_subsystem_candidates_rate": None,
+        "truth_module_present_in_top_module_candidates_count": 0,
+        "truth_module_present_in_top_module_candidates_rate": None,
+        "top_ranked_selected_parameter_exact_match_count": 0,
+        "top_ranked_selected_parameter_exact_match_rate": None,
+        "top_ranked_selected_parameter_in_truth_subsystem_count": 0,
+        "top_ranked_selected_parameter_in_truth_subsystem_rate": None,
+        "top_ranked_selected_parameter_in_truth_module_count": 0,
+        "top_ranked_selected_parameter_in_truth_module_rate": None,
+        "reconstruction_localization_cases": [],
+    }
+
+
 def _sorted_non_empty_string_values(df: pd.DataFrame, column: str) -> list[str]:
     if df.empty or column not in df.columns:
         return []
@@ -140,6 +168,97 @@ def _resolve_truth_candidate_ids(
         if mappable and truth_id:
             resolved_truth_ids.add(truth_id)
     return sorted(resolved_truth_ids)
+
+
+def _top_ranked_selected_parameter_details(
+    telemetry_selected_hits: pd.DataFrame,
+    *,
+    truth_parameter_to_subsystem: dict[str, str],
+    truth_parameter_to_module: dict[str, str],
+) -> dict[str, Any]:
+    if telemetry_selected_hits.empty or "parameter_name" not in telemetry_selected_hits.columns:
+        return {}
+
+    ranked = telemetry_selected_hits.copy()
+    rank_series = (
+        pd.to_numeric(ranked["parameter_support_rank_in_window"], errors="coerce")
+        if "parameter_support_rank_in_window" in ranked.columns
+        else pd.Series(pd.NA, index=ranked.index, dtype="float")
+    )
+    support_series = (
+        pd.to_numeric(ranked["parameter_localization_support"], errors="coerce")
+        if "parameter_localization_support" in ranked.columns
+        else pd.Series(pd.NA, index=ranked.index, dtype="float")
+    )
+    ranked["_sort_rank"] = rank_series.fillna(float("inf"))
+    ranked["_sort_support"] = support_series.fillna(float("-inf"))
+    ranked = ranked.sort_values(
+        ["_sort_rank", "_sort_support", "parameter_name"],
+        ascending=[True, False, True],
+        kind="mergesort",
+    )
+    top = ranked.iloc[0]
+    parameter_name = str(top.get("parameter_name") or "")
+    support_value = top.get("parameter_localization_support")
+    rank_value = top.get("parameter_support_rank_in_window")
+    return {
+        "top_ranked_selected_parameter_name": parameter_name or None,
+        "top_ranked_selected_parameter_support": (
+            None if pd.isna(support_value) else float(support_value)
+        ),
+        "top_ranked_selected_parameter_rank": (
+            None if pd.isna(rank_value) else int(rank_value)
+        ),
+        "top_ranked_selected_parameter_truth_subsystem": (
+            truth_parameter_to_subsystem.get(parameter_name) if parameter_name else None
+        ),
+        "top_ranked_selected_parameter_truth_module": (
+            truth_parameter_to_module.get(parameter_name) if parameter_name else None
+        ),
+    }
+
+
+def _classify_reconstruction_localization_failure(
+    *,
+    dominant_score_component: str,
+    truth_parameter: str,
+    truth_subsystem: str,
+    truth_module: str,
+    dominant_subsystem_match: bool,
+    dominant_module_match: bool,
+    telemetry_selected_truth_subsystem_present: bool,
+    telemetry_selected_truth_module_present: bool,
+    top_subsystem_candidate_present: bool,
+    top_module_candidate_present: bool,
+    top_ranked_selected_parameter_name: str | None,
+    top_ranked_selected_parameter_truth_subsystem: str | None,
+    top_ranked_selected_parameter_truth_module: str | None,
+) -> str | None:
+    if dominant_score_component != RECONSTRUCTION_ERROR_CHANNEL:
+        return None
+    if dominant_subsystem_match and (not truth_module or dominant_module_match):
+        return None
+    if not telemetry_selected_truth_subsystem_present:
+        return "missing_truth_local_candidate"
+
+    top_parameter_name = str(top_ranked_selected_parameter_name or "")
+    top_truth_subsystem = str(top_ranked_selected_parameter_truth_subsystem or "")
+    top_truth_module = str(top_ranked_selected_parameter_truth_module or "")
+
+    if top_parameter_name == truth_parameter:
+        if truth_module and not dominant_module_match:
+            return "truth_module_present_but_lost"
+        return "truth_subsystem_present_but_lost"
+    if top_truth_subsystem and top_truth_subsystem != truth_subsystem:
+        if top_subsystem_candidate_present:
+            return "sibling_consequence_won"
+        return "shared_source_won"
+    if truth_module and telemetry_selected_truth_module_present:
+        if top_truth_module and top_truth_module != truth_module:
+            return "truth_module_present_but_lost"
+        if not dominant_module_match or top_module_candidate_present:
+            return "truth_module_present_but_lost"
+    return "truth_subsystem_present_but_lost"
 
 
 def _rate_by_score_component(
@@ -380,6 +499,45 @@ class _TruthWindowAttributionMatch:
         }
         event_truth_modules.discard(None)
         event_truth_modules.discard("")
+        top_ranked_selected_parameter = _top_ranked_selected_parameter_details(
+            telemetry_selected_hits,
+            truth_parameter_to_subsystem=truth_parameter_to_subsystem,
+            truth_parameter_to_module=truth_parameter_to_module,
+        )
+        top_ranked_selected_parameter_name = str(
+            top_ranked_selected_parameter.get("top_ranked_selected_parameter_name") or ""
+        )
+        top_ranked_selected_parameter_truth_subsystem = str(
+            top_ranked_selected_parameter.get("top_ranked_selected_parameter_truth_subsystem") or ""
+        )
+        top_ranked_selected_parameter_truth_module = str(
+            top_ranked_selected_parameter.get("top_ranked_selected_parameter_truth_module") or ""
+        )
+        top_ranked_selected_parameter_exact_match = bool(top_ranked_selected_parameter_name == truth_parameter)
+        top_ranked_selected_parameter_in_truth_subsystem = bool(
+            top_ranked_selected_parameter_truth_subsystem
+            and top_ranked_selected_parameter_truth_subsystem == truth_subsystem
+        )
+        top_ranked_selected_parameter_in_truth_module = bool(
+            truth_module
+            and top_ranked_selected_parameter_truth_module
+            and top_ranked_selected_parameter_truth_module == truth_module
+        )
+        reconstruction_failure_bucket = _classify_reconstruction_localization_failure(
+            dominant_score_component=dominant_score_component,
+            truth_parameter=truth_parameter,
+            truth_subsystem=truth_subsystem,
+            truth_module=truth_module,
+            dominant_subsystem_match=dominant_subsystem_match,
+            dominant_module_match=dominant_module_match,
+            telemetry_selected_truth_subsystem_present=bool(truth_subsystem in telemetry_selected_truth_subsystems),
+            telemetry_selected_truth_module_present=bool(truth_module and truth_module in telemetry_selected_truth_modules),
+            top_subsystem_candidate_present=top_subsystem_candidate_present,
+            top_module_candidate_present=top_module_candidate_present,
+            top_ranked_selected_parameter_name=top_ranked_selected_parameter_name,
+            top_ranked_selected_parameter_truth_subsystem=top_ranked_selected_parameter_truth_subsystem,
+            top_ranked_selected_parameter_truth_module=top_ranked_selected_parameter_truth_module,
+        )
 
         payload = {
             "tail_id": str(truth["tail_id"]),
@@ -415,6 +573,29 @@ class _TruthWindowAttributionMatch:
             "telemetry_truth_module_present": bool(truth_module and truth_module in telemetry_truth_modules),
             "telemetry_selected_truth_module_present": bool(truth_module and truth_module in telemetry_selected_truth_modules),
             "event_truth_module_present": bool(truth_module and truth_module in event_truth_modules),
+            "top_ranked_selected_parameter_name": (
+                top_ranked_selected_parameter.get("top_ranked_selected_parameter_name")
+            ),
+            "top_ranked_selected_parameter_support": (
+                top_ranked_selected_parameter.get("top_ranked_selected_parameter_support")
+            ),
+            "top_ranked_selected_parameter_rank": (
+                top_ranked_selected_parameter.get("top_ranked_selected_parameter_rank")
+            ),
+            "top_ranked_selected_parameter_truth_subsystem": (
+                top_ranked_selected_parameter.get("top_ranked_selected_parameter_truth_subsystem")
+            ),
+            "top_ranked_selected_parameter_truth_module": (
+                top_ranked_selected_parameter.get("top_ranked_selected_parameter_truth_module")
+            ),
+            "top_ranked_selected_parameter_exact_match": top_ranked_selected_parameter_exact_match,
+            "top_ranked_selected_parameter_in_truth_subsystem": (
+                top_ranked_selected_parameter_in_truth_subsystem
+            ),
+            "top_ranked_selected_parameter_in_truth_module": (
+                top_ranked_selected_parameter_in_truth_module
+            ),
+            "reconstruction_failure_bucket": reconstruction_failure_bucket,
             "telemetry_attributed_parameter_names": telemetry_parameter_names,
             "telemetry_selected_attributed_parameter_names": telemetry_selected_parameter_names,
             "event_attributed_parameter_names": event_parameter_names,
@@ -503,6 +684,14 @@ def _build_parameter_localization_validation(per_truth_df: pd.DataFrame) -> dict
         "telemetry_truth_module_present",
         "telemetry_selected_truth_module_present",
         "event_truth_module_present",
+        "top_ranked_selected_parameter_name",
+        "top_ranked_selected_parameter_rank",
+        "top_ranked_selected_parameter_support",
+        "top_ranked_selected_parameter_truth_subsystem",
+        "top_ranked_selected_parameter_truth_module",
+        "top_ranked_selected_parameter_exact_match",
+        "top_ranked_selected_parameter_in_truth_subsystem",
+        "top_ranked_selected_parameter_in_truth_module",
         "telemetry_attributed_parameter_names",
         "telemetry_selected_attributed_parameter_names",
         "event_attributed_parameter_names",
@@ -627,6 +816,13 @@ def _build_channel_localization_validation(per_truth_df: pd.DataFrame) -> dict[s
         "telemetry_parameter_match",
         "telemetry_selected_parameter_match",
         "event_parameter_match",
+        "reconstruction_failure_bucket",
+        "top_ranked_selected_parameter_name",
+        "top_ranked_selected_parameter_rank",
+        "top_ranked_selected_parameter_truth_subsystem",
+        "top_ranked_selected_parameter_truth_module",
+        "top_ranked_selected_parameter_in_truth_subsystem",
+        "top_ranked_selected_parameter_in_truth_module",
         "telemetry_selected_attributed_parameter_names",
     ]
     available_case_columns = [column for column in case_columns if column in per_truth_df.columns]
@@ -680,6 +876,98 @@ def _build_channel_localization_validation(per_truth_df: pd.DataFrame) -> dict[s
     }
 
 
+def _build_reconstruction_localization_validation(per_truth_df: pd.DataFrame) -> dict[str, Any]:
+    if per_truth_df.empty or "dominant_score_component" not in per_truth_df.columns:
+        return _empty_reconstruction_localization_validation()
+
+    reconstruction_df = per_truth_df[
+        per_truth_df["dominant_score_component"].fillna("").astype(str) == RECONSTRUCTION_ERROR_CHANNEL
+    ].copy()
+    if reconstruction_df.empty:
+        return _empty_reconstruction_localization_validation()
+
+    truth_subsystem_present_selected = reconstruction_df["telemetry_selected_truth_subsystem_present"].fillna(False).astype(bool)
+    truth_module_present_selected = reconstruction_df["telemetry_selected_truth_module_present"].fillna(False).astype(bool)
+    top_subsystem_candidate_present = reconstruction_df["top_subsystem_candidate_present"].fillna(False).astype(bool)
+    top_module_candidate_present = reconstruction_df["top_module_candidate_present"].fillna(False).astype(bool)
+    top_ranked_parameter_match = reconstruction_df["top_ranked_selected_parameter_exact_match"].fillna(False).astype(bool)
+    top_ranked_in_truth_subsystem = reconstruction_df["top_ranked_selected_parameter_in_truth_subsystem"].fillna(False).astype(bool)
+    top_ranked_in_truth_module = reconstruction_df["top_ranked_selected_parameter_in_truth_module"].fillna(False).astype(bool)
+    failure_mask = reconstruction_df["reconstruction_failure_bucket"].fillna("").astype(str) != ""
+    failure_counts = (
+        reconstruction_df.loc[failure_mask, "reconstruction_failure_bucket"]
+        .fillna("")
+        .astype(str)
+        .value_counts()
+        .sort_index()
+        .to_dict()
+    )
+    failure_counts = {str(bucket): int(count) for bucket, count in failure_counts.items() if str(bucket)}
+    denominator = int(len(reconstruction_df))
+    failure_rates = {
+        bucket: float(count / denominator)
+        for bucket, count in failure_counts.items()
+    }
+    case_columns = [
+        "tail_id",
+        "flight_id",
+        "fault_window_id",
+        "misbehavior_window_id",
+        "subsystem_id",
+        "module_id",
+        "parameter_name",
+        "dominant_score_component",
+        "reconstruction_failure_bucket",
+        "dominant_subsystem_match",
+        "dominant_module_match",
+        "telemetry_selected_truth_subsystem_present",
+        "telemetry_selected_truth_module_present",
+        "top_subsystem_candidate_present",
+        "top_module_candidate_present",
+        "top_ranked_selected_parameter_name",
+        "top_ranked_selected_parameter_rank",
+        "top_ranked_selected_parameter_support",
+        "top_ranked_selected_parameter_truth_subsystem",
+        "top_ranked_selected_parameter_truth_module",
+        "top_ranked_selected_parameter_exact_match",
+        "top_ranked_selected_parameter_in_truth_subsystem",
+        "top_ranked_selected_parameter_in_truth_module",
+        "telemetry_selected_attributed_parameter_names",
+        "top_subsystem_candidate_truth_ids",
+        "top_module_candidate_truth_ids",
+    ]
+    available_case_columns = [column for column in case_columns if column in reconstruction_df.columns]
+    cases = _records_with_none_for_missing(
+        reconstruction_df[available_case_columns].sort_values(
+            [column for column in ("reconstruction_failure_bucket", "fault_window_id", "misbehavior_window_id", "parameter_name") if column in available_case_columns],
+            kind="mergesort",
+        )
+    )
+    return {
+        "status": "ok",
+        "truth_window_count": int(len(per_truth_df)),
+        "reconstruction_truth_window_count": denominator,
+        "reconstruction_failure_count": int(failure_mask.sum()),
+        "failure_count_by_bucket": failure_counts,
+        "failure_rate_by_bucket": failure_rates,
+        "truth_subsystem_present_in_selected_telemetry_count": int(truth_subsystem_present_selected.sum()),
+        "truth_subsystem_present_in_selected_telemetry_rate": float(truth_subsystem_present_selected.mean()),
+        "truth_module_present_in_selected_telemetry_count": int(truth_module_present_selected.sum()),
+        "truth_module_present_in_selected_telemetry_rate": float(truth_module_present_selected.mean()),
+        "truth_subsystem_present_in_top_subsystem_candidates_count": int(top_subsystem_candidate_present.sum()),
+        "truth_subsystem_present_in_top_subsystem_candidates_rate": float(top_subsystem_candidate_present.mean()),
+        "truth_module_present_in_top_module_candidates_count": int(top_module_candidate_present.sum()),
+        "truth_module_present_in_top_module_candidates_rate": float(top_module_candidate_present.mean()),
+        "top_ranked_selected_parameter_exact_match_count": int(top_ranked_parameter_match.sum()),
+        "top_ranked_selected_parameter_exact_match_rate": float(top_ranked_parameter_match.mean()),
+        "top_ranked_selected_parameter_in_truth_subsystem_count": int(top_ranked_in_truth_subsystem.sum()),
+        "top_ranked_selected_parameter_in_truth_subsystem_rate": float(top_ranked_in_truth_subsystem.mean()),
+        "top_ranked_selected_parameter_in_truth_module_count": int(top_ranked_in_truth_module.sum()),
+        "top_ranked_selected_parameter_in_truth_module_rate": float(top_ranked_in_truth_module.mean()),
+        "reconstruction_localization_cases": cases,
+    }
+
+
 def build_fault_attribution_summary_from_misbehavior_summary(summary: dict[str, Any]) -> dict[str, Any]:
     if summary.get("status") != "ok":
         return summary
@@ -711,6 +999,10 @@ def build_fault_attribution_summary_from_misbehavior_summary(summary: dict[str, 
         "channel_localization_validation": summary.get(
             "channel_localization_validation",
             _empty_channel_localization_validation(),
+        ),
+        "reconstruction_localization_validation": summary.get(
+            "reconstruction_localization_validation",
+            _empty_reconstruction_localization_validation(),
         ),
         "parameter_localization_validation": summary.get(
             "parameter_localization_validation",
@@ -763,6 +1055,7 @@ def validate_attribution_against_misbehavior_truth(
             "event_truth_subsystem_present_rate": None,
             "module_localization_validation": _empty_module_localization_validation(),
             "channel_localization_validation": _empty_channel_localization_validation(),
+            "reconstruction_localization_validation": _empty_reconstruction_localization_validation(),
             "parameter_localization_validation": _empty_parameter_localization_validation(),
             "misbehavior_windows": [],
         }
@@ -817,6 +1110,7 @@ def validate_attribution_against_misbehavior_truth(
     top_module_candidate_present_count = int(per_truth_df["top_module_candidate_present"].sum()) if not per_truth_df.empty else 0
     module_localization_validation = _build_module_localization_validation(per_truth_df)
     channel_localization_validation = _build_channel_localization_validation(per_truth_df)
+    reconstruction_localization_validation = _build_reconstruction_localization_validation(per_truth_df)
     parameter_localization_validation = _build_parameter_localization_validation(per_truth_df)
     exact_parameter_match_count_by_source = dict(
         parameter_localization_validation.get("exact_parameter_match_count_by_source") or {}
@@ -852,6 +1146,7 @@ def validate_attribution_against_misbehavior_truth(
         "event_truth_subsystem_present_rate": truth_subsystem_present_rate_by_source.get("event"),
         "module_localization_validation": module_localization_validation,
         "channel_localization_validation": channel_localization_validation,
+        "reconstruction_localization_validation": reconstruction_localization_validation,
         "parameter_localization_validation": parameter_localization_validation,
         "misbehavior_windows": [match.payload for match in matches],
     }

@@ -3,6 +3,7 @@
 
 from libs.anomaly import AnomalyAttributionPlan
 from libs.io.delta import get_spark, read_table
+from libs.profiling import ParameterBehaviorProfile
 from libs.perf import (
     build_artifact_manifest,
     build_stage_manifest,
@@ -31,6 +32,7 @@ def run() -> None:
     windows_path = runtime.artifacts.windows
     events_path = runtime.artifacts.events
     hierarchy_sensor_map_path = runtime.artifacts.hierarchy_sensor_map
+    parameter_behavior_profile_path = runtime.artifacts.parameter_behavior_profile
     raw_path = runtime.artifacts.raw_table
     anomaly_window_attribution_path = runtime.artifacts.anomaly_window_attribution
     anomaly_telemetry_attribution_path = runtime.artifacts.anomaly_telemetry_attribution
@@ -45,6 +47,11 @@ def run() -> None:
     windows_df = read_table(spark, windows_path, fmt=table_format)
     events_df = read_table(spark, events_path, fmt=table_format)
     hierarchy_sensor_map_df = read_table(spark, hierarchy_sensor_map_path, fmt=table_format)
+    parameter_behavior_profile_df = ParameterBehaviorProfile.read(
+        spark,
+        parameter_behavior_profile_path,
+        format=table_format,
+    ).to_dataframe()
     raw_df = read_table(spark, raw_path, fmt=table_format)
 
     artifacts = AnomalyAttributionPlan(top_k_per_subsystem=top_k_per_subsystem).build(
@@ -53,6 +60,7 @@ def run() -> None:
         windows_df=windows_df,
         events_df=events_df,
         hierarchy_sensor_map_df=hierarchy_sensor_map_df,
+        parameter_behavior_profile_df=parameter_behavior_profile_df,
         raw_df=raw_df,
     )
     anomaly_window_attribution = artifacts.window_attribution.bind(
@@ -85,6 +93,7 @@ def run() -> None:
     windows_count = int(windows_df.count())
     events_count = int(events_df.count())
     hierarchy_sensor_map_count = int(hierarchy_sensor_map_df.count())
+    parameter_behavior_profile_count = int(parameter_behavior_profile_df.count())
     raw_count = int(raw_df.count())
     anomaly_window_count = int(anomaly_window_attribution.to_dataframe().count())
     anomaly_telemetry_count = int(anomaly_telemetry_attribution.to_dataframe().count())
@@ -108,6 +117,7 @@ def run() -> None:
             "windows_path": windows_path,
             "events_path": events_path,
             "hierarchy_sensor_map_path": hierarchy_sensor_map_path,
+            "parameter_behavior_profile_path": parameter_behavior_profile_path,
             "raw_path": raw_path,
             "anomaly_window_attribution_path": anomaly_window_attribution_path,
             "anomaly_telemetry_attribution_path": anomaly_telemetry_attribution_path,
@@ -154,6 +164,11 @@ def run() -> None:
                 dataframe=hierarchy_sensor_map_df,
                 row_count=hierarchy_sensor_map_count,
             ),
+            "parameter_behavior_profile": build_artifact_manifest(
+                path=parameter_behavior_profile_path,
+                dataframe=parameter_behavior_profile_df,
+                row_count=parameter_behavior_profile_count,
+            ),
             "raw_telemetry": build_artifact_manifest(path=raw_path, dataframe=raw_df, row_count=raw_count),
         },
         output_artifacts={
@@ -179,6 +194,7 @@ def run() -> None:
             "windows",
             "events",
             "hierarchy_sensor_map",
+            "parameter_behavior_profile",
             "raw_telemetry",
         ],
     )

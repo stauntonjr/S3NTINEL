@@ -38,6 +38,7 @@ class AnomalyAttributionPlan:
         events_df: "DataFrame",
         hierarchy_sensor_map_df: "DataFrame",
         raw_df: "DataFrame",
+        parameter_behavior_profile_df: "DataFrame | None" = None,
         localization_targets_df: "DataFrame | None" = None,
     ) -> AnomalyWindowAttributionTable:
         attribution_context = AnomalyAttributionContextFrame.from_context_frames(
@@ -65,6 +66,7 @@ class AnomalyAttributionPlan:
                     phase_windows_df=phase_windows_df,
                     events_df=events_df,
                     hierarchy_sensor_map_df=hierarchy_sensor_map_df,
+                    parameter_behavior_profile_df=parameter_behavior_profile_df,
                 ).localized_targets_df()
             ),
         )
@@ -78,6 +80,7 @@ class AnomalyAttributionPlan:
         events_df: "DataFrame | None" = None,
         raw_df: "DataFrame",
         hierarchy_sensor_map_df: "DataFrame",
+        parameter_behavior_profile_df: "DataFrame | None" = None,
         parameter_localization_df: "DataFrame | None" = None,
     ) -> AnomalyTelemetryAttributionTable:
         return AnomalyTelemetryAttributionTable.from_calibrated_windows_raw_and_hierarchy(
@@ -94,6 +97,7 @@ class AnomalyAttributionPlan:
                         phase_windows_df=phase_windows_df,
                         events_df=events_df,
                         hierarchy_sensor_map_df=hierarchy_sensor_map_df,
+                        parameter_behavior_profile_df=parameter_behavior_profile_df,
                     ).to_dataframe()
                     if phase_windows_df is not None and events_df is not None
                     else None
@@ -126,12 +130,14 @@ class AnomalyAttributionPlan:
         events_df: "DataFrame",
         hierarchy_sensor_map_df: "DataFrame",
         raw_df: "DataFrame",
+        parameter_behavior_profile_df: "DataFrame | None" = None,
     ) -> AnomalyArtifactSet:
         parameter_localization = AnomalyParameterLocalizationFrame.from_calibrated_phase_windows_events_and_hierarchy(
             calibrated_df=calibrated_df,
             phase_windows_df=phase_windows_df,
             events_df=events_df,
             hierarchy_sensor_map_df=hierarchy_sensor_map_df,
+            parameter_behavior_profile_df=parameter_behavior_profile_df,
         )
         localization_targets_df = parameter_localization.localized_targets_df()
         return AnomalyArtifactSet(
@@ -142,6 +148,7 @@ class AnomalyAttributionPlan:
                 events_df=events_df,
                 hierarchy_sensor_map_df=hierarchy_sensor_map_df,
                 raw_df=raw_df,
+                parameter_behavior_profile_df=parameter_behavior_profile_df,
                 localization_targets_df=localization_targets_df,
             ),
             telemetry_attribution=self.build_telemetry_attribution(
@@ -151,6 +158,7 @@ class AnomalyAttributionPlan:
                 events_df=events_df,
                 raw_df=raw_df,
                 hierarchy_sensor_map_df=hierarchy_sensor_map_df,
+                parameter_behavior_profile_df=parameter_behavior_profile_df,
                 parameter_localization_df=parameter_localization.to_dataframe(),
             ),
             event_attribution=self.build_event_attribution(

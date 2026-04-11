@@ -8,6 +8,7 @@ REGIME_DEVIATION_CHANNEL = "regime_deviation"
 RECONSTRUCTION_ERROR_CHANNEL = "reconstruction_error"
 EVENT_DISCORDANCE_CHANNEL = "event_discordance"
 BOUND_VIOLATION_CHANNEL = "bound_violation"
+ACCUMULATION_VIOLATION_CHANNEL = "accumulation_violation"
 RESPONSE_VIOLATION_CHANNEL = "response_violation"
 STATE_VIOLATION_CHANNEL = "state_violation"
 COHERENCE_BREAK_CHANNEL = "coherence_break"
@@ -17,6 +18,7 @@ SCORE_COMPONENT_NAMES: tuple[str, ...] = (
     RECONSTRUCTION_ERROR_CHANNEL,
     EVENT_DISCORDANCE_CHANNEL,
     BOUND_VIOLATION_CHANNEL,
+    ACCUMULATION_VIOLATION_CHANNEL,
     RESPONSE_VIOLATION_CHANNEL,
     STATE_VIOLATION_CHANNEL,
     COHERENCE_BREAK_CHANNEL,
@@ -66,7 +68,7 @@ def score_component_map_expr(component_expr_by_name: Mapping[str, object]) -> ob
         args.extend(
             [
                 F.lit(name),
-                F.coalesce(component_expr_by_name.get(name), F.lit(0.0)).cast("double"),
+                F.coalesce(component_expr_by_name.get(name, F.lit(0.0)), F.lit(0.0)).cast("double"),
             ]
         )
     return F.create_map(*args)
@@ -77,9 +79,9 @@ def dominant_score_component_expr(component_expr_by_name: Mapping[str, object]) 
 
     first_name = SCORE_COMPONENT_NAMES[0]
     best_name = F.lit(first_name)
-    best_score = F.coalesce(component_expr_by_name.get(first_name), F.lit(0.0)).cast("double")
+    best_score = F.coalesce(component_expr_by_name.get(first_name, F.lit(0.0)), F.lit(0.0)).cast("double")
     for name in SCORE_COMPONENT_NAMES[1:]:
-        score = F.coalesce(component_expr_by_name.get(name), F.lit(0.0)).cast("double")
+        score = F.coalesce(component_expr_by_name.get(name, F.lit(0.0)), F.lit(0.0)).cast("double")
         best_name = F.when(score > best_score, F.lit(name)).otherwise(best_name)
         best_score = F.greatest(best_score, score)
     return best_name
@@ -91,7 +93,7 @@ def active_channel_mean_expr(component_expr_by_name: Mapping[str, object]) -> ob
     total_score = F.lit(0.0)
     active_count = F.lit(0)
     for name in SCORE_COMPONENT_NAMES:
-        score = F.coalesce(component_expr_by_name.get(name), F.lit(0.0)).cast("double")
+        score = F.coalesce(component_expr_by_name.get(name, F.lit(0.0)), F.lit(0.0)).cast("double")
         total_score = total_score + score
         active_count = active_count + F.when(score > F.lit(0.0), F.lit(1)).otherwise(F.lit(0))
     return F.when(active_count > F.lit(0), total_score / active_count.cast("double")).otherwise(F.lit(0.0))

@@ -38,7 +38,19 @@ Persisted score artifacts are defined in `libs/io/schemas/scoring.py`:
 
 ## Math / Methods
 
-Scores summarize reconstruction and structural deviation at the window level, then are calibrated into phase-conditioned rarity (`p_value`) plus a conservative `emit_ready` flag.
+Scores summarize regime, reconstruction, event, behavior-mechanism, and coherence
+deviation at the window level, then are calibrated into phase-conditioned rarity
+(`p_value`) plus a conservative `emit_ready` flag.
+
+The current canonical channel contract includes:
+- `regime_deviation`
+- `reconstruction_error`
+- `event_discordance`
+- `bound_violation`
+- `accumulation_violation`
+- `response_violation`
+- `state_violation`
+- `coherence_break`
 
 `emit_ready` now means:
 - the phase bucket is warm enough to calibrate
