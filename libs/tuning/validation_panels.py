@@ -47,9 +47,10 @@ VALIDATION_PANEL_SHORTLIST = (
     "overall:event_validation:median_unmatched_label_nearest_delta_seconds",
     "overall:phase_validation:macro_f1",
     "overall:hierarchy_validation:module_exact_match",
-    "overall:score_validation:detected_fault_window_rate",
-    "overall:score_validation:emit_ready_fault_window_rate",
-    "overall:attribution_validation:telemetry_parameter_match_rate",
+    "overall:benchmark_scope_validation:score_validation_by_benchmark_scope.detection.detected_fault_window_rate",
+    "overall:benchmark_scope_validation:score_validation_by_benchmark_scope.detection.emit_ready_fault_window_rate",
+    "overall:benchmark_scope_validation:attribution_validation_by_benchmark_scope.parameter.telemetry_parameter_match_rate",
+    "overall:benchmark_scope_validation:attribution_validation_by_benchmark_scope.subsystem.dominant_subsystem_match_rate",
 )
 
 

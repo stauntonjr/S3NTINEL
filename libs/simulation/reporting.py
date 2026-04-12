@@ -18,9 +18,11 @@ from libs.phase import validate_detected_phases_from_tables
 from libs.profiling.validator import build_profile_validation_summary
 from libs.scoring.validator import validate_scores_against_misbehavior_windows
 from libs.simulation.fault.spec import (
+    BENCHMARK_OPTIMIZATION_SCOPE_ORDER,
     BENCHMARK_RECOVERABILITY_LADDER,
     BENCHMARK_RECOVERABILITY_TARGETS,
     OBSERVED_RECOVERABILITY_STRENGTH_TIERS,
+    benchmark_eligible_declared_tiers_for_scope,
     recoverability_target_alignment_status,
     resolve_window_benchmark_recoverability_target,
     resolve_window_fault_window_id,
@@ -717,6 +719,181 @@ def _recoverability_summary_by_field(cases_df: pd.DataFrame, field: str) -> list
     )
 
 
+def _normalized_declared_benchmark_tier(value: Any) -> str:
+    text = _text_value(value)
+    return text or "undeclared"
+
+
+def _series_bool_mean(group: pd.DataFrame, column_name: str) -> float | None:
+    if group.empty or column_name not in group.columns:
+        return None
+    return float(group[column_name].fillna(False).astype(bool).mean())
+
+
+def _series_bool_sum(group: pd.DataFrame, column_name: str) -> int:
+    if group.empty or column_name not in group.columns:
+        return 0
+    return int(group[column_name].fillna(False).astype(bool).sum())
+
+
+def _series_float_median(group: pd.DataFrame, column_name: str) -> float | None:
+    if group.empty or column_name not in group.columns:
+        return None
+    series = pd.to_numeric(group[column_name], errors="coerce").dropna()
+    if series.empty:
+        return None
+    return float(series.median())
+
+
+def _count_declared_tier_labels(group: pd.DataFrame, *, include_undeclared: bool) -> dict[str, int]:
+    if group.empty or "declared_benchmark_tier" not in group.columns:
+        return {}
+    counts = (
+        group["declared_benchmark_tier"]
+        .fillna("")
+        .astype(str)
+        .map(_normalized_declared_benchmark_tier)
+        .value_counts(dropna=False)
+        .sort_index()
+    )
+    return {
+        str(label): int(count)
+        for label, count in counts.items()
+        if include_undeclared or str(label) != "undeclared"
+    }
+
+
+def _fault_window_ids(group: pd.DataFrame) -> list[str]:
+    if group.empty or "fault_window_id" not in group.columns:
+        return []
+    return sorted({str(value) for value in group["fault_window_id"].fillna("").astype(str).tolist() if str(value)})
+
+
+def _score_validation_by_benchmark_scope(cases_df: pd.DataFrame) -> dict[str, dict[str, Any]]:
+    rows: dict[str, dict[str, Any]] = {}
+    declared_series = (
+        cases_df.get("declared_benchmark_tier", pd.Series("", index=cases_df.index)).fillna("").astype(str)
+        if not cases_df.empty
+        else pd.Series(dtype="object")
+    )
+    for scope in BENCHMARK_OPTIMIZATION_SCOPE_ORDER:
+        eligible_tiers = benchmark_eligible_declared_tiers_for_scope(scope)
+        eligible = cases_df[declared_series.isin(eligible_tiers)] if not cases_df.empty else pd.DataFrame()
+        excluded = cases_df[~declared_series.isin(eligible_tiers)] if not cases_df.empty else pd.DataFrame()
+        rows[scope] = {
+            "eligible_fault_window_count": int(len(eligible)),
+            "excluded_fault_window_count": int(len(excluded)),
+            "eligible_declared_benchmark_tier_count": _count_declared_tier_labels(eligible, include_undeclared=False),
+            "excluded_declared_benchmark_tier_count": _count_declared_tier_labels(excluded, include_undeclared=True),
+            "eligible_fault_window_ids": _fault_window_ids(eligible),
+            "excluded_fault_window_ids": _fault_window_ids(excluded),
+            "detected_fault_window_count": _series_bool_sum(eligible, "detected"),
+            "emit_ready_fault_window_count": _series_bool_sum(eligible, "emit_ready"),
+            "detected_fault_window_rate": _series_bool_mean(eligible, "detected"),
+            "emit_ready_fault_window_rate": _series_bool_mean(eligible, "emit_ready"),
+            "median_detection_latency_seconds": _series_float_median(eligible, "detection_latency_seconds"),
+            "median_emit_ready_latency_seconds": _series_float_median(eligible, "emit_ready_latency_seconds"),
+            "dominant_score_component_count": (
+                {
+                    str(label): int(count)
+                    for label, count in eligible.get("dominant_score_component", pd.Series(dtype="object"))
+                    .fillna("")
+                    .astype(str)
+                    .replace({"": "unassigned"})
+                    .value_counts(dropna=False)
+                    .sort_index()
+                    .items()
+                    if str(label)
+                }
+                if not eligible.empty
+                else {}
+            ),
+        }
+    return rows
+
+
+def _attribution_validation_by_benchmark_scope(cases_df: pd.DataFrame) -> dict[str, dict[str, Any]]:
+    rows: dict[str, dict[str, Any]] = {}
+    declared_series = (
+        cases_df.get("declared_benchmark_tier", pd.Series("", index=cases_df.index)).fillna("").astype(str)
+        if not cases_df.empty
+        else pd.Series(dtype="object")
+    )
+    for scope in BENCHMARK_OPTIMIZATION_SCOPE_ORDER:
+        eligible_tiers = benchmark_eligible_declared_tiers_for_scope(scope)
+        eligible = cases_df[declared_series.isin(eligible_tiers)] if not cases_df.empty else pd.DataFrame()
+        excluded = cases_df[~declared_series.isin(eligible_tiers)] if not cases_df.empty else pd.DataFrame()
+        rows[scope] = {
+            "eligible_fault_window_count": int(len(eligible)),
+            "excluded_fault_window_count": int(len(excluded)),
+            "eligible_declared_benchmark_tier_count": _count_declared_tier_labels(eligible, include_undeclared=False),
+            "excluded_declared_benchmark_tier_count": _count_declared_tier_labels(excluded, include_undeclared=True),
+            "eligible_fault_window_ids": _fault_window_ids(eligible),
+            "excluded_fault_window_ids": _fault_window_ids(excluded),
+            "telemetry_parameter_match_count": _series_bool_sum(eligible, "telemetry_parameter_match"),
+            "telemetry_selected_parameter_match_count": _series_bool_sum(eligible, "telemetry_selected_parameter_match"),
+            "event_parameter_match_count": _series_bool_sum(eligible, "event_parameter_match"),
+            "dominant_subsystem_match_count": _series_bool_sum(eligible, "dominant_subsystem_match"),
+            "dominant_module_match_count": _series_bool_sum(eligible, "dominant_module_match"),
+            "top_subsystem_candidate_present_count": _series_bool_sum(eligible, "top_subsystem_candidate_present"),
+            "top_module_candidate_present_count": _series_bool_sum(eligible, "top_module_candidate_present"),
+            "telemetry_parameter_match_rate": _series_bool_mean(eligible, "telemetry_parameter_match"),
+            "telemetry_selected_parameter_match_rate": _series_bool_mean(eligible, "telemetry_selected_parameter_match"),
+            "event_parameter_match_rate": _series_bool_mean(eligible, "event_parameter_match"),
+            "dominant_subsystem_match_rate": _series_bool_mean(eligible, "dominant_subsystem_match"),
+            "dominant_module_match_rate": _series_bool_mean(eligible, "dominant_module_match"),
+            "top_subsystem_candidate_present_rate": _series_bool_mean(eligible, "top_subsystem_candidate_present"),
+            "top_module_candidate_present_rate": _series_bool_mean(eligible, "top_module_candidate_present"),
+        }
+    return rows
+
+
+def _build_benchmark_scope_validation_summary(
+    *,
+    simulation_benchmark_audit_summary: dict[str, Any],
+) -> dict[str, Any]:
+    if simulation_benchmark_audit_summary.get("status") != "ok":
+        return simulation_benchmark_audit_summary
+    cases_df = pd.DataFrame.from_records(simulation_benchmark_audit_summary.get("fault_window_audit_cases", []))
+    return {
+        "status": "ok",
+        "fault_window_count": int(len(cases_df)),
+        "benchmark_scope_order": list(BENCHMARK_OPTIMIZATION_SCOPE_ORDER),
+        "declared_benchmark_tier_order": list(BENCHMARK_RECOVERABILITY_TARGETS),
+        "score_validation_by_benchmark_scope": _score_validation_by_benchmark_scope(cases_df),
+        "attribution_validation_by_benchmark_scope": _attribution_validation_by_benchmark_scope(cases_df),
+        "recommended_objective_metric_paths": {
+            "detection": [
+                "score_validation_by_benchmark_scope.detection.detected_fault_window_rate",
+                "score_validation_by_benchmark_scope.detection.emit_ready_fault_window_rate",
+            ],
+            "parameter": [
+                "attribution_validation_by_benchmark_scope.parameter.telemetry_parameter_match_rate",
+                "attribution_validation_by_benchmark_scope.parameter.telemetry_selected_parameter_match_rate",
+            ],
+            "module": [
+                "attribution_validation_by_benchmark_scope.module.dominant_module_match_rate",
+                "attribution_validation_by_benchmark_scope.module.top_module_candidate_present_rate",
+            ],
+            "subsystem": [
+                "attribution_validation_by_benchmark_scope.subsystem.dominant_subsystem_match_rate",
+                "attribution_validation_by_benchmark_scope.subsystem.top_subsystem_candidate_present_rate",
+            ],
+        },
+        "methodology": {
+            "interpretation": (
+                "use benchmark-scope summaries for optimization denominators; raw score and attribution summaries remain all-window references"
+            ),
+            "scope_definitions": {
+                scope: {
+                    "eligible_declared_benchmark_tiers": list(benchmark_eligible_declared_tiers_for_scope(scope)),
+                }
+                for scope in BENCHMARK_OPTIMIZATION_SCOPE_ORDER
+            },
+        },
+    }
+
+
 def _build_benchmark_tier_scorecards(cases_df: pd.DataFrame) -> dict[str, dict[str, Any]]:
     rows: dict[str, dict[str, Any]] = {}
     for tier in BENCHMARK_RECOVERABILITY_LADDER:
@@ -1181,6 +1358,11 @@ def write_validation_reports(
     fault_attribution_summary = build_fault_attribution_summary_from_misbehavior(
         misbehavior_attribution_summary
     )
+    benchmark_audit_summary = _build_simulation_benchmark_audit_summary(
+        flight=flight,
+        fault_score_summary=fault_score_summary,
+        fault_attribution_summary=fault_attribution_summary,
+    )
     report_set = ValidationReportSet(
         payloads={
             "profile_validation_summary.json": _build_profile_validation_summary(tables),
@@ -1217,10 +1399,9 @@ def write_validation_reports(
             "misbehavior_attribution_validation_summary.json": misbehavior_attribution_summary,
             "fault_window_validation_summary.json": _build_fault_window_summary(misbehavior_window_summary),
             "attribution_validation_summary.json": fault_attribution_summary,
-            "simulation_benchmark_audit_summary.json": _build_simulation_benchmark_audit_summary(
-                flight=flight,
-                fault_score_summary=fault_score_summary,
-                fault_attribution_summary=fault_attribution_summary,
+            "simulation_benchmark_audit_summary.json": benchmark_audit_summary,
+            "benchmark_scope_validation_summary.json": _build_benchmark_scope_validation_summary(
+                simulation_benchmark_audit_summary=benchmark_audit_summary,
             ),
         }
     )

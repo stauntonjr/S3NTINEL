@@ -639,6 +639,9 @@ Deliverables:
 
 - `reports/simulation_benchmark_audit_summary.json` emitted by the canonical
   simulation reporting path
+- `reports/benchmark_scope_validation_summary.json` emitted by the same
+  reporting path so benchmark intent becomes optimization denominators instead
+  of audit-only metadata
 - fault-window recoverability classification in the validation harness
 - family/detail-level review surface for deciding whether the current simulator
   is a valid localization benchmark

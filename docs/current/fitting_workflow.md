@@ -117,6 +117,7 @@ and should not continuously re-fit those semantics unless a separate adaptation 
 Grouped simulation runs now emit `reports/validation_harness_report.json` and `reports/validation_harness_report.md`.
 Grouped simulation runs also emit `reports/objective_evaluation_report.json` and `reports/objective_evaluation_report.md`.
 Grouped full runs also emit `reports/simulation_benchmark_audit_summary.json`, which classifies each truth fault window by observed recoverability (`module_recoverable`, `subsystem_recoverable`, `parameter_visible_only`, `detection_only`, `undetected`) under the current anomaly stack, compares that outcome against the recoverability target declared on the simulator's authored misbehavior windows, and includes `benchmark_tier_scorecards` so detection-, parameter-, module-, and subsystem-tier benchmark windows can be evaluated separately rather than mixed into one headline score.
+Grouped full runs also emit `reports/benchmark_scope_validation_summary.json`, which converts those benchmark tiers into optimization scopes. This is the report that answers “what should count in the denominator for detection, parameter, subsystem, and module tuning?” The older raw score and attribution summaries remain all-window references and are not filtered by declared benchmark tier.
 
 The harness is intended to be the canonical tuning bundle for iterative model improvement. It joins:
 - fitting parameters from the run manifest and per-stage manifests

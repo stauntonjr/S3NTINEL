@@ -209,6 +209,17 @@ Full-run benchmark audit reports expose that declared intent directly through
 `benchmark_tier_scorecards`, so each recoverability tier can be evaluated on
 its own rather than through one mixed top-line metric.
 
+Full-run reporting also emits `benchmark_scope_validation_summary.json`.
+That report keeps the raw all-window validators intact, but adds
+benchmark-aware optimization denominators:
+- `detection`
+- `parameter`
+- `module`
+- `subsystem`
+
+Use the benchmark-scope summary for optimization and acceptance. Use the raw
+score/attribution summaries as all-window reference views.
+
 The named power/pressurization flights can also expose filtered benchmark packs
 such as:
 - `power_pressurization_hierarchy_composite_module_localization`

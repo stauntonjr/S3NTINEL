@@ -50,11 +50,41 @@ def _full_harness_report() -> dict[str, object]:
                 {"category": "validation", "scope_name": "overall", "subscope_name": "event_validation", "metric_path": "f1", "value": 0.8},
                 {"category": "validation", "scope_name": "overall", "subscope_name": "hierarchy_validation", "metric_path": "module_exact_match", "value": 0.85},
                 {"category": "validation", "scope_name": "overall", "subscope_name": "phase_validation", "metric_path": "macro_f1", "value": 0.75},
-                {"category": "validation", "scope_name": "overall", "subscope_name": "score_validation", "metric_path": "detected_fault_window_rate", "value": 0.7},
-                {"category": "validation", "scope_name": "overall", "subscope_name": "score_validation", "metric_path": "emit_ready_fault_window_rate", "value": 0.6},
-                {"category": "validation", "scope_name": "overall", "subscope_name": "attribution_validation", "metric_path": "dominant_subsystem_match_rate", "value": 0.65},
-                {"category": "validation", "scope_name": "overall", "subscope_name": "attribution_validation", "metric_path": "telemetry_parameter_match_rate", "value": 0.8},
-                {"category": "validation", "scope_name": "overall", "subscope_name": "attribution_validation", "metric_path": "event_parameter_match_rate", "value": 0.55},
+                {
+                    "category": "validation",
+                    "scope_name": "overall",
+                    "subscope_name": "benchmark_scope_validation",
+                    "metric_path": "score_validation_by_benchmark_scope.detection.detected_fault_window_rate",
+                    "value": 0.7,
+                },
+                {
+                    "category": "validation",
+                    "scope_name": "overall",
+                    "subscope_name": "benchmark_scope_validation",
+                    "metric_path": "score_validation_by_benchmark_scope.detection.emit_ready_fault_window_rate",
+                    "value": 0.6,
+                },
+                {
+                    "category": "validation",
+                    "scope_name": "overall",
+                    "subscope_name": "benchmark_scope_validation",
+                    "metric_path": "attribution_validation_by_benchmark_scope.subsystem.dominant_subsystem_match_rate",
+                    "value": 0.65,
+                },
+                {
+                    "category": "validation",
+                    "scope_name": "overall",
+                    "subscope_name": "benchmark_scope_validation",
+                    "metric_path": "attribution_validation_by_benchmark_scope.parameter.telemetry_parameter_match_rate",
+                    "value": 0.8,
+                },
+                {
+                    "category": "validation",
+                    "scope_name": "overall",
+                    "subscope_name": "benchmark_scope_validation",
+                    "metric_path": "attribution_validation_by_benchmark_scope.parameter.event_parameter_match_rate",
+                    "value": 0.55,
+                },
             ]
         },
         "compute_performance": {
@@ -120,7 +150,7 @@ def test_missing_required_full_metric_marks_evaluation_incomplete():
     harness_report["validation_metrics"]["metric_records"] = [
         record
         for record in harness_report["validation_metrics"]["metric_records"]
-        if record["metric_path"] != "detected_fault_window_rate"
+        if record["metric_path"] != "score_validation_by_benchmark_scope.detection.detected_fault_window_rate"
     ]
 
     spec = build_default_objective_spec(harness_report=harness_report)
@@ -342,6 +372,10 @@ def test_validation_panel_shortlist_is_exported_from_tuning_package():
     assert "overall:event_validation:event_family_metrics.slope_pos.f1" in VALIDATION_PANEL_SHORTLIST
     assert "overall:event_validation:event_family_metrics.slope_neg.f1" in VALIDATION_PANEL_SHORTLIST
     assert "overall:profile_validation:datatype_accuracy" in VALIDATION_PANEL_SHORTLIST
+    assert (
+        "overall:benchmark_scope_validation:score_validation_by_benchmark_scope.detection.detected_fault_window_rate"
+        in VALIDATION_PANEL_SHORTLIST
+    )
 
 
 def test_validation_panel_defaults_are_exported_from_tuning_package():

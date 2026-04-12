@@ -13,6 +13,25 @@ BENCHMARK_RECOVERABILITY_LADDER = (
     "subsystem_recoverable",
 )
 BENCHMARK_RECOVERABILITY_TARGETS = BENCHMARK_RECOVERABILITY_LADDER
+BENCHMARK_OPTIMIZATION_SCOPE_ORDER = (
+    "detection",
+    "parameter",
+    "module",
+    "subsystem",
+)
+_BENCHMARK_ELIGIBLE_TARGETS_BY_SCOPE = {
+    "detection": BENCHMARK_RECOVERABILITY_TARGETS,
+    "parameter": (
+        "parameter_visible_only",
+        "module_recoverable",
+        "subsystem_recoverable",
+    ),
+    "module": ("module_recoverable",),
+    "subsystem": (
+        "module_recoverable",
+        "subsystem_recoverable",
+    ),
+}
 
 OBSERVED_RECOVERABILITY_STRENGTH_TIERS = (
     "undetected",
@@ -41,6 +60,14 @@ def recoverability_target_alignment_status(*, observed_tier: str | None, declare
     if observed_rank == declared_rank:
         return "met_target"
     return "exceeded_target"
+
+
+def benchmark_eligible_declared_tiers_for_scope(scope: str | None) -> tuple[str, ...]:
+    return tuple(_BENCHMARK_ELIGIBLE_TARGETS_BY_SCOPE.get(str(scope or ""), ()))
+
+
+def benchmark_scope_includes_declared_tier(*, scope: str | None, declared_tier: str | None) -> bool:
+    return str(declared_tier or "") in benchmark_eligible_declared_tiers_for_scope(scope)
 
 
 @dataclass(frozen=True, slots=True)

@@ -83,6 +83,7 @@ VALIDATION_REPORT_BY_KEY = {
     "attribution_validation": "attribution_validation_summary.json",
     "misbehavior_attribution_validation": "misbehavior_attribution_validation_summary.json",
     "simulation_benchmark_audit": "simulation_benchmark_audit_summary.json",
+    "benchmark_scope_validation": "benchmark_scope_validation_summary.json",
 }
 
 MODELING_SUMMARY_KEYS = tuple(VALIDATION_REPORT_BY_KEY.keys())
@@ -95,6 +96,7 @@ MARKDOWN_MODELING_KEYS = (
     "score_validation",
     "attribution_validation",
     "simulation_benchmark_audit",
+    "benchmark_scope_validation",
 )
 STAGE_MODELING_SECTIONS = (
     StageModelingSection("12_behavior_profiles_fit.py", ("profile_validation",)),
@@ -107,7 +109,12 @@ STAGE_MODELING_SECTIONS = (
     ),
     StageModelingSection(
         "90_anomaly_attribution.py",
-        ("attribution_validation", "misbehavior_attribution_validation", "simulation_benchmark_audit"),
+        (
+            "attribution_validation",
+            "misbehavior_attribution_validation",
+            "simulation_benchmark_audit",
+            "benchmark_scope_validation",
+        ),
     ),
 )
 

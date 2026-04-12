@@ -258,8 +258,88 @@ def test_build_simulation_benchmark_audit_summary_classifies_recoverability_tier
         "parameter_visible_only",
         "module_recoverable",
     ]
-    assert [row["declared_target_alignment_status"] for row in summary["fault_window_audit_cases"]] == [
-        "missed_target",
-        "met_target",
-        "exceeded_target",
+
+
+def test_build_benchmark_scope_validation_summary_filters_denominators_by_declared_tier():
+    summary = reporting._build_benchmark_scope_validation_summary(
+        simulation_benchmark_audit_summary={
+            "status": "ok",
+            "fault_window_audit_cases": [
+                {
+                    "fault_window_id": "FW1",
+                    "declared_benchmark_tier": "subsystem_recoverable",
+                    "detected": True,
+                    "emit_ready": True,
+                    "detection_latency_seconds": 2.0,
+                    "emit_ready_latency_seconds": 3.0,
+                    "dominant_score_component": "event_discordance",
+                    "telemetry_parameter_match": True,
+                    "telemetry_selected_parameter_match": True,
+                    "event_parameter_match": True,
+                    "dominant_subsystem_match": False,
+                    "dominant_module_match": False,
+                    "top_subsystem_candidate_present": True,
+                    "top_module_candidate_present": True,
+                },
+                {
+                    "fault_window_id": "FW2",
+                    "declared_benchmark_tier": "parameter_visible_only",
+                    "detected": True,
+                    "emit_ready": False,
+                    "detection_latency_seconds": 1.0,
+                    "emit_ready_latency_seconds": None,
+                    "dominant_score_component": "reconstruction_error",
+                    "telemetry_parameter_match": True,
+                    "telemetry_selected_parameter_match": False,
+                    "event_parameter_match": False,
+                    "dominant_subsystem_match": False,
+                    "dominant_module_match": False,
+                    "top_subsystem_candidate_present": False,
+                    "top_module_candidate_present": False,
+                },
+                {
+                    "fault_window_id": "FW3",
+                    "declared_benchmark_tier": "detection_only",
+                    "detected": False,
+                    "emit_ready": False,
+                    "detection_latency_seconds": None,
+                    "emit_ready_latency_seconds": None,
+                    "dominant_score_component": "",
+                    "telemetry_parameter_match": False,
+                    "telemetry_selected_parameter_match": False,
+                    "event_parameter_match": False,
+                    "dominant_subsystem_match": False,
+                    "dominant_module_match": False,
+                    "top_subsystem_candidate_present": False,
+                    "top_module_candidate_present": False,
+                },
+            ],
+        }
+    )
+
+    detection = summary["score_validation_by_benchmark_scope"]["detection"]
+    parameter = summary["attribution_validation_by_benchmark_scope"]["parameter"]
+    module = summary["attribution_validation_by_benchmark_scope"]["module"]
+    subsystem = summary["attribution_validation_by_benchmark_scope"]["subsystem"]
+
+    assert summary["benchmark_scope_order"] == ["detection", "parameter", "module", "subsystem"]
+    assert detection["eligible_fault_window_count"] == 3
+    assert detection["detected_fault_window_rate"] == 2.0 / 3.0
+    assert detection["emit_ready_fault_window_rate"] == 1.0 / 3.0
+    assert detection["median_detection_latency_seconds"] == 1.5
+    assert parameter["eligible_fault_window_count"] == 2
+    assert parameter["excluded_declared_benchmark_tier_count"] == {"detection_only": 1}
+    assert parameter["telemetry_parameter_match_rate"] == 1.0
+    assert parameter["telemetry_selected_parameter_match_rate"] == 0.5
+    assert parameter["event_parameter_match_rate"] == 0.5
+    assert parameter["top_subsystem_candidate_present_rate"] == 0.5
+    assert parameter["top_module_candidate_present_rate"] == 0.5
+    assert module["eligible_fault_window_count"] == 0
+    assert module["dominant_module_match_rate"] is None
+    assert subsystem["eligible_fault_window_count"] == 1
+    assert subsystem["top_subsystem_candidate_present_rate"] == 1.0
+    assert subsystem["top_module_candidate_present_rate"] == 1.0
+    assert summary["recommended_objective_metric_paths"]["module"] == [
+        "attribution_validation_by_benchmark_scope.module.dominant_module_match_rate",
+        "attribution_validation_by_benchmark_scope.module.top_module_candidate_present_rate",
     ]

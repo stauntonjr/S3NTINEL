@@ -296,6 +296,35 @@ def test_flatten_numeric_metric_records_includes_simulation_benchmark_audit_metr
     ]
 
 
+def test_flatten_numeric_metric_records_includes_benchmark_scope_validation_metric_paths():
+    records = _flatten_numeric_metric_records(
+        {
+            "score_validation_by_benchmark_scope": {
+                "detection": {
+                    "eligible_fault_window_count": 12,
+                    "detected_fault_window_rate": 0.75,
+                }
+            },
+            "attribution_validation_by_benchmark_scope": {
+                "module": {
+                    "eligible_fault_window_count": 4,
+                    "dominant_module_match_rate": 0.25,
+                }
+            },
+        },
+        category="validation",
+        scope_name="overall",
+        subscope_name="benchmark_scope_validation",
+    )
+
+    assert [(record.metric_path, record.value) for record in records] == [
+        ("attribution_validation_by_benchmark_scope.module.dominant_module_match_rate", 0.25),
+        ("attribution_validation_by_benchmark_scope.module.eligible_fault_window_count", 4),
+        ("score_validation_by_benchmark_scope.detection.detected_fault_window_rate", 0.75),
+        ("score_validation_by_benchmark_scope.detection.eligible_fault_window_count", 12),
+    ]
+
+
 def test_summarize_misbehavior_program_includes_declared_benchmark_tiers():
     flight = build_legacy_power_pressurization_hierarchy_reference_flight_spec()
 
