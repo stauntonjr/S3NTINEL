@@ -203,6 +203,46 @@ The next model upgrade should therefore stay generic and should use already
 persisted window information rather than simulator-specific rules or a heavier
 sequence-model redesign.
 
+### Current status
+
+Attempted and rejected in its first fused form.
+
+Replay outcome on:
+
+- `/tmp/s3ntinel_backbone_v3_dual_view_rerun/20260412T011659Z_power_pressurization_hierarchy_composite`
+
+Observed result versus the kept accumulation-channel baseline:
+
+- phase macro F1: unchanged at `0.7299398538418875`
+- detected fault window rate: `0.8333 -> 1.0`
+- emit-ready fault window rate: `0.7778 -> 0.8333`
+- telemetry parameter match rate: `0.7778 -> 0.8333`
+- event parameter match rate: `0.1667 -> 0.2778`
+- dominant subsystem match rate: `0.3333 -> 0.1667`
+- dominant module match rate: unchanged at `0.0`
+- top subsystem candidate presence: `0.1111 -> 0.0556`
+- top module candidate presence: `0.1667 -> 0.1111`
+
+Reconstruction failure mix also regressed:
+
+- `missing_truth_local_candidate`: stayed `4`
+- `shared_source_won`: `3 -> 4`
+- `truth_module_present_but_lost`: `2 -> 3`
+
+Interpretation:
+
+- the fused `level + delta` backbone improved broad anomaly sensitivity
+- but it made localization worse on the actual target metric
+- the regression was large enough that the code pass was reverted
+
+Implication:
+
+- do not keep the dual-view backbone in the current fused scoring/localization
+  form
+- if reconstruction is revisited upstream, it should come back as a narrower
+  auxiliary signal with a tighter replay gate, not as a broad replacement for
+  the current level-view reconstruction surface
+
 ### Proposed design
 
 Implement one bounded reconstruction upgrade in the canonical Spark path:
@@ -330,6 +370,10 @@ Runtime guardrails:
 - full replay should stay within `1.5x` of the current baseline unless the
   quality improvement is clearly material
 
+Current replay result:
+
+- this workstream failed the quality gate and was reverted
+
 ## Workstream C: Post-Upgrade Replay Gate
 
 ### Objective
@@ -406,6 +450,9 @@ Current implementation note:
   `0.0556` to `0.1111`, top module candidate presence from `0.1111` to
   `0.1667`, and reduced the dominant `missing_truth_local_candidate` bucket
   from `5` to `4`
+- the attempted dual-view reconstruction upgrade improved broad detection and
+  telemetry/event parameter matching, but it regressed dominant subsystem
+  localization and top-k candidate presence, so it was not kept
 
 Rejected near-term direction:
 
@@ -446,6 +493,9 @@ Rejected near-term direction:
 - do not add heavy rerankers to stage `90`
 - do not jump to deep sequence models before the dual-view backbone is
   evaluated
+- do not keep the current fused dual-view reconstruction design; it is now a
+  measured rejected direction unless a future revision can preserve the level
+  view as the dominant localization surface
 
 Do not reintroduce:
 
@@ -516,26 +566,29 @@ Current gate result:
 
 The next active anomaly sequence should now be:
 
-1. dual-view reconstruction upgrade
-2. post-upgrade replay gate
-3. only then any further candidate-generation or hierarchy revisit
+1. keep the current accumulation-channel baseline
+2. do not advance the current dual-view reconstruction design
+3. if reconstruction is revisited again, constrain it to a narrower auxiliary
+   signal and replay-gate it before any further candidate-generation work
+4. only then any further candidate-generation or hierarchy revisit
 
 That ordering is intentional.
 
 The current bottleneck still sits in reconstruction-led localization, but the
-next move should be to strengthen the upstream reconstruction surface before
-adding another stage-`90` selection heuristic.
+next move should not be another broad upstream reconstruction fusion or another
+stage-`90` selection heuristic pile.
 
-If the dual-view pass is kept, then the next narrowing step should again focus
-on reconstruction cases where the selected set is dominated by:
+If reconstruction work resumes, the next narrowing step should focus on
+reconstruction cases where the selected set is dominated by:
 
 - shared upstream utility parameters
 - sibling module copies of the same signal family
 - shared control-state or environmental consequence parameters
 
-At that point, a follow-on implementation may target high-precision filtering
-or re-ranking of reconstruction candidates, but only after the new
-reconstruction surface has been evaluated on replay.
+At that point, a follow-on implementation may target a smaller auxiliary
+reconstruction cue or a more discriminating generic source-versus-consequence
+signal, but only if it can preserve the current level-view localization
+behavior on replay.
 
 ## Test And Acceptance Plan
 
