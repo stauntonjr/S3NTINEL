@@ -507,6 +507,18 @@ Rejected near-term direction:
 - do not keep the current fused dual-view reconstruction design; it is now a
   measured rejected direction unless a future revision can preserve the level
   view as the dominant localization surface
+- a narrow reconstruction-locality cue that penalized residual support spread
+  across many parameters/modules cleared the clean benchmark-tier smoke gates
+  but produced no change at all on the mixed composite replay:
+  - detected fault window rate stayed `0.8333`
+  - emit-ready fault window rate stayed `0.7778`
+  - dominant subsystem match rate stayed `0.3333`
+  - top subsystem candidate presence stayed `0.1111`
+  - top module candidate presence stayed `0.1667`
+  - reconstruction failure buckets stayed `4 / 3 / 1 / 2`
+  for `missing_truth_local_candidate / shared_source_won /
+  sibling_consequence_won / truth_module_present_but_lost`
+  and therefore was not kept
 
 Do not reintroduce:
 
@@ -645,7 +657,8 @@ The next active anomaly sequence should now be:
    auxiliary localization cue and replay-gate it before carrying more
    complexity forward
 5. if reconstruction is revisited again, constrain it to a narrower auxiliary
-   signal and replay-gate it as well
+   signal and replay-gate it as well; benchmark-tier smoke gates are necessary
+   but not sufficient acceptance if the mixed composite replay stays flat
 6. only then any further candidate-generation or hierarchy revisit
 
 That ordering is intentional.
