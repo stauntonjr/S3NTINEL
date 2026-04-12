@@ -258,6 +258,16 @@ def test_flatten_numeric_metric_records_includes_simulation_benchmark_audit_metr
                 "event_discordance": 4,
                 "reconstruction_error": 10,
             },
+            "benchmark_phase_scorecards": {
+                "detection_only": {
+                    "fault_window_count": 2,
+                    "detected_fault_window_rate": 0.5,
+                },
+                "module_recoverable": {
+                    "fault_window_count": 4,
+                    "dominant_module_match_rate": 0.25,
+                },
+            },
         },
         category="validation",
         scope_name="overall",
@@ -267,6 +277,10 @@ def test_flatten_numeric_metric_records_includes_simulation_benchmark_audit_metr
     assert [(record.metric_path, record.value) for record in records] == [
         ("benchmark_phase_alignment_status_count.met_target", 5),
         ("benchmark_phase_alignment_status_count.missed_target", 6),
+        ("benchmark_phase_scorecards.detection_only.detected_fault_window_rate", 0.5),
+        ("benchmark_phase_scorecards.detection_only.fault_window_count", 2),
+        ("benchmark_phase_scorecards.module_recoverable.dominant_module_match_rate", 0.25),
+        ("benchmark_phase_scorecards.module_recoverable.fault_window_count", 4),
         ("benchmark_review_priority_count.critical", 4),
         ("benchmark_review_priority_count.high", 6),
         ("declared_benchmark_phase_count.module_recoverable", 9),

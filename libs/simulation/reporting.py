@@ -717,6 +717,99 @@ def _recoverability_summary_by_field(cases_df: pd.DataFrame, field: str) -> list
     )
 
 
+def _build_benchmark_phase_scorecards(cases_df: pd.DataFrame) -> dict[str, dict[str, Any]]:
+    rows: dict[str, dict[str, Any]] = {}
+    for phase in BENCHMARK_RECOVERABILITY_PHASES:
+        if cases_df.empty or "declared_benchmark_phase" not in cases_df.columns:
+            group = pd.DataFrame()
+        else:
+            group = cases_df[cases_df["declared_benchmark_phase"] == phase]
+        total = int(len(group))
+        observed_counts = {
+            tier: int(
+                (group.get("observed_recoverability_strength_tier", pd.Series(dtype="object")).fillna("").astype(str) == tier).sum()
+            )
+            for tier in OBSERVED_RECOVERABILITY_STRENGTH_TIERS
+        }
+        alignment_counts = {
+            status: int(
+                (group.get("declared_target_alignment_status", pd.Series(dtype="object")).fillna("").astype(str) == status).sum()
+            )
+            for status in _DECLARED_TARGET_ALIGNMENT_ORDER
+        }
+        dominant_score_component_count = (
+            {
+                str(label): int(count)
+                for label, count in group.get("dominant_score_component", pd.Series(dtype="object"))
+                .fillna("")
+                .astype(str)
+                .replace({"": "unassigned"})
+                .value_counts(dropna=False)
+                .sort_index()
+                .items()
+                if str(label)
+            }
+            if total > 0
+            else {}
+        )
+        rows[phase] = {
+            "fault_window_count": total,
+            "detected_fault_window_count": (int(group["detected"].sum()) if total > 0 else 0),
+            "emit_ready_fault_window_count": (int(group["emit_ready"].sum()) if total > 0 else 0),
+            "detected_fault_window_rate": (float(group["detected"].mean()) if total > 0 else None),
+            "emit_ready_fault_window_rate": (float(group["emit_ready"].mean()) if total > 0 else None),
+            "telemetry_parameter_match_rate": (
+                float(group["telemetry_parameter_match"].mean()) if total > 0 else None
+            ),
+            "telemetry_selected_parameter_match_rate": (
+                float(group["telemetry_selected_parameter_match"].mean()) if total > 0 else None
+            ),
+            "event_parameter_match_rate": (float(group["event_parameter_match"].mean()) if total > 0 else None),
+            "dominant_subsystem_match_rate": (
+                float(group["dominant_subsystem_match"].mean()) if total > 0 else None
+            ),
+            "dominant_module_match_rate": (float(group["dominant_module_match"].mean()) if total > 0 else None),
+            "top_subsystem_candidate_present_rate": (
+                float(group["top_subsystem_candidate_present"].mean()) if total > 0 else None
+            ),
+            "top_module_candidate_present_rate": (
+                float(group["top_module_candidate_present"].mean()) if total > 0 else None
+            ),
+            "module_recoverable_exact_rate": (
+                float((group["observed_recoverability_strength_tier"] == "module_recoverable").mean())
+                if total > 0
+                else None
+            ),
+            "subsystem_or_better_rate": (
+                float(
+                    group["observed_recoverability_strength_tier"]
+                    .isin(("module_recoverable", "subsystem_recoverable"))
+                    .mean()
+                )
+                if total > 0
+                else None
+            ),
+            "parameter_or_better_rate": (
+                float(
+                    group["observed_recoverability_strength_tier"].isin(
+                        ("module_recoverable", "subsystem_recoverable", "parameter_visible_only")
+                    ).mean()
+                )
+                if total > 0
+                else None
+            ),
+            "observed_recoverability_strength_tier_count": observed_counts,
+            "benchmark_phase_alignment_status_count": alignment_counts,
+            "dominant_score_component_count": dominant_score_component_count,
+            "benchmark_phase_met_or_exceeded_rate": (
+                float(group["declared_target_alignment_status"].isin(("met_target", "exceeded_target")).mean())
+                if total > 0
+                else None
+            ),
+        }
+    return rows
+
+
 def _build_simulation_benchmark_audit_summary(
     *,
     flight: Any,
@@ -745,6 +838,7 @@ def _build_simulation_benchmark_audit_summary(
             "benchmark_phase_alignment_status_count": {},
             "benchmark_review_priority_count": {},
             "dominant_score_component_count": {},
+            "benchmark_phase_scorecards": {},
             "summary_by_fault_family": [],
             "summary_by_fault_type": [],
             "summary_by_source_subsystem": [],
@@ -963,6 +1057,7 @@ def _build_simulation_benchmark_audit_summary(
     summary_by_fault_type = _recoverability_summary_by_field(merged, "fault_type")
     summary_by_source_subsystem = _recoverability_summary_by_field(merged, "truth_subsystem_id")
     summary_by_source_module = _recoverability_summary_by_field(merged, "truth_module_id")
+    benchmark_phase_scorecards = _build_benchmark_phase_scorecards(merged)
     top_review_candidates = [
         {
             "fault_type": row.get("fault_type", ""),
@@ -993,6 +1088,7 @@ def _build_simulation_benchmark_audit_summary(
         "benchmark_phase_alignment_status_count": benchmark_phase_alignment_status_count,
         "benchmark_review_priority_count": review_priority_count,
         "dominant_score_component_count": dominant_score_component_count,
+        "benchmark_phase_scorecards": benchmark_phase_scorecards,
         "summary_by_fault_family": summary_by_fault_family,
         "summary_by_fault_type": summary_by_fault_type,
         "summary_by_source_subsystem": summary_by_source_subsystem,
@@ -1004,6 +1100,9 @@ def _build_simulation_benchmark_audit_summary(
             "development_phase_order": list(BENCHMARK_RECOVERABILITY_PHASES),
             "observed_strength_order": list(OBSERVED_RECOVERABILITY_STRENGTH_TIERS),
             "declared_target_order": list(BENCHMARK_RECOVERABILITY_TARGETS),
+            "benchmark_phase_scorecard_interpretation": (
+                "use scorecards grouped by declared benchmark phase to evaluate each recoverability tier separately"
+            ),
             "tier_definitions": {
                 "module_recoverable": "truth module matched or present in top module candidates",
                 "subsystem_recoverable": "truth subsystem matched or present in top subsystem candidates without module recovery",

@@ -494,6 +494,12 @@ def test_validation_harness_report_bundles_fit_validation_and_compute(tmp_path):
                     "module_recoverable": 2,
                     "parameter_visible_only": 5,
                 },
+                "benchmark_phase_scorecards": {
+                    "module_recoverable": {
+                        "fault_window_count": 3,
+                        "dominant_module_match_rate": 1.0 / 3.0,
+                    }
+                },
             },
         },
         "engineering_performance": {
@@ -577,6 +583,14 @@ def test_validation_harness_report_bundles_fit_validation_and_compute(tmp_path):
         and record["subscope_name"] == "simulation_benchmark_audit"
         and record["metric_path"] == "observed_recoverability_strength_tier_count.parameter_visible_only"
         and record["value"] == 5
+        for record in harness["validation_metrics"]["metric_records"]
+    )
+    assert any(
+        record["category"] == "validation"
+        and record["scope_name"] == "overall"
+        and record["subscope_name"] == "simulation_benchmark_audit"
+        and record["metric_path"] == "benchmark_phase_scorecards.module_recoverable.dominant_module_match_rate"
+        and record["value"] == 1.0 / 3.0
         for record in harness["validation_metrics"]["metric_records"]
     )
     assert any(

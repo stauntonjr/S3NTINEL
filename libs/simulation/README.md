@@ -205,6 +205,10 @@ Authored misbehavior windows may also declare benchmark intent through
 expects the window to be usable as a module-, subsystem-, parameter-, or
 detection-level benchmark under downstream validation.
 
+Full-run benchmark audit reports expose that declared intent directly through
+`benchmark_phase_scorecards`, so each recoverability tier can be evaluated on
+its own rather than through one mixed top-line metric.
+
 The named power/pressurization flights can also expose filtered benchmark packs
 such as:
 - `power_pressurization_hierarchy_composite_module_localization`

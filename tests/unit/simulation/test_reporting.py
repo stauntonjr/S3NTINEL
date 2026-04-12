@@ -208,6 +208,50 @@ def test_build_simulation_benchmark_audit_summary_classifies_recoverability_tier
         "met_target": 1,
         "exceeded_target": 1,
     }
+    assert list(summary["benchmark_phase_scorecards"]) == [
+        "detection_only",
+        "parameter_visible_only",
+        "module_recoverable",
+        "subsystem_recoverable",
+    ]
+    assert summary["benchmark_phase_scorecards"]["detection_only"] == {
+        "fault_window_count": 1,
+        "detected_fault_window_count": 0,
+        "emit_ready_fault_window_count": 0,
+        "detected_fault_window_rate": 0.0,
+        "emit_ready_fault_window_rate": 0.0,
+        "telemetry_parameter_match_rate": 0.0,
+        "telemetry_selected_parameter_match_rate": 0.0,
+        "event_parameter_match_rate": 0.0,
+        "dominant_subsystem_match_rate": 0.0,
+        "dominant_module_match_rate": 0.0,
+        "top_subsystem_candidate_present_rate": 0.0,
+        "top_module_candidate_present_rate": 0.0,
+        "module_recoverable_exact_rate": 0.0,
+        "subsystem_or_better_rate": 0.0,
+        "parameter_or_better_rate": 0.0,
+        "observed_recoverability_strength_tier_count": {
+            "undetected": 1,
+            "detection_only": 0,
+            "parameter_visible_only": 0,
+            "subsystem_recoverable": 0,
+            "module_recoverable": 0,
+        },
+        "benchmark_phase_alignment_status_count": {
+            "missed_target": 1,
+            "undeclared": 0,
+            "met_target": 0,
+            "exceeded_target": 0,
+        },
+        "dominant_score_component_count": {"unassigned": 1},
+        "benchmark_phase_met_or_exceeded_rate": 0.0,
+    }
+    assert summary["benchmark_phase_scorecards"]["parameter_visible_only"]["parameter_or_better_rate"] == 1.0
+    assert summary["benchmark_phase_scorecards"]["parameter_visible_only"]["benchmark_phase_met_or_exceeded_rate"] == 1.0
+    assert summary["benchmark_phase_scorecards"]["module_recoverable"]["fault_window_count"] == 0
+    assert summary["benchmark_phase_scorecards"]["module_recoverable"]["detected_fault_window_rate"] is None
+    assert summary["benchmark_phase_scorecards"]["subsystem_recoverable"]["subsystem_or_better_rate"] == 1.0
+    assert summary["benchmark_phase_scorecards"]["subsystem_recoverable"]["top_module_candidate_present_rate"] == 1.0
     assert summary["top_review_candidates"][0]["fault_type"] == "forbidden_transition"
     assert [row["observed_recoverability_strength_tier"] for row in summary["fault_window_audit_cases"]] == [
         "undetected",

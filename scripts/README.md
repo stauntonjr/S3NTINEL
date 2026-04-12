@@ -36,7 +36,7 @@ Incremental patches:
     - persisted `window_features`
     - structural graph artifacts, including `lag_profile` and the collapsed compatibility `lag_graph`
     - phase/scoring/attribution outputs
-    - `reports/simulation_benchmark_audit_summary.json`, which summarizes observed fault-window recoverability for the current simulator bundle and compares it against the recoverability targets declared on the flight's authored misbehavior windows
+    - `reports/simulation_benchmark_audit_summary.json`, which summarizes observed fault-window recoverability for the current simulator bundle, compares it against the recoverability targets declared on the flight's authored misbehavior windows, and emits `benchmark_phase_scorecards` so each benchmark tier can be reviewed independently
     - local stage summaries and manifests under `reports/`
     - a run manifest at `reports/run_manifest.json`
     - a consolidated console log at `logs/run.log`
