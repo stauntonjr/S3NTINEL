@@ -229,6 +229,16 @@ simulation work directly.
 
 Observed outcomes:
 
+- `power_pressurization_hierarchy_smoke_localization_focus_drift`
+  - `drift` is now available as a dedicated module-localization gate
+  - current measured result is `module_recoverable` and meets the declared
+    target:
+    - detected `1/1`
+    - emit-ready `1/1`
+    - telemetry parameter match `1/1`
+    - selected telemetry parameter match `1/1`
+    - top module candidate present `1/1`
+    - benchmark phase alignment: `met_target`
 - `power_pressurization_hierarchy_smoke_localization_focus_bias_drift`
   - `drift` is a valid module-localization benchmark in the current stack
   - `bias` currently behaves as a subsystem-recoverable benchmark, not a clean
@@ -264,6 +274,8 @@ now.
 The benchmark evidence says:
 
 - `drift` should remain in the module-localization sanity suite
+- the dedicated `power_pressurization_hierarchy_smoke_localization_focus_drift`
+  pack should be treated as the clean module-localization acceptance gate
 - `bias` should be treated as a subsystem-vs-module separation problem
 - local-monitor `bias` is a useful redesign probe, but not yet a
   module-localization acceptance gate
@@ -334,6 +346,7 @@ The current smoke-family results already imply the next phase assignments:
 
 - `drift`
   - stays in the module-recoverability phase
+  - the dedicated `drift` pack is now the clean acceptance gate for that phase
 - `bias`
   - currently straddles parameter/module work and should be treated as the next
     module-separation design problem

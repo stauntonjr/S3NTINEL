@@ -17,6 +17,7 @@ from libs.simulation.flight.examples import (
     build_power_pressurization_hierarchy_composite_subsystem_localization_flight_spec,
     build_power_pressurization_hierarchy_medium_flight_spec,
     build_power_pressurization_hierarchy_composite_flight_spec,
+    build_power_pressurization_hierarchy_smoke_localization_focus_drift_flight_spec,
     build_power_pressurization_hierarchy_smoke_localization_focus_bias_load_monitor_flight_spec,
     build_power_pressurization_hierarchy_smoke_localization_focus_bias_drift_flight_spec,
     build_power_pressurization_hierarchy_smoke_localization_focus_saturation_local_flight_spec,
@@ -88,6 +89,7 @@ def test_build_flight_specs_construct_live_flights():
         build_power_pressurization_hierarchy_smoke_localization_focus_flight_spec,
         build_power_pressurization_hierarchy_smoke_localization_focus_bias_drift_flight_spec,
         build_power_pressurization_hierarchy_smoke_localization_focus_bias_load_monitor_flight_spec,
+        build_power_pressurization_hierarchy_smoke_localization_focus_drift_flight_spec,
         build_power_pressurization_hierarchy_smoke_localization_focus_saturation_flight_spec,
         build_power_pressurization_hierarchy_smoke_localization_focus_saturation_local_flight_spec,
         build_power_pressurization_hierarchy_medium_flight_spec,
@@ -379,6 +381,7 @@ def test_named_builder_resolves_smoke_localization_focus_flight_spec():
 
 def test_smoke_localization_focus_family_packs_filter_fault_types():
     bias_drift_suite = build_power_pressurization_hierarchy_smoke_localization_focus_bias_drift_flight_spec()
+    drift_suite = build_power_pressurization_hierarchy_smoke_localization_focus_drift_flight_spec()
     saturation_suite = build_power_pressurization_hierarchy_smoke_localization_focus_saturation_flight_spec()
     saturation_local_suite = build_power_pressurization_hierarchy_smoke_localization_focus_saturation_local_flight_spec()
 
@@ -401,6 +404,14 @@ def test_smoke_localization_focus_family_packs_filter_fault_types():
         "bias": "subsystem_recoverable",
         "drift": "module_recoverable",
     }
+
+    assert drift_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_localization_focus_drift"
+    assert drift_suite.metadata["benchmark_suite_name"] == "localization_focus_drift"
+    assert drift_suite.metadata["benchmark_fault_types"] == ["drift"]
+    assert drift_suite.metadata["benchmark_recoverability_targets"] == ["module_recoverable"]
+    assert len(drift_suite.misbehavior_program_spec.windows) == 1
+    assert drift_suite.misbehavior_program_spec.windows[0].context["violation_type"] == "drift"
+    assert drift_suite.misbehavior_program_spec.windows[0].metadata["benchmark_recoverability_target"] == "module_recoverable"
 
     assert saturation_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_localization_focus_saturation"
     assert saturation_suite.metadata["benchmark_suite_name"] == "localization_focus_saturation"
@@ -431,9 +442,11 @@ def test_smoke_localization_focus_family_packs_filter_fault_types():
 
 def test_named_builder_resolves_smoke_localization_focus_family_packs():
     bias_drift_suite = build_named_flight_spec("power_pressurization_hierarchy_smoke_localization_focus_bias_drift")
+    drift_suite = build_named_flight_spec("power_pressurization_hierarchy_smoke_localization_focus_drift")
     saturation_suite = build_named_flight_spec("power_pressurization_hierarchy_smoke_localization_focus_saturation")
     saturation_local_suite = build_named_flight_spec("power_pressurization_hierarchy_smoke_localization_focus_saturation_local")
 
     assert bias_drift_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_localization_focus_bias_drift"
+    assert drift_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_localization_focus_drift"
     assert saturation_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_localization_focus_saturation"
     assert saturation_local_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_localization_focus_saturation_local"

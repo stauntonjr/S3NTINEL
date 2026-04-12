@@ -48,9 +48,11 @@ Incremental patches:
     - `power_pressurization_hierarchy_smoke_localization_focus`
     - `power_pressurization_hierarchy_smoke_localization_focus_bias_drift`
     - `power_pressurization_hierarchy_smoke_localization_focus_bias_load_monitor`
+    - `power_pressurization_hierarchy_smoke_localization_focus_drift`
     - `power_pressurization_hierarchy_smoke_localization_focus_saturation`
     - `power_pressurization_hierarchy_smoke_localization_focus_saturation_local`
   - current smoke-benchmark intent:
+    - `drift` is the clean module-localization acceptance gate
     - `bias_drift` is a split family:
       - `drift` is module-recoverable
       - `bias` is subsystem-recoverable
