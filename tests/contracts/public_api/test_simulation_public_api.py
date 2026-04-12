@@ -109,6 +109,7 @@ def test_object_level_examples_are_public_from_subpackages():
     assert "pressurization" in flight_names
     assert "power_pressurization_hierarchy_smoke" in flight_names
     assert "power_pressurization_hierarchy_smoke_localization_focus" in flight_names
+    assert "power_pressurization_hierarchy_smoke_localization_focus_bias" in flight_names
     assert "power_pressurization_hierarchy_smoke_localization_focus_bias_drift" in flight_names
     assert "power_pressurization_hierarchy_smoke_localization_focus_bias_load_monitor" in flight_names
     assert "power_pressurization_hierarchy_smoke_localization_focus_drift" in flight_names

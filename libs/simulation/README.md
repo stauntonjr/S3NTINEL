@@ -230,6 +230,10 @@ are all valid module targets.
 The two family packs split that sanity suite again so `bias`/`drift` can be
 evaluated separately from `saturation` without a blended benchmark result.
 
+`power_pressurization_hierarchy_smoke_localization_focus_bias` keeps only the
+`bias` case and exists as the clean subsystem-localization acceptance gate on
+the smoke topology.
+
 `power_pressurization_hierarchy_smoke_localization_focus_drift` keeps only the
 `drift` case and exists as the clean module-localization acceptance gate on the
 smoke topology.
@@ -246,6 +250,8 @@ shared-supply saturation benchmark is structurally too shared for module
 recovery.
 
 Current measured benchmark intent:
+- `power_pressurization_hierarchy_smoke_localization_focus_bias`
+  - use as the clean subsystem-localization acceptance gate
 - `power_pressurization_hierarchy_smoke_localization_focus_drift`
   - use as the clean module-localization acceptance gate
 - `power_pressurization_hierarchy_smoke_localization_focus_bias_drift`

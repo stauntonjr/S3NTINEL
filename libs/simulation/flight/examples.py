@@ -1130,6 +1130,18 @@ def build_power_pressurization_hierarchy_smoke_localization_focus_bias_drift_fli
     )
 
 
+def build_power_pressurization_hierarchy_smoke_localization_focus_bias_flight_spec(
+    *,
+    seed: int | None = None,
+) -> FlightSpec:
+    return build_power_pressurization_localization_focus_flight_spec(
+        seed=seed,
+        benchmark_fault_types=("bias",),
+        benchmark_suite_name="localization_focus_bias",
+        flight_name="power_pressurization_hierarchy_smoke_localization_focus_bias",
+    )
+
+
 def build_power_pressurization_hierarchy_smoke_localization_focus_bias_load_monitor_flight_spec(
     *,
     seed: int | None = None,
@@ -1190,6 +1202,9 @@ def get_flight_builders() -> dict[str, FlightBuilder]:
         "power_pressurization_hierarchy_smoke_localization_focus": (
             build_power_pressurization_hierarchy_smoke_localization_focus_flight_spec
         ),
+        "power_pressurization_hierarchy_smoke_localization_focus_bias": (
+            build_power_pressurization_hierarchy_smoke_localization_focus_bias_flight_spec
+        ),
         "power_pressurization_hierarchy_smoke_localization_focus_bias_drift": (
             build_power_pressurization_hierarchy_smoke_localization_focus_bias_drift_flight_spec
         ),
@@ -1226,6 +1241,9 @@ def build_named_flight_spec(flight_name: str, *, seed: int | None = None) -> Fli
         "power_pressurization_hierarchy_smoke": build_power_pressurization_hierarchy_smoke_flight_spec,
         "power_pressurization_hierarchy_smoke_localization_focus": (
             build_power_pressurization_hierarchy_smoke_localization_focus_flight_spec
+        ),
+        "power_pressurization_hierarchy_smoke_localization_focus_bias": (
+            build_power_pressurization_hierarchy_smoke_localization_focus_bias_flight_spec
         ),
         "power_pressurization_hierarchy_smoke_localization_focus_bias_drift": (
             build_power_pressurization_hierarchy_smoke_localization_focus_bias_drift_flight_spec
