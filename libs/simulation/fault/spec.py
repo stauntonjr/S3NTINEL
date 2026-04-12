@@ -6,13 +6,13 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 
-BENCHMARK_RECOVERABILITY_PHASES = (
+BENCHMARK_RECOVERABILITY_LADDER = (
     "detection_only",
     "parameter_visible_only",
     "module_recoverable",
     "subsystem_recoverable",
 )
-BENCHMARK_RECOVERABILITY_TARGETS = BENCHMARK_RECOVERABILITY_PHASES
+BENCHMARK_RECOVERABILITY_TARGETS = BENCHMARK_RECOVERABILITY_LADDER
 
 OBSERVED_RECOVERABILITY_STRENGTH_TIERS = (
     "undetected",

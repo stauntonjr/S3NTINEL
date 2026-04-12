@@ -494,7 +494,7 @@ def test_validation_harness_report_bundles_fit_validation_and_compute(tmp_path):
                     "module_recoverable": 2,
                     "parameter_visible_only": 5,
                 },
-                "benchmark_phase_scorecards": {
+                "benchmark_tier_scorecards": {
                     "module_recoverable": {
                         "fault_window_count": 3,
                         "dominant_module_match_rate": 1.0 / 3.0,
@@ -561,7 +561,7 @@ def test_validation_harness_report_bundles_fit_validation_and_compute(tmp_path):
     assert harness["simulation_context"]["parameter_catalog"]["parameter_count"] > 0
     assert harness["simulation_context"]["hierarchy"]["system_count"] > 0
     assert harness["simulation_context"]["phases"]["run_step_count"] == 12
-    assert harness["simulation_context"]["misbehavior_program"]["declared_benchmark_phase_count"] == {}
+    assert harness["simulation_context"]["misbehavior_program"]["declared_benchmark_tier_count"] == {}
     assert harness["compute_performance"]["bottleneck_stages"][0]["stage_script"] == "50_build_graph.py"
     assert any(
         record["scope_name"] == "50_build_graph.py"
@@ -589,7 +589,7 @@ def test_validation_harness_report_bundles_fit_validation_and_compute(tmp_path):
         record["category"] == "validation"
         and record["scope_name"] == "overall"
         and record["subscope_name"] == "simulation_benchmark_audit"
-        and record["metric_path"] == "benchmark_phase_scorecards.module_recoverable.dominant_module_match_rate"
+        and record["metric_path"] == "benchmark_tier_scorecards.module_recoverable.dominant_module_match_rate"
         and record["value"] == 1.0 / 3.0
         for record in harness["validation_metrics"]["metric_records"]
     )

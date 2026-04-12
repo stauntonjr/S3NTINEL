@@ -238,7 +238,7 @@ Observed outcomes:
     - telemetry parameter match `1/1`
     - selected telemetry parameter match `1/1`
     - top module candidate present `1/1`
-    - benchmark phase alignment: `met_target`
+    - benchmark tier alignment: `met_target`
 - `power_pressurization_hierarchy_smoke_localization_focus_bias`
   - `bias` is now available as a dedicated subsystem-localization gate
   - current measured result is `subsystem_recoverable` and meets the declared
@@ -248,7 +248,7 @@ Observed outcomes:
     - telemetry parameter match `1/1`
     - dominant subsystem match `1/1`
     - top subsystem candidate present `1/1`
-    - benchmark phase alignment: `met_target`
+    - benchmark tier alignment: `met_target`
 - `power_pressurization_hierarchy_smoke_localization_focus_bias_drift`
   - `drift` is a valid module-localization benchmark in the current stack
   - `bias` currently behaves as a subsystem-recoverable benchmark, not a clean
@@ -299,9 +299,9 @@ The benchmark evidence says:
 Use a grouped gate-suite harness for anomaly acceptance:
 
 - canonical runner:
-  - `python -m scripts.run_sim_benchmark_phase_gates --base-dir ...`
+  - `python -m scripts.run_sim_benchmark_tier_gates --base-dir ...`
 - canonical suite report:
-  - `reports/benchmark_phase_gate_suite_summary.json`
+  - `reports/benchmark_tier_gate_suite_summary.json`
 - intended use:
   - evaluate anomaly changes on the dedicated `bias` and `drift` packs before
     returning to the mixed composite benchmark
@@ -409,7 +409,7 @@ Existing anomaly/abnormality features should build on the current seam:
 - `violation_context_by_module_for_step`
 - `apply_violations`
 - behavior-local violator hooks
-- phase gates
+- tier gates
 - mode gates
 
 These should converge into one clear anomaly-conditioning model rather than

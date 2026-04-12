@@ -1,4 +1,4 @@
-"""Canonical benchmark-phase gate suite for simulation-backed anomaly evaluation."""
+"""Canonical benchmark-tier gate suite for simulation-backed anomaly evaluation."""
 
 from __future__ import annotations
 
@@ -11,39 +11,39 @@ from typing import Any
 
 from libs.perf import get_logger
 from libs.simulation.cli import add_backbone_args, add_event_args, add_profile_args, add_source_args, add_window_args
-from libs.simulation.fault.spec import BENCHMARK_RECOVERABILITY_PHASES
+from libs.simulation.fault.spec import BENCHMARK_RECOVERABILITY_LADDER
 from libs.simulation.run_bundle import load_json_if_exists
 from libs.simulation.run_context import PipelineRunConfig
 from libs.simulation.runner import run_pipeline
 
 
-LOGGER_NAME = "s3ntinel.run_sim_benchmark_phase_gates"
-BENCHMARK_PHASE_GATE_SUITE_NAME = "localization_benchmark_phase_gates"
-BENCHMARK_PHASE_GATE_SUMMARY_FILENAME = "benchmark_phase_gate_suite_summary.json"
-BENCHMARK_PHASE_GATE_MARKDOWN_FILENAME = "benchmark_phase_gate_suite_summary.md"
+LOGGER_NAME = "s3ntinel.run_sim_benchmark_tier_gates"
+BENCHMARK_TIER_GATE_SUITE_NAME = "localization_benchmark_tier_gates"
+BENCHMARK_TIER_GATE_SUMMARY_FILENAME = "benchmark_tier_gate_suite_summary.json"
+BENCHMARK_TIER_GATE_MARKDOWN_FILENAME = "benchmark_tier_gate_suite_summary.md"
 
 
 @dataclass(frozen=True, slots=True)
-class BenchmarkPhaseGateSpec:
+class BenchmarkTierGateSpec:
     gate_name: str
     flight_name: str
-    declared_benchmark_phase: str
+    declared_benchmark_tier: str
     description: str
 
     def to_payload(self) -> dict[str, Any]:
         return {
             "gate_name": self.gate_name,
             "flight_name": self.flight_name,
-            "declared_benchmark_phase": self.declared_benchmark_phase,
+            "declared_benchmark_tier": self.declared_benchmark_tier,
             "description": self.description,
         }
 
 
 @dataclass(frozen=True, slots=True)
-class BenchmarkPhaseGateRunSummary:
+class BenchmarkTierGateRunSummary:
     gate_name: str
     flight_name: str
-    declared_benchmark_phase: str
+    declared_benchmark_tier: str
     run_dir: str | None
     run_status: str
     error_message: str | None
@@ -63,7 +63,7 @@ class BenchmarkPhaseGateRunSummary:
         return {
             "gate_name": self.gate_name,
             "flight_name": self.flight_name,
-            "declared_benchmark_phase": self.declared_benchmark_phase,
+            "declared_benchmark_tier": self.declared_benchmark_tier,
             "run_dir": self.run_dir,
             "run_status": self.run_status,
             "error_message": self.error_message,
@@ -82,12 +82,12 @@ class BenchmarkPhaseGateRunSummary:
 
 
 @dataclass(frozen=True, slots=True)
-class BenchmarkPhaseGateSuiteSummary:
+class BenchmarkTierGateSuiteSummary:
     suite_name: str
     generated_at_utc: str
     suite_dir: str
-    gate_specs: tuple[BenchmarkPhaseGateSpec, ...]
-    gate_results: tuple[BenchmarkPhaseGateRunSummary, ...]
+    gate_specs: tuple[BenchmarkTierGateSpec, ...]
+    gate_results: tuple[BenchmarkTierGateRunSummary, ...]
 
     def to_payload(self) -> dict[str, Any]:
         gate_alignment_status_count = {
@@ -111,37 +111,38 @@ class BenchmarkPhaseGateSuiteSummary:
             "met_or_exceeded_gate_count": met_or_exceeded,
             "all_gates_met_or_exceeded": bool(self.gate_results) and met_or_exceeded == len(self.gate_results),
             "suite_interpretation": (
-                "use this suite before the mixed composite bundle when evaluating anomaly changes against the clean subsystem and module benchmark phases"
+                "use this suite before the mixed composite bundle when evaluating anomaly changes "
+                "against the clean subsystem and module benchmark tiers"
             ),
         }
 
 
-BENCHMARK_PHASE_GATE_SPECS = (
-    BenchmarkPhaseGateSpec(
-        gate_name="subsystem_phase_bias",
+BENCHMARK_TIER_GATE_SPECS = (
+    BenchmarkTierGateSpec(
+        gate_name="subsystem_tier_bias",
         flight_name="power_pressurization_hierarchy_smoke_localization_focus_bias",
-        declared_benchmark_phase="subsystem_recoverable",
-        description="Clean subsystem-phase acceptance gate for the regulated bias family on the smoke topology.",
+        declared_benchmark_tier="subsystem_recoverable",
+        description="Clean subsystem-tier acceptance gate for the regulated bias family on the smoke topology.",
     ),
-    BenchmarkPhaseGateSpec(
-        gate_name="module_phase_drift",
+    BenchmarkTierGateSpec(
+        gate_name="module_tier_drift",
         flight_name="power_pressurization_hierarchy_smoke_localization_focus_drift",
-        declared_benchmark_phase="module_recoverable",
-        description="Clean module-phase acceptance gate for the accumulative drift family on the smoke topology.",
+        declared_benchmark_tier="module_recoverable",
+        description="Clean module-tier acceptance gate for the accumulative drift family on the smoke topology.",
     ),
 )
 
 
-def ordered_benchmark_phase_gate_specs() -> tuple[BenchmarkPhaseGateSpec, ...]:
-    ordered_specs: list[BenchmarkPhaseGateSpec] = []
-    for phase in BENCHMARK_RECOVERABILITY_PHASES:
-        ordered_specs.extend(spec for spec in BENCHMARK_PHASE_GATE_SPECS if spec.declared_benchmark_phase == phase)
+def ordered_benchmark_tier_gate_specs() -> tuple[BenchmarkTierGateSpec, ...]:
+    ordered_specs: list[BenchmarkTierGateSpec] = []
+    for tier in BENCHMARK_RECOVERABILITY_LADDER:
+        ordered_specs.extend(spec for spec in BENCHMARK_TIER_GATE_SPECS if spec.declared_benchmark_tier == tier)
     return tuple(ordered_specs)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run the canonical benchmark-phase gate suite for simulation-backed anomaly evaluation"
+        description="Run the canonical benchmark-tier gate suite for simulation-backed anomaly evaluation"
     )
     add_source_args(parser)
     add_profile_args(parser)
@@ -160,7 +161,7 @@ def parse_args() -> argparse.Namespace:
 
 def _timestamped_suite_dir(base_dir: str | Path) -> Path:
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    return Path(base_dir) / f"{timestamp}_{BENCHMARK_PHASE_GATE_SUITE_NAME}"
+    return Path(base_dir) / f"{timestamp}_{BENCHMARK_TIER_GATE_SUITE_NAME}"
 
 
 def _text_value(value: Any) -> str | None:
@@ -186,22 +187,22 @@ def _latest_new_run_dir(*, runs_dir: Path, flight_name: str, before: set[Path]) 
     return max(candidates, key=lambda path: path.stat().st_mtime)
 
 
-def build_benchmark_phase_gate_run_summary(
+def build_benchmark_tier_gate_run_summary(
     *,
-    gate_spec: BenchmarkPhaseGateSpec,
+    gate_spec: BenchmarkTierGateSpec,
     run_dir: Path | None,
     run_status: str,
     error_message: str | None = None,
-) -> BenchmarkPhaseGateRunSummary:
+) -> BenchmarkTierGateRunSummary:
     reports_dir = None if run_dir is None else run_dir / "reports"
     audit_payload = None if reports_dir is None else load_json_if_exists(reports_dir / "simulation_benchmark_audit_summary.json")
     attribution_payload = None if reports_dir is None else load_json_if_exists(reports_dir / "attribution_validation_summary.json")
     score_payload = None if reports_dir is None else load_json_if_exists(reports_dir / "score_validation_summary.json")
     case_payload = dict(((audit_payload or {}).get("fault_window_audit_cases") or [{}])[0])
-    return BenchmarkPhaseGateRunSummary(
+    return BenchmarkTierGateRunSummary(
         gate_name=gate_spec.gate_name,
         flight_name=gate_spec.flight_name,
-        declared_benchmark_phase=gate_spec.declared_benchmark_phase,
+        declared_benchmark_tier=gate_spec.declared_benchmark_tier,
         run_dir=(None if run_dir is None else str(run_dir)),
         run_status=str(run_status),
         error_message=_text_value(error_message),
@@ -223,25 +224,25 @@ def build_benchmark_phase_gate_run_summary(
     )
 
 
-def build_benchmark_phase_gate_suite_summary(
+def build_benchmark_tier_gate_suite_summary(
     *,
     suite_dir: Path,
-    gate_results: tuple[BenchmarkPhaseGateRunSummary, ...],
-    gate_specs: tuple[BenchmarkPhaseGateSpec, ...] | None = None,
-) -> BenchmarkPhaseGateSuiteSummary:
-    return BenchmarkPhaseGateSuiteSummary(
-        suite_name=BENCHMARK_PHASE_GATE_SUITE_NAME,
+    gate_results: tuple[BenchmarkTierGateRunSummary, ...],
+    gate_specs: tuple[BenchmarkTierGateSpec, ...] | None = None,
+) -> BenchmarkTierGateSuiteSummary:
+    return BenchmarkTierGateSuiteSummary(
+        suite_name=BENCHMARK_TIER_GATE_SUITE_NAME,
         generated_at_utc=datetime.now(timezone.utc).isoformat(),
         suite_dir=str(suite_dir),
-        gate_specs=ordered_benchmark_phase_gate_specs() if gate_specs is None else gate_specs,
+        gate_specs=ordered_benchmark_tier_gate_specs() if gate_specs is None else gate_specs,
         gate_results=gate_results,
     )
 
 
-def render_benchmark_phase_gate_suite_markdown(summary: BenchmarkPhaseGateSuiteSummary) -> str:
+def render_benchmark_tier_gate_suite_markdown(summary: BenchmarkTierGateSuiteSummary) -> str:
     payload = summary.to_payload()
     lines = [
-        "# Benchmark Phase Gate Suite",
+        "# Benchmark Tier Gate Suite",
         "",
         f"- suite_name: `{payload['suite_name']}`",
         f"- suite_dir: `{payload['suite_dir']}`",
@@ -256,7 +257,7 @@ def render_benchmark_phase_gate_suite_markdown(summary: BenchmarkPhaseGateSuiteS
                 "",
                 f"### {result.gate_name}",
                 f"- flight_name: `{result.flight_name}`",
-                f"- declared_benchmark_phase: `{result.declared_benchmark_phase}`",
+                f"- declared_benchmark_tier: `{result.declared_benchmark_tier}`",
                 f"- declared_target_alignment_status: `{result.declared_target_alignment_status}`",
                 f"- observed_recoverability_strength_tier: `{result.observed_recoverability_strength_tier}`",
                 f"- run_status: `{result.run_status}`",
@@ -272,33 +273,33 @@ def render_benchmark_phase_gate_suite_markdown(summary: BenchmarkPhaseGateSuiteS
     return "\n".join(lines) + "\n"
 
 
-def write_benchmark_phase_gate_suite_report(
+def write_benchmark_tier_gate_suite_report(
     *,
     suite_dir: Path,
-    summary: BenchmarkPhaseGateSuiteSummary,
+    summary: BenchmarkTierGateSuiteSummary,
 ) -> dict[str, Any]:
     reports_dir = suite_dir / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
     payload = summary.to_payload()
-    (reports_dir / BENCHMARK_PHASE_GATE_SUMMARY_FILENAME).write_text(
+    (reports_dir / BENCHMARK_TIER_GATE_SUMMARY_FILENAME).write_text(
         json.dumps(payload, indent=2, sort_keys=True),
         encoding="utf-8",
     )
-    (reports_dir / BENCHMARK_PHASE_GATE_MARKDOWN_FILENAME).write_text(
-        render_benchmark_phase_gate_suite_markdown(summary),
+    (reports_dir / BENCHMARK_TIER_GATE_MARKDOWN_FILENAME).write_text(
+        render_benchmark_tier_gate_suite_markdown(summary),
         encoding="utf-8",
     )
     return payload
 
 
-def run_benchmark_phase_gate_suite(base_config: PipelineRunConfig) -> tuple[Path, dict[str, Any]]:
+def run_benchmark_tier_gate_suite(base_config: PipelineRunConfig) -> tuple[Path, dict[str, Any]]:
     logger = get_logger(LOGGER_NAME)
     suite_dir = _timestamped_suite_dir(base_config.base_dir)
     runs_dir = suite_dir / "runs"
     runs_dir.mkdir(parents=True, exist_ok=True)
-    gate_results: list[BenchmarkPhaseGateRunSummary] = []
+    gate_results: list[BenchmarkTierGateRunSummary] = []
 
-    for gate_spec in ordered_benchmark_phase_gate_specs():
+    for gate_spec in ordered_benchmark_tier_gate_specs():
         gate_config = replace(
             base_config,
             base_dir=str(runs_dir),
@@ -311,10 +312,10 @@ def run_benchmark_phase_gate_suite(base_config: PipelineRunConfig) -> tuple[Path
         )
         existing_run_dirs = set(runs_dir.glob(f"*_{gate_spec.flight_name}"))
         logger.info(
-            "benchmark_phase_gate_start gate=%s flight=%s declared_benchmark_phase=%s suite_dir=%s",
+            "benchmark_tier_gate_start gate=%s flight=%s declared_benchmark_tier=%s suite_dir=%s",
             gate_spec.gate_name,
             gate_spec.flight_name,
-            gate_spec.declared_benchmark_phase,
+            gate_spec.declared_benchmark_tier,
             suite_dir,
         )
         run_dir: Path | None = None
@@ -327,9 +328,9 @@ def run_benchmark_phase_gate_suite(base_config: PipelineRunConfig) -> tuple[Path
         except Exception as exc:  # pragma: no cover - exercised through integration runs
             run_dir = _latest_new_run_dir(runs_dir=runs_dir, flight_name=gate_spec.flight_name, before=existing_run_dirs)
             error_message = f"{exc.__class__.__name__}: {exc}"
-            logger.exception("benchmark_phase_gate_failed gate=%s flight=%s", gate_spec.gate_name, gate_spec.flight_name)
+            logger.exception("benchmark_tier_gate_failed gate=%s flight=%s", gate_spec.gate_name, gate_spec.flight_name)
         gate_results.append(
-            build_benchmark_phase_gate_run_summary(
+            build_benchmark_tier_gate_run_summary(
                 gate_spec=gate_spec,
                 run_dir=run_dir,
                 run_status=run_status,
@@ -337,14 +338,14 @@ def run_benchmark_phase_gate_suite(base_config: PipelineRunConfig) -> tuple[Path
             )
         )
 
-    summary = build_benchmark_phase_gate_suite_summary(
+    summary = build_benchmark_tier_gate_suite_summary(
         suite_dir=suite_dir,
         gate_results=tuple(gate_results),
-        gate_specs=ordered_benchmark_phase_gate_specs(),
+        gate_specs=ordered_benchmark_tier_gate_specs(),
     )
-    payload = write_benchmark_phase_gate_suite_report(suite_dir=suite_dir, summary=summary)
+    payload = write_benchmark_tier_gate_suite_report(suite_dir=suite_dir, summary=summary)
     logger.info(
-        "benchmark_phase_gate_suite_complete suite_dir=%s all_gates_met_or_exceeded=%s",
+        "benchmark_tier_gate_suite_complete suite_dir=%s all_gates_met_or_exceeded=%s",
         suite_dir,
         payload.get("all_gates_met_or_exceeded"),
     )
@@ -354,12 +355,12 @@ def run_benchmark_phase_gate_suite(base_config: PipelineRunConfig) -> tuple[Path
 def main() -> None:
     args = parse_args()
     config = PipelineRunConfig.from_args(args)
-    suite_dir, payload = run_benchmark_phase_gate_suite(config)
+    suite_dir, payload = run_benchmark_tier_gate_suite(config)
     print(
         json.dumps(
             {
                 "suite_dir": str(suite_dir),
-                "summary_path": str(Path(suite_dir) / "reports" / BENCHMARK_PHASE_GATE_SUMMARY_FILENAME),
+                "summary_path": str(Path(suite_dir) / "reports" / BENCHMARK_TIER_GATE_SUMMARY_FILENAME),
                 "all_gates_met_or_exceeded": payload.get("all_gates_met_or_exceeded"),
                 "gate_alignment_status_count": payload.get("gate_alignment_status_count"),
             },

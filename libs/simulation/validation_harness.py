@@ -416,7 +416,7 @@ def _summarize_misbehavior_program(
             "subject_kind": str(getattr(window, "subject_kind", "parameter")),
             "fault_family_label": _window_family_label(window),
             "fault_type": (_window_detail_label(window) or "unspecified"),
-            "declared_benchmark_phase": str(resolve_window_benchmark_recoverability_target(window) or ""),
+            "declared_benchmark_tier": str(resolve_window_benchmark_recoverability_target(window) or ""),
             "module_id": (str(getattr(window, "module_id", "") or "") if getattr(window, "module_id", None) else ""),
             "parameter_name": (
                 str(getattr(window, "parameter_name", "") or "") if getattr(window, "parameter_name", None) else ""
@@ -443,7 +443,7 @@ def _summarize_misbehavior_program(
             "max": (max(durations_steps) * float(dt_seconds) if durations_steps else 0.0),
             "mean": (((sum(durations_steps) / len(durations_steps)) * float(dt_seconds)) if durations_steps else 0.0),
         },
-        "declared_benchmark_phase_count": {
+        "declared_benchmark_tier_count": {
             target: int(benchmark_target_counts.get(target, 0))
             for target in BENCHMARK_RECOVERABILITY_TARGETS
             if int(benchmark_target_counts.get(target, 0)) > 0

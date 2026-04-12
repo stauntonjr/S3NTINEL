@@ -18,7 +18,7 @@ from libs.phase import validate_detected_phases_from_tables
 from libs.profiling.validator import build_profile_validation_summary
 from libs.scoring.validator import validate_scores_against_misbehavior_windows
 from libs.simulation.fault.spec import (
-    BENCHMARK_RECOVERABILITY_PHASES,
+    BENCHMARK_RECOVERABILITY_LADDER,
     BENCHMARK_RECOVERABILITY_TARGETS,
     OBSERVED_RECOVERABILITY_STRENGTH_TIERS,
     recoverability_target_alignment_status,
@@ -648,11 +648,11 @@ def _recoverability_summary_by_field(cases_df: pd.DataFrame, field: str) -> list
         }
         declared_target_counts = {
             target: int(
-                (group.get("declared_benchmark_phase", pd.Series(dtype="object")).fillna("").astype(str) == target).sum()
+                (group.get("declared_benchmark_tier", pd.Series(dtype="object")).fillna("").astype(str) == target).sum()
             )
             for target in BENCHMARK_RECOVERABILITY_TARGETS
             if int(
-                (group.get("declared_benchmark_phase", pd.Series(dtype="object")).fillna("").astype(str) == target).sum()
+                (group.get("declared_benchmark_tier", pd.Series(dtype="object")).fillna("").astype(str) == target).sum()
             )
             > 0
         }
@@ -694,8 +694,8 @@ def _recoverability_summary_by_field(cases_df: pd.DataFrame, field: str) -> list
                 if total > 0
                 else None,
                 "recoverability_strength_tier_count": tier_counts,
-                "declared_benchmark_phase_count": declared_target_counts,
-                "benchmark_phase_alignment_status_count": alignment_counts,
+                "declared_benchmark_tier_count": declared_target_counts,
+                "benchmark_tier_alignment_status_count": alignment_counts,
                 "declared_target_coverage_rate": (float(declared_total / total) if total > 0 else None),
                 "declared_target_met_or_exceeded_rate": (
                     float(
@@ -717,13 +717,13 @@ def _recoverability_summary_by_field(cases_df: pd.DataFrame, field: str) -> list
     )
 
 
-def _build_benchmark_phase_scorecards(cases_df: pd.DataFrame) -> dict[str, dict[str, Any]]:
+def _build_benchmark_tier_scorecards(cases_df: pd.DataFrame) -> dict[str, dict[str, Any]]:
     rows: dict[str, dict[str, Any]] = {}
-    for phase in BENCHMARK_RECOVERABILITY_PHASES:
-        if cases_df.empty or "declared_benchmark_phase" not in cases_df.columns:
+    for tier in BENCHMARK_RECOVERABILITY_LADDER:
+        if cases_df.empty or "declared_benchmark_tier" not in cases_df.columns:
             group = pd.DataFrame()
         else:
-            group = cases_df[cases_df["declared_benchmark_phase"] == phase]
+            group = cases_df[cases_df["declared_benchmark_tier"] == tier]
         total = int(len(group))
         observed_counts = {
             tier: int(
@@ -752,7 +752,7 @@ def _build_benchmark_phase_scorecards(cases_df: pd.DataFrame) -> dict[str, dict[
             if total > 0
             else {}
         )
-        rows[phase] = {
+        rows[tier] = {
             "fault_window_count": total,
             "detected_fault_window_count": (int(group["detected"].sum()) if total > 0 else 0),
             "emit_ready_fault_window_count": (int(group["emit_ready"].sum()) if total > 0 else 0),
@@ -799,9 +799,9 @@ def _build_benchmark_phase_scorecards(cases_df: pd.DataFrame) -> dict[str, dict[
                 else None
             ),
             "observed_recoverability_strength_tier_count": observed_counts,
-            "benchmark_phase_alignment_status_count": alignment_counts,
+            "benchmark_tier_alignment_status_count": alignment_counts,
             "dominant_score_component_count": dominant_score_component_count,
-            "benchmark_phase_met_or_exceeded_rate": (
+            "benchmark_tier_met_or_exceeded_rate": (
                 float(group["declared_target_alignment_status"].isin(("met_target", "exceeded_target")).mean())
                 if total > 0
                 else None
@@ -834,11 +834,11 @@ def _build_simulation_benchmark_audit_summary(
             "fault_window_count": 0,
             "observed_recoverability_strength_tier_count": {tier: 0 for tier in OBSERVED_RECOVERABILITY_STRENGTH_TIERS},
             "observed_recoverability_strength_tier_rate": {tier: None for tier in OBSERVED_RECOVERABILITY_STRENGTH_TIERS},
-            "declared_benchmark_phase_count": {},
-            "benchmark_phase_alignment_status_count": {},
+            "declared_benchmark_tier_count": {},
+            "benchmark_tier_alignment_status_count": {},
             "benchmark_review_priority_count": {},
             "dominant_score_component_count": {},
-            "benchmark_phase_scorecards": {},
+            "benchmark_tier_scorecards": {},
             "summary_by_fault_family": [],
             "summary_by_fault_type": [],
             "summary_by_source_subsystem": [],
@@ -869,7 +869,7 @@ def _build_simulation_benchmark_audit_summary(
         declared_windows.append(
             {
                 "fault_window_id": str(fault_window_id),
-                "declared_benchmark_phase": str(resolve_window_benchmark_recoverability_target(window) or ""),
+                "declared_benchmark_tier": str(resolve_window_benchmark_recoverability_target(window) or ""),
                 "declared_subject_kind": str(getattr(window, "subject_kind", "parameter")),
                 "declared_fault_family_label": _text_value(
                     dict(getattr(window, "metadata", {}) or {}).get("fault_family_label")
@@ -889,7 +889,7 @@ def _build_simulation_benchmark_audit_summary(
     if not declared_windows_df.empty and "fault_window_id" in merged.columns:
         merged = merged.merge(declared_windows_df, on="fault_window_id", how="left")
     else:
-        merged["declared_benchmark_phase"] = pd.Series("", index=merged.index)
+        merged["declared_benchmark_tier"] = pd.Series("", index=merged.index)
         merged["declared_subject_kind"] = pd.Series("", index=merged.index)
         merged["declared_fault_family_label"] = pd.Series("", index=merged.index)
         merged["declared_fault_type"] = pd.Series("", index=merged.index)
@@ -960,8 +960,8 @@ def _build_simulation_benchmark_audit_summary(
     merged["observed_recoverability_strength_tier"] = [
         _observed_recoverability_strength_tier(row) for row in merged.to_dict(orient="records")
     ]
-    merged["declared_benchmark_phase"] = (
-        merged.get("declared_benchmark_phase", pd.Series("", index=merged.index)).fillna("").astype(str)
+    merged["declared_benchmark_tier"] = (
+        merged.get("declared_benchmark_tier", pd.Series("", index=merged.index)).fillna("").astype(str)
     )
     merged["declared_target_alignment_status"] = [
         _declared_target_alignment_status(
@@ -970,7 +970,7 @@ def _build_simulation_benchmark_audit_summary(
         )
         for observed_tier, declared_target in zip(
             merged["observed_recoverability_strength_tier"].tolist(),
-            merged["declared_benchmark_phase"].tolist(),
+            merged["declared_benchmark_tier"].tolist(),
             strict=False,
         )
     ]
@@ -991,11 +991,11 @@ def _build_simulation_benchmark_audit_summary(
         for tier, count in tier_count.items()
     }
     declared_target_count = {
-        target: int((merged["declared_benchmark_phase"] == target).sum())
+        target: int((merged["declared_benchmark_tier"] == target).sum())
         for target in BENCHMARK_RECOVERABILITY_TARGETS
-        if int((merged["declared_benchmark_phase"] == target).sum()) > 0
+        if int((merged["declared_benchmark_tier"] == target).sum()) > 0
     }
-    benchmark_phase_alignment_status_count = {
+    benchmark_tier_alignment_status_count = {
         status: int((merged["declared_target_alignment_status"] == status).sum())
         for status in _DECLARED_TARGET_ALIGNMENT_ORDER
         if int((merged["declared_target_alignment_status"] == status).sum()) > 0
@@ -1021,7 +1021,7 @@ def _build_simulation_benchmark_audit_summary(
             "truth_module_id": _text_value(row.get("truth_module_id")),
             "truth_parameter_name": _text_value(row.get("truth_parameter_name")),
             "declared_subject_kind": _text_value(row.get("declared_subject_kind")),
-            "declared_benchmark_phase": _text_value(row.get("declared_benchmark_phase")),
+            "declared_benchmark_tier": _text_value(row.get("declared_benchmark_tier")),
             "declared_target_alignment_status": _text_value(row.get("declared_target_alignment_status")),
             "detected": _bool_value(row.get("detected")),
             "emit_ready": _bool_value(row.get("emit_ready")),
@@ -1057,14 +1057,14 @@ def _build_simulation_benchmark_audit_summary(
     summary_by_fault_type = _recoverability_summary_by_field(merged, "fault_type")
     summary_by_source_subsystem = _recoverability_summary_by_field(merged, "truth_subsystem_id")
     summary_by_source_module = _recoverability_summary_by_field(merged, "truth_module_id")
-    benchmark_phase_scorecards = _build_benchmark_phase_scorecards(merged)
+    benchmark_tier_scorecards = _build_benchmark_tier_scorecards(merged)
     top_review_candidates = [
         {
             "fault_type": row.get("fault_type", ""),
             "fault_window_count": row.get("fault_window_count", 0),
             "benchmark_review_priority": row.get("benchmark_review_priority", ""),
-            "declared_benchmark_phase_count": row.get("declared_benchmark_phase_count", {}),
-            "benchmark_phase_alignment_status_count": row.get("benchmark_phase_alignment_status_count", {}),
+            "declared_benchmark_tier_count": row.get("declared_benchmark_tier_count", {}),
+            "benchmark_tier_alignment_status_count": row.get("benchmark_tier_alignment_status_count", {}),
             "declared_target_met_or_exceeded_rate": row.get("declared_target_met_or_exceeded_rate"),
             "module_recoverable_exact_rate": row.get("module_recoverable_exact_rate"),
             "subsystem_or_better_rate": row.get("subsystem_or_better_rate"),
@@ -1073,7 +1073,7 @@ def _build_simulation_benchmark_audit_summary(
         for row in summary_by_fault_type
         if (
             str(row.get("benchmark_review_priority", "")) in {"critical", "high"}
-            or int((row.get("benchmark_phase_alignment_status_count", {}) or {}).get("missed_target", 0)) > 0
+            or int((row.get("benchmark_tier_alignment_status_count", {}) or {}).get("missed_target", 0)) > 0
         )
     ][:8]
     return {
@@ -1084,11 +1084,11 @@ def _build_simulation_benchmark_audit_summary(
         "emit_ready_fault_window_count": int(merged["emit_ready"].sum()) if total > 0 else 0,
         "observed_recoverability_strength_tier_count": tier_count,
         "observed_recoverability_strength_tier_rate": tier_rate,
-        "declared_benchmark_phase_count": declared_target_count,
-        "benchmark_phase_alignment_status_count": benchmark_phase_alignment_status_count,
+        "declared_benchmark_tier_count": declared_target_count,
+        "benchmark_tier_alignment_status_count": benchmark_tier_alignment_status_count,
         "benchmark_review_priority_count": review_priority_count,
         "dominant_score_component_count": dominant_score_component_count,
-        "benchmark_phase_scorecards": benchmark_phase_scorecards,
+        "benchmark_tier_scorecards": benchmark_tier_scorecards,
         "summary_by_fault_family": summary_by_fault_family,
         "summary_by_fault_type": summary_by_fault_type,
         "summary_by_source_subsystem": summary_by_source_subsystem,
@@ -1097,11 +1097,11 @@ def _build_simulation_benchmark_audit_summary(
         "fault_window_audit_cases": fault_window_cases,
         "methodology": {
             "interpretation": "observed recoverability under the current anomaly stack, not theoretical identifiability",
-            "development_phase_order": list(BENCHMARK_RECOVERABILITY_PHASES),
+            "benchmark_ladder_order": list(BENCHMARK_RECOVERABILITY_LADDER),
             "observed_strength_order": list(OBSERVED_RECOVERABILITY_STRENGTH_TIERS),
-            "declared_target_order": list(BENCHMARK_RECOVERABILITY_TARGETS),
-            "benchmark_phase_scorecard_interpretation": (
-                "use scorecards grouped by declared benchmark phase to evaluate each recoverability tier separately"
+            "declared_target_tier_order": list(BENCHMARK_RECOVERABILITY_TARGETS),
+            "benchmark_tier_scorecard_interpretation": (
+                "use scorecards grouped by declared benchmark tier to evaluate each recoverability tier separately"
             ),
             "tier_definitions": {
                 "module_recoverable": "truth module matched or present in top module candidates",

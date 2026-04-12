@@ -48,14 +48,14 @@ Interpretation:
 
 Benchmark discipline for the next anomaly passes:
 
-- use the dedicated simulation benchmark phase gates before the mixed composite
+- use the dedicated simulation benchmark tier gates before the mixed composite
   bundle
 - subsystem gate:
   - `power_pressurization_hierarchy_smoke_localization_focus_bias`
 - module gate:
   - `power_pressurization_hierarchy_smoke_localization_focus_drift`
 - canonical grouped runner:
-  - `python -m scripts.run_sim_benchmark_phase_gates --base-dir ...`
+  - `python -m scripts.run_sim_benchmark_tier_gates --base-dir ...`
 
 ## Current Architecture Constraints
 

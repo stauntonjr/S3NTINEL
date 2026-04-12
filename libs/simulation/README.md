@@ -206,7 +206,7 @@ expects the window to be usable as a module-, subsystem-, parameter-, or
 detection-level benchmark under downstream validation.
 
 Full-run benchmark audit reports expose that declared intent directly through
-`benchmark_phase_scorecards`, so each recoverability tier can be evaluated on
+`benchmark_tier_scorecards`, so each recoverability tier can be evaluated on
 its own rather than through one mixed top-line metric.
 
 The named power/pressurization flights can also expose filtered benchmark packs
@@ -268,11 +268,11 @@ Current measured benchmark intent:
 
 The canonical grouped acceptance harness for those clean gates is:
 
-- `python -m scripts.run_sim_benchmark_phase_gates --base-dir ...`
+- `python -m scripts.run_sim_benchmark_tier_gates --base-dir ...`
   - runs the dedicated `bias` and `drift` packs as one suite
-  - writes `reports/benchmark_phase_gate_suite_summary.json`
+  - writes `reports/benchmark_tier_gate_suite_summary.json`
   - should be preferred over the mixed composite bundle when screening anomaly
-    changes against the clean subsystem and module phases
+    changes against the clean subsystem and module tiers
 
 ## Authoring model
 
