@@ -189,7 +189,169 @@ Success criteria:
 - the output is stable on empty or no-match cases
 - the replay metrics above remain unchanged
 
-## Workstream B: Reconstruction-Led Candidate Generation
+## Workstream B: Dual-View Reconstruction Upgrade
+
+### Objective
+
+Upgrade reconstruction before adding more stage-`90` heuristics.
+
+The current backbone only reconstructs the end-of-window continuous state.
+That is enough to detect many abnormal windows, but it is still too weak on
+source-versus-consequence localization for reconstruction-dominated cases.
+
+The next model upgrade should therefore stay generic and should use already
+persisted window information rather than simulator-specific rules or a heavier
+sequence-model redesign.
+
+### Proposed design
+
+Implement one bounded reconstruction upgrade in the canonical Spark path:
+
+- keep the existing end-state `level` backbone
+- add a second `delta` backbone on
+  `continuous_vector_t_end_scaled - continuous_vector_t_start_scaled`
+- fit separate sensor selections and ridge weights for the `level` and `delta`
+  views
+- keep one backbone artifact row, not two backbones and not a second modeling
+  path
+
+Shared constraints:
+
+- do not add simulator-specific logic
+- do not add event-level reconstruction in this pass
+- do not add a second local or in-memory reconstruction path
+- do not change graph semantics in this pass; stage `50` should continue to use
+  the existing level-view backbone selection
+- do not persist a new delta vector artifact in `window_features`; compute it
+  lazily inside the backbone and phase stages
+
+### Scope
+
+Primary code areas:
+
+- stage `40` backbone fit
+- stage `70` phase reconstruction assembly
+- stage `80` raw scoring
+- stage `90` anomaly-local reconstruction support
+
+Schema additions for the kept implementation:
+
+- backbone artifact:
+  - `selected_sensors_delta_c`
+  - `weights_delta_b`
+  - `backbone_version = 3`
+- phase output surface:
+  - `backbone_level_reconstruction_error`
+  - `backbone_level_residual_by_parameter`
+  - `backbone_delta_reconstruction_error`
+  - `backbone_delta_residual_by_parameter`
+
+Keep the existing legacy fields by emitting fused views:
+
+- `backbone_reconstruction_error`
+- `backbone_residual_by_parameter`
+
+Fusion semantics:
+
+- scalar raw reconstruction error should be RMS over the level and delta view
+  errors
+- residual-by-parameter should be per-parameter RMS over level and delta
+  residuals
+
+### Scoring and localization semantics
+
+Do not add a second public reconstruction score channel in this pass.
+
+Keep the channel name:
+
+- `reconstruction_error`
+
+But calibrate both internal views:
+
+- level reconstruction error
+- delta reconstruction error
+- combined reconstruction error
+
+Final score semantics:
+
+- positive robust z-score for the level view
+- positive robust z-score for the delta view
+- `reconstruction_error = max(level_z, delta_z)`
+
+Localization semantics:
+
+- use the new view-specific residual maps in the existing reconstruction-support
+  path
+- parameter support should prefer the stronger view rather than summing the two
+  indiscriminately
+- add a lightweight diagnostic field:
+  - `dominant_reconstruction_view = level | delta | mixed`
+
+### Phase 2 gate
+
+Do not bundle local-adaptive calibration into the first code pass.
+
+Phase 2 should only start if the dual-view backbone:
+
+- keeps detection stable
+- improves candidate presence or dominant subsystem quality
+- but still leaves reconstruction-led separation too coarse
+
+If that gate is met, the first adaptive-calibration step should be:
+
+- phase centroid x drift bucket calibration using `drift_magnitude_profiled`
+
+It should not start with:
+
+- event-density buckets
+- simulator-specific contexts
+- parameter-family-specific calibration
+
+### Acceptance
+
+Required non-regressions:
+
+- phase macro F1
+- detected fault window rate
+- emit-ready fault window rate
+- telemetry parameter match rate
+
+At least two of these should improve over the current kept baseline:
+
+- dominant subsystem match rate `> 0.3333`
+- top subsystem candidate presence `> 0.1111`
+- truth subsystem present in selected telemetry `> 0.6`
+- `missing_truth_local_candidate < 4`
+- `shared_source_won < 3`
+
+Runtime guardrails:
+
+- stage `90` should stay within `1.25x` of the current replay runtime
+- full replay should stay within `1.5x` of the current baseline unless the
+  quality improvement is clearly material
+
+## Workstream C: Post-Upgrade Replay Gate
+
+### Objective
+
+Use one clean replay to decide whether the dual-view reconstruction upgrade is
+kept, revised, or reverted.
+
+### Required checks
+
+- `py_compile`
+- targeted unit tests for backbone, phase, scoring, and anomaly
+- targeted integration tests for phase/anomaly pipeline slices
+- full replay in `sentinel-spark35`
+
+### Decision rule
+
+- keep the pass only if it clears the acceptance and runtime gates above
+- if it misses the quality gates and breaches the runtime guardrail, revert it
+- if it is neutral but cheap, reject it unless the new diagnostics reveal a
+  clearer next targeted change
+
+## Workstream D: Reconstruction-Led Candidate Generation
 
 ### Objective
 
@@ -253,6 +415,24 @@ Rejected near-term direction:
 - a reconstruction reranking pass using phase-selected sensor/state metadata
   plus parameter behavior profiles also did not move the replay metrics or
   failure-bucket mix, and it pushed stage `90` runtime to about `89s`
+- a quiet `bound_violation` broadening pass that mixed residual concentration
+  with bound/saturation profile evidence without requiring nearby bound events
+  improved telemetry parameter match rate from `0.7778` to `0.8333`, but it
+  regressed the more important localization targets:
+  - dominant subsystem match rate `0.3333 -> 0.1429`
+  - top subsystem candidate presence `0.1111 -> 0.0556`
+  - top module candidate presence `0.1667 -> 0.1111`
+  and therefore was not kept
+- a reconstruction-only module-representative retention pass in stage `90`
+  kept one representative from the strongest secondary modules before the final
+  selection cutoff, but it produced no replay change at all:
+  - dominant subsystem match rate stayed `0.3333`
+  - top subsystem candidate presence stayed `0.1111`
+  - top module candidate presence stayed `0.1667`
+  - reconstruction failure buckets stayed `4 / 3 / 1 / 2`
+  for `missing_truth_local_candidate / shared_source_won /
+  sibling_consequence_won / truth_module_present_but_lost`
+  and therefore was not kept
 - seeding stage `90` localization from the existing stage-`80` dominant
   subsystem/module winner does not look promising on the current replay;
   for the checked reconstruction misses, stage `80` and stage `90` were
@@ -262,6 +442,10 @@ Rejected near-term direction:
 - do not add phase-feature or parameter-profile reranking to stage `90`
   unless a future design can show a materially cheaper path or a clearly
   stronger generic signal
+- do not widen retention again without a new upstream reconstruction signal
+- do not add heavy rerankers to stage `90`
+- do not jump to deep sequence models before the dual-view backbone is
+  evaluated
 
 Do not reintroduce:
 
@@ -276,7 +460,7 @@ Do not reintroduce:
 - stage-`80` winner carry-forward as a substitute for better reconstruction
   candidate generation
 
-## Workstream C: Channel Maturation
+## Workstream E: Channel Maturation
 
 ### Objective
 
@@ -298,12 +482,13 @@ If channel work resumes, the order should be:
 
 - make `event_discordance` more useful when event-stream mismatch is real
 - strengthen behavior-mechanism evidence through:
-  - `bound_violation`
   - `response_violation`
   - `state_violation`
+- revisit `bound_violation` only with a more discriminating generic signal than
+  the rejected quiet residual-plus-profile broadening pass above
 - keep channel-aware validation visible in reports
 
-## Workstream D: Upstream Hierarchy Revisit Gate
+## Workstream F: Upstream Hierarchy Revisit Gate
 
 ### Objective
 
@@ -329,26 +514,28 @@ Current gate result:
 
 ## Next Narrowing Step
 
-The next anomaly improvement should stay in stage `90`, but it should be
-narrower than the rejected broad-retention pass.
+The next active anomaly sequence should now be:
 
-Focus on reconstruction cases where the selected set is dominated by:
+1. dual-view reconstruction upgrade
+2. post-upgrade replay gate
+3. only then any further candidate-generation or hierarchy revisit
+
+That ordering is intentional.
+
+The current bottleneck still sits in reconstruction-led localization, but the
+next move should be to strengthen the upstream reconstruction surface before
+adding another stage-`90` selection heuristic.
+
+If the dual-view pass is kept, then the next narrowing step should again focus
+on reconstruction cases where the selected set is dominated by:
 
 - shared upstream utility parameters
 - sibling module copies of the same signal family
 - shared control-state or environmental consequence parameters
 
-The next implementation should therefore target high-precision filtering or
-re-ranking of reconstruction candidates before broadening retention again.
-
-Desired direction:
-
-- suppress generic shared-source and shared-consequence parameters when more
-  local module evidence is already present
-- do this with generic structure-aware cues, not simulator-specific identifier
-  rules
-- keep stage-90 runtime near the current replay baseline rather than trading a
-  4x slowdown for no quality gain
+At that point, a follow-on implementation may target high-precision filtering
+or re-ranking of reconstruction candidates, but only after the new
+reconstruction surface has been evaluated on replay.
 
 ## Test And Acceptance Plan
 
