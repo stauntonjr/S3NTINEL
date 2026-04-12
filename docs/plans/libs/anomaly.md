@@ -46,6 +46,17 @@ Interpretation:
 - subsystem localization is weak but non-zero
 - module localization is still the weakest active anomaly layer
 
+Benchmark discipline for the next anomaly passes:
+
+- use the dedicated simulation benchmark phase gates before the mixed composite
+  bundle
+- subsystem gate:
+  - `power_pressurization_hierarchy_smoke_localization_focus_bias`
+- module gate:
+  - `power_pressurization_hierarchy_smoke_localization_focus_drift`
+- canonical grouped runner:
+  - `python -m scripts.run_sim_benchmark_phase_gates --base-dir ...`
+
 ## Current Architecture Constraints
 
 ### 1. Canonical scoring path is now Spark-only

@@ -266,6 +266,14 @@ Current measured benchmark intent:
 - `power_pressurization_hierarchy_smoke_localization_focus_saturation_local`
   - use as a `detection_only` benchmark
 
+The canonical grouped acceptance harness for those clean gates is:
+
+- `python -m scripts.run_sim_benchmark_phase_gates --base-dir ...`
+  - runs the dedicated `bias` and `drift` packs as one suite
+  - writes `reports/benchmark_phase_gate_suite_summary.json`
+  - should be preferred over the mixed composite bundle when screening anomaly
+    changes against the clean subsystem and module phases
+
 ## Authoring model
 
 There are two main authoring layers:

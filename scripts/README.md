@@ -40,6 +40,12 @@ Incremental patches:
     - local stage summaries and manifests under `reports/`
     - a run manifest at `reports/run_manifest.json`
     - a consolidated console log at `logs/run.log`
+- Run the canonical benchmark-phase gate suite into one grouped bundle:
+  - `python -m scripts.run_sim_benchmark_phase_gates --base-dir data/simulation_gate_runs`
+  - this runs the dedicated `bias` and `drift` smoke benchmark gates as one suite and writes:
+    - per-gate child run bundles under `runs/`
+    - `reports/benchmark_phase_gate_suite_summary.json`
+    - `reports/benchmark_phase_gate_suite_summary.md`
 - Realistic hierarchy presets are available through the same entrypoint:
   - `power_pressurization_hierarchy_smoke`
   - `power_pressurization_hierarchy_medium`
@@ -61,6 +67,9 @@ Incremental patches:
     - `bias_load_monitor` is a subsystem-vs-module separation probe and still misses the module target
     - `saturation` is parameter-visible-only
     - `saturation_local` is detection-only
+  - use `python -m scripts.run_sim_benchmark_phase_gates ...` when anomaly work
+    should be judged against the clean subsystem/module gates instead of the
+    mixed composite bundle
   - filtered benchmark packs over the same authored composite scenario are also available:
     - `power_pressurization_hierarchy_composite_module_localization`
     - `power_pressurization_hierarchy_composite_subsystem_localization`

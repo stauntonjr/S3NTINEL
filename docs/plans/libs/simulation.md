@@ -296,6 +296,16 @@ The benchmark evidence says:
   - shared-supply saturation as `parameter_visible_only`
   - local pack-temperature saturation as `detection_only`
 
+Use a grouped gate-suite harness for anomaly acceptance:
+
+- canonical runner:
+  - `python -m scripts.run_sim_benchmark_phase_gates --base-dir ...`
+- canonical suite report:
+  - `reports/benchmark_phase_gate_suite_summary.json`
+- intended use:
+  - evaluate anomaly changes on the dedicated `bias` and `drift` packs before
+    returning to the mixed composite benchmark
+
 If saturation is revisited again, do it as a simulation-design problem:
 
 - add stronger local observability
