@@ -507,6 +507,8 @@ Do not reintroduce:
   without improving candidate quality
 - expensive reconstruction rerankers that only change which wrong winner
   appears at the top
+- broad event-discordance morphology expansions that add stage-80 or stage-90
+  complexity without improving structural localization
 - stage-`80` winner carry-forward as a substitute for better reconstruction
   candidate generation
 
@@ -522,15 +524,74 @@ diagnostics are explicit.
 The seven-channel contract is correct, but some channels are still conservative
 or low-impact on the kept replay.
 
+Current replay signal by dominant score component:
+
+- `event_discordance` truth windows: `4`
+- `event_discordance` telemetry parameter match rate: `1.0`
+- `event_discordance` selected telemetry parameter match rate: `0.75`
+- `event_discordance` event parameter match rate: `0.75`
+- `event_discordance` top module candidate presence: `0.25`
+- `event_discordance` top subsystem candidate presence: `0.0`
+- `event_discordance` dominant module match rate: `0.0`
+- `reconstruction_error` truth windows: `10`
+
+Interpretation:
+
+- `event_discordance` already has the cleanest non-reconstruction parameter
+  alignment
+- but it is still mostly a parameter-hinting channel, not a structure-localizing
+  channel
+- broadening its morphology surface is not automatically enough to improve
+  subsystem or module localization
+
 If channel work resumes, the order should be:
 
 1. keep the canonical channel contract stable
 2. validate which non-reconstruction channels are materially active
 3. expand channel-specific diagnostics before changing weights or emission
 
-### Good next targets
+### Rejected pass: broad event-discordance expansion
 
-- make `event_discordance` more useful when event-stream mismatch is real
+Attempted generic expansion:
+
+- stage `80`: added event-family specificity, temporal concentration, repeated
+  firing, and parameter-spread morphology metrics
+- stage `90`: added specificity-weighted parameter support and subsystem event
+  mass biasing
+- no simulator-specific identifiers or parameter-name rules were introduced
+
+Replay outcome:
+
+- full replay succeeded after materializing the richer stage-`80` branch once
+- overall anomaly metrics stayed flat at the kept baseline:
+  - detected fault window rate: `0.8333333333333334`
+  - emit-ready fault window rate: `0.7777777777777778`
+  - telemetry parameter match rate: `0.7777777777777778`
+  - dominant subsystem match rate: `0.3333333333333333`
+  - top subsystem candidate presence: `0.1111111111111111`
+  - top module candidate presence: `0.16666666666666666`
+- `event_discordance`-dominant truth windows also stayed flat:
+  - event parameter match rate: `0.75`
+  - selected telemetry parameter match rate: `0.75`
+  - top module candidate presence: `0.25`
+  - top subsystem candidate presence: `0.0`
+
+Decision:
+
+- reject this broad event-discordance expansion
+- do not keep the added stage-`80` and stage-`90` complexity when it does not
+  move structural localization
+
+What this means:
+
+- `event_discordance` remains useful as a parameter-hinting channel
+- it has not yet shown that broader morphology weighting turns it into a
+  reliable subsystem or module localizer
+- if the channel is revisited, the next pass should be much narrower and
+  replay-gated earlier
+
+### Other next targets
+
 - strengthen behavior-mechanism evidence through:
   - `response_violation`
   - `state_violation`
@@ -567,16 +628,21 @@ Current gate result:
 The next active anomaly sequence should now be:
 
 1. keep the current accumulation-channel baseline
-2. do not advance the current dual-view reconstruction design
-3. if reconstruction is revisited again, constrain it to a narrower auxiliary
-   signal and replay-gate it before any further candidate-generation work
-4. only then any further candidate-generation or hierarchy revisit
+2. do not advance the rejected broad event-discordance expansion
+3. do not advance the current dual-view reconstruction design
+4. if `event_discordance` is revisited again, constrain it to a much narrower
+   auxiliary localization cue and replay-gate it before carrying more
+   complexity forward
+5. if reconstruction is revisited again, constrain it to a narrower auxiliary
+   signal and replay-gate it as well
+6. only then any further candidate-generation or hierarchy revisit
 
 That ordering is intentional.
 
 The current bottleneck still sits in reconstruction-led localization, but the
-next move should not be another broad upstream reconstruction fusion or another
-stage-`90` selection heuristic pile.
+next move should not be another broad upstream reconstruction fusion, another
+broad event-discordance morphology expansion, or another stage-`90` selection
+heuristic pile.
 
 If reconstruction work resumes, the next narrowing step should focus on
 reconstruction cases where the selected set is dominated by:
