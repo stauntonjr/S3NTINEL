@@ -17,6 +17,14 @@ from libs.io.schemas.profiling import PARAMETER_BEHAVIOR_PROFILE_COLUMNS, PARAME
 from libs.phase import validate_detected_phases_from_tables
 from libs.profiling.validator import build_profile_validation_summary
 from libs.scoring.validator import validate_scores_against_misbehavior_windows
+from libs.simulation.fault.spec import (
+    BENCHMARK_RECOVERABILITY_PHASES,
+    BENCHMARK_RECOVERABILITY_TARGETS,
+    OBSERVED_RECOVERABILITY_STRENGTH_TIERS,
+    recoverability_target_alignment_status,
+    resolve_window_benchmark_recoverability_target,
+    resolve_window_fault_window_id,
+)
 from libs.simulation.report_tables import ArtifactView, RunArtifactBundle
 from libs.simulation.run_context import RunPaths, write_manifest
 from libs.testing.assertions import (
@@ -534,6 +542,485 @@ def _build_fault_window_summary(summary: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+_BENCHMARK_REVIEW_PRIORITY_BY_TIER = {
+    "module_recoverable": "low",
+    "subsystem_recoverable": "medium",
+    "parameter_visible_only": "high",
+    "detection_only": "critical",
+    "undetected": "critical",
+}
+_BENCHMARK_REVIEW_ACTION_BY_TIER = {
+    "module_recoverable": "keep_as_module_localization_benchmark",
+    "subsystem_recoverable": "use_as_subsystem_benchmark_or_improve_module_separation",
+    "parameter_visible_only": "review_truth_granularity_and_structural_observability",
+    "detection_only": "review_signal_observability_and_fault_design",
+    "undetected": "review_detection_signal_and_scenario_validity",
+}
+_BENCHMARK_REVIEW_PRIORITY_ORDER = {
+    "critical": 0,
+    "high": 1,
+    "medium": 2,
+    "low": 3,
+}
+_DECLARED_TARGET_ALIGNMENT_ORDER = {
+    "missed_target": 0,
+    "undeclared": 1,
+    "met_target": 2,
+    "exceeded_target": 3,
+}
+
+
+def _bool_value(value: Any) -> bool:
+    return False if pd.isna(value) else bool(value)
+
+
+def _int_value(value: Any) -> int:
+    if pd.isna(value):
+        return 0
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _float_value(value: Any) -> float | None:
+    if pd.isna(value):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _text_value(value: Any, *, default: str = "") -> str:
+    if pd.isna(value):
+        return default
+    text = str(value)
+    return text if text else default
+
+
+def _observed_recoverability_strength_tier(row: dict[str, Any]) -> str:
+    if _bool_value(row.get("dominant_module_match")) or _bool_value(row.get("top_module_candidate_present")):
+        return "module_recoverable"
+    if _bool_value(row.get("dominant_subsystem_match")) or _bool_value(row.get("top_subsystem_candidate_present")):
+        return "subsystem_recoverable"
+    if (
+        _bool_value(row.get("telemetry_parameter_match"))
+        or _bool_value(row.get("telemetry_selected_parameter_match"))
+        or _bool_value(row.get("event_parameter_match"))
+    ):
+        return "parameter_visible_only"
+    if _bool_value(row.get("detected")) or _bool_value(row.get("emit_ready")):
+        return "detection_only"
+    return "undetected"
+
+
+def _declared_target_alignment_status(*, observed_tier: str, declared_target: str) -> str:
+    return recoverability_target_alignment_status(
+        observed_tier=str(observed_tier),
+        declared_target=str(declared_target),
+    )
+
+
+def _group_review_priority(group: pd.DataFrame) -> str:
+    priorities = {
+        _BENCHMARK_REVIEW_PRIORITY_BY_TIER.get(str(value), "critical")
+        for value in group.get("observed_recoverability_strength_tier", pd.Series(dtype="object")).fillna("").astype(str).tolist()
+        if str(value)
+    }
+    if not priorities:
+        return "critical"
+    return sorted(priorities, key=lambda value: _BENCHMARK_REVIEW_PRIORITY_ORDER.get(value, 99))[0]
+
+
+def _recoverability_summary_by_field(cases_df: pd.DataFrame, field: str) -> list[dict[str, Any]]:
+    if cases_df.empty or field not in cases_df.columns:
+        return []
+
+    rows: list[dict[str, Any]] = []
+    for raw_value, group in cases_df.groupby(field, dropna=False):
+        label = _text_value(raw_value, default="unspecified")
+        tier_counts = {
+            tier: int(
+                (group.get("observed_recoverability_strength_tier", pd.Series(dtype="object")).fillna("").astype(str) == tier).sum()
+            )
+            for tier in OBSERVED_RECOVERABILITY_STRENGTH_TIERS
+        }
+        declared_target_counts = {
+            target: int(
+                (group.get("declared_benchmark_phase", pd.Series(dtype="object")).fillna("").astype(str) == target).sum()
+            )
+            for target in BENCHMARK_RECOVERABILITY_TARGETS
+            if int(
+                (group.get("declared_benchmark_phase", pd.Series(dtype="object")).fillna("").astype(str) == target).sum()
+            )
+            > 0
+        }
+        alignment_counts = {
+            status: int(
+                (group.get("declared_target_alignment_status", pd.Series(dtype="object")).fillna("").astype(str) == status).sum()
+            )
+            for status in _DECLARED_TARGET_ALIGNMENT_ORDER
+            if int(
+                (group.get("declared_target_alignment_status", pd.Series(dtype="object")).fillna("").astype(str) == status).sum()
+            )
+            > 0
+        }
+        total = int(len(group))
+        declared_total = int(sum(declared_target_counts.values()))
+        rows.append(
+            {
+                field: label,
+                "fault_window_count": total,
+                "detected_fault_window_rate": float(group["detected"].mean()) if total > 0 else None,
+                "emit_ready_fault_window_rate": float(group["emit_ready"].mean()) if total > 0 else None,
+                "module_recoverable_exact_rate": float(
+                    (group["observed_recoverability_strength_tier"] == "module_recoverable").mean()
+                )
+                if total > 0
+                else None,
+                "subsystem_or_better_rate": float(
+                    group["observed_recoverability_strength_tier"]
+                    .isin(("module_recoverable", "subsystem_recoverable"))
+                    .mean()
+                )
+                if total > 0
+                else None,
+                "parameter_or_better_rate": float(
+                    group["observed_recoverability_strength_tier"].isin(
+                        ("module_recoverable", "subsystem_recoverable", "parameter_visible_only")
+                    ).mean()
+                )
+                if total > 0
+                else None,
+                "recoverability_strength_tier_count": tier_counts,
+                "declared_benchmark_phase_count": declared_target_counts,
+                "benchmark_phase_alignment_status_count": alignment_counts,
+                "declared_target_coverage_rate": (float(declared_total / total) if total > 0 else None),
+                "declared_target_met_or_exceeded_rate": (
+                    float(
+                        group["declared_target_alignment_status"].isin(("met_target", "exceeded_target")).mean()
+                    )
+                    if declared_total > 0
+                    else None
+                ),
+                "benchmark_review_priority": _group_review_priority(group),
+            }
+        )
+    return sorted(
+        rows,
+        key=lambda row: (
+            _BENCHMARK_REVIEW_PRIORITY_ORDER.get(str(row.get("benchmark_review_priority")), 99),
+            -int(row.get("fault_window_count", 0) or 0),
+            str(row.get(field, "")),
+        ),
+    )
+
+
+def _build_simulation_benchmark_audit_summary(
+    *,
+    flight: Any,
+    fault_score_summary: dict[str, Any],
+    fault_attribution_summary: dict[str, Any],
+) -> dict[str, Any]:
+    flight_metadata = dict(getattr(flight, "metadata", {}) or {})
+    if fault_score_summary.get("status") != "ok" or fault_attribution_summary.get("status") != "ok":
+        return _skipped_report(reason="missing score or attribution validation summary")
+
+    score_cases = pd.DataFrame.from_records(fault_score_summary.get("fault_windows", []))
+    attribution_cases = pd.DataFrame.from_records(fault_attribution_summary.get("fault_windows", []))
+    join_keys = [
+        key
+        for key in ("tail_id", "flight_id", "fault_window_id")
+        if key in score_cases.columns or key in attribution_cases.columns
+    ]
+    if not join_keys:
+        return {
+            "status": "ok",
+            "flight_name": str(flight_metadata.get("flight_name", "")),
+            "fault_window_count": 0,
+            "observed_recoverability_strength_tier_count": {tier: 0 for tier in OBSERVED_RECOVERABILITY_STRENGTH_TIERS},
+            "observed_recoverability_strength_tier_rate": {tier: None for tier in OBSERVED_RECOVERABILITY_STRENGTH_TIERS},
+            "declared_benchmark_phase_count": {},
+            "benchmark_phase_alignment_status_count": {},
+            "benchmark_review_priority_count": {},
+            "dominant_score_component_count": {},
+            "summary_by_fault_family": [],
+            "summary_by_fault_type": [],
+            "summary_by_source_subsystem": [],
+            "summary_by_source_module": [],
+            "top_review_candidates": [],
+            "fault_window_audit_cases": [],
+            "methodology": {
+                "interpretation": "observed recoverability under the current anomaly stack, not theoretical identifiability",
+            },
+        }
+    for key in join_keys:
+        if key not in score_cases.columns:
+            score_cases[key] = pd.Series(dtype="object")
+        if key not in attribution_cases.columns:
+            attribution_cases[key] = pd.Series(dtype="object")
+
+    merged = score_cases.merge(
+        attribution_cases,
+        on=join_keys,
+        how="outer",
+        suffixes=("_score", "_attr"),
+    )
+    declared_windows = []
+    for window in tuple(getattr(getattr(flight, "misbehavior_program_spec", None), "windows", ()) or ()):
+        fault_window_id = resolve_window_fault_window_id(window)
+        if not fault_window_id:
+            continue
+        declared_windows.append(
+            {
+                "fault_window_id": str(fault_window_id),
+                "declared_benchmark_phase": str(resolve_window_benchmark_recoverability_target(window) or ""),
+                "declared_subject_kind": str(getattr(window, "subject_kind", "parameter")),
+                "declared_fault_family_label": _text_value(
+                    dict(getattr(window, "metadata", {}) or {}).get("fault_family_label")
+                    or dict(getattr(window, "context", {}) or {}).get("fault_family_label")
+                    or dict(getattr(window, "metadata", {}) or {}).get("misbehavior_family_label")
+                    or dict(getattr(window, "context", {}) or {}).get("misbehavior_family_label")
+                ),
+                "declared_fault_type": _text_value(
+                    dict(getattr(window, "metadata", {}) or {}).get("fault_type")
+                    or dict(getattr(window, "metadata", {}) or {}).get("misbehavior_detail_label")
+                    or dict(getattr(window, "context", {}) or {}).get("misbehavior_detail_label")
+                    or dict(getattr(window, "context", {}) or {}).get("violation_type")
+                ),
+            }
+        )
+    declared_windows_df = pd.DataFrame.from_records(declared_windows)
+    if not declared_windows_df.empty and "fault_window_id" in merged.columns:
+        merged = merged.merge(declared_windows_df, on="fault_window_id", how="left")
+    else:
+        merged["declared_benchmark_phase"] = pd.Series("", index=merged.index)
+        merged["declared_subject_kind"] = pd.Series("", index=merged.index)
+        merged["declared_fault_family_label"] = pd.Series("", index=merged.index)
+        merged["declared_fault_type"] = pd.Series("", index=merged.index)
+    merged["fault_family_label"] = merged.apply(
+        lambda row: (
+            _text_value(row.get("fault_family_label"))
+            or _text_value(row.get("fault_family_label_score"))
+            or _text_value(row.get("fault_family_label_attr"))
+            or _text_value(row.get("declared_fault_family_label"))
+        ),
+        axis=1,
+    )
+    merged["fault_type"] = merged.apply(
+        lambda row: (
+            _text_value(row.get("fault_type"))
+            or _text_value(row.get("fault_type_score"))
+            or _text_value(row.get("fault_type_attr"))
+            or _text_value(row.get("declared_fault_type"))
+        ),
+        axis=1,
+    )
+    merged["truth_subsystem_id"] = merged.apply(
+        lambda row: (
+            _text_value(row.get("subsystem_id"))
+            or _text_value(row.get("subsystem_id_score"))
+            or _text_value(row.get("subsystem_id_attr"))
+        ),
+        axis=1,
+    )
+    merged["truth_module_id"] = merged.apply(
+        lambda row: (
+            _text_value(row.get("module_id"))
+            or _text_value(row.get("module_id_score"))
+            or _text_value(row.get("module_id_attr"))
+        ),
+        axis=1,
+    )
+    merged["truth_parameter_name"] = merged.apply(
+        lambda row: (
+            _text_value(row.get("parameter_name"))
+            or _text_value(row.get("parameter_name_score"))
+            or _text_value(row.get("parameter_name_attr"))
+        ),
+        axis=1,
+    )
+    merged["detected"] = merged.get("detected_window_count", pd.Series(0, index=merged.index)).fillna(0).astype(float) > 0.0
+    merged["emit_ready"] = merged.get("emit_ready_window_count", pd.Series(0, index=merged.index)).fillna(0).astype(float) > 0.0
+    merged["dominant_score_component"] = (
+        merged.get("dominant_score_component", pd.Series("", index=merged.index))
+        .fillna("")
+        .astype(str)
+        .replace({"": "unassigned"})
+    )
+    for column_name in (
+        "telemetry_parameter_match",
+        "telemetry_selected_parameter_match",
+        "event_parameter_match",
+        "dominant_subsystem_match",
+        "dominant_module_match",
+        "top_subsystem_candidate_present",
+        "top_module_candidate_present",
+    ):
+        if column_name not in merged.columns:
+            merged[column_name] = False
+        else:
+            merged[column_name] = merged[column_name].fillna(False).astype(bool)
+
+    merged["observed_recoverability_strength_tier"] = [
+        _observed_recoverability_strength_tier(row) for row in merged.to_dict(orient="records")
+    ]
+    merged["declared_benchmark_phase"] = (
+        merged.get("declared_benchmark_phase", pd.Series("", index=merged.index)).fillna("").astype(str)
+    )
+    merged["declared_target_alignment_status"] = [
+        _declared_target_alignment_status(
+            observed_tier=str(observed_tier),
+            declared_target=str(declared_target),
+        )
+        for observed_tier, declared_target in zip(
+            merged["observed_recoverability_strength_tier"].tolist(),
+            merged["declared_benchmark_phase"].tolist(),
+            strict=False,
+        )
+    ]
+    merged["benchmark_review_priority"] = merged["observed_recoverability_strength_tier"].map(
+        lambda tier: _BENCHMARK_REVIEW_PRIORITY_BY_TIER.get(str(tier), "critical")
+    )
+    merged["recommended_review_action"] = merged["observed_recoverability_strength_tier"].map(
+        lambda tier: _BENCHMARK_REVIEW_ACTION_BY_TIER.get(str(tier), "review_scenario")
+    )
+
+    total = int(len(merged))
+    tier_count = {
+        tier: int((merged["observed_recoverability_strength_tier"] == tier).sum())
+        for tier in OBSERVED_RECOVERABILITY_STRENGTH_TIERS
+    }
+    tier_rate = {
+        tier: (float(count / total) if total > 0 else None)
+        for tier, count in tier_count.items()
+    }
+    declared_target_count = {
+        target: int((merged["declared_benchmark_phase"] == target).sum())
+        for target in BENCHMARK_RECOVERABILITY_TARGETS
+        if int((merged["declared_benchmark_phase"] == target).sum()) > 0
+    }
+    benchmark_phase_alignment_status_count = {
+        status: int((merged["declared_target_alignment_status"] == status).sum())
+        for status in _DECLARED_TARGET_ALIGNMENT_ORDER
+        if int((merged["declared_target_alignment_status"] == status).sum()) > 0
+    }
+    review_priority_count = {
+        priority: int((merged["benchmark_review_priority"] == priority).sum())
+        for priority in ("critical", "high", "medium", "low")
+        if int((merged["benchmark_review_priority"] == priority).sum()) > 0
+    }
+    dominant_score_component_count = {
+        str(label): int(count)
+        for label, count in merged["dominant_score_component"].value_counts(dropna=False).sort_index().items()
+        if str(label)
+    }
+    fault_window_cases = [
+        {
+            "tail_id": _text_value(row.get("tail_id")),
+            "flight_id": _text_value(row.get("flight_id")),
+            "fault_window_id": _text_value(row.get("fault_window_id")),
+            "fault_family_label": _text_value(row.get("fault_family_label")),
+            "fault_type": _text_value(row.get("fault_type")),
+            "truth_subsystem_id": _text_value(row.get("truth_subsystem_id")),
+            "truth_module_id": _text_value(row.get("truth_module_id")),
+            "truth_parameter_name": _text_value(row.get("truth_parameter_name")),
+            "declared_subject_kind": _text_value(row.get("declared_subject_kind")),
+            "declared_benchmark_phase": _text_value(row.get("declared_benchmark_phase")),
+            "declared_target_alignment_status": _text_value(row.get("declared_target_alignment_status")),
+            "detected": _bool_value(row.get("detected")),
+            "emit_ready": _bool_value(row.get("emit_ready")),
+            "detected_window_count": _int_value(row.get("detected_window_count")),
+            "emit_ready_window_count": _int_value(row.get("emit_ready_window_count")),
+            "detection_latency_seconds": _float_value(row.get("detection_latency_seconds")),
+            "emit_ready_latency_seconds": _float_value(row.get("emit_ready_latency_seconds")),
+            "dominant_score_component": _text_value(row.get("dominant_score_component"), default="unassigned"),
+            "telemetry_parameter_match": _bool_value(row.get("telemetry_parameter_match")),
+            "telemetry_selected_parameter_match": _bool_value(row.get("telemetry_selected_parameter_match")),
+            "event_parameter_match": _bool_value(row.get("event_parameter_match")),
+            "dominant_subsystem_match": _bool_value(row.get("dominant_subsystem_match")),
+            "dominant_module_match": _bool_value(row.get("dominant_module_match")),
+            "top_subsystem_candidate_present": _bool_value(row.get("top_subsystem_candidate_present")),
+            "top_module_candidate_present": _bool_value(row.get("top_module_candidate_present")),
+            "observed_recoverability_strength_tier": _text_value(row.get("observed_recoverability_strength_tier")),
+            "benchmark_review_priority": _text_value(row.get("benchmark_review_priority")),
+            "recommended_review_action": _text_value(row.get("recommended_review_action")),
+        }
+        for row in merged.sort_values(
+            ["declared_target_alignment_status", "benchmark_review_priority", "fault_family_label", "fault_type", "fault_window_id"],
+            key=lambda series: (
+                series.map(lambda value: _DECLARED_TARGET_ALIGNMENT_ORDER.get(str(value), 99))
+                if series.name == "declared_target_alignment_status"
+                else series.map(lambda value: _BENCHMARK_REVIEW_PRIORITY_ORDER.get(str(value), 99))
+                if series.name == "benchmark_review_priority"
+                else series
+            ),
+            kind="mergesort",
+        ).to_dict(orient="records")
+    ]
+    summary_by_fault_family = _recoverability_summary_by_field(merged, "fault_family_label")
+    summary_by_fault_type = _recoverability_summary_by_field(merged, "fault_type")
+    summary_by_source_subsystem = _recoverability_summary_by_field(merged, "truth_subsystem_id")
+    summary_by_source_module = _recoverability_summary_by_field(merged, "truth_module_id")
+    top_review_candidates = [
+        {
+            "fault_type": row.get("fault_type", ""),
+            "fault_window_count": row.get("fault_window_count", 0),
+            "benchmark_review_priority": row.get("benchmark_review_priority", ""),
+            "declared_benchmark_phase_count": row.get("declared_benchmark_phase_count", {}),
+            "benchmark_phase_alignment_status_count": row.get("benchmark_phase_alignment_status_count", {}),
+            "declared_target_met_or_exceeded_rate": row.get("declared_target_met_or_exceeded_rate"),
+            "module_recoverable_exact_rate": row.get("module_recoverable_exact_rate"),
+            "subsystem_or_better_rate": row.get("subsystem_or_better_rate"),
+            "parameter_or_better_rate": row.get("parameter_or_better_rate"),
+        }
+        for row in summary_by_fault_type
+        if (
+            str(row.get("benchmark_review_priority", "")) in {"critical", "high"}
+            or int((row.get("benchmark_phase_alignment_status_count", {}) or {}).get("missed_target", 0)) > 0
+        )
+    ][:8]
+    return {
+        "status": "ok",
+        "flight_name": str(flight_metadata.get("flight_name", "")),
+        "fault_window_count": total,
+        "detected_fault_window_count": int(merged["detected"].sum()) if total > 0 else 0,
+        "emit_ready_fault_window_count": int(merged["emit_ready"].sum()) if total > 0 else 0,
+        "observed_recoverability_strength_tier_count": tier_count,
+        "observed_recoverability_strength_tier_rate": tier_rate,
+        "declared_benchmark_phase_count": declared_target_count,
+        "benchmark_phase_alignment_status_count": benchmark_phase_alignment_status_count,
+        "benchmark_review_priority_count": review_priority_count,
+        "dominant_score_component_count": dominant_score_component_count,
+        "summary_by_fault_family": summary_by_fault_family,
+        "summary_by_fault_type": summary_by_fault_type,
+        "summary_by_source_subsystem": summary_by_source_subsystem,
+        "summary_by_source_module": summary_by_source_module,
+        "top_review_candidates": top_review_candidates,
+        "fault_window_audit_cases": fault_window_cases,
+        "methodology": {
+            "interpretation": "observed recoverability under the current anomaly stack, not theoretical identifiability",
+            "development_phase_order": list(BENCHMARK_RECOVERABILITY_PHASES),
+            "observed_strength_order": list(OBSERVED_RECOVERABILITY_STRENGTH_TIERS),
+            "declared_target_order": list(BENCHMARK_RECOVERABILITY_TARGETS),
+            "tier_definitions": {
+                "module_recoverable": "truth module matched or present in top module candidates",
+                "subsystem_recoverable": "truth subsystem matched or present in top subsystem candidates without module recovery",
+                "parameter_visible_only": "truth parameter surfaced but no structural candidate recovery",
+                "detection_only": "fault detected without truth parameter or structure recovery",
+                "undetected": "fault not detected in the current run",
+            },
+            "declared_target_alignment_definitions": {
+                "missed_target": "observed recoverability fell below the declared benchmark target",
+                "undeclared": "no declared benchmark target was attached to the truth fault window",
+                "met_target": "observed recoverability matched the declared benchmark target",
+                "exceeded_target": "observed recoverability exceeded the declared benchmark target",
+            },
+        },
+    }
+
+
 def _build_misbehavior_attribution_summary(tables: RunArtifactBundle) -> dict[str, Any]:
     return validate_attribution_against_misbehavior_truth(
         raw_telemetry_df=tables.pandas(RAW_TELEMETRY_SCORE_VIEW),
@@ -591,6 +1078,10 @@ def write_validation_reports(
         if can_validate_attribution
         else _skipped_report(reason="missing window, hierarchy, or anomaly attribution artifacts")
     )
+    fault_score_summary = build_fault_score_summary_from_misbehavior(misbehavior_score_summary)
+    fault_attribution_summary = build_fault_attribution_summary_from_misbehavior(
+        misbehavior_attribution_summary
+    )
     report_set = ValidationReportSet(
         payloads={
             "profile_validation_summary.json": _build_profile_validation_summary(tables),
@@ -621,13 +1112,16 @@ def write_validation_reports(
                 if can_validate_couplings
                 else _skipped_report(reason="missing graph artifacts")
             ),
-            "score_validation_summary.json": build_fault_score_summary_from_misbehavior(misbehavior_score_summary),
+            "score_validation_summary.json": fault_score_summary,
             "misbehavior_score_validation_summary.json": misbehavior_score_summary,
             "misbehavior_window_validation_summary.json": misbehavior_window_summary,
             "misbehavior_attribution_validation_summary.json": misbehavior_attribution_summary,
             "fault_window_validation_summary.json": _build_fault_window_summary(misbehavior_window_summary),
-            "attribution_validation_summary.json": build_fault_attribution_summary_from_misbehavior(
-                misbehavior_attribution_summary
+            "attribution_validation_summary.json": fault_attribution_summary,
+            "simulation_benchmark_audit_summary.json": _build_simulation_benchmark_audit_summary(
+                flight=flight,
+                fault_score_summary=fault_score_summary,
+                fault_attribution_summary=fault_attribution_summary,
             ),
         }
     )

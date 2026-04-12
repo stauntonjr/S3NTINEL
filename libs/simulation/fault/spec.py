@@ -6,6 +6,43 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 
+BENCHMARK_RECOVERABILITY_PHASES = (
+    "detection_only",
+    "parameter_visible_only",
+    "module_recoverable",
+    "subsystem_recoverable",
+)
+BENCHMARK_RECOVERABILITY_TARGETS = BENCHMARK_RECOVERABILITY_PHASES
+
+OBSERVED_RECOVERABILITY_STRENGTH_TIERS = (
+    "undetected",
+    "detection_only",
+    "parameter_visible_only",
+    "subsystem_recoverable",
+    "module_recoverable",
+)
+_OBSERVED_RECOVERABILITY_STRENGTH_RANK = {
+    tier: index
+    for index, tier in enumerate(OBSERVED_RECOVERABILITY_STRENGTH_TIERS)
+}
+
+
+def observed_recoverability_strength_rank(label: str | None) -> int:
+    return _OBSERVED_RECOVERABILITY_STRENGTH_RANK.get(str(label or ""), -1)
+
+
+def recoverability_target_alignment_status(*, observed_tier: str | None, declared_target: str | None) -> str:
+    observed_rank = observed_recoverability_strength_rank(observed_tier)
+    declared_rank = observed_recoverability_strength_rank(declared_target)
+    if declared_rank < 0:
+        return "undeclared"
+    if observed_rank < declared_rank:
+        return "missed_target"
+    if observed_rank == declared_rank:
+        return "met_target"
+    return "exceeded_target"
+
+
 @dataclass(frozen=True, slots=True)
 class MisbehaviorWindowSpec:
     start_step: int
@@ -27,6 +64,12 @@ class MisbehaviorWindowSpec:
                 raise ValueError("parameter misbehavior windows require module_id and parameter_name")
         elif not self.coupling_id:
             raise ValueError("coupling misbehavior windows require coupling_id")
+        recoverability_target = resolve_window_benchmark_recoverability_target(self)
+        if recoverability_target and recoverability_target not in BENCHMARK_RECOVERABILITY_TARGETS:
+            raise ValueError(
+                "unsupported benchmark_recoverability_target="
+                f"{recoverability_target!r}; expected one of {BENCHMARK_RECOVERABILITY_TARGETS}"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,3 +80,37 @@ class MisbehaviorProgramSpec:
 
 FaultWindowSpec = MisbehaviorWindowSpec
 FaultProgramSpec = MisbehaviorProgramSpec
+
+
+def resolve_window_fault_window_id(window: Any) -> str | None:
+    metadata = dict(getattr(window, "metadata", {}) or {})
+    value = metadata.get("fault_window_id") or metadata.get("misbehavior_window_id")
+    if value is None:
+        return None
+    text = str(value)
+    return text or None
+
+
+def resolve_window_benchmark_recoverability_target(window: Any) -> str | None:
+    metadata = dict(getattr(window, "metadata", {}) or {})
+    context = dict(getattr(window, "context", {}) or {})
+    value = metadata.get("benchmark_recoverability_target") or context.get("benchmark_recoverability_target")
+    if value is None:
+        return None
+    text = str(value)
+    return text or None
+
+
+def resolve_window_fault_type(window: Any) -> str | None:
+    metadata = dict(getattr(window, "metadata", {}) or {})
+    context = dict(getattr(window, "context", {}) or {})
+    value = (
+        metadata.get("fault_type")
+        or metadata.get("misbehavior_detail_label")
+        or context.get("misbehavior_detail_label")
+        or context.get("violation_type")
+    )
+    if value is None:
+        return None
+    text = str(value)
+    return text or None

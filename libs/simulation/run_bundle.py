@@ -17,6 +17,7 @@ VALIDATION_REPORT_FILENAMES = (
     "misbehavior_attribution_validation_summary.json",
     "fault_window_validation_summary.json",
     "attribution_validation_summary.json",
+    "simulation_benchmark_audit_summary.json",
 )
 
 OPTIONAL_PIPELINE_SUMMARY_FILENAMES = (

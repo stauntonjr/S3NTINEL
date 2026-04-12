@@ -16,9 +16,10 @@ For current implementation ownership, prefer:
 The standing priorities are:
 
 1. continually clean the codebase and remove stale or redundant paths
-2. improve simulation realism and feature depth
-3. keep the hot path bounded and performant
-4. keep phase detection and anomaly channels moving forward together
+2. audit the current simulation as a localization benchmark before adding more detector logic
+3. improve simulation realism and feature depth where the benchmark audit shows real ambiguity
+4. keep the hot path bounded and performant
+5. keep phase detection and anomaly channels moving forward together
 
 ## Generality Constraint
 
@@ -60,14 +61,282 @@ The plan below is grounded in the current repo shape:
 - phase and anomaly logic now have cleaner ownership, but further simulation
   realism, scenario curation, and performance work are still needed
 
-The next work should be organized into three workstreams and executed in this
+The next work should be organized into four workstreams and executed in this
 order:
 
-1. `A. Realism, phase context, and anomaly/violation integration`
-2. `B. Golden scenarios and validation discipline`
-3. `C. Remaining performance and hot-path profiling`
+1. `A. Localization benchmark audit and scenario review`
+2. `B. Realism, phase context, and anomaly/violation integration`
+3. `C. Golden scenarios and validation discipline`
+4. `D. Remaining performance and hot-path profiling`
 
-## A. Realism, Phase Context, And Anomaly/Violation Integration
+## A. Localization Benchmark Audit And Scenario Review
+
+### Objective
+
+Scrutinize the current simulator as a benchmark for anomaly attribution before
+building more downstream heuristics or replacing the whole simulator.
+
+The practical question is not just whether faults are injected. It is whether
+the emitted telemetry and event stream make the source module identifiable at
+all.
+
+### Current concern
+
+Repeated anomaly-channel changes are not materially moving module localization.
+That now has to be treated as a benchmark question, not only a detector
+question.
+
+Possible explanations:
+
+- the current anomaly stack is near its ceiling on the present benchmark
+- the current simulation makes many fault sources only weakly identifiable from
+  the observables it emits
+- the truth target is sometimes finer-grained than the observable best answer
+
+### Audit rule
+
+Before introducing another broad anomaly-localization change, generate and read
+an explicit simulation benchmark audit from the current validation surfaces.
+
+That audit should classify each truth fault window by observed recoverability:
+
+- `module_recoverable`
+- `subsystem_recoverable`
+- `parameter_visible_only`
+- `detection_only`
+- `undetected`
+
+The audit should also aggregate by:
+
+- fault family
+- fault detail type
+- source subsystem
+- source module
+- dominant score component
+
+### What the audit should answer
+
+For each truth window:
+
+- was it detected at all
+- did it become emit-ready
+- was the truth parameter visible
+- was the truth subsystem present in top candidates
+- was the truth module present in top candidates
+- which dominant score component surfaced it
+
+For each fault family/detail:
+
+- how often the current benchmark supports module-level recovery
+- how often it only supports subsystem-level recovery
+- how often it collapses to parameter-only or detection-only evidence
+
+### Implementation direction
+
+Implement the audit as a first-class simulation report, not a notebook-only
+side analysis.
+
+Canonical owners:
+
+- `libs/simulation/reporting.py`
+- `libs/simulation/full_run_report.py`
+- `libs/simulation/validation_harness.py`
+
+The report should be written into `reports/` and folded into the validation
+harness so every simulation run produces the same benchmark view.
+
+Encode benchmark intent on the authored misbehavior windows themselves.
+
+That means the simulator should declare, per fault window, whether the scenario
+is intended to be a:
+
+- `module_recoverable`
+- `subsystem_recoverable`
+- `parameter_visible_only`
+- `detection_only`
+
+The audit should then compare observed recoverability against the declared
+target and surface:
+
+- windows that miss the declared target
+- windows that meet the target
+- windows whose current target is probably too coarse
+
+The benchmark should stop treating every fault as if module recovery were the
+same expectation.
+
+### Acceptance
+
+The audit is useful if it makes the next simulation decisions concrete:
+
+- which current scenarios are valid module-localization benchmarks
+- which are only subsystem-localization benchmarks
+- which are effectively detection-only benchmarks
+- which fault families deserve a new scenario pack rather than more detector
+  tuning
+
+### Outcome expectation
+
+This workstream may justify one of two next moves:
+
+- revise the current scenario design and truth framing
+- build a narrower new localization-focused scenario pack before more anomaly
+  work
+
+### Immediate benchmark split
+
+Do not keep using only the mixed composite bundle for every benchmark question.
+
+The current scenario family should expose separate named benchmark packs for:
+
+- module-localization-target windows
+- subsystem-localization-target windows
+
+Those packs should be thin filters over the canonical authored scenario first,
+so the benchmark can be split immediately without forking a second simulator.
+
+After that split is working, design a new localization-focused scenario pack for
+the fault types that still miss their declared target badly.
+
+The first new pack should be a smoke-topology localization sanity suite, not a
+full second composite benchmark. It should:
+
+- keep the canonical authored power/pressurization scenario family
+- reduce stochastic ambiguity rather than adding simulator-specific labels
+- use only clean module-target fault types first:
+  - `bias`
+  - `saturation`
+  - `drift`
+- expose a named entrypoint so the benchmark can answer a narrower question:
+  - can the current stack recover module structure at all in a simpler,
+    better-identified setting?
+
+The next step after that first pack is not more detector tuning. It is a fault
+family split:
+
+- `bias` and `drift` should be benchmarked together as the cleaner
+  module-localization family
+- `saturation` should be benchmarked separately because it can remain only
+  parameter-visible even when the cleaner family starts to recover structure
+
+That split should decide whether `saturation` needs scenario redesign,
+additional observability, or a downgraded benchmark target.
+
+### Current measured benchmark split
+
+The current smoke benchmark split has now been run and should guide the next
+simulation work directly.
+
+Observed outcomes:
+
+- `power_pressurization_hierarchy_smoke_localization_focus_bias_drift`
+  - `drift` is a valid module-localization benchmark in the current stack
+  - `bias` currently behaves as a subsystem-recoverable benchmark, not a clean
+    module benchmark
+- `power_pressurization_hierarchy_smoke_localization_focus_saturation`
+  - shared-supply saturation is stable as a `parameter_visible_only` benchmark
+  - it should not be treated as a module-localization benchmark in the current
+    benchmark family
+- `power_pressurization_hierarchy_smoke_localization_focus_saturation_local`
+  - rewriting saturation onto local `pack_temp_c` reduced the case further to
+    `detection_only`
+  - that local rewrite is still useful as a benchmark because it shows that
+    simply moving saturation onto a more local observable can remove structural
+    evidence instead of improving recoverability
+
+### Updated immediate next move
+
+Do not spend more anomaly-localization effort on the saturation family right
+now.
+
+The benchmark evidence says:
+
+- `drift` should remain in the module-localization sanity suite
+- `bias` should be treated as a subsystem-vs-module separation problem
+- `saturation` should live in explicit lower-tier benchmark packs:
+  - shared-supply saturation as `parameter_visible_only`
+  - local pack-temperature saturation as `detection_only`
+
+If saturation is revisited again, do it as a simulation-design problem:
+
+- add stronger local observability
+- add clearer downstream propagation from the saturated local variable
+- or redesign the saturation scenario around a different module/parameter pair
+
+Do not treat saturation as a current module-localization acceptance gate.
+
+### Recoverability development phases
+
+Simulation improvement should now proceed as an explicit recoverability ladder,
+not as a mixed attempt to optimize every structural level at once.
+
+The sequencing should be:
+
+1. `parameter detectability and labeling`
+2. `module recoverability`
+3. `subsystem recoverability`
+4. `system recoverability`
+
+The practical meaning of each phase is:
+
+- `parameter detectability and labeling`
+  - optimize whether the correct faulted parameter or parameter family becomes
+    detectable and attributable at all
+  - current benchmark tiers already support this through:
+    - `detection_only`
+    - `parameter_visible_only`
+- `module recoverability`
+  - only after parameter visibility is stable, optimize whether the correct
+    source module is structurally recoverable
+  - current benchmark tier:
+    - `module_recoverable`
+- `subsystem recoverability`
+  - only after module-local benchmark families are working, optimize whether
+    subsystem rollups remain stable under harder or more shared scenarios
+  - current benchmark tier:
+    - `subsystem_recoverable`
+- `system recoverability`
+  - only after subsystem behavior is stable, add broader system-level
+    benchmark intent for multi-subsystem or highly shared scenarios
+  - this is a future extension and is not yet a first-class benchmark target
+    encoded in the current simulation specs
+
+### Working rule for future scenario design
+
+New scenario packs should be introduced in that same order.
+
+That means:
+
+- do not author a new module-localization benchmark until the underlying fault
+  family is at least parameter-visible in a stable way
+- do not treat subsystem or system scenarios as the next optimization target
+  when module recovery is still unproven for the cleaner family
+- when a scenario fails at a lower phase, downgrade or redesign it there
+  instead of keeping it as a higher-tier benchmark
+
+### Immediate application of the phased ladder
+
+The current smoke-family results already imply the next phase assignments:
+
+- `drift`
+  - stays in the module-recoverability phase
+- `bias`
+  - currently straddles parameter/module work and should be treated as the next
+    module-separation design problem
+- shared-supply `saturation`
+  - stays in the parameter-detectability/labeling phase
+- local `pack_temp_c` saturation
+  - stays in the detection-only phase and should not be used to judge module
+    localization
+
+So the next simulation-design work should prioritize:
+
+1. strengthening lower-tier parameter labeling where it is still weak
+2. then building a cleaner `bias` path from parameter visibility to module
+   recoverability
+3. only after that, expanding harder subsystem- and system-level scenario packs
+
+## B. Realism, Phase Context, And Anomaly/Violation Integration
 
 ### Objective
 
@@ -177,7 +446,7 @@ Each golden scenario should eventually include:
 See also:
 - [phase.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/phase.md)
 
-## B. Golden Scenarios And Validation Discipline
+## C. Golden Scenarios And Validation Discipline
 
 ### Objective
 
@@ -214,7 +483,7 @@ When realism changes land, check:
 But do not accept a change just because it improves one golden scenario through
 scenario-specific tuning. The intended target is broader detector generality.
 
-## D. Behavior-Family Observability
+## E. Behavior-Family Observability
 
 ### Objective
 
@@ -260,7 +529,7 @@ If needed, split:
 so simulator internals can remain rich while unary behavior benchmarks stay
 scientifically defensible.
 
-## C. Remaining Performance And Hot-Path Profiling
+## D. Remaining Performance And Hot-Path Profiling
 
 ### Objective
 
@@ -309,7 +578,17 @@ For each milestone touching simulation or replay-heavy stages:
 
 ## Milestone Ordering
 
-### Milestone 1: realism and integrated violation model
+### Milestone 1: localization benchmark audit
+
+Deliverables:
+
+- `reports/simulation_benchmark_audit_summary.json` emitted by the canonical
+  simulation reporting path
+- fault-window recoverability classification in the validation harness
+- family/detail-level review surface for deciding whether the current simulator
+  is a valid localization benchmark
+
+### Milestone 2: realism and integrated violation model
 
 Deliverables:
 
@@ -318,7 +597,7 @@ Deliverables:
 - authored golden scenarios expanded with explicit violation truth
 - downstream regression signals defined for phase and anomaly quality
 
-### Milestone 2: scenario and validation discipline
+### Milestone 3: scenario and validation discipline
 
 Deliverables:
 
@@ -326,7 +605,7 @@ Deliverables:
 - simulation changes are read through the validation harness
 - realism work is tied to named scenario coverage rather than one-off demos
 
-### Milestone 3: performance and hotspot hardening
+### Milestone 4: performance and hotspot hardening
 
 Deliverables:
 
@@ -347,6 +626,10 @@ Deliverables:
 
 ### Phase/anomaly gate
 
+- simulation benchmark audit is emitted and readable from the canonical run
+  reports
+- the audit clearly shows which scenarios are module-recoverable versus only
+  parameter-visible or detection-only
 - regression checks on detected phase outputs
 - regression checks on calibrated scores and attribution outputs against known
   injected truth

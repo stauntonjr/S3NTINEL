@@ -363,6 +363,7 @@ def _build_run_bundle(tmp_path: Path, run_name: str, *, include_validations: boo
         _write_json(reports_dir / "misbehavior_attribution_validation_summary.json", {"status": "ok"})
         _write_json(reports_dir / "fault_window_validation_summary.json", {"status": "ok"})
         _write_json(reports_dir / "attribution_validation_summary.json", {"status": "ok"})
+        _write_json(reports_dir / "simulation_benchmark_audit_summary.json", {"status": "ok"})
     (logs_dir / "run.log").write_text(
         "\n".join(
             [

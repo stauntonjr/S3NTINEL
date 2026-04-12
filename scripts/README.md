@@ -36,6 +36,7 @@ Incremental patches:
     - persisted `window_features`
     - structural graph artifacts, including `lag_profile` and the collapsed compatibility `lag_graph`
     - phase/scoring/attribution outputs
+    - `reports/simulation_benchmark_audit_summary.json`, which summarizes observed fault-window recoverability for the current simulator bundle and compares it against the recoverability targets declared on the flight's authored misbehavior windows
     - local stage summaries and manifests under `reports/`
     - a run manifest at `reports/run_manifest.json`
     - a consolidated console log at `logs/run.log`
@@ -43,6 +44,18 @@ Incremental patches:
   - `power_pressurization_hierarchy_smoke`
   - `power_pressurization_hierarchy_medium`
   - `power_pressurization_hierarchy_composite`
+  - a narrower localization-sanity pack is also available on the smoke topology:
+    - `power_pressurization_hierarchy_smoke_localization_focus`
+    - `power_pressurization_hierarchy_smoke_localization_focus_bias_drift`
+    - `power_pressurization_hierarchy_smoke_localization_focus_saturation`
+    - `power_pressurization_hierarchy_smoke_localization_focus_saturation_local`
+  - current smoke-benchmark intent:
+    - `bias_drift` is the cleaner module-localization family
+    - `saturation` is parameter-visible-only
+    - `saturation_local` is detection-only
+  - filtered benchmark packs over the same authored composite scenario are also available:
+    - `power_pressurization_hierarchy_composite_module_localization`
+    - `power_pressurization_hierarchy_composite_subsystem_localization`
   - the realistic preset family uses a `28` minute authored mission on a `0.5` second internal tick, sparse multi-rate emission, parameter and coupling misbehavior truth, and writes `reports/coupling_validation_summary.json` alongside the existing validation reports
 - For larger local full runs on a laptop, set `S3NTINEL_SPARK_PROFILE=laptop_large_sim` before invoking the runner.
   - the profile currently applies `local[4]`, `spark.driver.memory=8g`, `spark.driver.maxResultSize=2g`, `spark.sql.shuffle.partitions=16`, `spark.default.parallelism=8`, adaptive execution, Kryo serialization, and a dedicated `/tmp` spill directory

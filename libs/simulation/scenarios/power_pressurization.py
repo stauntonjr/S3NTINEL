@@ -13,6 +13,10 @@ from libs.simulation.aircraft.spec import AircraftSpec
 from libs.simulation.coupling.examples import build_drive_coupling_spec, build_enable_coupling_spec
 from libs.simulation.coupling.spec import CouplingSpec
 from libs.simulation.fault.examples import build_misbehavior_program_spec, build_misbehavior_window_spec
+from libs.simulation.fault.spec import (
+    resolve_window_benchmark_recoverability_target,
+    resolve_window_fault_type,
+)
 from libs.simulation.flight.spec import FlightSpec, InitialStateSpec, InputProgramSpec, StepInputSpec
 from libs.simulation.module.spec import LatentUpdateSpec, ModuleSpec
 from libs.simulation.parameter.examples import (
@@ -31,6 +35,7 @@ from libs.simulation.system.examples import build_system_spec
 
 
 ScenarioScale = Literal["smoke", "medium", "composite"]
+LocalizationFocusSaturationVariant = Literal["shared_supply", "pack_temp_local"]
 
 _MISSION_PHASE_SEGMENTS = (
     ("gate_turnaround", 480),
@@ -2041,6 +2046,63 @@ def _build_validation_expectations(*, scenario: PowerPressurizationScenarioSpec,
     }
 
 
+def _misbehavior_window_metadata(
+    *,
+    misbehavior_window_id: str,
+    fault_window_id: str,
+    fault_family_label: str,
+    benchmark_recoverability_target: str,
+) -> dict[str, str]:
+    return {
+        "misbehavior_window_id": str(misbehavior_window_id),
+        "fault_window_id": str(fault_window_id),
+        "fault_family_label": str(fault_family_label),
+        "benchmark_recoverability_target": str(benchmark_recoverability_target),
+    }
+
+
+def _filter_misbehavior_program_by_benchmark_targets(
+    *,
+    program: Any,
+    benchmark_recoverability_targets: tuple[str, ...] | None,
+    benchmark_suite_name: str | None,
+    fault_types: tuple[str, ...] | None = None,
+) -> Any:
+    if not benchmark_recoverability_targets and not benchmark_suite_name and not fault_types:
+        return program
+    allowed_targets = {
+        str(target)
+        for target in tuple(benchmark_recoverability_targets or ())
+        if str(target)
+    }
+    allowed_fault_types = {
+        str(fault_type)
+        for fault_type in tuple(fault_types or ())
+        if str(fault_type)
+    }
+    windows = tuple(
+        window
+        for window in tuple(getattr(program, "windows", ()) or ())
+        if (
+            (not allowed_targets or str(resolve_window_benchmark_recoverability_target(window) or "") in allowed_targets)
+            and (not allowed_fault_types or str(resolve_window_fault_type(window) or "") in allowed_fault_types)
+        )
+    )
+    metadata = dict(getattr(program, "metadata", {}) or {})
+    if allowed_targets:
+        metadata["benchmark_recoverability_targets"] = sorted(allowed_targets)
+    if allowed_fault_types:
+        metadata["benchmark_fault_types"] = sorted(allowed_fault_types)
+    if benchmark_suite_name:
+        metadata["benchmark_suite_name"] = str(benchmark_suite_name)
+        if metadata.get("misbehavior_program_name"):
+            metadata["misbehavior_program_name"] = f"{metadata['misbehavior_program_name']}_{benchmark_suite_name}"
+    return build_misbehavior_program_spec(
+        windows=windows,
+        metadata=metadata,
+    )
+
+
 def _build_misbehavior_program(*, scenario: PowerPressurizationScenarioSpec, aircraft: AircraftSpec) -> Any:
     instances = _role_instances(scenario)
     couplings = tuple(aircraft.couplings)
@@ -2062,11 +2124,12 @@ def _build_misbehavior_program(*, scenario: PowerPressurizationScenarioSpec, air
                         "anomaly_rate": _probability(scenario, "state_chatter"),
                         "rng_seed": _window_rng_seed(scenario, f"MBW_STATE_CHATTER_{control_role_name.upper()}"),
                     },
-                    metadata={
-                        "misbehavior_window_id": f"MBW_STATE_CHATTER_{control_role_name.upper()}",
-                        "fault_window_id": f"FW_STATE_CHATTER_{control_role_name.upper()}",
-                        "fault_family_label": "discrete_state",
-                    },
+                    metadata=_misbehavior_window_metadata(
+                        misbehavior_window_id=f"MBW_STATE_CHATTER_{control_role_name.upper()}",
+                        fault_window_id=f"FW_STATE_CHATTER_{control_role_name.upper()}",
+                        fault_family_label="discrete_state",
+                        benchmark_recoverability_target="module_recoverable",
+                    ),
                 ),
                 build_misbehavior_window_spec(
                     module_id=control.module_ids_by_kind["MOD_PRESS_MODE"],
@@ -2079,11 +2142,12 @@ def _build_misbehavior_program(*, scenario: PowerPressurizationScenarioSpec, air
                         "anomaly_rate": _probability(scenario, "illegal_transition"),
                         "rng_seed": _window_rng_seed(scenario, f"MBW_ILLEGAL_TRANSITION_{control_role_name.upper()}"),
                     },
-                    metadata={
-                        "misbehavior_window_id": f"MBW_ILLEGAL_TRANSITION_{control_role_name.upper()}",
-                        "fault_window_id": f"FW_ILLEGAL_TRANSITION_{control_role_name.upper()}",
-                        "fault_family_label": "discrete_state",
-                    },
+                    metadata=_misbehavior_window_metadata(
+                        misbehavior_window_id=f"MBW_ILLEGAL_TRANSITION_{control_role_name.upper()}",
+                        fault_window_id=f"FW_ILLEGAL_TRANSITION_{control_role_name.upper()}",
+                        fault_family_label="discrete_state",
+                        benchmark_recoverability_target="module_recoverable",
+                    ),
                 ),
             )
         )
@@ -2103,11 +2167,12 @@ def _build_misbehavior_program(*, scenario: PowerPressurizationScenarioSpec, air
                     "anomaly_rate": _probability(scenario, "bias"),
                     "rng_seed": _window_rng_seed(scenario, f"MBW_REGULATED_BIAS_{power_role_name.upper()}"),
                 },
-                metadata={
-                    "misbehavior_window_id": f"MBW_REGULATED_BIAS_{power_role_name.upper()}",
-                    "fault_window_id": f"FW_REGULATED_BIAS_{power_role_name.upper()}",
-                    "fault_family_label": "regulated",
-                },
+                metadata=_misbehavior_window_metadata(
+                    misbehavior_window_id=f"MBW_REGULATED_BIAS_{power_role_name.upper()}",
+                    fault_window_id=f"FW_REGULATED_BIAS_{power_role_name.upper()}",
+                    fault_family_label="regulated",
+                    benchmark_recoverability_target="module_recoverable",
+                ),
             )
         )
     for bleed_role_name, cabin_role_name in (
@@ -2129,11 +2194,12 @@ def _build_misbehavior_program(*, scenario: PowerPressurizationScenarioSpec, air
                     start_step=_mission_step_for_phase(scenario, "takeoff_climb", 45.0),
                     end_step_exclusive=_mission_step_for_phase(scenario, "takeoff_climb", 105.0),
                     context={"violation_type": "timing_lag", "lag_steps": 3, "anomaly_rate": 1.0},
-                    metadata={
-                        "misbehavior_window_id": f"MBW_TIMING_LAG_{zone_code}",
-                        "fault_window_id": f"FW_TIMING_LAG_{zone_code}",
-                        "fault_family_label": "inertial",
-                    },
+                    metadata=_misbehavior_window_metadata(
+                        misbehavior_window_id=f"MBW_TIMING_LAG_{zone_code}",
+                        fault_window_id=f"FW_TIMING_LAG_{zone_code}",
+                        fault_family_label="inertial",
+                        benchmark_recoverability_target="module_recoverable",
+                    ),
                 ),
                 build_misbehavior_window_spec(
                     module_id=bleed.module_ids_by_kind["MOD_BLEED_SUPPLY"],
@@ -2146,11 +2212,12 @@ def _build_misbehavior_program(*, scenario: PowerPressurizationScenarioSpec, air
                         "anomaly_rate": _probability(scenario, "saturation"),
                         "rng_seed": _window_rng_seed(scenario, f"MBW_REGULATED_SAT_{zone_code}"),
                     },
-                    metadata={
-                        "misbehavior_window_id": f"MBW_REGULATED_SAT_{zone_code}",
-                        "fault_window_id": f"FW_REGULATED_SAT_{zone_code}",
-                        "fault_family_label": "regulated",
-                    },
+                    metadata=_misbehavior_window_metadata(
+                        misbehavior_window_id=f"MBW_REGULATED_SAT_{zone_code}",
+                        fault_window_id=f"FW_REGULATED_SAT_{zone_code}",
+                        fault_family_label="regulated",
+                        benchmark_recoverability_target="module_recoverable",
+                    ),
                 ),
                 build_misbehavior_window_spec(
                     module_id=bleed.module_ids_by_kind["MOD_BLEED_SUPPLY"],
@@ -2163,11 +2230,12 @@ def _build_misbehavior_program(*, scenario: PowerPressurizationScenarioSpec, air
                         "anomaly_rate": _probability(scenario, "drift"),
                         "rng_seed": _window_rng_seed(scenario, f"MBW_ACCUM_DRIFT_{zone_code}"),
                     },
-                    metadata={
-                        "misbehavior_window_id": f"MBW_ACCUM_DRIFT_{zone_code}",
-                        "fault_window_id": f"FW_ACCUM_DRIFT_{zone_code}",
-                        "fault_family_label": "accumulative",
-                    },
+                    metadata=_misbehavior_window_metadata(
+                        misbehavior_window_id=f"MBW_ACCUM_DRIFT_{zone_code}",
+                        fault_window_id=f"FW_ACCUM_DRIFT_{zone_code}",
+                        fault_family_label="accumulative",
+                        benchmark_recoverability_target="module_recoverable",
+                    ),
                 ),
                 build_misbehavior_window_spec(
                     subject_kind="coupling",
@@ -2184,11 +2252,12 @@ def _build_misbehavior_program(*, scenario: PowerPressurizationScenarioSpec, air
                         "violation_type": "timing_jitter",
                         "jitter_seconds": float(_rng(scenario.stochasticity.seed, "coupling_jitter", zone_code).uniform(0.15, scenario.stochasticity.coupling_lag_jitter_seconds)),
                     },
-                    metadata={
-                        "misbehavior_window_id": f"MBW_COUPLING_JITTER_{zone_code}",
-                        "fault_window_id": f"FW_COUPLING_JITTER_{zone_code}",
-                        "fault_family_label": "coupling",
-                    },
+                    metadata=_misbehavior_window_metadata(
+                        misbehavior_window_id=f"MBW_COUPLING_JITTER_{zone_code}",
+                        fault_window_id=f"FW_COUPLING_JITTER_{zone_code}",
+                        fault_family_label="coupling",
+                        benchmark_recoverability_target="subsystem_recoverable",
+                    ),
                 ),
                 build_misbehavior_window_spec(
                     subject_kind="coupling",
@@ -2205,11 +2274,12 @@ def _build_misbehavior_program(*, scenario: PowerPressurizationScenarioSpec, air
                         "violation_type": "coupling_inversion" if zone_code in {"FORWARD", "CENTER"} else "coupling_break",
                         "anomaly_rate": 1.0,
                     },
-                    metadata={
-                        "misbehavior_window_id": f"MBW_COUPLING_STRUCTURE_{zone_code}",
-                        "fault_window_id": f"FW_COUPLING_STRUCTURE_{zone_code}",
-                        "fault_family_label": "coupling",
-                    },
+                    metadata=_misbehavior_window_metadata(
+                        misbehavior_window_id=f"MBW_COUPLING_STRUCTURE_{zone_code}",
+                        fault_window_id=f"FW_COUPLING_STRUCTURE_{zone_code}",
+                        fault_family_label="coupling",
+                        benchmark_recoverability_target="subsystem_recoverable",
+                    ),
                 ),
                 build_misbehavior_window_spec(
                     subject_kind="coupling",
@@ -2223,11 +2293,12 @@ def _build_misbehavior_program(*, scenario: PowerPressurizationScenarioSpec, air
                     start_step=_mission_step_for_phase(scenario, "gate_turnaround", 140.0),
                     end_step_exclusive=_mission_step_for_phase(scenario, "gate_turnaround", 220.0),
                     context={"violation_type": "phase_context_violation", "anomaly_rate": 1.0},
-                    metadata={
-                        "misbehavior_window_id": f"MBW_COUPLING_PHASE_{zone_code}",
-                        "fault_window_id": f"FW_COUPLING_PHASE_{zone_code}",
-                        "fault_family_label": "coupling",
-                    },
+                    metadata=_misbehavior_window_metadata(
+                        misbehavior_window_id=f"MBW_COUPLING_PHASE_{zone_code}",
+                        fault_window_id=f"FW_COUPLING_PHASE_{zone_code}",
+                        fault_family_label="coupling",
+                        benchmark_recoverability_target="subsystem_recoverable",
+                    ),
                 ),
             )
         )
@@ -2240,18 +2311,212 @@ def _build_misbehavior_program(*, scenario: PowerPressurizationScenarioSpec, air
     )
 
 
-def build_power_pressurization_flight_spec(*, scale: ScenarioScale, seed: int | None = None) -> FlightSpec:
-    scenario = build_power_pressurization_scenario_spec(scale=scale, seed=seed)
-    aircraft = build_power_pressurization_aircraft_spec(scale=scale)
+def _build_power_pressurization_flight_from_scenario(
+    *,
+    scenario: PowerPressurizationScenarioSpec,
+    benchmark_recoverability_targets: tuple[str, ...] | None = None,
+    benchmark_suite_name: str | None = None,
+    benchmark_fault_types: tuple[str, ...] | None = None,
+    flight_name_override: str | None = None,
+    localization_focus_saturation_variant: LocalizationFocusSaturationVariant = "shared_supply",
+    benchmark_fault_target_overrides: dict[str, str] | None = None,
+) -> FlightSpec:
+    aircraft = build_power_pressurization_aircraft_spec(scale=scenario.scale)
     validation_expectations = _build_validation_expectations(scenario=scenario, aircraft=aircraft)
+    misbehavior_program = _filter_misbehavior_program_by_benchmark_targets(
+        program=_build_misbehavior_program(scenario=scenario, aircraft=aircraft),
+        benchmark_recoverability_targets=benchmark_recoverability_targets,
+        benchmark_suite_name=benchmark_suite_name,
+        fault_types=benchmark_fault_types,
+    )
+    misbehavior_program = _rewrite_localization_focus_saturation_windows(
+        program=misbehavior_program,
+        scenario=scenario,
+        saturation_variant=localization_focus_saturation_variant,
+    )
+    misbehavior_program = _override_benchmark_targets_by_fault_type(
+        program=misbehavior_program,
+        benchmark_fault_target_overrides=benchmark_fault_target_overrides,
+    )
+    metadata = {
+        **scenario.to_metadata(),
+        "validation": validation_expectations,
+    }
+    effective_targets = sorted(
+        {
+            str(target)
+            for target in (
+                resolve_window_benchmark_recoverability_target(window)
+                for window in misbehavior_program.windows
+            )
+            if target
+        }
+    )
+    if effective_targets:
+        metadata["benchmark_recoverability_targets"] = effective_targets
+    elif benchmark_recoverability_targets:
+        metadata["benchmark_recoverability_targets"] = [str(target) for target in benchmark_recoverability_targets]
+    if benchmark_fault_types:
+        metadata["benchmark_fault_types"] = [str(fault_type) for fault_type in benchmark_fault_types]
+    if benchmark_suite_name:
+        metadata["benchmark_suite_name"] = str(benchmark_suite_name)
+    if localization_focus_saturation_variant != "shared_supply":
+        metadata["localization_focus_saturation_variant"] = str(localization_focus_saturation_variant)
+    if flight_name_override:
+        metadata["flight_name"] = str(flight_name_override)
+    elif benchmark_suite_name:
+        metadata["flight_name"] = f"{scenario.flight_name}_{benchmark_suite_name}"
     return FlightSpec(
         aircraft_spec=aircraft,
         input_program_spec=_build_input_program(scenario),
         initial_state_spec=_build_initial_state(scenario),
         phase_program_spec=_build_phase_program(scenario),
-        misbehavior_program_spec=_build_misbehavior_program(scenario=scenario, aircraft=aircraft),
-        metadata={
-            **scenario.to_metadata(),
-            "validation": validation_expectations,
+        misbehavior_program_spec=misbehavior_program,
+        metadata=metadata,
+    )
+
+
+def _localization_focus_stochasticity(stochasticity: ScenarioStochasticSpec) -> ScenarioStochasticSpec:
+    return replace(
+        stochasticity,
+        profile_name="seeded_localization_focus_v1",
+        enabled_channels=("nominal_observation_noise", "role_profile_offsets"),
+        nominal_noise_scale_by_behavior={
+            "regulated": 0.04,
+            "tracking": 0.025,
+            "inertial": 0.03,
+            "accumulative": 0.01,
+            "discrete_state": 0.0,
         },
+        role_offset_scale=0.025,
+        coupling_lag_jitter_seconds=0.2,
+        misbehavior_activation_probability_by_detail={
+            key: 1.0
+            for key in stochasticity.misbehavior_activation_probability_by_detail
+        },
+    )
+
+
+def _find_role_instance_for_parameter_name(
+    *,
+    scenario: PowerPressurizationScenarioSpec,
+    base_parameter_name: str,
+    parameter_name: str,
+    required_module_kind: str | None = None,
+) -> _RoleInstance | None:
+    for instance in _role_instances(scenario).values():
+        if required_module_kind and required_module_kind not in instance.module_ids_by_kind:
+            continue
+        if _parameter_name(base_parameter_name, instance.parameter_suffix) == str(parameter_name):
+            return instance
+    return None
+
+
+def _rewrite_localization_focus_saturation_windows(
+    *,
+    program,
+    scenario: PowerPressurizationScenarioSpec,
+    saturation_variant: LocalizationFocusSaturationVariant,
+):
+    if saturation_variant == "shared_supply":
+        return program
+    if saturation_variant != "pack_temp_local":
+        raise ValueError(f"unsupported localization focus saturation variant {saturation_variant!r}")
+
+    rewritten_windows = []
+    for window in program.windows:
+        if resolve_window_fault_type(window) != "saturation":
+            rewritten_windows.append(window)
+            continue
+        if window.subject_kind != "parameter" or not window.parameter_name:
+            rewritten_windows.append(window)
+            continue
+        role_instance = _find_role_instance_for_parameter_name(
+            scenario=scenario,
+            base_parameter_name="bleed_supply_psi",
+            parameter_name=str(window.parameter_name),
+            required_module_kind="MOD_BLEED_SUPPLY",
+        )
+        if role_instance is None:
+            raise KeyError(f"could not resolve saturation role for parameter {window.parameter_name!r}")
+        rewritten_context = dict(window.context)
+        rewritten_context["saturation_max"] = float(
+            _rng(scenario.stochasticity.seed, "local_sat_pack_temp", role_instance.spec.role_name).uniform(1.75, 2.5)
+        )
+        rewritten_context["benchmark_fault_variant"] = "pack_temp_local"
+        rewritten_metadata = dict(window.metadata)
+        rewritten_metadata["benchmark_fault_variant"] = "pack_temp_local"
+        rewritten_metadata["fault_variant_label"] = "pack_temp_local"
+        rewritten_windows.append(
+            replace(
+                window,
+                module_id=role_instance.module_ids_by_kind["MOD_PACK_FLOW"],
+                parameter_name=_parameter_name("pack_temp_c", role_instance.parameter_suffix),
+                context=rewritten_context,
+                metadata=rewritten_metadata,
+            )
+        )
+    rewritten_metadata = dict(program.metadata)
+    rewritten_metadata["localization_focus_saturation_variant"] = str(saturation_variant)
+    return replace(program, windows=tuple(rewritten_windows), metadata=rewritten_metadata)
+
+
+def _override_benchmark_targets_by_fault_type(
+    *,
+    program,
+    benchmark_fault_target_overrides: dict[str, str] | None,
+):
+    if not benchmark_fault_target_overrides:
+        return program
+    rewritten_windows = []
+    for window in program.windows:
+        override_target = benchmark_fault_target_overrides.get(str(resolve_window_fault_type(window) or ""))
+        if not override_target:
+            rewritten_windows.append(window)
+            continue
+        rewritten_metadata = dict(window.metadata)
+        rewritten_metadata["benchmark_recoverability_target"] = str(override_target)
+        rewritten_windows.append(replace(window, metadata=rewritten_metadata))
+    return replace(program, windows=tuple(rewritten_windows))
+
+
+def build_power_pressurization_flight_spec(
+    *,
+    scale: ScenarioScale,
+    seed: int | None = None,
+    benchmark_recoverability_targets: tuple[str, ...] | None = None,
+    benchmark_suite_name: str | None = None,
+    benchmark_fault_types: tuple[str, ...] | None = None,
+) -> FlightSpec:
+    scenario = build_power_pressurization_scenario_spec(scale=scale, seed=seed)
+    return _build_power_pressurization_flight_from_scenario(
+        scenario=scenario,
+        benchmark_recoverability_targets=benchmark_recoverability_targets,
+        benchmark_suite_name=benchmark_suite_name,
+        benchmark_fault_types=benchmark_fault_types,
+    )
+
+
+def build_power_pressurization_localization_focus_flight_spec(
+    *,
+    seed: int | None = None,
+    benchmark_fault_types: tuple[str, ...] | None = ("bias", "saturation", "drift"),
+    benchmark_suite_name: str = "localization_focus",
+    flight_name: str = "power_pressurization_hierarchy_smoke_localization_focus",
+    saturation_variant: LocalizationFocusSaturationVariant = "shared_supply",
+    benchmark_fault_target_overrides: dict[str, str] | None = None,
+) -> FlightSpec:
+    base_scenario = build_power_pressurization_scenario_spec(scale="smoke", seed=seed)
+    focus_scenario = replace(
+        base_scenario,
+        stochasticity=_localization_focus_stochasticity(base_scenario.stochasticity),
+    )
+    return _build_power_pressurization_flight_from_scenario(
+        scenario=focus_scenario,
+        benchmark_recoverability_targets=("module_recoverable",),
+        benchmark_suite_name=benchmark_suite_name,
+        benchmark_fault_types=benchmark_fault_types,
+        flight_name_override=flight_name,
+        localization_focus_saturation_variant=saturation_variant,
+        benchmark_fault_target_overrides=benchmark_fault_target_overrides,
     )

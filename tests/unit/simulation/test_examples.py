@@ -13,8 +13,14 @@ from libs.simulation.aircraft.examples import (
 from libs.simulation.flight.examples import (
     build_named_flight_spec,
     build_coupled_module_flight_spec,
+    build_power_pressurization_hierarchy_composite_module_localization_flight_spec,
+    build_power_pressurization_hierarchy_composite_subsystem_localization_flight_spec,
     build_power_pressurization_hierarchy_medium_flight_spec,
     build_power_pressurization_hierarchy_composite_flight_spec,
+    build_power_pressurization_hierarchy_smoke_localization_focus_bias_drift_flight_spec,
+    build_power_pressurization_hierarchy_smoke_localization_focus_saturation_local_flight_spec,
+    build_power_pressurization_hierarchy_smoke_localization_focus_saturation_flight_spec,
+    build_power_pressurization_hierarchy_smoke_localization_focus_flight_spec,
     build_power_pressurization_hierarchy_smoke_flight_spec,
     build_power_chain_flight_spec,
     build_pressurization_flight_spec,
@@ -78,6 +84,10 @@ def test_build_flight_specs_construct_live_flights():
         build_coupled_module_flight_spec,
         build_power_chain_flight_spec,
         build_power_pressurization_hierarchy_smoke_flight_spec,
+        build_power_pressurization_hierarchy_smoke_localization_focus_flight_spec,
+        build_power_pressurization_hierarchy_smoke_localization_focus_bias_drift_flight_spec,
+        build_power_pressurization_hierarchy_smoke_localization_focus_saturation_flight_spec,
+        build_power_pressurization_hierarchy_smoke_localization_focus_saturation_local_flight_spec,
         build_power_pressurization_hierarchy_medium_flight_spec,
         build_power_pressurization_hierarchy_composite_flight_spec,
         build_pressurization_flight_spec,
@@ -276,3 +286,115 @@ def test_seeded_hierarchy_flight_is_reproducible_but_seed_sensitive():
 
     assert raw_rows_a == raw_rows_b
     assert raw_rows_a != raw_rows_c
+
+
+def test_filtered_benchmark_flight_specs_split_module_and_subsystem_suites():
+    module_suite = build_power_pressurization_hierarchy_composite_module_localization_flight_spec()
+    subsystem_suite = build_power_pressurization_hierarchy_composite_subsystem_localization_flight_spec()
+
+    assert module_suite.metadata["flight_name"] == "power_pressurization_hierarchy_composite_module_localization"
+    assert module_suite.metadata["benchmark_suite_name"] == "module_localization"
+    assert module_suite.metadata["benchmark_recoverability_targets"] == ["module_recoverable"]
+    assert len(module_suite.misbehavior_program_spec.windows) == 14
+    assert {
+        str(window.metadata["benchmark_recoverability_target"])
+        for window in module_suite.misbehavior_program_spec.windows
+    } == {"module_recoverable"}
+
+    assert subsystem_suite.metadata["flight_name"] == "power_pressurization_hierarchy_composite_subsystem_localization"
+    assert subsystem_suite.metadata["benchmark_suite_name"] == "subsystem_localization"
+    assert subsystem_suite.metadata["benchmark_recoverability_targets"] == ["subsystem_recoverable"]
+    assert len(subsystem_suite.misbehavior_program_spec.windows) == 9
+    assert {
+        str(window.metadata["benchmark_recoverability_target"])
+        for window in subsystem_suite.misbehavior_program_spec.windows
+    } == {"subsystem_recoverable"}
+
+
+def test_named_builder_resolves_filtered_benchmark_flight_specs():
+    module_suite = build_named_flight_spec("power_pressurization_hierarchy_composite_module_localization")
+    subsystem_suite = build_named_flight_spec("power_pressurization_hierarchy_composite_subsystem_localization")
+
+    assert module_suite.metadata["flight_name"] == "power_pressurization_hierarchy_composite_module_localization"
+    assert subsystem_suite.metadata["flight_name"] == "power_pressurization_hierarchy_composite_subsystem_localization"
+
+
+def test_smoke_localization_focus_flight_spec_targets_clean_module_faults():
+    flight_spec = build_power_pressurization_hierarchy_smoke_localization_focus_flight_spec()
+
+    assert flight_spec.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_localization_focus"
+    assert flight_spec.metadata["scale"] == "smoke"
+    assert flight_spec.metadata["benchmark_suite_name"] == "localization_focus"
+    assert flight_spec.metadata["benchmark_recoverability_targets"] == ["module_recoverable"]
+    assert flight_spec.metadata["benchmark_fault_types"] == ["bias", "saturation", "drift"]
+    assert flight_spec.metadata["stochasticity"]["profile_name"] == "seeded_localization_focus_v1"
+    assert flight_spec.metadata["stochasticity"]["enabled_channels"] == [
+        "nominal_observation_noise",
+        "role_profile_offsets",
+    ]
+    assert len(flight_spec.misbehavior_program_spec.windows) == 3
+    assert {
+        str(window.metadata["benchmark_recoverability_target"])
+        for window in flight_spec.misbehavior_program_spec.windows
+    } == {"module_recoverable"}
+    assert {
+        str(window.context["violation_type"])
+        for window in flight_spec.misbehavior_program_spec.windows
+    } == {"bias", "saturation", "drift"}
+
+
+def test_named_builder_resolves_smoke_localization_focus_flight_spec():
+    focus_suite = build_named_flight_spec("power_pressurization_hierarchy_smoke_localization_focus")
+
+    assert focus_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_localization_focus"
+
+
+def test_smoke_localization_focus_family_packs_filter_fault_types():
+    bias_drift_suite = build_power_pressurization_hierarchy_smoke_localization_focus_bias_drift_flight_spec()
+    saturation_suite = build_power_pressurization_hierarchy_smoke_localization_focus_saturation_flight_spec()
+    saturation_local_suite = build_power_pressurization_hierarchy_smoke_localization_focus_saturation_local_flight_spec()
+
+    assert bias_drift_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_localization_focus_bias_drift"
+    assert bias_drift_suite.metadata["benchmark_suite_name"] == "localization_focus_bias_drift"
+    assert bias_drift_suite.metadata["benchmark_fault_types"] == ["bias", "drift"]
+    assert len(bias_drift_suite.misbehavior_program_spec.windows) == 2
+    assert {
+        str(window.context["violation_type"])
+        for window in bias_drift_suite.misbehavior_program_spec.windows
+    } == {"bias", "drift"}
+
+    assert saturation_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_localization_focus_saturation"
+    assert saturation_suite.metadata["benchmark_suite_name"] == "localization_focus_saturation"
+    assert saturation_suite.metadata["benchmark_fault_types"] == ["saturation"]
+    assert saturation_suite.metadata["benchmark_recoverability_targets"] == ["parameter_visible_only"]
+    assert len(saturation_suite.misbehavior_program_spec.windows) == 1
+    assert {
+        str(window.context["violation_type"])
+        for window in saturation_suite.misbehavior_program_spec.windows
+    } == {"saturation"}
+    assert saturation_suite.misbehavior_program_spec.windows[0].parameter_name == "bleed_supply_psi"
+    assert saturation_suite.misbehavior_program_spec.windows[0].metadata["benchmark_recoverability_target"] == "parameter_visible_only"
+
+    assert saturation_local_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_localization_focus_saturation_local"
+    assert saturation_local_suite.metadata["benchmark_suite_name"] == "localization_focus_saturation_local"
+    assert saturation_local_suite.metadata["benchmark_fault_types"] == ["saturation"]
+    assert saturation_local_suite.metadata["benchmark_recoverability_targets"] == ["detection_only"]
+    assert saturation_local_suite.metadata["localization_focus_saturation_variant"] == "pack_temp_local"
+    assert len(saturation_local_suite.misbehavior_program_spec.windows) == 1
+    assert saturation_local_suite.misbehavior_program_spec.windows[0].parameter_name == "pack_temp_c"
+    assert saturation_local_suite.misbehavior_program_spec.windows[0].module_id == "MOD_PACK_FLOW"
+    assert saturation_local_suite.misbehavior_program_spec.windows[0].metadata["benchmark_recoverability_target"] == "detection_only"
+    assert (
+        saturation_local_suite.misbehavior_program_spec.windows[0].context["benchmark_fault_variant"]
+        == "pack_temp_local"
+    )
+
+
+def test_named_builder_resolves_smoke_localization_focus_family_packs():
+    bias_drift_suite = build_named_flight_spec("power_pressurization_hierarchy_smoke_localization_focus_bias_drift")
+    saturation_suite = build_named_flight_spec("power_pressurization_hierarchy_smoke_localization_focus_saturation")
+    saturation_local_suite = build_named_flight_spec("power_pressurization_hierarchy_smoke_localization_focus_saturation_local")
+
+    assert bias_drift_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_localization_focus_bias_drift"
+    assert saturation_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_localization_focus_saturation"
+    assert saturation_local_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_localization_focus_saturation_local"

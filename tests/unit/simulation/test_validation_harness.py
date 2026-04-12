@@ -1,4 +1,6 @@
-from libs.simulation.validation_harness import _flatten_numeric_metric_records
+from libs.simulation.flight import build_named_flight_spec
+from libs.simulation.flight.examples import build_legacy_power_pressurization_hierarchy_reference_flight_spec
+from libs.simulation.validation_harness import _flatten_numeric_metric_records, _summarize_misbehavior_program
 
 
 def test_flatten_numeric_metric_records_includes_event_family_metric_paths():
@@ -225,3 +227,87 @@ def test_flatten_numeric_metric_records_includes_parameter_localization_metric_p
         ("reconstruction_localization_validation.reconstruction_truth_window_count", 4),
         ("reconstruction_localization_validation.top_ranked_selected_parameter_in_truth_subsystem_rate", 0.25),
     ]
+
+
+def test_flatten_numeric_metric_records_includes_simulation_benchmark_audit_metric_paths():
+    records = _flatten_numeric_metric_records(
+        {
+            "fault_window_count": 18,
+            "detected_fault_window_count": 15,
+            "declared_benchmark_phase_count": {
+                "module_recoverable": 9,
+                "subsystem_recoverable": 3,
+            },
+            "benchmark_phase_alignment_status_count": {
+                "missed_target": 6,
+                "met_target": 5,
+            },
+            "observed_recoverability_strength_tier_count": {
+                "module_recoverable": 3,
+                "undetected": 2,
+            },
+            "observed_recoverability_strength_tier_rate": {
+                "module_recoverable": 1.0 / 6.0,
+                "parameter_visible_only": 0.5,
+            },
+            "benchmark_review_priority_count": {
+                "critical": 4,
+                "high": 6,
+            },
+            "dominant_score_component_count": {
+                "event_discordance": 4,
+                "reconstruction_error": 10,
+            },
+        },
+        category="validation",
+        scope_name="overall",
+        subscope_name="simulation_benchmark_audit",
+    )
+
+    assert [(record.metric_path, record.value) for record in records] == [
+        ("benchmark_phase_alignment_status_count.met_target", 5),
+        ("benchmark_phase_alignment_status_count.missed_target", 6),
+        ("benchmark_review_priority_count.critical", 4),
+        ("benchmark_review_priority_count.high", 6),
+        ("declared_benchmark_phase_count.module_recoverable", 9),
+        ("declared_benchmark_phase_count.subsystem_recoverable", 3),
+        ("detected_fault_window_count", 15),
+        ("dominant_score_component_count.event_discordance", 4),
+        ("dominant_score_component_count.reconstruction_error", 10),
+        ("fault_window_count", 18),
+        ("observed_recoverability_strength_tier_count.module_recoverable", 3),
+        ("observed_recoverability_strength_tier_count.undetected", 2),
+        ("observed_recoverability_strength_tier_rate.module_recoverable", 1.0 / 6.0),
+        ("observed_recoverability_strength_tier_rate.parameter_visible_only", 0.5),
+    ]
+
+
+def test_summarize_misbehavior_program_includes_declared_benchmark_phases():
+    flight = build_legacy_power_pressurization_hierarchy_reference_flight_spec()
+
+    summary = _summarize_misbehavior_program(flight=flight, dt_seconds=1.0)
+
+    assert summary["window_count"] == 4
+    assert summary["declared_benchmark_window_count"] == 4
+    assert summary["declared_benchmark_phase_count"] == {
+        "module_recoverable": 4,
+    }
+    assert [row["declared_benchmark_phase"] for row in summary["benchmark_windows"]] == [
+        "module_recoverable",
+        "module_recoverable",
+        "module_recoverable",
+        "module_recoverable",
+    ]
+
+
+def test_summarize_misbehavior_program_includes_declared_benchmark_phases_for_current_composite_builder():
+    flight = build_named_flight_spec("power_pressurization_hierarchy_composite")
+
+    summary = _summarize_misbehavior_program(flight=flight, dt_seconds=0.5)
+
+    assert summary["window_count"] == 23
+    assert summary["declared_benchmark_window_count"] == 23
+    assert summary["declared_benchmark_phase_count"] == {
+        "subsystem_recoverable": 9,
+        "module_recoverable": 14,
+    }

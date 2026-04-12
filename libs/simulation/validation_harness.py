@@ -8,6 +8,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from libs.simulation.fault.spec import (
+    BENCHMARK_RECOVERABILITY_TARGETS,
+    resolve_window_benchmark_recoverability_target,
+    resolve_window_fault_window_id,
+)
 from libs.simulation.phase.runtime import PhaseProgram
 from libs.simulation.run_bundle import load_json_if_exists
 from libs.simulation.run_context import RunPaths, resolve_flight_stochasticity, write_manifest
@@ -399,6 +404,28 @@ def _summarize_misbehavior_program(
             if str(getattr(window, "subject_kind", "parameter")) == "coupling" and getattr(window, "coupling_id", None)
         }
     )
+    benchmark_targets = [
+        target
+        for window in windows
+        if (target := resolve_window_benchmark_recoverability_target(window)) is not None
+    ]
+    benchmark_target_counts = _count_values(benchmark_targets)
+    benchmark_windows = [
+        {
+            "fault_window_id": str(resolve_window_fault_window_id(window) or ""),
+            "subject_kind": str(getattr(window, "subject_kind", "parameter")),
+            "fault_family_label": _window_family_label(window),
+            "fault_type": (_window_detail_label(window) or "unspecified"),
+            "declared_benchmark_phase": str(resolve_window_benchmark_recoverability_target(window) or ""),
+            "module_id": (str(getattr(window, "module_id", "") or "") if getattr(window, "module_id", None) else ""),
+            "parameter_name": (
+                str(getattr(window, "parameter_name", "") or "") if getattr(window, "parameter_name", None) else ""
+            ),
+            "coupling_id": (str(getattr(window, "coupling_id", "") or "") if getattr(window, "coupling_id", None) else ""),
+        }
+        for window in windows
+        if resolve_window_benchmark_recoverability_target(window) is not None
+    ]
     return {
         "window_count": len(windows),
         "subject_kind_counts": _count_values([str(getattr(window, "subject_kind", "parameter")) for window in windows]),
@@ -416,6 +443,13 @@ def _summarize_misbehavior_program(
             "max": (max(durations_steps) * float(dt_seconds) if durations_steps else 0.0),
             "mean": (((sum(durations_steps) / len(durations_steps)) * float(dt_seconds)) if durations_steps else 0.0),
         },
+        "declared_benchmark_phase_count": {
+            target: int(benchmark_target_counts.get(target, 0))
+            for target in BENCHMARK_RECOVERABILITY_TARGETS
+            if int(benchmark_target_counts.get(target, 0)) > 0
+        },
+        "declared_benchmark_window_count": len(benchmark_windows),
+        "benchmark_windows": benchmark_windows,
         "metadata": dict(getattr(flight.misbehavior_program_spec, "metadata", {}) or {}),
     }
 

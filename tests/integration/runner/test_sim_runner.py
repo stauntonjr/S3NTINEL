@@ -488,6 +488,13 @@ def test_validation_harness_report_bundles_fit_validation_and_compute(tmp_path):
                 "telemetry_parameter_match_rate": 0.8,
                 "event_parameter_match_rate": 0.5,
             },
+            "simulation_benchmark_audit": {
+                "fault_window_count": 12,
+                "observed_recoverability_strength_tier_count": {
+                    "module_recoverable": 2,
+                    "parameter_visible_only": 5,
+                },
+            },
         },
         "engineering_performance": {
             "overall": {
@@ -548,6 +555,7 @@ def test_validation_harness_report_bundles_fit_validation_and_compute(tmp_path):
     assert harness["simulation_context"]["parameter_catalog"]["parameter_count"] > 0
     assert harness["simulation_context"]["hierarchy"]["system_count"] > 0
     assert harness["simulation_context"]["phases"]["run_step_count"] == 12
+    assert harness["simulation_context"]["misbehavior_program"]["declared_benchmark_phase_count"] == {}
     assert harness["compute_performance"]["bottleneck_stages"][0]["stage_script"] == "50_build_graph.py"
     assert any(
         record["scope_name"] == "50_build_graph.py"
@@ -561,6 +569,14 @@ def test_validation_harness_report_bundles_fit_validation_and_compute(tmp_path):
         and record["subscope_name"] == "score_validation"
         and record["metric_path"] == "detected_fault_window_rate"
         and record["value"] == 0.5
+        for record in harness["validation_metrics"]["metric_records"]
+    )
+    assert any(
+        record["category"] == "validation"
+        and record["scope_name"] == "overall"
+        and record["subscope_name"] == "simulation_benchmark_audit"
+        and record["metric_path"] == "observed_recoverability_strength_tier_count.parameter_visible_only"
+        and record["value"] == 5
         for record in harness["validation_metrics"]["metric_records"]
     )
     assert any(

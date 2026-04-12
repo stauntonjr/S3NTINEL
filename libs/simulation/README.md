@@ -200,6 +200,45 @@ Use `fault`, not `anomaly`, for injected simulation-side misbehavior.
 
 `FaultProgram` resolves per-step violation context, which is then passed into the machine step.
 
+Authored misbehavior windows may also declare benchmark intent through
+`benchmark_recoverability_target`. That target describes whether the simulator
+expects the window to be usable as a module-, subsystem-, parameter-, or
+detection-level benchmark under downstream validation.
+
+The named power/pressurization flights can also expose filtered benchmark packs
+such as:
+- `power_pressurization_hierarchy_composite_module_localization`
+- `power_pressurization_hierarchy_composite_subsystem_localization`
+- `power_pressurization_hierarchy_smoke_localization_focus`
+- `power_pressurization_hierarchy_smoke_localization_focus_bias_drift`
+- `power_pressurization_hierarchy_smoke_localization_focus_saturation`
+- `power_pressurization_hierarchy_smoke_localization_focus_saturation_local`
+
+The composite benchmark packs are filtered views of the canonical authored
+scenario, not separate simulators.
+
+`power_pressurization_hierarchy_smoke_localization_focus` is the first narrower
+localization-sanity pack: a smoke-topology run with only deterministic
+module-target `bias`, `saturation`, and `drift` faults under reduced
+stochastic ambiguity.
+
+The two family packs split that sanity suite again so `bias`/`drift` can be
+evaluated separately from `saturation` without a blended benchmark result.
+
+`power_pressurization_hierarchy_smoke_localization_focus_saturation_local`
+keeps the same smoke topology but rewrites the saturation target onto a more
+local pack-flow observable. It exists specifically to test whether the original
+shared-supply saturation benchmark is structurally too shared for module
+recovery.
+
+Current measured benchmark intent:
+- `power_pressurization_hierarchy_smoke_localization_focus_bias_drift`
+  - keep as the cleaner module-localization sanity family
+- `power_pressurization_hierarchy_smoke_localization_focus_saturation`
+  - use as a `parameter_visible_only` benchmark
+- `power_pressurization_hierarchy_smoke_localization_focus_saturation_local`
+  - use as a `detection_only` benchmark
+
 ## Authoring model
 
 There are two main authoring layers:

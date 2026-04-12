@@ -31,7 +31,10 @@ from libs.simulation.phase.spec import (
     PhaseScheduleSpec,
     PhaseSegmentSpec,
 )
-from libs.simulation.scenarios import build_power_pressurization_flight_spec
+from libs.simulation.scenarios import (
+    build_power_pressurization_flight_spec,
+    build_power_pressurization_localization_focus_flight_spec,
+)
 
 
 FlightBuilder = Callable[..., FlightSpec]
@@ -46,6 +49,25 @@ def _step_inputs(*, module_id: str, parameter_name: str, contexts: tuple[dict[st
         }
         for context in contexts
     )
+
+
+def _misbehavior_window_metadata(
+    *,
+    misbehavior_window_id: str,
+    fault_window_id: str,
+    fault_family_label: str,
+    benchmark_recoverability_target: str,
+    extra_metadata: dict[str, object] | None = None,
+) -> dict[str, object]:
+    metadata = {
+        "misbehavior_window_id": str(misbehavior_window_id),
+        "fault_window_id": str(fault_window_id),
+        "fault_family_label": str(fault_family_label),
+        "benchmark_recoverability_target": str(benchmark_recoverability_target),
+    }
+    if extra_metadata:
+        metadata.update(dict(extra_metadata))
+    return metadata
 
 
 def build_coupled_module_flight_spec() -> FlightSpec:
@@ -428,7 +450,12 @@ def build_power_pressurization_hierarchy_composite_flight_spec() -> FlightSpec:
                 start_step=10,
                 end_step_exclusive=15,
                 context={"violation_type": "timing_lag", "lag_steps": 2, "anomaly_rate": 1.0},
-                metadata={"misbehavior_window_id": "MBW_INERTIAL_LAG", "fault_window_id": "FW_INERTIAL_LAG", "fault_family_label": "inertial"},
+                metadata=_misbehavior_window_metadata(
+                    misbehavior_window_id="MBW_INERTIAL_LAG",
+                    fault_window_id="FW_INERTIAL_LAG",
+                    fault_family_label="inertial",
+                    benchmark_recoverability_target="module_recoverable",
+                ),
             ),
             build_misbehavior_window_spec(
                 module_id="MOD_BLEED_SUPPLY",
@@ -436,7 +463,12 @@ def build_power_pressurization_hierarchy_composite_flight_spec() -> FlightSpec:
                 start_step=18,
                 end_step_exclusive=23,
                 context={"violation_type": "saturation", "saturation_max": 6.0, "anomaly_rate": 1.0},
-                metadata={"misbehavior_window_id": "MBW_REGULATED_SAT", "fault_window_id": "FW_REGULATED_SAT", "fault_family_label": "regulated"},
+                metadata=_misbehavior_window_metadata(
+                    misbehavior_window_id="MBW_REGULATED_SAT",
+                    fault_window_id="FW_REGULATED_SAT",
+                    fault_family_label="regulated",
+                    benchmark_recoverability_target="module_recoverable",
+                ),
             ),
             build_misbehavior_window_spec(
                 module_id="MOD_BLEED_SUPPLY",
@@ -444,7 +476,12 @@ def build_power_pressurization_hierarchy_composite_flight_spec() -> FlightSpec:
                 start_step=20,
                 end_step_exclusive=30,
                 context={"violation_type": "drift", "drift_rate": 0.15, "anomaly_rate": 1.0},
-                metadata={"misbehavior_window_id": "MBW_ACCUM_DRIFT", "fault_window_id": "FW_ACCUM_DRIFT", "fault_family_label": "accumulative"},
+                metadata=_misbehavior_window_metadata(
+                    misbehavior_window_id="MBW_ACCUM_DRIFT",
+                    fault_window_id="FW_ACCUM_DRIFT",
+                    fault_family_label="accumulative",
+                    benchmark_recoverability_target="module_recoverable",
+                ),
             ),
             build_misbehavior_window_spec(
                 module_id="MOD_PRESS_MODE",
@@ -452,7 +489,12 @@ def build_power_pressurization_hierarchy_composite_flight_spec() -> FlightSpec:
                 start_step=25,
                 end_step_exclusive=29,
                 context={"violation_type": "state_chatter", "chatter_states": ("LOW", "OFF"), "anomaly_rate": 1.0},
-                metadata={"misbehavior_window_id": "MBW_DISCRETE_CHATTER", "fault_window_id": "FW_DISCRETE_CHATTER", "fault_family_label": "discrete_state"},
+                metadata=_misbehavior_window_metadata(
+                    misbehavior_window_id="MBW_DISCRETE_CHATTER",
+                    fault_window_id="FW_DISCRETE_CHATTER",
+                    fault_family_label="discrete_state",
+                    benchmark_recoverability_target="module_recoverable",
+                ),
             ),
         ),
         metadata={"misbehavior_program_name": "power_pressurization_hierarchy_composite"},
@@ -814,11 +856,12 @@ def _build_realistic_misbehavior_program(*, branch_count: int) -> Any:
                     start_step=_mission_step_for_phase("takeoff_climb", offset_seconds=45.0 + (12.0 * branch_index)),
                     end_step_exclusive=_mission_step_for_phase("takeoff_climb", offset_seconds=105.0 + (12.0 * branch_index)),
                     context={"violation_type": "timing_lag", "lag_steps": 3 + branch_index, "anomaly_rate": 1.0},
-                    metadata={
-                        "misbehavior_window_id": f"MBW_TIMING_LAG_{branch_code}",
-                        "fault_window_id": f"FW_TIMING_LAG_{branch_code}",
-                        "fault_family_label": "inertial",
-                    },
+                    metadata=_misbehavior_window_metadata(
+                        misbehavior_window_id=f"MBW_TIMING_LAG_{branch_code}",
+                        fault_window_id=f"FW_TIMING_LAG_{branch_code}",
+                        fault_family_label="inertial",
+                        benchmark_recoverability_target="module_recoverable",
+                    ),
                 ),
                 build_misbehavior_window_spec(
                     module_id=module_id("MOD_PWR_SOURCE"),
@@ -826,11 +869,12 @@ def _build_realistic_misbehavior_program(*, branch_count: int) -> Any:
                     start_step=_mission_step_for_phase("gate_turnaround", offset_seconds=120.0 + (10.0 * branch_index)),
                     end_step_exclusive=_mission_step_for_phase("takeoff_climb", offset_seconds=45.0 + (10.0 * branch_index)),
                     context={"violation_type": "bias", "bias": 1.25 + (0.2 * branch_index), "anomaly_rate": 1.0},
-                    metadata={
-                        "misbehavior_window_id": f"MBW_REGULATED_BIAS_{branch_code}",
-                        "fault_window_id": f"FW_REGULATED_BIAS_{branch_code}",
-                        "fault_family_label": "regulated",
-                    },
+                    metadata=_misbehavior_window_metadata(
+                        misbehavior_window_id=f"MBW_REGULATED_BIAS_{branch_code}",
+                        fault_window_id=f"FW_REGULATED_BIAS_{branch_code}",
+                        fault_family_label="regulated",
+                        benchmark_recoverability_target="module_recoverable",
+                    ),
                 ),
                 build_misbehavior_window_spec(
                     module_id=module_id("MOD_BLEED_SUPPLY"),
@@ -838,11 +882,12 @@ def _build_realistic_misbehavior_program(*, branch_count: int) -> Any:
                     start_step=_mission_step_for_phase("cruise", offset_seconds=120.0 + (20.0 * branch_index)),
                     end_step_exclusive=_mission_step_for_phase("cruise", offset_seconds=220.0 + (20.0 * branch_index)),
                     context={"violation_type": "saturation", "saturation_max": 7.0 + (0.25 * branch_index), "anomaly_rate": 1.0},
-                    metadata={
-                        "misbehavior_window_id": f"MBW_REGULATED_SAT_{branch_code}",
-                        "fault_window_id": f"FW_REGULATED_SAT_{branch_code}",
-                        "fault_family_label": "regulated",
-                    },
+                    metadata=_misbehavior_window_metadata(
+                        misbehavior_window_id=f"MBW_REGULATED_SAT_{branch_code}",
+                        fault_window_id=f"FW_REGULATED_SAT_{branch_code}",
+                        fault_family_label="regulated",
+                        benchmark_recoverability_target="module_recoverable",
+                    ),
                 ),
                 build_misbehavior_window_spec(
                     module_id=module_id("MOD_BLEED_SUPPLY"),
@@ -850,11 +895,12 @@ def _build_realistic_misbehavior_program(*, branch_count: int) -> Any:
                     start_step=_mission_step_for_phase("cruise", offset_seconds=420.0 + (25.0 * branch_index)),
                     end_step_exclusive=_mission_step_for_phase("descent_approach", offset_seconds=120.0 + (15.0 * branch_index)),
                     context={"violation_type": "drift", "drift_rate": 0.02 + (0.005 * branch_index), "anomaly_rate": 1.0},
-                    metadata={
-                        "misbehavior_window_id": f"MBW_ACCUM_DRIFT_{branch_code}",
-                        "fault_window_id": f"FW_ACCUM_DRIFT_{branch_code}",
-                        "fault_family_label": "accumulative",
-                    },
+                    metadata=_misbehavior_window_metadata(
+                        misbehavior_window_id=f"MBW_ACCUM_DRIFT_{branch_code}",
+                        fault_window_id=f"FW_ACCUM_DRIFT_{branch_code}",
+                        fault_family_label="accumulative",
+                        benchmark_recoverability_target="module_recoverable",
+                    ),
                 ),
                 build_misbehavior_window_spec(
                     module_id=module_id("MOD_PRESS_MODE"),
@@ -862,11 +908,12 @@ def _build_realistic_misbehavior_program(*, branch_count: int) -> Any:
                     start_step=_mission_step_for_phase("descent_approach", offset_seconds=150.0 + (15.0 * branch_index)),
                     end_step_exclusive=_mission_step_for_phase("descent_approach", offset_seconds=240.0 + (15.0 * branch_index)),
                     context={"violation_type": "state_chatter", "chatter_states": ("LOW", "OFF"), "anomaly_rate": 1.0},
-                    metadata={
-                        "misbehavior_window_id": f"MBW_STATE_CHATTER_{branch_code}",
-                        "fault_window_id": f"FW_STATE_CHATTER_{branch_code}",
-                        "fault_family_label": "discrete_state",
-                    },
+                    metadata=_misbehavior_window_metadata(
+                        misbehavior_window_id=f"MBW_STATE_CHATTER_{branch_code}",
+                        fault_window_id=f"FW_STATE_CHATTER_{branch_code}",
+                        fault_family_label="discrete_state",
+                        benchmark_recoverability_target="module_recoverable",
+                    ),
                 ),
                 build_misbehavior_window_spec(
                     module_id=module_id("MOD_PRESS_MODE"),
@@ -874,11 +921,12 @@ def _build_realistic_misbehavior_program(*, branch_count: int) -> Any:
                     start_step=_mission_step_for_phase("descent_approach", offset_seconds=40.0 + (10.0 * branch_index)),
                     end_step_exclusive=_mission_step_for_phase("descent_approach", offset_seconds=110.0 + (10.0 * branch_index)),
                     context={"violation_type": "illegal_transition", "target_state": "GROUND", "anomaly_rate": 1.0},
-                    metadata={
-                        "misbehavior_window_id": f"MBW_ILLEGAL_TRANSITION_{branch_code}",
-                        "fault_window_id": f"FW_ILLEGAL_TRANSITION_{branch_code}",
-                        "fault_family_label": "discrete_state",
-                    },
+                    metadata=_misbehavior_window_metadata(
+                        misbehavior_window_id=f"MBW_ILLEGAL_TRANSITION_{branch_code}",
+                        fault_window_id=f"FW_ILLEGAL_TRANSITION_{branch_code}",
+                        fault_family_label="discrete_state",
+                        benchmark_recoverability_target="module_recoverable",
+                    ),
                 ),
                 build_misbehavior_window_spec(
                     subject_kind="coupling",
@@ -886,11 +934,12 @@ def _build_realistic_misbehavior_program(*, branch_count: int) -> Any:
                     start_step=_mission_step_for_phase("takeoff_climb", offset_seconds=160.0 + (15.0 * branch_index)),
                     end_step_exclusive=_mission_step_for_phase("takeoff_climb", offset_seconds=245.0 + (15.0 * branch_index)),
                     context={"violation_type": "timing_lag", "extra_lag_seconds": 1.5 + (0.25 * branch_index)},
-                    metadata={
-                        "misbehavior_window_id": f"MBW_COUPLING_LAG_{branch_code}",
-                        "fault_window_id": f"FW_COUPLING_LAG_{branch_code}",
-                        "fault_family_label": "coupling",
-                    },
+                    metadata=_misbehavior_window_metadata(
+                        misbehavior_window_id=f"MBW_COUPLING_LAG_{branch_code}",
+                        fault_window_id=f"FW_COUPLING_LAG_{branch_code}",
+                        fault_family_label="coupling",
+                        benchmark_recoverability_target="subsystem_recoverable",
+                    ),
                 ),
                 build_misbehavior_window_spec(
                     subject_kind="coupling",
@@ -901,11 +950,12 @@ def _build_realistic_misbehavior_program(*, branch_count: int) -> Any:
                         "violation_type": "coupling_inversion" if branch_index % 2 == 0 else "coupling_break",
                         "anomaly_rate": 1.0,
                     },
-                    metadata={
-                        "misbehavior_window_id": f"MBW_COUPLING_STRUCTURE_{branch_code}",
-                        "fault_window_id": f"FW_COUPLING_STRUCTURE_{branch_code}",
-                        "fault_family_label": "coupling",
-                    },
+                    metadata=_misbehavior_window_metadata(
+                        misbehavior_window_id=f"MBW_COUPLING_STRUCTURE_{branch_code}",
+                        fault_window_id=f"FW_COUPLING_STRUCTURE_{branch_code}",
+                        fault_family_label="coupling",
+                        benchmark_recoverability_target="subsystem_recoverable",
+                    ),
                 ),
                 build_misbehavior_window_spec(
                     subject_kind="coupling",
@@ -913,11 +963,12 @@ def _build_realistic_misbehavior_program(*, branch_count: int) -> Any:
                     start_step=_mission_step_for_phase("gate_turnaround", offset_seconds=160.0 + (15.0 * branch_index)),
                     end_step_exclusive=_mission_step_for_phase("gate_turnaround", offset_seconds=220.0 + (15.0 * branch_index)),
                     context={"violation_type": "phase_context_violation", "anomaly_rate": 1.0},
-                    metadata={
-                        "misbehavior_window_id": f"MBW_COUPLING_PHASE_{branch_code}",
-                        "fault_window_id": f"FW_COUPLING_PHASE_{branch_code}",
-                        "fault_family_label": "coupling",
-                    },
+                    metadata=_misbehavior_window_metadata(
+                        misbehavior_window_id=f"MBW_COUPLING_PHASE_{branch_code}",
+                        fault_window_id=f"FW_COUPLING_PHASE_{branch_code}",
+                        fault_family_label="coupling",
+                        benchmark_recoverability_target="subsystem_recoverable",
+                    ),
                 ),
             )
         )
@@ -1036,13 +1087,101 @@ def build_power_pressurization_hierarchy_composite_flight_spec(*, seed: int | No
     return build_power_pressurization_flight_spec(scale="composite", seed=seed)
 
 
+def build_power_pressurization_hierarchy_composite_module_localization_flight_spec(
+    *,
+    seed: int | None = None,
+) -> FlightSpec:
+    return build_power_pressurization_flight_spec(
+        scale="composite",
+        seed=seed,
+        benchmark_recoverability_targets=("module_recoverable",),
+        benchmark_suite_name="module_localization",
+    )
+
+
+def build_power_pressurization_hierarchy_composite_subsystem_localization_flight_spec(
+    *,
+    seed: int | None = None,
+) -> FlightSpec:
+    return build_power_pressurization_flight_spec(
+        scale="composite",
+        seed=seed,
+        benchmark_recoverability_targets=("subsystem_recoverable",),
+        benchmark_suite_name="subsystem_localization",
+    )
+
+
+def build_power_pressurization_hierarchy_smoke_localization_focus_flight_spec(
+    *,
+    seed: int | None = None,
+) -> FlightSpec:
+    return build_power_pressurization_localization_focus_flight_spec(seed=seed)
+
+
+def build_power_pressurization_hierarchy_smoke_localization_focus_bias_drift_flight_spec(
+    *,
+    seed: int | None = None,
+) -> FlightSpec:
+    return build_power_pressurization_localization_focus_flight_spec(
+        seed=seed,
+        benchmark_fault_types=("bias", "drift"),
+        benchmark_suite_name="localization_focus_bias_drift",
+        flight_name="power_pressurization_hierarchy_smoke_localization_focus_bias_drift",
+    )
+
+
+def build_power_pressurization_hierarchy_smoke_localization_focus_saturation_flight_spec(
+    *,
+    seed: int | None = None,
+) -> FlightSpec:
+    return build_power_pressurization_localization_focus_flight_spec(
+        seed=seed,
+        benchmark_fault_types=("saturation",),
+        benchmark_suite_name="localization_focus_saturation",
+        flight_name="power_pressurization_hierarchy_smoke_localization_focus_saturation",
+        benchmark_fault_target_overrides={"saturation": "parameter_visible_only"},
+    )
+
+
+def build_power_pressurization_hierarchy_smoke_localization_focus_saturation_local_flight_spec(
+    *,
+    seed: int | None = None,
+) -> FlightSpec:
+    return build_power_pressurization_localization_focus_flight_spec(
+        seed=seed,
+        benchmark_fault_types=("saturation",),
+        benchmark_suite_name="localization_focus_saturation_local",
+        flight_name="power_pressurization_hierarchy_smoke_localization_focus_saturation_local",
+        saturation_variant="pack_temp_local",
+        benchmark_fault_target_overrides={"saturation": "detection_only"},
+    )
+
+
 def get_flight_builders() -> dict[str, FlightBuilder]:
     return {
         "coupled_module": build_coupled_module_flight_spec,
         "power_chain": build_power_chain_flight_spec,
         "power_pressurization_hierarchy_smoke": build_power_pressurization_hierarchy_smoke_flight_spec,
+        "power_pressurization_hierarchy_smoke_localization_focus": (
+            build_power_pressurization_hierarchy_smoke_localization_focus_flight_spec
+        ),
+        "power_pressurization_hierarchy_smoke_localization_focus_bias_drift": (
+            build_power_pressurization_hierarchy_smoke_localization_focus_bias_drift_flight_spec
+        ),
+        "power_pressurization_hierarchy_smoke_localization_focus_saturation": (
+            build_power_pressurization_hierarchy_smoke_localization_focus_saturation_flight_spec
+        ),
+        "power_pressurization_hierarchy_smoke_localization_focus_saturation_local": (
+            build_power_pressurization_hierarchy_smoke_localization_focus_saturation_local_flight_spec
+        ),
         "power_pressurization_hierarchy_medium": build_power_pressurization_hierarchy_medium_flight_spec,
         "power_pressurization_hierarchy_composite": build_power_pressurization_hierarchy_composite_flight_spec,
+        "power_pressurization_hierarchy_composite_module_localization": (
+            build_power_pressurization_hierarchy_composite_module_localization_flight_spec
+        ),
+        "power_pressurization_hierarchy_composite_subsystem_localization": (
+            build_power_pressurization_hierarchy_composite_subsystem_localization_flight_spec
+        ),
         "pressurization": build_pressurization_flight_spec,
     }
 
@@ -1054,8 +1193,26 @@ def list_flight_names() -> tuple[str, ...]:
 def build_named_flight_spec(flight_name: str, *, seed: int | None = None) -> FlightSpec:
     hierarchy_builders = {
         "power_pressurization_hierarchy_smoke": build_power_pressurization_hierarchy_smoke_flight_spec,
+        "power_pressurization_hierarchy_smoke_localization_focus": (
+            build_power_pressurization_hierarchy_smoke_localization_focus_flight_spec
+        ),
+        "power_pressurization_hierarchy_smoke_localization_focus_bias_drift": (
+            build_power_pressurization_hierarchy_smoke_localization_focus_bias_drift_flight_spec
+        ),
+        "power_pressurization_hierarchy_smoke_localization_focus_saturation": (
+            build_power_pressurization_hierarchy_smoke_localization_focus_saturation_flight_spec
+        ),
+        "power_pressurization_hierarchy_smoke_localization_focus_saturation_local": (
+            build_power_pressurization_hierarchy_smoke_localization_focus_saturation_local_flight_spec
+        ),
         "power_pressurization_hierarchy_medium": build_power_pressurization_hierarchy_medium_flight_spec,
         "power_pressurization_hierarchy_composite": build_power_pressurization_hierarchy_composite_flight_spec,
+        "power_pressurization_hierarchy_composite_module_localization": (
+            build_power_pressurization_hierarchy_composite_module_localization_flight_spec
+        ),
+        "power_pressurization_hierarchy_composite_subsystem_localization": (
+            build_power_pressurization_hierarchy_composite_subsystem_localization_flight_spec
+        ),
     }
     if str(flight_name) in hierarchy_builders:
         return hierarchy_builders[str(flight_name)](seed=seed)

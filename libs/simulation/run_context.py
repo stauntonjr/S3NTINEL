@@ -573,5 +573,6 @@ def build_manifest(
             "misbehavior_attribution_validation": str(paths.run_dir / "reports" / "misbehavior_attribution_validation_summary.json"),
             "attribution_validation": str(paths.run_dir / "reports" / "attribution_validation_summary.json"),
             "fault_window_validation": str(paths.run_dir / "reports" / "fault_window_validation_summary.json"),
+            "simulation_benchmark_audit": str(paths.run_dir / "reports" / "simulation_benchmark_audit_summary.json"),
         },
     }

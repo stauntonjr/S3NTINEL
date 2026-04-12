@@ -12,6 +12,7 @@ _POWER_PRESSURIZATION_EXPORTS = {
     "StructuralRoleSpec",
     "build_power_pressurization_aircraft_spec",
     "build_power_pressurization_flight_spec",
+    "build_power_pressurization_localization_focus_flight_spec",
     "build_power_pressurization_scenario_spec",
 }
 

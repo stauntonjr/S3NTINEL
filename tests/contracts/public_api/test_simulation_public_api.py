@@ -108,7 +108,13 @@ def test_object_level_examples_are_public_from_subpackages():
     assert aircraft_spec.aircraft_id == "coupled_module"
     assert "pressurization" in flight_names
     assert "power_pressurization_hierarchy_smoke" in flight_names
+    assert "power_pressurization_hierarchy_smoke_localization_focus" in flight_names
+    assert "power_pressurization_hierarchy_smoke_localization_focus_bias_drift" in flight_names
+    assert "power_pressurization_hierarchy_smoke_localization_focus_saturation" in flight_names
+    assert "power_pressurization_hierarchy_smoke_localization_focus_saturation_local" in flight_names
     assert "power_pressurization_hierarchy_medium" in flight_names
+    assert "power_pressurization_hierarchy_composite_module_localization" in flight_names
+    assert "power_pressurization_hierarchy_composite_subsystem_localization" in flight_names
     assert pressurization_flight.metadata["flight_name"] == "pressurization"
 
 
@@ -134,3 +140,4 @@ def test_simulation_public_api_runs_end_to_end(tmp_path):
     assert (result.paths.run_dir / "reports" / "fault_window_validation_summary.json").exists()
     assert (result.paths.run_dir / "reports" / "misbehavior_attribution_validation_summary.json").exists()
     assert (result.paths.run_dir / "reports" / "attribution_validation_summary.json").exists()
+    assert (result.paths.run_dir / "reports" / "simulation_benchmark_audit_summary.json").exists()
