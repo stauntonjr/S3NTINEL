@@ -222,12 +222,18 @@ The composite benchmark packs are filtered views of the canonical authored
 scenario, not separate simulators.
 
 `power_pressurization_hierarchy_smoke_localization_focus` is the first narrower
-localization-sanity pack: a smoke-topology run with only deterministic
-module-target `bias`, `saturation`, and `drift` faults under reduced
-stochastic ambiguity.
+localization-sanity pack: a smoke-topology run with deterministic `bias`,
+`saturation`, and `drift` faults under reduced stochastic ambiguity, but with
+benchmark intent split by measured recoverability tier instead of assuming they
+are all valid module targets.
 
 The two family packs split that sanity suite again so `bias`/`drift` can be
 evaluated separately from `saturation` without a blended benchmark result.
+
+`power_pressurization_hierarchy_smoke_localization_focus_bias_load_monitor`
+keeps the same smoke topology but rewrites `bias` onto local
+`electrical_load_pct` so the benchmark can test whether a cleaner regulated
+monitor signal is enough to separate module from subsystem recovery.
 
 `power_pressurization_hierarchy_smoke_localization_focus_saturation_local`
 keeps the same smoke topology but rewrites the saturation target onto a more
@@ -237,7 +243,12 @@ recovery.
 
 Current measured benchmark intent:
 - `power_pressurization_hierarchy_smoke_localization_focus_bias_drift`
-  - keep as the cleaner module-localization sanity family
+  - keep as a split family:
+    - `drift` as `module_recoverable`
+    - `bias` as `subsystem_recoverable`
+- `power_pressurization_hierarchy_smoke_localization_focus_bias_load_monitor`
+  - use as a subsystem-vs-module separation probe; it is still
+    `subsystem_recoverable`, not module-recoverable, in the current stack
 - `power_pressurization_hierarchy_smoke_localization_focus_saturation`
   - use as a `parameter_visible_only` benchmark
 - `power_pressurization_hierarchy_smoke_localization_focus_saturation_local`

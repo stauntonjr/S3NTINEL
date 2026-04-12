@@ -47,10 +47,14 @@ Incremental patches:
   - a narrower localization-sanity pack is also available on the smoke topology:
     - `power_pressurization_hierarchy_smoke_localization_focus`
     - `power_pressurization_hierarchy_smoke_localization_focus_bias_drift`
+    - `power_pressurization_hierarchy_smoke_localization_focus_bias_load_monitor`
     - `power_pressurization_hierarchy_smoke_localization_focus_saturation`
     - `power_pressurization_hierarchy_smoke_localization_focus_saturation_local`
   - current smoke-benchmark intent:
-    - `bias_drift` is the cleaner module-localization family
+    - `bias_drift` is a split family:
+      - `drift` is module-recoverable
+      - `bias` is subsystem-recoverable
+    - `bias_load_monitor` is a subsystem-vs-module separation probe and still misses the module target
     - `saturation` is parameter-visible-only
     - `saturation_local` is detection-only
   - filtered benchmark packs over the same authored composite scenario are also available:

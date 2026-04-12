@@ -17,6 +17,7 @@ from libs.simulation.flight.examples import (
     build_power_pressurization_hierarchy_composite_subsystem_localization_flight_spec,
     build_power_pressurization_hierarchy_medium_flight_spec,
     build_power_pressurization_hierarchy_composite_flight_spec,
+    build_power_pressurization_hierarchy_smoke_localization_focus_bias_load_monitor_flight_spec,
     build_power_pressurization_hierarchy_smoke_localization_focus_bias_drift_flight_spec,
     build_power_pressurization_hierarchy_smoke_localization_focus_saturation_local_flight_spec,
     build_power_pressurization_hierarchy_smoke_localization_focus_saturation_flight_spec,
@@ -86,6 +87,7 @@ def test_build_flight_specs_construct_live_flights():
         build_power_pressurization_hierarchy_smoke_flight_spec,
         build_power_pressurization_hierarchy_smoke_localization_focus_flight_spec,
         build_power_pressurization_hierarchy_smoke_localization_focus_bias_drift_flight_spec,
+        build_power_pressurization_hierarchy_smoke_localization_focus_bias_load_monitor_flight_spec,
         build_power_pressurization_hierarchy_smoke_localization_focus_saturation_flight_spec,
         build_power_pressurization_hierarchy_smoke_localization_focus_saturation_local_flight_spec,
         build_power_pressurization_hierarchy_medium_flight_spec,
@@ -184,6 +186,24 @@ def test_composite_aircraft_spec_is_large_enough_for_hierarchy_discovery():
     }
     assert switch_datatypes
     assert set(switch_datatypes.values()) == {"categorical"}
+
+
+def test_localization_focus_bias_load_monitor_pack_rewrites_bias_onto_local_monitor():
+    flight_spec = build_power_pressurization_hierarchy_smoke_localization_focus_bias_load_monitor_flight_spec()
+
+    assert flight_spec.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_localization_focus_bias_load_monitor"
+    assert flight_spec.metadata["benchmark_suite_name"] == "localization_focus_bias_load_monitor"
+    assert flight_spec.metadata["benchmark_recoverability_targets"] == ["subsystem_recoverable"]
+    assert flight_spec.metadata["localization_focus_bias_variant"] == "load_monitor_local"
+
+    windows = tuple(flight_spec.misbehavior_program_spec.windows)
+    assert len(windows) == 1
+    window = windows[0]
+    assert window.context["violation_type"] == "bias"
+    assert window.module_id == "MOD_PWR_LOAD_MON"
+    assert window.parameter_name == "electrical_load_pct"
+    assert window.metadata["benchmark_fault_variant"] == "load_monitor_local"
+    assert window.metadata["benchmark_recoverability_target"] == "subsystem_recoverable"
 
 
 def test_composite_flight_spec_carries_misbehaviors_and_validation_expectations():
@@ -325,7 +345,11 @@ def test_smoke_localization_focus_flight_spec_targets_clean_module_faults():
     assert flight_spec.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_localization_focus"
     assert flight_spec.metadata["scale"] == "smoke"
     assert flight_spec.metadata["benchmark_suite_name"] == "localization_focus"
-    assert flight_spec.metadata["benchmark_recoverability_targets"] == ["module_recoverable"]
+    assert flight_spec.metadata["benchmark_recoverability_targets"] == [
+        "module_recoverable",
+        "parameter_visible_only",
+        "subsystem_recoverable",
+    ]
     assert flight_spec.metadata["benchmark_fault_types"] == ["bias", "saturation", "drift"]
     assert flight_spec.metadata["stochasticity"]["profile_name"] == "seeded_localization_focus_v1"
     assert flight_spec.metadata["stochasticity"]["enabled_channels"] == [
@@ -334,9 +358,13 @@ def test_smoke_localization_focus_flight_spec_targets_clean_module_faults():
     ]
     assert len(flight_spec.misbehavior_program_spec.windows) == 3
     assert {
-        str(window.metadata["benchmark_recoverability_target"])
+        str(window.context["violation_type"]): str(window.metadata["benchmark_recoverability_target"])
         for window in flight_spec.misbehavior_program_spec.windows
-    } == {"module_recoverable"}
+    } == {
+        "bias": "subsystem_recoverable",
+        "drift": "module_recoverable",
+        "saturation": "parameter_visible_only",
+    }
     assert {
         str(window.context["violation_type"])
         for window in flight_spec.misbehavior_program_spec.windows
@@ -357,11 +385,22 @@ def test_smoke_localization_focus_family_packs_filter_fault_types():
     assert bias_drift_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_localization_focus_bias_drift"
     assert bias_drift_suite.metadata["benchmark_suite_name"] == "localization_focus_bias_drift"
     assert bias_drift_suite.metadata["benchmark_fault_types"] == ["bias", "drift"]
+    assert bias_drift_suite.metadata["benchmark_recoverability_targets"] == [
+        "module_recoverable",
+        "subsystem_recoverable",
+    ]
     assert len(bias_drift_suite.misbehavior_program_spec.windows) == 2
     assert {
         str(window.context["violation_type"])
         for window in bias_drift_suite.misbehavior_program_spec.windows
     } == {"bias", "drift"}
+    assert {
+        str(window.context["violation_type"]): str(window.metadata["benchmark_recoverability_target"])
+        for window in bias_drift_suite.misbehavior_program_spec.windows
+    } == {
+        "bias": "subsystem_recoverable",
+        "drift": "module_recoverable",
+    }
 
     assert saturation_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_localization_focus_saturation"
     assert saturation_suite.metadata["benchmark_suite_name"] == "localization_focus_saturation"

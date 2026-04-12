@@ -36,6 +36,7 @@ from libs.simulation.system.examples import build_system_spec
 
 ScenarioScale = Literal["smoke", "medium", "composite"]
 LocalizationFocusSaturationVariant = Literal["shared_supply", "pack_temp_local"]
+LocalizationFocusBiasVariant = Literal["shared_source", "load_monitor_local"]
 
 _MISSION_PHASE_SEGMENTS = (
     ("gate_turnaround", 480),
@@ -424,7 +425,7 @@ def _build_module_templates() -> dict[str, ModuleSpec]:
                     unit="pct",
                     input_port_names=("current_in",),
                     output_port_name="load_pct_out",
-                    allowed_fault_families=("offset", "saturation", "tracking_degradation", "oscillation"),
+                    allowed_fault_families=("offset", "saturation", "tracking_degradation", "oscillation", "bias"),
                     metadata={"example_role": "electrical_load"},
                 ),
                 _replace_numeric_parameter(
@@ -2318,6 +2319,7 @@ def _build_power_pressurization_flight_from_scenario(
     benchmark_suite_name: str | None = None,
     benchmark_fault_types: tuple[str, ...] | None = None,
     flight_name_override: str | None = None,
+    localization_focus_bias_variant: LocalizationFocusBiasVariant = "shared_source",
     localization_focus_saturation_variant: LocalizationFocusSaturationVariant = "shared_supply",
     benchmark_fault_target_overrides: dict[str, str] | None = None,
 ) -> FlightSpec:
@@ -2328,6 +2330,11 @@ def _build_power_pressurization_flight_from_scenario(
         benchmark_recoverability_targets=benchmark_recoverability_targets,
         benchmark_suite_name=benchmark_suite_name,
         fault_types=benchmark_fault_types,
+    )
+    misbehavior_program = _rewrite_localization_focus_bias_windows(
+        program=misbehavior_program,
+        scenario=scenario,
+        bias_variant=localization_focus_bias_variant,
     )
     misbehavior_program = _rewrite_localization_focus_saturation_windows(
         program=misbehavior_program,
@@ -2360,6 +2367,8 @@ def _build_power_pressurization_flight_from_scenario(
         metadata["benchmark_fault_types"] = [str(fault_type) for fault_type in benchmark_fault_types]
     if benchmark_suite_name:
         metadata["benchmark_suite_name"] = str(benchmark_suite_name)
+    if localization_focus_bias_variant != "shared_source":
+        metadata["localization_focus_bias_variant"] = str(localization_focus_bias_variant)
     if localization_focus_saturation_variant != "shared_supply":
         metadata["localization_focus_saturation_variant"] = str(localization_focus_saturation_variant)
     if flight_name_override:
@@ -2461,6 +2470,60 @@ def _rewrite_localization_focus_saturation_windows(
     return replace(program, windows=tuple(rewritten_windows), metadata=rewritten_metadata)
 
 
+def _rewrite_localization_focus_bias_windows(
+    *,
+    program,
+    scenario: PowerPressurizationScenarioSpec,
+    bias_variant: LocalizationFocusBiasVariant,
+):
+    if bias_variant == "shared_source":
+        return program
+    if bias_variant != "load_monitor_local":
+        raise ValueError(f"unsupported localization focus bias variant {bias_variant!r}")
+
+    rewritten_windows = []
+    for window in program.windows:
+        if resolve_window_fault_type(window) != "bias":
+            rewritten_windows.append(window)
+            continue
+        if window.subject_kind != "parameter" or not window.parameter_name:
+            rewritten_windows.append(window)
+            continue
+        role_instance = _find_role_instance_for_parameter_name(
+            scenario=scenario,
+            base_parameter_name="bus_voltage_v",
+            parameter_name=str(window.parameter_name),
+            required_module_kind="MOD_PWR_SOURCE",
+        )
+        if role_instance is None:
+            raise KeyError(f"could not resolve bias role for parameter {window.parameter_name!r}")
+        if "MOD_PWR_LOAD_MON" not in role_instance.module_ids_by_kind:
+            raise KeyError(
+                "localization focus load-monitor bias requires MOD_PWR_LOAD_MON for role "
+                f"{role_instance.spec.role_name!r}"
+            )
+        rewritten_context = dict(window.context)
+        rewritten_context["bias"] = float(
+            _rng(scenario.stochasticity.seed, "local_bias_load_monitor", role_instance.spec.role_name).uniform(4.0, 7.0)
+        )
+        rewritten_context["benchmark_fault_variant"] = "load_monitor_local"
+        rewritten_metadata = dict(window.metadata)
+        rewritten_metadata["benchmark_fault_variant"] = "load_monitor_local"
+        rewritten_metadata["fault_variant_label"] = "load_monitor_local"
+        rewritten_windows.append(
+            replace(
+                window,
+                module_id=role_instance.module_ids_by_kind["MOD_PWR_LOAD_MON"],
+                parameter_name=_parameter_name("electrical_load_pct", role_instance.parameter_suffix),
+                context=rewritten_context,
+                metadata=rewritten_metadata,
+            )
+        )
+    rewritten_metadata = dict(program.metadata)
+    rewritten_metadata["localization_focus_bias_variant"] = str(bias_variant)
+    return replace(program, windows=tuple(rewritten_windows), metadata=rewritten_metadata)
+
+
 def _override_benchmark_targets_by_fault_type(
     *,
     program,
@@ -2503,6 +2566,7 @@ def build_power_pressurization_localization_focus_flight_spec(
     benchmark_fault_types: tuple[str, ...] | None = ("bias", "saturation", "drift"),
     benchmark_suite_name: str = "localization_focus",
     flight_name: str = "power_pressurization_hierarchy_smoke_localization_focus",
+    bias_variant: LocalizationFocusBiasVariant = "shared_source",
     saturation_variant: LocalizationFocusSaturationVariant = "shared_supply",
     benchmark_fault_target_overrides: dict[str, str] | None = None,
 ) -> FlightSpec:
@@ -2511,12 +2575,21 @@ def build_power_pressurization_localization_focus_flight_spec(
         base_scenario,
         stochasticity=_localization_focus_stochasticity(base_scenario.stochasticity),
     )
+    effective_target_overrides = {
+        "bias": "subsystem_recoverable",
+        "saturation": "parameter_visible_only",
+    }
+    if benchmark_fault_target_overrides:
+        effective_target_overrides.update(
+            {str(key): str(value) for key, value in benchmark_fault_target_overrides.items()}
+        )
     return _build_power_pressurization_flight_from_scenario(
         scenario=focus_scenario,
         benchmark_recoverability_targets=("module_recoverable",),
         benchmark_suite_name=benchmark_suite_name,
         benchmark_fault_types=benchmark_fault_types,
         flight_name_override=flight_name,
+        localization_focus_bias_variant=bias_variant,
         localization_focus_saturation_variant=saturation_variant,
-        benchmark_fault_target_overrides=benchmark_fault_target_overrides,
+        benchmark_fault_target_overrides=effective_target_overrides,
     )

@@ -233,6 +233,18 @@ Observed outcomes:
   - `drift` is a valid module-localization benchmark in the current stack
   - `bias` currently behaves as a subsystem-recoverable benchmark, not a clean
     module benchmark
+  - benchmark intent should now encode that split directly:
+    - `drift` as `module_recoverable`
+    - `bias` as `subsystem_recoverable`
+- `power_pressurization_hierarchy_smoke_localization_focus_bias_load_monitor`
+  - rewriting `bias` onto local `electrical_load_pct` improves benchmark
+    clarity, but it still misses the module target
+  - current measured result is still `subsystem_recoverable`:
+    - detected `1/1`
+    - emit-ready `1/1`
+    - telemetry parameter match `1/1`
+    - dominant subsystem match `1/1`
+    - dominant module match `0/1`
 - `power_pressurization_hierarchy_smoke_localization_focus_saturation`
   - shared-supply saturation is stable as a `parameter_visible_only` benchmark
   - it should not be treated as a module-localization benchmark in the current
@@ -253,6 +265,8 @@ The benchmark evidence says:
 
 - `drift` should remain in the module-localization sanity suite
 - `bias` should be treated as a subsystem-vs-module separation problem
+- local-monitor `bias` is a useful redesign probe, but not yet a
+  module-localization acceptance gate
 - `saturation` should live in explicit lower-tier benchmark packs:
   - shared-supply saturation as `parameter_visible_only`
   - local pack-temperature saturation as `detection_only`
@@ -323,6 +337,10 @@ The current smoke-family results already imply the next phase assignments:
 - `bias`
   - currently straddles parameter/module work and should be treated as the next
     module-separation design problem
+  - the new local-monitor rewrite does not fix that yet; it remains a
+    subsystem-recoverable benchmark
+  - benchmark intent should be downgraded accordingly in the smoke packs now,
+    rather than leaving `bias` declared as module-recoverable
 - shared-supply `saturation`
   - stays in the parameter-detectability/labeling phase
 - local `pack_temp_c` saturation
@@ -333,7 +351,8 @@ So the next simulation-design work should prioritize:
 
 1. strengthening lower-tier parameter labeling where it is still weak
 2. then building a cleaner `bias` path from parameter visibility to module
-   recoverability
+   recoverability, likely by separating `MOD_PWR_LOAD_MON` from sibling
+   `MOD_COMP_DRIVE` evidence rather than staying on shared-source voltage
 3. only after that, expanding harder subsystem- and system-level scenario packs
 
 ## B. Realism, Phase Context, And Anomaly/Violation Integration
