@@ -332,18 +332,17 @@ Current implemented parameter-tier gate family:
   - `power_pressurization_hierarchy_smoke_parameter_focus_discrete`
   - `power_pressurization_hierarchy_smoke_parameter_focus_coupling`
 
-Measured grouped result on:
+Current canonical grouped result on:
 
-- `/tmp/s3ntinel_parameter_tier_gates/20260413T012741Z_parameter_benchmark_tier_gates`
+- `/tmp/s3ntinel_parameter_tier_gates_v2/20260413T021821Z_parameter_benchmark_tier_gates`
 
-Observed outcome before the discrete-family repair:
+Observed outcome:
 
 - suite status:
-  - `all_gates_met_or_exceeded = false`
+  - `all_gates_met_or_exceeded = true`
   - alignment counts:
     - `met_target = 1`
-    - `exceeded_target = 2`
-    - `missed_target = 1`
+    - `exceeded_target = 3`
 - by family:
   - regulated `saturation`
     - observed `parameter_visible_only`
@@ -358,11 +357,13 @@ Observed outcome before the discrete-family repair:
     - telemetry parameter match `1/1`
     - alignment `exceeded_target`
   - discrete `state_chatter`
-    - observed `undetected`
-    - detected `0/1`
-    - emit-ready `0/1`
-    - telemetry parameter match `0/1`
-    - alignment `missed_target`
+    - observed `module_recoverable`
+    - detected `1/1`
+    - emit-ready `1/1`
+    - telemetry parameter match `1/1`
+    - selected telemetry parameter match `1/1`
+    - event parameter match `1/1`
+    - alignment `exceeded_target`
   - coupling `timing_jitter`
     - observed `module_recoverable`
     - detected `1/1`
@@ -377,39 +378,23 @@ Implication:
 - parameter-tier coverage is no longer blocked on missing benchmark supply
 - the discrete family miss was traced to authored/sampled chatter cadence, not a
   generic absence of lower-tier benchmark supply
-
-Current discrete-family repair result:
-
-- direct rerun on:
+- after aligning `state_chatter` to the emitted sample cadence, the grouped
+  suite now shows the discrete family as a working event-driven benchmark rather
+  than the prior `undetected` miss
+- raw signal confirmation from the repaired discrete rerun:
   - `/tmp/s3ntinel_parameter_discrete_fix_v4/20260413T020945Z_power_pressurization_hierarchy_smoke_parameter_focus_discrete`
-- observed result:
-  - detected `1/1`
-  - emit-ready `1/1`
-  - telemetry parameter match `1/1`
-  - selected telemetry parameter match `1/1`
-  - event parameter match `1/1`
-  - dominant score component `event_discordance`
-  - observed recoverability `module_recoverable`
-  - declared-target alignment `exceeded_target`
-- raw signal confirmation:
   - sampled `pack_mode_state` alternates `LOW/OFF` across the window
   - extracted `transition` events rise from `3` baseline transitions to `47`
-    transitions in the repaired run
-
-That means the discrete parameter-tier family is now behaving as an actual
-benchmark. The grouped suite should be rerun to refresh its top-level summary,
-but the missing benchmark-supply problem is resolved.
+    transitions
 
 ### Next simulation work for the parameter tier
 
 The dedicated parameter-tier suite now exists, and the discrete family is no
 longer structurally broken, so the next work is narrower:
 
-1. rerun the grouped parameter-tier gate suite so its summary matches the
-   repaired discrete benchmark
-2. keep the regulated, accumulative, discrete, and coupling family packs as the
+1. keep the regulated, accumulative, discrete, and coupling family packs as the
    canonical lower-tier acceptance set
-3. only after that, decide whether parameter-tier coverage also needs an
+2. only after that, decide whether parameter-tier coverage also needs an
    additional illegal-transition pack
 
 Practical interpretation:

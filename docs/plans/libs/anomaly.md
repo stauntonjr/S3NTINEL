@@ -62,21 +62,11 @@ Parameter-tier discipline:
 - use the dedicated grouped lower-tier suite before any parameter-level tuning:
   - `python -m scripts.run_sim_benchmark_tier_gates --suite parameter --base-dir ...`
 - current measured suite result on
-  `/tmp/s3ntinel_parameter_tier_gates/20260413T012741Z_parameter_benchmark_tier_gates`:
+  `/tmp/s3ntinel_parameter_tier_gates_v2/20260413T021821Z_parameter_benchmark_tier_gates`:
   - regulated `saturation`: `met_target`
   - accumulative `drift`: `exceeded_target`
   - coupling `timing_jitter`: `exceeded_target`
-  - discrete `state_chatter`: originally `missed_target` at the `detection`
-    scope
-- discrete-family repair result on
-  `/tmp/s3ntinel_parameter_discrete_fix_v4/20260413T020945Z_power_pressurization_hierarchy_smoke_parameter_focus_discrete`:
-  - `state_chatter`: `exceeded_target`
-  - detected `1/1`
-  - emit-ready `1/1`
-  - telemetry parameter match `1/1`
-  - selected telemetry parameter match `1/1`
-  - event parameter match `1/1`
-  - dominant score component `event_discordance`
+  - discrete `state_chatter`: `exceeded_target`
 - implication:
   - generic parameter-ranking work is not the first missing capability
   - the lower-tier benchmark gap is no longer the reason parameter work is
@@ -739,13 +729,11 @@ Latest composite benchmark-tier ledger result:
 Latest grouped parameter-tier gate result:
 
 - suite:
-  - `/tmp/s3ntinel_parameter_tier_gates/20260413T012741Z_parameter_benchmark_tier_gates`
+  - `/tmp/s3ntinel_parameter_tier_gates_v2/20260413T021821Z_parameter_benchmark_tier_gates`
 - alignment count:
   - `met_target`: `1`
-  - `exceeded_target`: `2`
-  - `missed_target`: `1`
-- discrete repair follow-up:
-  - `/tmp/s3ntinel_parameter_discrete_fix_v4/20260413T020945Z_power_pressurization_hierarchy_smoke_parameter_focus_discrete`
+  - `exceeded_target`: `3`
+- discrete benchmark note:
   - `parameter_tier_discrete_state_chatter` now exceeds target through an
     `event_discordance`-led signal after aligning chatter cadence to emitted
     sample timing
