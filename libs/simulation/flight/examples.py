@@ -489,7 +489,12 @@ def build_power_pressurization_hierarchy_composite_flight_spec() -> FlightSpec:
                 parameter_name="pack_mode_state",
                 start_step=25,
                 end_step_exclusive=29,
-                context={"violation_type": "state_chatter", "chatter_states": ("LOW", "OFF"), "anomaly_rate": 1.0},
+                context={
+                    "violation_type": "state_chatter",
+                    "chatter_states": ("LOW", "OFF"),
+                    "chatter_cycle_steps": 4,
+                    "anomaly_rate": 1.0,
+                },
                 metadata=_misbehavior_window_metadata(
                     misbehavior_window_id="MBW_DISCRETE_CHATTER",
                     fault_window_id="FW_DISCRETE_CHATTER",
@@ -908,7 +913,12 @@ def _build_realistic_misbehavior_program(*, branch_count: int) -> Any:
                     parameter_name=parameter_name("pack_mode_state"),
                     start_step=_mission_step_for_phase("descent_approach", offset_seconds=150.0 + (15.0 * branch_index)),
                     end_step_exclusive=_mission_step_for_phase("descent_approach", offset_seconds=240.0 + (15.0 * branch_index)),
-                    context={"violation_type": "state_chatter", "chatter_states": ("LOW", "OFF"), "anomaly_rate": 1.0},
+                    context={
+                        "violation_type": "state_chatter",
+                        "chatter_states": ("LOW", "OFF"),
+                        "chatter_cycle_steps": 4,
+                        "anomaly_rate": 1.0,
+                    },
                     metadata=_misbehavior_window_metadata(
                         misbehavior_window_id=f"MBW_STATE_CHATTER_{branch_code}",
                         fault_window_id=f"FW_STATE_CHATTER_{branch_code}",

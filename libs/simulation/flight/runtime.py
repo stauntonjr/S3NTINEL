@@ -143,7 +143,10 @@ class InputProgram:
                 str(parameter_name): BehaviorStepInput(
                     dt_seconds=float(dt_seconds),
                     latent_state=dict(step_input_spec.latent_state),
-                    context=dict(step_input_spec.context),
+                    context={
+                        **dict(step_input_spec.context),
+                        "step_index": int(step_index),
+                    },
                 )
                 for parameter_name, step_input_spec in parameters.items()
             }

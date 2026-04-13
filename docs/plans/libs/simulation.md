@@ -336,7 +336,7 @@ Measured grouped result on:
 
 - `/tmp/s3ntinel_parameter_tier_gates/20260413T012741Z_parameter_benchmark_tier_gates`
 
-Observed outcome:
+Observed outcome before the discrete-family repair:
 
 - suite status:
   - `all_gates_met_or_exceeded = false`
@@ -375,17 +375,40 @@ Implication:
 
 - the parameter tier is now real and useful, not hypothetical
 - parameter-tier coverage is no longer blocked on missing benchmark supply
-- the next simulation bottleneck inside that tier is the discrete family, which
-  currently fails at detection before parameter visibility can even be judged
+- the discrete family miss was traced to authored/sampled chatter cadence, not a
+  generic absence of lower-tier benchmark supply
+
+Current discrete-family repair result:
+
+- direct rerun on:
+  - `/tmp/s3ntinel_parameter_discrete_fix_v4/20260413T020945Z_power_pressurization_hierarchy_smoke_parameter_focus_discrete`
+- observed result:
+  - detected `1/1`
+  - emit-ready `1/1`
+  - telemetry parameter match `1/1`
+  - selected telemetry parameter match `1/1`
+  - event parameter match `1/1`
+  - dominant score component `event_discordance`
+  - observed recoverability `module_recoverable`
+  - declared-target alignment `exceeded_target`
+- raw signal confirmation:
+  - sampled `pack_mode_state` alternates `LOW/OFF` across the window
+  - extracted `transition` events rise from `3` baseline transitions to `47`
+    transitions in the repaired run
+
+That means the discrete parameter-tier family is now behaving as an actual
+benchmark. The grouped suite should be rerun to refresh its top-level summary,
+but the missing benchmark-supply problem is resolved.
 
 ### Next simulation work for the parameter tier
 
-The dedicated parameter-tier suite now exists, so the next work is narrower:
+The dedicated parameter-tier suite now exists, and the discrete family is no
+longer structurally broken, so the next work is narrower:
 
-1. keep the current regulated, accumulative, and coupling family packs as the
+1. rerun the grouped parameter-tier gate suite so its summary matches the
+   repaired discrete benchmark
+2. keep the regulated, accumulative, discrete, and coupling family packs as the
    canonical lower-tier acceptance set
-2. redesign the discrete family so it becomes at least a stable
-   `parameter_visible_only` benchmark instead of an `undetected` case
 3. only after that, decide whether parameter-tier coverage also needs an
    additional illegal-transition pack
 
@@ -395,9 +418,8 @@ Practical interpretation:
 - accumulative `drift` and coupling `timing_jitter` currently overachieve and
   should stay in the parameter suite as lower-tier smoke screens, even though
   they can recover structure
-- discrete `state_chatter` is the current weak point and should be treated as a
-  simulation-design or detection-signal problem before more parameter-level
-  anomaly tuning
+- discrete `state_chatter` is now viable after aligning the chatter cadence to
+  the emitted sample cadence; keep it as an event-driven lower-tier benchmark
 
 ### Recoverability development phases
 

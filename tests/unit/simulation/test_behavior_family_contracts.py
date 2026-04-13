@@ -12,6 +12,7 @@ from libs.behavior import (
     TrackingBehavior,
     behavior_samples_to_frame,
     build_default_behavior_registry,
+    iter_tick_samples,
 )
 
 
@@ -345,6 +346,34 @@ def test_discrete_state_violator_can_inject_illegal_transition() -> None:
     )
     assert all(sample.parameter_value == "ILLEGAL" for sample in violated_stream)
     assert all(sample.metadata.get("misbehavior_family_label") == "illegal_transition" for sample in violated_stream)
+
+
+def test_discrete_state_chatter_survives_single_tick_runtime_calls() -> None:
+    behavior = DiscreteStateBehavior()
+    values = []
+    for step_index in range(4):
+        samples = list(
+            iter_tick_samples(
+                parameter_name="pack_mode_state",
+                generator=behavior.generator,
+                step_input=BehaviorStepInput(
+                    dt_seconds=1.0,
+                    latent_state={},
+                    context={"target_state": "LOW", "step_index": step_index},
+                ),
+                initial_state="LOW",
+                violator=behavior.violator,
+                violation_context={
+                    "violation_type": "state_chatter",
+                    "chatter_states": ("LOW", "OFF"),
+                    "anomaly_rate": 1.0,
+                    "step_index": step_index,
+                },
+            )
+        )
+        assert len(samples) == 1
+        values.append(samples[0].parameter_value)
+    assert values == ["LOW", "OFF", "LOW", "OFF"]
 
 
 def test_regulated_violator_supports_all_declared_fault_types() -> None:

@@ -44,6 +44,24 @@ def _build_test_module_spec() -> ModuleSpec:
     )
 
 
+def _build_discrete_test_module_spec() -> ModuleSpec:
+    return ModuleSpec(
+        module_id="MOD_DISC",
+        subsystem_id="SUB_DISC",
+        system_id="SYS_DISC",
+        parameters=(
+            ParameterSpec(
+                parameter_name="pack_mode_state",
+                system_id="SYS_DISC",
+                subsystem_id="SUB_DISC",
+                module_id="MOD_DISC",
+                parameter_datatype_label="categorical",
+                behavior_family_label="discrete_state",
+            ),
+        ),
+    )
+
+
 def test_iter_module_samples_emits_local_behavior_streams():
     module_spec = _build_test_module_spec()
     module = Module.from_spec(module_spec)
@@ -88,6 +106,55 @@ def test_iter_module_samples_can_apply_violations():
     assert len(samples) == 1
     assert samples[0].metadata.get("misbehavior_applied") is True
     assert samples[0].metadata.get("misbehavior_family_label") == "offset"
+
+
+def test_iter_module_samples_merges_step_context_into_discrete_fault_context() -> None:
+    module = Module.from_spec(_build_discrete_test_module_spec())
+    first = next(
+        module.iter_samples(
+            step_inputs_by_parameter={
+                "pack_mode_state": BehaviorStepInput(
+                    dt_seconds=1.0,
+                    latent_state={},
+                    context={"target_state": "LOW", "step_index": 0},
+                ),
+            },
+            initial_state_by_parameter={"pack_mode_state": "LOW"},
+            fault_context_by_parameter={
+                "pack_mode_state": {
+                    "violation_type": "state_chatter",
+                    "chatter_states": ("LOW", "OFF"),
+                    "chatter_cycle_steps": 1,
+                    "anomaly_rate": 1.0,
+                },
+            },
+            apply_faults=True,
+        )
+    )
+    second = next(
+        module.iter_samples(
+            step_inputs_by_parameter={
+                "pack_mode_state": BehaviorStepInput(
+                    dt_seconds=1.0,
+                    latent_state={},
+                    context={"target_state": "LOW", "step_index": 1},
+                ),
+            },
+            initial_state_by_parameter={"pack_mode_state": "LOW"},
+            fault_context_by_parameter={
+                "pack_mode_state": {
+                    "violation_type": "state_chatter",
+                    "chatter_states": ("LOW", "OFF"),
+                    "chatter_cycle_steps": 1,
+                    "anomaly_rate": 1.0,
+                },
+            },
+            apply_faults=True,
+        )
+    )
+
+    assert first.parameter_value == "LOW"
+    assert second.parameter_value == "OFF"
 
 
 def test_apply_module_sample_to_runtime_updates_parameter_state():

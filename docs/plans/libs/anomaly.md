@@ -66,13 +66,23 @@ Parameter-tier discipline:
   - regulated `saturation`: `met_target`
   - accumulative `drift`: `exceeded_target`
   - coupling `timing_jitter`: `exceeded_target`
-  - discrete `state_chatter`: `missed_target` at the `detection` scope
+  - discrete `state_chatter`: originally `missed_target` at the `detection`
+    scope
+- discrete-family repair result on
+  `/tmp/s3ntinel_parameter_discrete_fix_v4/20260413T020945Z_power_pressurization_hierarchy_smoke_parameter_focus_discrete`:
+  - `state_chatter`: `exceeded_target`
+  - detected `1/1`
+  - emit-ready `1/1`
+  - telemetry parameter match `1/1`
+  - selected telemetry parameter match `1/1`
+  - event parameter match `1/1`
+  - dominant score component `event_discordance`
 - implication:
   - generic parameter-ranking work is not the first missing capability
-  - the current lower-tier bottleneck is discrete-family detectability
+  - the lower-tier benchmark gap is no longer the reason parameter work is
+    deferred
   - parameter-ranking or parameter-detection tuning should therefore remain
     secondary to:
-    - discrete parameter-tier simulation redesign or detection fixes
     - composite detection fixes
     - composite subsystem-rollup fixes
 
@@ -686,9 +696,9 @@ The next active anomaly sequence should now be:
 1. keep the current accumulation-channel baseline
 2. do not advance the rejected broad event-discordance expansion
 3. do not advance the current dual-view reconstruction design
-4. do not prioritize generic new parameter-level optimization until the
-   discrete parameter-tier gate is at least detectable in the dedicated lower-
-   tier suite
+4. do not prioritize generic new parameter-level optimization yet, but the
+   reason is now composite first-fail structure rather than missing lower-tier
+   simulation coverage
 5. if `event_discordance` is revisited again, constrain it to a much narrower
    auxiliary localization cue and replay-gate it before carrying more
    complexity forward
@@ -734,8 +744,11 @@ Latest grouped parameter-tier gate result:
   - `met_target`: `1`
   - `exceeded_target`: `2`
   - `missed_target`: `1`
-- current lower-tier blocker:
-  - `parameter_tier_discrete_state_chatter` missed at the `detection` scope
+- discrete repair follow-up:
+  - `/tmp/s3ntinel_parameter_discrete_fix_v4/20260413T020945Z_power_pressurization_hierarchy_smoke_parameter_focus_discrete`
+  - `parameter_tier_discrete_state_chatter` now exceeds target through an
+    `event_discordance`-led signal after aligning chatter cadence to emitted
+    sample timing
 
 So the current composite replay is not bottlenecked at parameter visibility for
 eligible subsystem/module windows. The immediate anomaly bottleneck is later in

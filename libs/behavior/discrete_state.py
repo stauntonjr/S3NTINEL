@@ -114,10 +114,11 @@ class DiscreteStateViolator(BehaviorViolator):
         rng = np.random.default_rng(int(context.get("rng_seed", 0)))
         stuck_state = str(context.get("stuck_state", "")) or None
         chatter_states = tuple(str(item) for item in context.get("chatter_states", ()) if str(item))
+        chatter_cycle_steps = max(int(context.get("chatter_cycle_steps", 1) or 1), 1)
         extra_dwell_steps = max(int(context.get("extra_dwell_steps", 1)), 1)
+        step_index = int(context.get("step_index", 0) or 0)
         held_state = None
         held_remaining = 0
-        last_output = None
         for sample in generated_stream:
             apply_violation = bool(rng.random() < anomaly_rate)
             base_state = sample.parameter_value
@@ -135,19 +136,15 @@ class DiscreteStateViolator(BehaviorViolator):
                 perturbed = held_state
             elif apply_violation and violation_type == "state_chatter":
                 if chatter_states:
-                    idx = 0
-                    if last_output is not None and last_output in chatter_states:
-                        idx = (chatter_states.index(str(last_output)) + 1) % len(chatter_states)
-                    perturbed = chatter_states[idx]
+                    perturbed = chatter_states[(step_index // chatter_cycle_steps) % len(chatter_states)]
                 else:
-                    perturbed = base_state if last_output not in {None, base_state} else violating_state
+                    perturbed = base_state if (step_index // chatter_cycle_steps) % 2 else violating_state
             elif apply_violation and violation_type == "stuck_state":
                 if stuck_state is None:
                     stuck_state = str(base_state)
                 perturbed = stuck_state
             else:
                 perturbed = base_state
-            last_output = perturbed
             metadata = dict(sample.metadata)
             metadata["misbehavior_applied"] = apply_violation
             metadata["misbehavior_family_label"] = violation_type if apply_violation else None

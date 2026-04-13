@@ -2122,6 +2122,7 @@ def _build_misbehavior_program(*, scenario: PowerPressurizationScenarioSpec, air
                     context={
                         "violation_type": "state_chatter",
                         "chatter_states": ("LOW", "OFF"),
+                        "chatter_cycle_steps": 4,
                         "anomaly_rate": _probability(scenario, "state_chatter"),
                         "rng_seed": _window_rng_seed(scenario, f"MBW_STATE_CHATTER_{control_role_name.upper()}"),
                     },

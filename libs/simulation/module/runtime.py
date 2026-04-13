@@ -269,13 +269,14 @@ class Module:
                 context={**dict(parameter.metadata), **dict(step_input.context)},
             )
             fault_context = dict(resolved_fault_context_by_parameter.get(parameter_name) or {})
+            resolved_fault_context = {**dict(resolved_step_input.context), **fault_context}
             for sample in iter_tick_samples(
                 parameter_name=parameter_name,
                 generator=parameter.behavior.generator,
                 step_input=resolved_step_input,
                 initial_state=resolved_initial_state_by_parameter.get(parameter_name),
                 violator=parameter.behavior.violator if apply_faults else None,
-                violation_context=fault_context,
+                violation_context=resolved_fault_context,
             ):
                 metadata = dict(sample.metadata)
                 misbehavior_active = bool(fault_context)
