@@ -519,6 +519,20 @@ Rejected near-term direction:
   for `missing_truth_local_candidate / shared_source_won /
   sibling_consequence_won / truth_module_present_but_lost`
   and therefore was not kept
+- a narrow reconstruction corroboration cue that boosted residual support when
+  the same parameter also had generic event / bound / response / state /
+  accumulation evidence cleared the benchmark-tier gate suite but produced no
+  change at all on the mixed composite replay:
+  - detected fault window rate stayed `0.8333`
+  - emit-ready fault window rate stayed `0.7778`
+  - telemetry parameter match rate stayed `0.7778`
+  - dominant subsystem match rate stayed `0.3333`
+  - top subsystem candidate presence stayed `0.1111`
+  - top module candidate presence stayed `0.1667`
+  - reconstruction failure buckets stayed `4 / 3 / 1 / 2`
+  for `missing_truth_local_candidate / shared_source_won /
+  sibling_consequence_won / truth_module_present_but_lost`
+  and therefore was not kept
 
 Do not reintroduce:
 
