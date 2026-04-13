@@ -325,6 +325,37 @@ def test_flatten_numeric_metric_records_includes_benchmark_scope_validation_metr
     ]
 
 
+def test_flatten_numeric_metric_records_includes_benchmark_tier_validation_metric_paths():
+    records = _flatten_numeric_metric_records(
+        {
+            "score_validation_by_benchmark_tier": {
+                "module_recoverable": {
+                    "fault_window_count": 3,
+                    "emit_ready_fault_window_rate": 2.0 / 3.0,
+                }
+            },
+            "eligible_composite_first_failed_benchmark_scope_count": {
+                "parameter": 4,
+            },
+            "attribution_validation_by_benchmark_tier": {
+                "subsystem_recoverable": {
+                    "dominant_subsystem_match_rate": 0.5,
+                }
+            },
+        },
+        category="validation",
+        scope_name="overall",
+        subscope_name="benchmark_tier_validation",
+    )
+
+    assert [(record.metric_path, record.value) for record in records] == [
+        ("attribution_validation_by_benchmark_tier.subsystem_recoverable.dominant_subsystem_match_rate", 0.5),
+        ("eligible_composite_first_failed_benchmark_scope_count.parameter", 4),
+        ("score_validation_by_benchmark_tier.module_recoverable.emit_ready_fault_window_rate", 2.0 / 3.0),
+        ("score_validation_by_benchmark_tier.module_recoverable.fault_window_count", 3),
+    ]
+
+
 def test_summarize_misbehavior_program_includes_declared_benchmark_tiers():
     flight = build_legacy_power_pressurization_hierarchy_reference_flight_spec()
 

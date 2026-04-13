@@ -343,3 +343,176 @@ def test_build_benchmark_scope_validation_summary_filters_denominators_by_declar
         "attribution_validation_by_benchmark_scope.module.dominant_module_match_rate",
         "attribution_validation_by_benchmark_scope.module.top_module_candidate_present_rate",
     ]
+
+
+def test_build_benchmark_tier_validation_summary_emits_tier_scorecards_and_eligible_window_ledger():
+    summary = reporting._build_benchmark_tier_validation_summary(
+        simulation_benchmark_audit_summary={
+            "status": "ok",
+            "fault_window_audit_cases": [
+                {
+                    "tail_id": "T1",
+                    "flight_id": "F1",
+                    "fault_window_id": "FW_D",
+                    "fault_family_label": "inertial",
+                    "fault_type": "timing_lag",
+                    "declared_benchmark_tier": "detection_only",
+                    "observed_recoverability_strength_tier": "undetected",
+                    "declared_target_alignment_status": "missed_target",
+                    "detected": False,
+                    "emit_ready": False,
+                    "detection_latency_seconds": None,
+                    "emit_ready_latency_seconds": None,
+                    "dominant_score_component": "unassigned",
+                    "telemetry_parameter_match": False,
+                    "telemetry_selected_parameter_match": False,
+                    "event_parameter_match": False,
+                    "dominant_subsystem_match": False,
+                    "dominant_module_match": False,
+                    "top_subsystem_candidate_present": False,
+                    "top_module_candidate_present": False,
+                },
+                {
+                    "tail_id": "T1",
+                    "flight_id": "F1",
+                    "fault_window_id": "FW_P",
+                    "fault_family_label": "regulated",
+                    "fault_type": "saturation",
+                    "declared_benchmark_tier": "parameter_visible_only",
+                    "observed_recoverability_strength_tier": "detection_only",
+                    "declared_target_alignment_status": "missed_target",
+                    "detected": True,
+                    "emit_ready": True,
+                    "detection_latency_seconds": 1.0,
+                    "emit_ready_latency_seconds": 2.0,
+                    "dominant_score_component": "reconstruction_error",
+                    "telemetry_parameter_match": False,
+                    "telemetry_selected_parameter_match": False,
+                    "event_parameter_match": False,
+                    "dominant_subsystem_match": False,
+                    "dominant_module_match": False,
+                    "top_subsystem_candidate_present": False,
+                    "top_module_candidate_present": False,
+                },
+                {
+                    "tail_id": "T1",
+                    "flight_id": "F1",
+                    "fault_window_id": "FW_S",
+                    "fault_family_label": "regulated",
+                    "fault_type": "bias",
+                    "declared_benchmark_tier": "subsystem_recoverable",
+                    "observed_recoverability_strength_tier": "detection_only",
+                    "declared_target_alignment_status": "missed_target",
+                    "detected": True,
+                    "emit_ready": False,
+                    "detection_latency_seconds": 1.5,
+                    "emit_ready_latency_seconds": None,
+                    "dominant_score_component": "reconstruction_error",
+                    "telemetry_parameter_match": True,
+                    "telemetry_selected_parameter_match": True,
+                    "event_parameter_match": False,
+                    "dominant_subsystem_match": False,
+                    "dominant_module_match": False,
+                    "top_subsystem_candidate_present": False,
+                    "top_module_candidate_present": False,
+                },
+                {
+                    "tail_id": "T1",
+                    "flight_id": "F1",
+                    "fault_window_id": "FW_M",
+                    "fault_family_label": "accumulative",
+                    "fault_type": "drift",
+                    "declared_benchmark_tier": "module_recoverable",
+                    "observed_recoverability_strength_tier": "subsystem_recoverable",
+                    "declared_target_alignment_status": "missed_target",
+                    "detected": True,
+                    "emit_ready": True,
+                    "detection_latency_seconds": 0.5,
+                    "emit_ready_latency_seconds": 1.0,
+                    "dominant_score_component": "reconstruction_error",
+                    "telemetry_parameter_match": True,
+                    "telemetry_selected_parameter_match": True,
+                    "event_parameter_match": False,
+                    "dominant_subsystem_match": True,
+                    "dominant_module_match": False,
+                    "top_subsystem_candidate_present": True,
+                    "top_module_candidate_present": False,
+                },
+            ],
+        },
+        fault_attribution_summary={
+            "status": "ok",
+            "fault_windows": [
+                {
+                    "tail_id": "T1",
+                    "flight_id": "F1",
+                    "fault_window_id": "FW_P",
+                    "reconstruction_failure_bucket": "missing_truth_local_candidate",
+                    "top_ranked_selected_parameter_name": "P_PARAM",
+                    "top_ranked_selected_parameter_rank": 1,
+                    "top_ranked_selected_parameter_support": 0.2,
+                    "telemetry_selected_attributed_parameter_names": ["P_PARAM"],
+                    "top_subsystem_candidate_ids_detected": ["SUB_P"],
+                    "top_module_candidate_ids_detected": ["MOD_P"],
+                    "matched_attribution_window_count": 1,
+                    "overlapping_window_count": 2,
+                },
+                {
+                    "tail_id": "T1",
+                    "flight_id": "F1",
+                    "fault_window_id": "FW_S",
+                    "reconstruction_failure_bucket": "shared_source_won",
+                    "top_ranked_selected_parameter_name": "S_PARAM",
+                    "top_ranked_selected_parameter_rank": 1,
+                    "top_ranked_selected_parameter_support": 0.4,
+                    "telemetry_selected_attributed_parameter_names": ["S_PARAM"],
+                    "top_subsystem_candidate_ids_detected": ["SUB_S"],
+                    "top_module_candidate_ids_detected": ["MOD_S"],
+                    "matched_attribution_window_count": 2,
+                    "overlapping_window_count": 3,
+                },
+                {
+                    "tail_id": "T1",
+                    "flight_id": "F1",
+                    "fault_window_id": "FW_M",
+                    "reconstruction_failure_bucket": "truth_module_present_but_lost",
+                    "top_ranked_selected_parameter_name": "M_PARAM",
+                    "top_ranked_selected_parameter_rank": 1,
+                    "top_ranked_selected_parameter_support": 0.8,
+                    "telemetry_selected_attributed_parameter_names": ["M_PARAM"],
+                    "top_subsystem_candidate_ids_detected": ["SUB_M"],
+                    "top_module_candidate_ids_detected": ["MOD_M"],
+                    "matched_attribution_window_count": 3,
+                    "overlapping_window_count": 4,
+                },
+            ],
+        },
+    )
+
+    assert summary["status"] == "ok"
+    assert list(summary["score_validation_by_benchmark_tier"]) == [
+        "detection_only",
+        "parameter_visible_only",
+        "module_recoverable",
+        "subsystem_recoverable",
+    ]
+    assert summary["score_validation_by_benchmark_tier"]["subsystem_recoverable"]["emit_ready_fault_window_rate"] == 0.0
+    assert summary["attribution_validation_by_benchmark_tier"]["module_recoverable"]["top_module_candidate_present_rate"] == 0.0
+    assert summary["eligible_composite_fault_window_count"] == 3
+    assert summary["eligible_composite_declared_benchmark_tier_count"] == {
+        "module_recoverable": 1,
+        "parameter_visible_only": 1,
+        "subsystem_recoverable": 1,
+    }
+    assert summary["eligible_composite_first_failed_benchmark_scope_count"] == {
+        "detection": 1,
+        "parameter": 1,
+        "module": 1,
+    }
+    assert summary["eligible_composite_failure_summary_by_fault_family"][0]["fault_family_label"] == "regulated"
+    ledger = summary["eligible_composite_window_failure_ledger"]
+    assert [row["fault_window_id"] for row in ledger] == ["FW_S", "FW_P", "FW_M"]
+    assert ledger[0]["first_failed_benchmark_scope"] == "detection"
+    assert ledger[0]["reconstruction_failure_bucket"] == "shared_source_won"
+    assert ledger[1]["first_failed_benchmark_scope"] == "parameter"
+    assert ledger[2]["first_failed_benchmark_scope"] == "module"

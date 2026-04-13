@@ -23,6 +23,7 @@ from libs.simulation.fault.spec import (
     BENCHMARK_RECOVERABILITY_TARGETS,
     OBSERVED_RECOVERABILITY_STRENGTH_TIERS,
     benchmark_eligible_declared_tiers_for_scope,
+    benchmark_scope_includes_declared_tier,
     recoverability_target_alignment_status,
     resolve_window_benchmark_recoverability_target,
     resolve_window_fault_window_id,
@@ -564,6 +565,18 @@ _BENCHMARK_REVIEW_PRIORITY_ORDER = {
     "medium": 2,
     "low": 3,
 }
+_BENCHMARK_FAILURE_SCOPE_ORDER = {
+    "detection": 0,
+    "parameter": 1,
+    "subsystem": 2,
+    "module": 3,
+    "met_target": 4,
+}
+_ELIGIBLE_COMPOSITE_BENCHMARK_TIERS = (
+    "parameter_visible_only",
+    "module_recoverable",
+    "subsystem_recoverable",
+)
 _DECLARED_TARGET_ALIGNMENT_ORDER = {
     "missed_target": 0,
     "undeclared": 1,
@@ -599,6 +612,15 @@ def _text_value(value: Any, *, default: str = "") -> str:
         return default
     text = str(value)
     return text if text else default
+
+
+def _list_text_values(value: Any) -> list[str]:
+    if isinstance(value, (list, tuple, set)):
+        return [str(item) for item in value if not pd.isna(item) and str(item)]
+    if value is None or pd.isna(value):
+        return []
+    text = str(value)
+    return [text] if text else []
 
 
 def _observed_recoverability_strength_tier(row: dict[str, Any]) -> str:
@@ -890,6 +912,337 @@ def _build_benchmark_scope_validation_summary(
                 }
                 for scope in BENCHMARK_OPTIMIZATION_SCOPE_ORDER
             },
+        },
+    }
+
+
+def _score_validation_by_benchmark_tier(cases_df: pd.DataFrame) -> dict[str, dict[str, Any]]:
+    rows: dict[str, dict[str, Any]] = {}
+    declared_series = (
+        cases_df.get("declared_benchmark_tier", pd.Series("", index=cases_df.index)).fillna("").astype(str)
+        if not cases_df.empty
+        else pd.Series(dtype="object")
+    )
+    for tier in BENCHMARK_RECOVERABILITY_TARGETS:
+        group = cases_df[declared_series == tier] if not cases_df.empty else pd.DataFrame()
+        total = int(len(group))
+        rows[tier] = {
+            "fault_window_count": total,
+            "fault_window_ids": _fault_window_ids(group),
+            "detected_fault_window_count": _series_bool_sum(group, "detected"),
+            "emit_ready_fault_window_count": _series_bool_sum(group, "emit_ready"),
+            "detected_fault_window_rate": _series_bool_mean(group, "detected"),
+            "emit_ready_fault_window_rate": _series_bool_mean(group, "emit_ready"),
+            "median_detection_latency_seconds": _series_float_median(group, "detection_latency_seconds"),
+            "median_emit_ready_latency_seconds": _series_float_median(group, "emit_ready_latency_seconds"),
+            "dominant_score_component_count": (
+                {
+                    str(label): int(count)
+                    for label, count in group.get("dominant_score_component", pd.Series(dtype="object"))
+                    .fillna("")
+                    .astype(str)
+                    .replace({"": "unassigned"})
+                    .value_counts(dropna=False)
+                    .sort_index()
+                    .items()
+                    if str(label)
+                }
+                if total > 0
+                else {}
+            ),
+        }
+    return rows
+
+
+def _attribution_validation_by_benchmark_tier(cases_df: pd.DataFrame) -> dict[str, dict[str, Any]]:
+    rows: dict[str, dict[str, Any]] = {}
+    declared_series = (
+        cases_df.get("declared_benchmark_tier", pd.Series("", index=cases_df.index)).fillna("").astype(str)
+        if not cases_df.empty
+        else pd.Series(dtype="object")
+    )
+    for tier in BENCHMARK_RECOVERABILITY_TARGETS:
+        group = cases_df[declared_series == tier] if not cases_df.empty else pd.DataFrame()
+        total = int(len(group))
+        rows[tier] = {
+            "fault_window_count": total,
+            "fault_window_ids": _fault_window_ids(group),
+            "telemetry_parameter_match_count": _series_bool_sum(group, "telemetry_parameter_match"),
+            "telemetry_selected_parameter_match_count": _series_bool_sum(group, "telemetry_selected_parameter_match"),
+            "event_parameter_match_count": _series_bool_sum(group, "event_parameter_match"),
+            "dominant_subsystem_match_count": _series_bool_sum(group, "dominant_subsystem_match"),
+            "dominant_module_match_count": _series_bool_sum(group, "dominant_module_match"),
+            "top_subsystem_candidate_present_count": _series_bool_sum(group, "top_subsystem_candidate_present"),
+            "top_module_candidate_present_count": _series_bool_sum(group, "top_module_candidate_present"),
+            "telemetry_parameter_match_rate": _series_bool_mean(group, "telemetry_parameter_match"),
+            "telemetry_selected_parameter_match_rate": _series_bool_mean(group, "telemetry_selected_parameter_match"),
+            "event_parameter_match_rate": _series_bool_mean(group, "event_parameter_match"),
+            "dominant_subsystem_match_rate": _series_bool_mean(group, "dominant_subsystem_match"),
+            "dominant_module_match_rate": _series_bool_mean(group, "dominant_module_match"),
+            "top_subsystem_candidate_present_rate": _series_bool_mean(group, "top_subsystem_candidate_present"),
+            "top_module_candidate_present_rate": _series_bool_mean(group, "top_module_candidate_present"),
+        }
+    return rows
+
+
+def _join_composite_benchmark_cases(
+    *,
+    simulation_benchmark_audit_summary: dict[str, Any],
+    fault_attribution_summary: dict[str, Any],
+) -> pd.DataFrame:
+    cases_df = pd.DataFrame.from_records(simulation_benchmark_audit_summary.get("fault_window_audit_cases", []))
+    if cases_df.empty:
+        return cases_df
+
+    attribution_df = pd.DataFrame.from_records(fault_attribution_summary.get("fault_windows", []))
+    if attribution_df.empty:
+        return cases_df
+
+    join_keys = [
+        key
+        for key in ("tail_id", "flight_id", "fault_window_id")
+        if key in cases_df.columns and key in attribution_df.columns
+    ]
+    if not join_keys:
+        return cases_df
+
+    detail_columns = [
+        column_name
+        for column_name in (
+            "reconstruction_failure_bucket",
+            "top_ranked_selected_parameter_name",
+            "top_ranked_selected_parameter_rank",
+            "top_ranked_selected_parameter_support",
+            "telemetry_attributed_parameter_names",
+            "telemetry_selected_attributed_parameter_names",
+            "event_attributed_parameter_names",
+            "top_subsystem_candidate_ids_detected",
+            "top_module_candidate_ids_detected",
+            "matched_attribution_window_count",
+            "overlapping_window_count",
+        )
+        if column_name in attribution_df.columns
+    ]
+    if not detail_columns:
+        return cases_df
+    return cases_df.merge(
+        attribution_df[join_keys + detail_columns].drop_duplicates(join_keys),
+        on=join_keys,
+        how="left",
+    )
+
+
+def _first_failed_benchmark_scope(row: dict[str, Any]) -> str:
+    declared_tier = _text_value(row.get("declared_benchmark_tier"))
+    parameter_scope_satisfied = (
+        _bool_value(row.get("telemetry_parameter_match"))
+        or _bool_value(row.get("telemetry_selected_parameter_match"))
+        or _bool_value(row.get("event_parameter_match"))
+    )
+    subsystem_scope_satisfied = (
+        _bool_value(row.get("dominant_subsystem_match")) or _bool_value(row.get("top_subsystem_candidate_present"))
+    )
+    module_scope_satisfied = (
+        _bool_value(row.get("dominant_module_match")) or _bool_value(row.get("top_module_candidate_present"))
+    )
+    detection_scope_satisfied = _bool_value(row.get("emit_ready"))
+
+    if not detection_scope_satisfied:
+        return "detection"
+    if benchmark_scope_includes_declared_tier(scope="parameter", declared_tier=declared_tier) and not parameter_scope_satisfied:
+        return "parameter"
+    if benchmark_scope_includes_declared_tier(scope="subsystem", declared_tier=declared_tier) and not subsystem_scope_satisfied:
+        return "subsystem"
+    if benchmark_scope_includes_declared_tier(scope="module", declared_tier=declared_tier) and not module_scope_satisfied:
+        return "module"
+    return "met_target"
+
+
+def _eligible_composite_failure_summary_by_field(ledger_df: pd.DataFrame, field: str) -> list[dict[str, Any]]:
+    if ledger_df.empty or field not in ledger_df.columns:
+        return []
+
+    rows: list[dict[str, Any]] = []
+    for raw_value, group in ledger_df.groupby(field, dropna=False):
+        label = _text_value(raw_value, default="unspecified")
+        rows.append(
+            {
+                field: label,
+                "fault_window_count": int(len(group)),
+                "declared_benchmark_tier_count": _count_declared_tier_labels(group, include_undeclared=False),
+                "first_failed_benchmark_scope_count": {
+                    scope: int(
+                        (group.get("first_failed_benchmark_scope", pd.Series(dtype="object")).fillna("").astype(str) == scope).sum()
+                    )
+                    for scope in _BENCHMARK_FAILURE_SCOPE_ORDER
+                    if int(
+                        (group.get("first_failed_benchmark_scope", pd.Series(dtype="object")).fillna("").astype(str) == scope).sum()
+                    )
+                    > 0
+                },
+                "dominant_score_component_count": (
+                    {
+                        str(label_value): int(count)
+                        for label_value, count in group.get("dominant_score_component", pd.Series(dtype="object"))
+                        .fillna("")
+                        .astype(str)
+                        .replace({"": "unassigned"})
+                        .value_counts(dropna=False)
+                        .sort_index()
+                        .items()
+                        if str(label_value)
+                    }
+                    if not group.empty
+                    else {}
+                ),
+                "reconstruction_failure_bucket_count": (
+                    {
+                        str(label_value): int(count)
+                        for label_value, count in group.get("reconstruction_failure_bucket", pd.Series(dtype="object"))
+                        .fillna("")
+                        .astype(str)
+                        .replace({"": "unassigned"})
+                        .value_counts(dropna=False)
+                        .sort_index()
+                        .items()
+                        if str(label_value)
+                    }
+                    if not group.empty
+                    else {}
+                ),
+            }
+        )
+    return sorted(
+        rows,
+        key=lambda row: (
+            -int(row.get("fault_window_count", 0) or 0),
+            str(row.get(field, "")),
+        ),
+    )
+
+
+def _build_eligible_composite_benchmark_window_ledger(cases_df: pd.DataFrame) -> list[dict[str, Any]]:
+    if cases_df.empty:
+        return []
+    declared_series = cases_df.get("declared_benchmark_tier", pd.Series("", index=cases_df.index)).fillna("").astype(str)
+    eligible_df = cases_df[declared_series.isin(_ELIGIBLE_COMPOSITE_BENCHMARK_TIERS)].copy()
+    if eligible_df.empty:
+        return []
+
+    eligible_df["first_failed_benchmark_scope"] = [
+        _first_failed_benchmark_scope(row) for row in eligible_df.to_dict(orient="records")
+    ]
+    eligible_df["failed_detection_scope"] = eligible_df["first_failed_benchmark_scope"] == "detection"
+    eligible_df["failed_parameter_scope"] = eligible_df["first_failed_benchmark_scope"] == "parameter"
+    eligible_df["failed_subsystem_scope"] = eligible_df["first_failed_benchmark_scope"] == "subsystem"
+    eligible_df["failed_module_scope"] = eligible_df["first_failed_benchmark_scope"] == "module"
+
+    sorted_df = eligible_df.sort_values(
+        ["first_failed_benchmark_scope", "declared_benchmark_tier", "fault_family_label", "fault_type", "fault_window_id"],
+        key=lambda series: (
+            series.map(lambda value: _BENCHMARK_FAILURE_SCOPE_ORDER.get(str(value), 99))
+            if series.name == "first_failed_benchmark_scope"
+            else series.map(lambda value: BENCHMARK_RECOVERABILITY_TARGETS.index(str(value)) if str(value) in BENCHMARK_RECOVERABILITY_TARGETS else 99)
+            if series.name == "declared_benchmark_tier"
+            else series
+        ),
+        kind="mergesort",
+    )
+    return [
+        {
+            "tail_id": _text_value(row.get("tail_id")),
+            "flight_id": _text_value(row.get("flight_id")),
+            "fault_window_id": _text_value(row.get("fault_window_id")),
+            "fault_family_label": _text_value(row.get("fault_family_label")),
+            "fault_type": _text_value(row.get("fault_type")),
+            "declared_benchmark_tier": _text_value(row.get("declared_benchmark_tier")),
+            "observed_recoverability_strength_tier": _text_value(row.get("observed_recoverability_strength_tier")),
+            "declared_target_alignment_status": _text_value(row.get("declared_target_alignment_status")),
+            "dominant_score_component": _text_value(row.get("dominant_score_component"), default="unassigned"),
+            "detected": _bool_value(row.get("detected")),
+            "emit_ready": _bool_value(row.get("emit_ready")),
+            "telemetry_parameter_match": _bool_value(row.get("telemetry_parameter_match")),
+            "telemetry_selected_parameter_match": _bool_value(row.get("telemetry_selected_parameter_match")),
+            "event_parameter_match": _bool_value(row.get("event_parameter_match")),
+            "dominant_subsystem_match": _bool_value(row.get("dominant_subsystem_match")),
+            "dominant_module_match": _bool_value(row.get("dominant_module_match")),
+            "top_subsystem_candidate_present": _bool_value(row.get("top_subsystem_candidate_present")),
+            "top_module_candidate_present": _bool_value(row.get("top_module_candidate_present")),
+            "failed_detection_scope": _bool_value(row.get("failed_detection_scope")),
+            "failed_parameter_scope": _bool_value(row.get("failed_parameter_scope")),
+            "failed_subsystem_scope": _bool_value(row.get("failed_subsystem_scope")),
+            "failed_module_scope": _bool_value(row.get("failed_module_scope")),
+            "first_failed_benchmark_scope": _text_value(row.get("first_failed_benchmark_scope")),
+            "reconstruction_failure_bucket": _text_value(row.get("reconstruction_failure_bucket")),
+            "top_ranked_selected_parameter_name": _text_value(row.get("top_ranked_selected_parameter_name")),
+            "top_ranked_selected_parameter_rank": _int_value(row.get("top_ranked_selected_parameter_rank")),
+            "top_ranked_selected_parameter_support": _float_value(row.get("top_ranked_selected_parameter_support")),
+            "telemetry_selected_attributed_parameter_names": _list_text_values(
+                row.get("telemetry_selected_attributed_parameter_names")
+            ),
+            "top_subsystem_candidate_ids_detected": _list_text_values(row.get("top_subsystem_candidate_ids_detected")),
+            "top_module_candidate_ids_detected": _list_text_values(row.get("top_module_candidate_ids_detected")),
+            "matched_attribution_window_count": _int_value(row.get("matched_attribution_window_count")),
+            "overlapping_window_count": _int_value(row.get("overlapping_window_count")),
+        }
+        for row in sorted_df.to_dict(orient="records")
+    ]
+
+
+def _build_benchmark_tier_validation_summary(
+    *,
+    simulation_benchmark_audit_summary: dict[str, Any],
+    fault_attribution_summary: dict[str, Any],
+) -> dict[str, Any]:
+    if simulation_benchmark_audit_summary.get("status") != "ok":
+        return simulation_benchmark_audit_summary
+
+    joined_cases_df = _join_composite_benchmark_cases(
+        simulation_benchmark_audit_summary=simulation_benchmark_audit_summary,
+        fault_attribution_summary=fault_attribution_summary,
+    )
+    eligible_ledger = _build_eligible_composite_benchmark_window_ledger(joined_cases_df)
+    eligible_ledger_df = pd.DataFrame.from_records(eligible_ledger)
+
+    return {
+        "status": "ok",
+        "fault_window_count": int(len(joined_cases_df)),
+        "declared_benchmark_tier_order": list(BENCHMARK_RECOVERABILITY_TARGETS),
+        "eligible_composite_declared_benchmark_tier_order": list(_ELIGIBLE_COMPOSITE_BENCHMARK_TIERS),
+        "score_validation_by_benchmark_tier": _score_validation_by_benchmark_tier(joined_cases_df),
+        "attribution_validation_by_benchmark_tier": _attribution_validation_by_benchmark_tier(joined_cases_df),
+        "eligible_composite_fault_window_count": int(len(eligible_ledger_df)),
+        "eligible_composite_fault_window_ids": _fault_window_ids(eligible_ledger_df),
+        "eligible_composite_declared_benchmark_tier_count": _count_declared_tier_labels(
+            eligible_ledger_df,
+            include_undeclared=False,
+        ),
+        "eligible_composite_first_failed_benchmark_scope_count": {
+            scope: int(
+                (eligible_ledger_df.get("first_failed_benchmark_scope", pd.Series(dtype="object")).fillna("").astype(str) == scope).sum()
+            )
+            for scope in _BENCHMARK_FAILURE_SCOPE_ORDER
+            if int(
+                (eligible_ledger_df.get("first_failed_benchmark_scope", pd.Series(dtype="object")).fillna("").astype(str) == scope).sum()
+            )
+            > 0
+        },
+        "eligible_composite_failure_summary_by_fault_family": _eligible_composite_failure_summary_by_field(
+            eligible_ledger_df,
+            "fault_family_label",
+        ),
+        "eligible_composite_failure_summary_by_dominant_score_component": _eligible_composite_failure_summary_by_field(
+            eligible_ledger_df,
+            "dominant_score_component",
+        ),
+        "eligible_composite_window_failure_ledger": eligible_ledger,
+        "methodology": {
+            "interpretation": (
+                "use this report to read mixed composite results by declared benchmark tier; the eligible composite ledger excludes detection-only windows so structural optimization focuses on windows expected to reach parameter, subsystem, or module visibility"
+            ),
+            "first_failed_benchmark_scope_rule": (
+                "first_failed_benchmark_scope uses emit_ready as the detection acceptance gate, then checks parameter, subsystem, and module recovery in declared-tier order"
+            ),
         },
     }
 
@@ -1402,6 +1755,10 @@ def write_validation_reports(
             "simulation_benchmark_audit_summary.json": benchmark_audit_summary,
             "benchmark_scope_validation_summary.json": _build_benchmark_scope_validation_summary(
                 simulation_benchmark_audit_summary=benchmark_audit_summary,
+            ),
+            "benchmark_tier_validation_summary.json": _build_benchmark_tier_validation_summary(
+                simulation_benchmark_audit_summary=benchmark_audit_summary,
+                fault_attribution_summary=fault_attribution_summary,
             ),
         }
     )

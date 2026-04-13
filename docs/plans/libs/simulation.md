@@ -642,6 +642,9 @@ Deliverables:
 - `reports/benchmark_scope_validation_summary.json` emitted by the same
   reporting path so benchmark intent becomes optimization denominators instead
   of audit-only metadata
+- `reports/benchmark_tier_validation_summary.json` emitted by the same
+  reporting path so mixed composite runs are readable by declared benchmark
+  tier and eligible-window failure stage
 - fault-window recoverability classification in the validation harness
 - family/detail-level review surface for deciding whether the current simulator
   is a valid localization benchmark

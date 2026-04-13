@@ -217,8 +217,15 @@ benchmark-aware optimization denominators:
 - `module`
 - `subsystem`
 
-Use the benchmark-scope summary for optimization and acceptance. Use the raw
-score/attribution summaries as all-window reference views.
+Full-run reporting also emits `benchmark_tier_validation_summary.json`.
+That report keeps the composite replay readable by declared benchmark tier and
+adds an eligible-window failure ledger for the composite windows that are
+expected to reach parameter, subsystem, or module visibility.
+
+Use the reports this way:
+- raw score/attribution summaries: all-window reference views
+- `benchmark_scope_validation_summary.json`: optimization denominators
+- `benchmark_tier_validation_summary.json`: composite replay failure analysis
 
 The named power/pressurization flights can also expose filtered benchmark packs
 such as:

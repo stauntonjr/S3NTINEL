@@ -575,5 +575,6 @@ def build_manifest(
             "fault_window_validation": str(paths.run_dir / "reports" / "fault_window_validation_summary.json"),
             "simulation_benchmark_audit": str(paths.run_dir / "reports" / "simulation_benchmark_audit_summary.json"),
             "benchmark_scope_validation": str(paths.run_dir / "reports" / "benchmark_scope_validation_summary.json"),
+            "benchmark_tier_validation": str(paths.run_dir / "reports" / "benchmark_tier_validation_summary.json"),
         },
     }

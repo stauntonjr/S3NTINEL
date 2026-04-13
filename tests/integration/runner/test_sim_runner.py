@@ -506,13 +506,34 @@ def test_validation_harness_report_bundles_fit_validation_and_compute(tmp_path):
                     "detection": {
                         "eligible_fault_window_count": 12,
                         "detected_fault_window_rate": 0.5,
+                        "emit_ready_fault_window_rate": 0.4,
                     }
                 },
                 "attribution_validation_by_benchmark_scope": {
+                    "parameter": {
+                        "eligible_fault_window_count": 8,
+                        "telemetry_parameter_match_rate": 0.8,
+                        "event_parameter_match_rate": 0.5,
+                    },
                     "module": {
                         "eligible_fault_window_count": 3,
                         "dominant_module_match_rate": 1.0 / 3.0,
+                    },
+                    "subsystem": {
+                        "eligible_fault_window_count": 5,
+                        "dominant_subsystem_match_rate": 0.6,
                     }
+                },
+            },
+            "benchmark_tier_validation": {
+                "score_validation_by_benchmark_tier": {
+                    "module_recoverable": {
+                        "fault_window_count": 3,
+                        "emit_ready_fault_window_rate": 1.0 / 3.0,
+                    }
+                },
+                "eligible_composite_first_failed_benchmark_scope_count": {
+                    "parameter": 2,
                 },
             },
         },
@@ -612,6 +633,14 @@ def test_validation_harness_report_bundles_fit_validation_and_compute(tmp_path):
         and record["scope_name"] == "overall"
         and record["subscope_name"] == "benchmark_scope_validation"
         and record["metric_path"] == "attribution_validation_by_benchmark_scope.module.dominant_module_match_rate"
+        and record["value"] == 1.0 / 3.0
+        for record in harness["validation_metrics"]["metric_records"]
+    )
+    assert any(
+        record["category"] == "validation"
+        and record["scope_name"] == "overall"
+        and record["subscope_name"] == "benchmark_tier_validation"
+        and record["metric_path"] == "score_validation_by_benchmark_tier.module_recoverable.emit_ready_fault_window_rate"
         and record["value"] == 1.0 / 3.0
         for record in harness["validation_metrics"]["metric_records"]
     )

@@ -145,3 +145,4 @@ def test_simulation_public_api_runs_end_to_end(tmp_path):
     assert (result.paths.run_dir / "reports" / "attribution_validation_summary.json").exists()
     assert (result.paths.run_dir / "reports" / "simulation_benchmark_audit_summary.json").exists()
     assert (result.paths.run_dir / "reports" / "benchmark_scope_validation_summary.json").exists()
+    assert (result.paths.run_dir / "reports" / "benchmark_tier_validation_summary.json").exists()
