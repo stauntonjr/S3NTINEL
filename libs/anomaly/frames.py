@@ -19,6 +19,7 @@ from libs.scoring.channels import (
 )
 
 ANOMALY_LOCALIZATION_PARAMETER_TOP_K = 3
+ANOMALY_PARAMETER_SELECTION_TOP_K = 5
 ANOMALY_LOCALIZATION_TARGET_TOP_K = 3
 
 
@@ -423,7 +424,7 @@ class AnomalyParameterLocalizationFrame(Frame):
         events_df: "DataFrame",
         hierarchy_sensor_map_df: "DataFrame",
         parameter_behavior_profile_df: "DataFrame | None" = None,
-        top_k_per_window: int = ANOMALY_LOCALIZATION_PARAMETER_TOP_K,
+        top_k_per_window: int = ANOMALY_PARAMETER_SELECTION_TOP_K,
     ) -> "AnomalyParameterLocalizationFrame":
         from pyspark.sql import functions as F
         from pyspark.sql.window import Window
@@ -821,11 +822,21 @@ class AnomalyParameterLocalizationFrame(Frame):
         )
 
     @hot_path
-    def localized_targets_df(self, *, top_k_per_window: int = ANOMALY_LOCALIZATION_TARGET_TOP_K) -> "DataFrame":
+    def localized_targets_df(
+        self,
+        *,
+        top_k_per_window: int = ANOMALY_LOCALIZATION_TARGET_TOP_K,
+        parameter_support_top_k: int | None = None,
+    ) -> "DataFrame":
         from pyspark.sql import functions as F
         from pyspark.sql.window import Window
 
-        module_support_df = self._module_support_df()
+        support_df = self.to_dataframe()
+        if parameter_support_top_k is not None:
+            support_df = support_df.where(
+                F.col("parameter_support_rank_in_window") <= F.lit(max(int(parameter_support_top_k), 1))
+            )
+        module_support_df = AnomalyParameterLocalizationFrame(dataframe=support_df)._module_support_df()
         subsystem_rank_window = Window.partitionBy("tail_id", "flight_id", "win_id", "date_utc").orderBy(
             F.col("subsystem_best_module_support").desc(),
             F.col("subsystem_rank_weighted_support").desc(),
@@ -928,7 +939,10 @@ class AnomalyParameterLocalizationFrame(Frame):
 
     @hot_path
     def dominant_targets_df(self) -> "DataFrame":
-        return self.localized_targets_df(top_k_per_window=1).select(
+        return self.localized_targets_df(
+            top_k_per_window=1,
+            parameter_support_top_k=ANOMALY_LOCALIZATION_PARAMETER_TOP_K,
+        ).select(
             "tail_id",
             "flight_id",
             "win_id",

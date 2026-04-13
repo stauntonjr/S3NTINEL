@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from libs.anomaly.frames import (
     AnomalyAttributionContextFrame,
     AnomalyPanelContextFrame,
+    ANOMALY_LOCALIZATION_PARAMETER_TOP_K,
     AnomalyParameterLocalizationFrame,
     AnomalySubsystemContextFrame,
 )
@@ -67,7 +68,7 @@ class AnomalyAttributionPlan:
                     events_df=events_df,
                     hierarchy_sensor_map_df=hierarchy_sensor_map_df,
                     parameter_behavior_profile_df=parameter_behavior_profile_df,
-                ).localized_targets_df()
+                ).localized_targets_df(parameter_support_top_k=ANOMALY_LOCALIZATION_PARAMETER_TOP_K)
             ),
         )
 
@@ -139,7 +140,9 @@ class AnomalyAttributionPlan:
             hierarchy_sensor_map_df=hierarchy_sensor_map_df,
             parameter_behavior_profile_df=parameter_behavior_profile_df,
         )
-        localization_targets_df = parameter_localization.localized_targets_df()
+        localization_targets_df = parameter_localization.localized_targets_df(
+            parameter_support_top_k=ANOMALY_LOCALIZATION_PARAMETER_TOP_K
+        )
         return AnomalyArtifactSet(
             window_attribution=self.build_window_attribution(
                 calibrated_df=calibrated_df,

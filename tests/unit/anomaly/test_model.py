@@ -7,6 +7,7 @@ from libs.anomaly import (
     AnomalyParameterLocalizationFrame,
     AnomalySubsystemContextFrame,
 )
+from libs.anomaly.frames import ANOMALY_LOCALIZATION_PARAMETER_TOP_K
 from libs.scoring.channels import (
     ACCUMULATION_VIOLATION_CHANNEL,
     EVENT_DISCORDANCE_CHANNEL,
@@ -559,3 +560,86 @@ def test_parameter_localization_uses_accumulation_channel_to_promote_accumulativ
     dominant_targets = AnomalyParameterLocalizationFrame(dataframe=localization_df).dominant_targets_df().collect()[0]
     assert dominant_targets["dominant_subsystem_id"] == "SUBSYS_ACC"
     assert dominant_targets["dominant_module_id"] == "MOD_ACC"
+
+
+def test_parameter_localization_retains_broader_selection_than_structural_target_rollup(spark):
+    calibrated_df = spark.createDataFrame(
+        [
+            {
+                "tail_id": "T001",
+                "flight_id": "F001",
+                "win_id": 1,
+                "phase_state_detected": "stable",
+                "phase_id_detected": 0,
+                "phase_confidence_detected": 0.9,
+                "distance_to_centroid_detected": 0.1,
+                "drift_magnitude": 0.1,
+                "breadth": 0.2,
+                "global_score": 5.0,
+                "p_value": 0.01,
+                "severity": "high",
+                "dominant_subsystem_id": "SUBSYS_SOURCE",
+                "dominant_score_component": RECONSTRUCTION_ERROR_CHANNEL,
+                "subsystem_scores": {"SUBSYS_SOURCE": 1.0},
+                "score_component_scores": score_component_scores_with_updates({RECONSTRUCTION_ERROR_CHANNEL: 100.0}),
+                "warm": True,
+                "emit_ready": True,
+                "min_warm": 1,
+                "date_utc": date(2026, 2, 28),
+            }
+        ]
+    )
+    phase_windows_df = spark.createDataFrame(
+        [
+            {
+                "tail_id": "T001",
+                "flight_id": "F001",
+                "win_id": 1,
+                "t_start": datetime(2026, 2, 28, 0, 0, 0, 100000),
+                "t_end": datetime(2026, 2, 28, 0, 0, 0, 900000),
+                "duration_ms": 800,
+                "backbone_residual_by_parameter": {
+                    "SRC_PARAM_A": 5.0,
+                    "SRC_PARAM_B": 4.5,
+                    "CTX_PARAM": 3.0,
+                    "SEL_PARAM": 2.5,
+                },
+                "date_utc": date(2026, 2, 28),
+            }
+        ]
+    )
+    events_df = spark.createDataFrame([], schema=create_sample_events_df(spark).schema)
+    hierarchy_df = spark.createDataFrame(
+        [
+            {"parameter_name": "SRC_PARAM_A", "system_id": "SYS_1", "subsystem_id": "SUBSYS_SOURCE", "module_id": "MOD_SRC"},
+            {"parameter_name": "SRC_PARAM_B", "system_id": "SYS_1", "subsystem_id": "SUBSYS_SOURCE", "module_id": "MOD_SRC"},
+            {"parameter_name": "CTX_PARAM", "system_id": "SYS_1", "subsystem_id": "SUBSYS_CONTEXT", "module_id": "MOD_CTX"},
+            {"parameter_name": "SEL_PARAM", "system_id": "SYS_1", "subsystem_id": "SUBSYS_SELECTION", "module_id": "MOD_SEL"},
+        ]
+    )
+
+    localization = AnomalyParameterLocalizationFrame.from_calibrated_phase_windows_events_and_hierarchy(
+        calibrated_df=calibrated_df,
+        phase_windows_df=phase_windows_df,
+        events_df=events_df,
+        hierarchy_sensor_map_df=hierarchy_df,
+    )
+    localization_df = localization.to_dataframe()
+
+    ranked = localization_df.orderBy("parameter_support_rank_in_window").select("parameter_name").collect()
+    assert [row["parameter_name"] for row in ranked] == [
+        "SRC_PARAM_A",
+        "SRC_PARAM_B",
+        "CTX_PARAM",
+        "SEL_PARAM",
+    ]
+
+    localized_targets = localization.localized_targets_df(
+        top_k_per_window=3,
+        parameter_support_top_k=ANOMALY_LOCALIZATION_PARAMETER_TOP_K,
+    ).collect()[0]
+    assert [candidate["id"] for candidate in localized_targets["top_module_candidates"]] == ["MOD_SRC", "MOD_CTX"]
+    assert [candidate["id"] for candidate in localized_targets["top_subsystem_candidates"]] == [
+        "SUBSYS_SOURCE",
+        "SUBSYS_CONTEXT",
+    ]

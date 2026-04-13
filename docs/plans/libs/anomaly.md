@@ -704,6 +704,28 @@ next move should not be another broad upstream reconstruction fusion, another
 broad event-discordance morphology expansion, or another stage-`90` selection
 heuristic pile.
 
+Accepted narrow parameter-level pass:
+
+- widen telemetry parameter selection from the structural rollup cap so the
+  parameter evidence view can retain a slightly broader top-k without changing
+  subsystem/module target aggregation
+- gate order used for acceptance:
+  - parameter-tier suite
+  - localization benchmark-tier suite
+  - mixed composite replay
+- latest accepted replay bundle:
+  - `/tmp/s3ntinel_param_select_v1_composite/20260413T033831Z_power_pressurization_hierarchy_composite`
+- measured effect on benchmark-scope parameter metrics:
+  - telemetry parameter match rate: `0.8333 -> 0.8333`
+  - telemetry selected parameter match rate: `0.5000 -> 0.6111`
+  - dominant subsystem match rate: `0.0556 -> 0.0556`
+  - dominant module match rate: `0.0769 -> 0.0769`
+- interpretation:
+  - accepted as a parameter-selection quality improvement
+  - not evidence of better structural localization
+  - the top-ranked wrong context parameter still wins in the same difficult
+    windows, so the remaining bottleneck is unchanged
+
 If reconstruction work resumes, the next narrowing step should focus on
 reconstruction cases where the selected set is dominated by:
 
