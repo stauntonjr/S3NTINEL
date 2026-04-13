@@ -739,6 +739,11 @@ Deliverables:
 - `reports/benchmark_tier_validation_summary.json` emitted by the same
   reporting path so mixed composite runs are readable by declared benchmark
   tier and eligible-window failure stage
+- composite candidate diagnostics in
+  `reports/benchmark_tier_validation_summary.json` for:
+  - rollup inconsistency
+  - detected-to-truth subsystem mapping gaps
+  - detected-to-truth module mapping gaps
 - fault-window recoverability classification in the validation harness
 - family/detail-level review surface for deciding whether the current simulator
   is a valid localization benchmark

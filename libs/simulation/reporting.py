@@ -1017,7 +1017,9 @@ def _join_composite_benchmark_cases(
             "telemetry_selected_attributed_parameter_names",
             "event_attributed_parameter_names",
             "top_subsystem_candidate_ids_detected",
+            "top_subsystem_candidate_truth_ids",
             "top_module_candidate_ids_detected",
+            "top_module_candidate_truth_ids",
             "matched_attribution_window_count",
             "overlapping_window_count",
         )
@@ -1110,6 +1112,18 @@ def _eligible_composite_failure_summary_by_field(ledger_df: pd.DataFrame, field:
                     if not group.empty
                     else {}
                 ),
+                "candidate_rollup_consistency_violation_count": _series_bool_sum(
+                    group,
+                    "candidate_rollup_consistency_violation",
+                ),
+                "top_subsystem_truth_mapping_gap_count": _series_bool_sum(
+                    group,
+                    "top_subsystem_truth_mapping_gap",
+                ),
+                "top_module_truth_mapping_gap_count": _series_bool_sum(
+                    group,
+                    "top_module_truth_mapping_gap",
+                ),
             }
         )
     return sorted(
@@ -1148,45 +1162,66 @@ def _build_eligible_composite_benchmark_window_ledger(cases_df: pd.DataFrame) ->
         ),
         kind="mergesort",
     )
-    return [
-        {
-            "tail_id": _text_value(row.get("tail_id")),
-            "flight_id": _text_value(row.get("flight_id")),
-            "fault_window_id": _text_value(row.get("fault_window_id")),
-            "fault_family_label": _text_value(row.get("fault_family_label")),
-            "fault_type": _text_value(row.get("fault_type")),
-            "declared_benchmark_tier": _text_value(row.get("declared_benchmark_tier")),
-            "observed_recoverability_strength_tier": _text_value(row.get("observed_recoverability_strength_tier")),
-            "declared_target_alignment_status": _text_value(row.get("declared_target_alignment_status")),
-            "dominant_score_component": _text_value(row.get("dominant_score_component"), default="unassigned"),
-            "detected": _bool_value(row.get("detected")),
-            "emit_ready": _bool_value(row.get("emit_ready")),
-            "telemetry_parameter_match": _bool_value(row.get("telemetry_parameter_match")),
-            "telemetry_selected_parameter_match": _bool_value(row.get("telemetry_selected_parameter_match")),
-            "event_parameter_match": _bool_value(row.get("event_parameter_match")),
-            "dominant_subsystem_match": _bool_value(row.get("dominant_subsystem_match")),
-            "dominant_module_match": _bool_value(row.get("dominant_module_match")),
-            "top_subsystem_candidate_present": _bool_value(row.get("top_subsystem_candidate_present")),
-            "top_module_candidate_present": _bool_value(row.get("top_module_candidate_present")),
-            "failed_detection_scope": _bool_value(row.get("failed_detection_scope")),
-            "failed_parameter_scope": _bool_value(row.get("failed_parameter_scope")),
-            "failed_subsystem_scope": _bool_value(row.get("failed_subsystem_scope")),
-            "failed_module_scope": _bool_value(row.get("failed_module_scope")),
-            "first_failed_benchmark_scope": _text_value(row.get("first_failed_benchmark_scope")),
-            "reconstruction_failure_bucket": _text_value(row.get("reconstruction_failure_bucket")),
-            "top_ranked_selected_parameter_name": _text_value(row.get("top_ranked_selected_parameter_name")),
-            "top_ranked_selected_parameter_rank": _int_value(row.get("top_ranked_selected_parameter_rank")),
-            "top_ranked_selected_parameter_support": _float_value(row.get("top_ranked_selected_parameter_support")),
-            "telemetry_selected_attributed_parameter_names": _list_text_values(
-                row.get("telemetry_selected_attributed_parameter_names")
-            ),
-            "top_subsystem_candidate_ids_detected": _list_text_values(row.get("top_subsystem_candidate_ids_detected")),
-            "top_module_candidate_ids_detected": _list_text_values(row.get("top_module_candidate_ids_detected")),
-            "matched_attribution_window_count": _int_value(row.get("matched_attribution_window_count")),
-            "overlapping_window_count": _int_value(row.get("overlapping_window_count")),
-        }
-        for row in sorted_df.to_dict(orient="records")
-    ]
+    ledger: list[dict[str, Any]] = []
+    for row in sorted_df.to_dict(orient="records"):
+        top_subsystem_candidate_ids_detected = _list_text_values(row.get("top_subsystem_candidate_ids_detected"))
+        top_subsystem_candidate_truth_ids = _list_text_values(row.get("top_subsystem_candidate_truth_ids"))
+        top_module_candidate_ids_detected = _list_text_values(row.get("top_module_candidate_ids_detected"))
+        top_module_candidate_truth_ids = _list_text_values(row.get("top_module_candidate_truth_ids"))
+        top_subsystem_candidate_present = _bool_value(row.get("top_subsystem_candidate_present"))
+        top_module_candidate_present = _bool_value(row.get("top_module_candidate_present"))
+        ledger.append(
+            {
+                "tail_id": _text_value(row.get("tail_id")),
+                "flight_id": _text_value(row.get("flight_id")),
+                "fault_window_id": _text_value(row.get("fault_window_id")),
+                "fault_family_label": _text_value(row.get("fault_family_label")),
+                "fault_type": _text_value(row.get("fault_type")),
+                "declared_benchmark_tier": _text_value(row.get("declared_benchmark_tier")),
+                "observed_recoverability_strength_tier": _text_value(row.get("observed_recoverability_strength_tier")),
+                "declared_target_alignment_status": _text_value(row.get("declared_target_alignment_status")),
+                "dominant_score_component": _text_value(row.get("dominant_score_component"), default="unassigned"),
+                "detected": _bool_value(row.get("detected")),
+                "emit_ready": _bool_value(row.get("emit_ready")),
+                "telemetry_parameter_match": _bool_value(row.get("telemetry_parameter_match")),
+                "telemetry_selected_parameter_match": _bool_value(row.get("telemetry_selected_parameter_match")),
+                "event_parameter_match": _bool_value(row.get("event_parameter_match")),
+                "dominant_subsystem_match": _bool_value(row.get("dominant_subsystem_match")),
+                "dominant_module_match": _bool_value(row.get("dominant_module_match")),
+                "top_subsystem_candidate_present": top_subsystem_candidate_present,
+                "top_module_candidate_present": top_module_candidate_present,
+                "candidate_rollup_consistency_violation": bool(
+                    top_module_candidate_present and not top_subsystem_candidate_present
+                ),
+                "top_subsystem_truth_mapping_gap": bool(
+                    top_subsystem_candidate_ids_detected
+                    and len(top_subsystem_candidate_truth_ids) < len(top_subsystem_candidate_ids_detected)
+                ),
+                "top_module_truth_mapping_gap": bool(
+                    top_module_candidate_ids_detected
+                    and len(top_module_candidate_truth_ids) < len(top_module_candidate_ids_detected)
+                ),
+                "failed_detection_scope": _bool_value(row.get("failed_detection_scope")),
+                "failed_parameter_scope": _bool_value(row.get("failed_parameter_scope")),
+                "failed_subsystem_scope": _bool_value(row.get("failed_subsystem_scope")),
+                "failed_module_scope": _bool_value(row.get("failed_module_scope")),
+                "first_failed_benchmark_scope": _text_value(row.get("first_failed_benchmark_scope")),
+                "reconstruction_failure_bucket": _text_value(row.get("reconstruction_failure_bucket")),
+                "top_ranked_selected_parameter_name": _text_value(row.get("top_ranked_selected_parameter_name")),
+                "top_ranked_selected_parameter_rank": _int_value(row.get("top_ranked_selected_parameter_rank")),
+                "top_ranked_selected_parameter_support": _float_value(row.get("top_ranked_selected_parameter_support")),
+                "telemetry_selected_attributed_parameter_names": _list_text_values(
+                    row.get("telemetry_selected_attributed_parameter_names")
+                ),
+                "top_subsystem_candidate_ids_detected": top_subsystem_candidate_ids_detected,
+                "top_subsystem_candidate_truth_ids": top_subsystem_candidate_truth_ids,
+                "top_module_candidate_ids_detected": top_module_candidate_ids_detected,
+                "top_module_candidate_truth_ids": top_module_candidate_truth_ids,
+                "matched_attribution_window_count": _int_value(row.get("matched_attribution_window_count")),
+                "overlapping_window_count": _int_value(row.get("overlapping_window_count")),
+            }
+        )
+    return ledger
 
 
 def _build_benchmark_tier_validation_summary(
@@ -1235,6 +1270,18 @@ def _build_benchmark_tier_validation_summary(
             eligible_ledger_df,
             "dominant_score_component",
         ),
+        "eligible_composite_candidate_rollup_consistency_violation_count": _series_bool_sum(
+            eligible_ledger_df,
+            "candidate_rollup_consistency_violation",
+        ),
+        "eligible_composite_top_subsystem_truth_mapping_gap_count": _series_bool_sum(
+            eligible_ledger_df,
+            "top_subsystem_truth_mapping_gap",
+        ),
+        "eligible_composite_top_module_truth_mapping_gap_count": _series_bool_sum(
+            eligible_ledger_df,
+            "top_module_truth_mapping_gap",
+        ),
         "eligible_composite_window_failure_ledger": eligible_ledger,
         "methodology": {
             "interpretation": (
@@ -1242,6 +1289,12 @@ def _build_benchmark_tier_validation_summary(
             ),
             "first_failed_benchmark_scope_rule": (
                 "first_failed_benchmark_scope uses emit_ready as the detection acceptance gate, then checks parameter, subsystem, and module recovery in declared-tier order"
+            ),
+            "candidate_rollup_consistency_rule": (
+                "candidate_rollup_consistency_violation marks windows where the truth module is already present in top module candidates but the truth subsystem is still absent from top subsystem candidates"
+            ),
+            "candidate_truth_mapping_gap_rule": (
+                "top_*_truth_mapping_gap marks windows where detected candidate ids outnumber resolved truth ids, which usually indicates ambiguous or unresolved detected-to-truth hierarchy mapping"
             ),
         },
     }

@@ -404,9 +404,9 @@ def test_build_benchmark_tier_validation_summary_emits_tier_scorecards_and_eligi
                     "observed_recoverability_strength_tier": "detection_only",
                     "declared_target_alignment_status": "missed_target",
                     "detected": True,
-                    "emit_ready": False,
+                    "emit_ready": True,
                     "detection_latency_seconds": 1.5,
-                    "emit_ready_latency_seconds": None,
+                    "emit_ready_latency_seconds": 2.5,
                     "dominant_score_component": "reconstruction_error",
                     "telemetry_parameter_match": True,
                     "telemetry_selected_parameter_match": True,
@@ -414,7 +414,7 @@ def test_build_benchmark_tier_validation_summary_emits_tier_scorecards_and_eligi
                     "dominant_subsystem_match": False,
                     "dominant_module_match": False,
                     "top_subsystem_candidate_present": False,
-                    "top_module_candidate_present": False,
+                    "top_module_candidate_present": True,
                 },
                 {
                     "tail_id": "T1",
@@ -467,7 +467,9 @@ def test_build_benchmark_tier_validation_summary_emits_tier_scorecards_and_eligi
                     "top_ranked_selected_parameter_support": 0.4,
                     "telemetry_selected_attributed_parameter_names": ["S_PARAM"],
                     "top_subsystem_candidate_ids_detected": ["SUB_S"],
+                    "top_subsystem_candidate_truth_ids": [],
                     "top_module_candidate_ids_detected": ["MOD_S"],
+                    "top_module_candidate_truth_ids": ["MOD_S"],
                     "matched_attribution_window_count": 2,
                     "overlapping_window_count": 3,
                 },
@@ -481,7 +483,9 @@ def test_build_benchmark_tier_validation_summary_emits_tier_scorecards_and_eligi
                     "top_ranked_selected_parameter_support": 0.8,
                     "telemetry_selected_attributed_parameter_names": ["M_PARAM"],
                     "top_subsystem_candidate_ids_detected": ["SUB_M"],
+                    "top_subsystem_candidate_truth_ids": ["SUB_M"],
                     "top_module_candidate_ids_detected": ["MOD_M"],
+                    "top_module_candidate_truth_ids": ["MOD_M"],
                     "matched_attribution_window_count": 3,
                     "overlapping_window_count": 4,
                 },
@@ -496,7 +500,7 @@ def test_build_benchmark_tier_validation_summary_emits_tier_scorecards_and_eligi
         "module_recoverable",
         "subsystem_recoverable",
     ]
-    assert summary["score_validation_by_benchmark_tier"]["subsystem_recoverable"]["emit_ready_fault_window_rate"] == 0.0
+    assert summary["score_validation_by_benchmark_tier"]["subsystem_recoverable"]["emit_ready_fault_window_rate"] == 1.0
     assert summary["attribution_validation_by_benchmark_tier"]["module_recoverable"]["top_module_candidate_present_rate"] == 0.0
     assert summary["eligible_composite_fault_window_count"] == 3
     assert summary["eligible_composite_declared_benchmark_tier_count"] == {
@@ -505,14 +509,22 @@ def test_build_benchmark_tier_validation_summary_emits_tier_scorecards_and_eligi
         "subsystem_recoverable": 1,
     }
     assert summary["eligible_composite_first_failed_benchmark_scope_count"] == {
-        "detection": 1,
         "parameter": 1,
+        "subsystem": 1,
         "module": 1,
     }
+    assert summary["eligible_composite_candidate_rollup_consistency_violation_count"] == 1
+    assert summary["eligible_composite_top_subsystem_truth_mapping_gap_count"] == 2
+    assert summary["eligible_composite_top_module_truth_mapping_gap_count"] == 1
     assert summary["eligible_composite_failure_summary_by_fault_family"][0]["fault_family_label"] == "regulated"
     ledger = summary["eligible_composite_window_failure_ledger"]
-    assert [row["fault_window_id"] for row in ledger] == ["FW_S", "FW_P", "FW_M"]
-    assert ledger[0]["first_failed_benchmark_scope"] == "detection"
-    assert ledger[0]["reconstruction_failure_bucket"] == "shared_source_won"
-    assert ledger[1]["first_failed_benchmark_scope"] == "parameter"
+    assert [row["fault_window_id"] for row in ledger] == ["FW_P", "FW_S", "FW_M"]
+    assert ledger[0]["first_failed_benchmark_scope"] == "parameter"
+    assert ledger[1]["first_failed_benchmark_scope"] == "subsystem"
+    assert ledger[1]["reconstruction_failure_bucket"] == "shared_source_won"
+    assert ledger[1]["candidate_rollup_consistency_violation"] is True
+    assert ledger[1]["top_subsystem_truth_mapping_gap"] is True
+    assert ledger[1]["top_module_truth_mapping_gap"] is False
+    assert ledger[1]["top_subsystem_candidate_truth_ids"] == []
+    assert ledger[1]["top_module_candidate_truth_ids"] == ["MOD_S"]
     assert ledger[2]["first_failed_benchmark_scope"] == "module"

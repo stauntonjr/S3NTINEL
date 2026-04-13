@@ -720,11 +720,20 @@ Latest composite benchmark-tier ledger result:
 
 - eligible composite windows: `18`
 - first failed scope count:
-  - `detection`: `4`
+  - `detection`: `3`
   - `parameter`: `0`
-  - `subsystem`: `12`
+  - `subsystem`: `14`
   - `module`: `1`
-  - `met_target`: `1`
+- diagnostic replay bundle:
+  - `/tmp/s3ntinel_composite_tier_rollup_diag/20260413T024540Z_power_pressurization_hierarchy_composite`
+- composite candidate diagnostic from
+  `benchmark_tier_validation_summary.json`:
+  - `eligible_composite_candidate_rollup_consistency_violation_count`: `1`
+  - `eligible_composite_top_subsystem_truth_mapping_gap_count`: `13`
+  - `eligible_composite_top_module_truth_mapping_gap_count`: `15`
+  - direct rollup inconsistency on this replay:
+    - `FW_STATE_CHATTER_CONTROL_SHARED`
+      (`event_discordance`, declared `module_recoverable`)
 
 Latest grouped parameter-tier gate result:
 
@@ -745,6 +754,9 @@ the stack:
 - detection on a small timing/discrete subset
 - subsystem recovery on the majority of eligible windows
 - module recovery on a small remainder
+- the new ledger also says the subsystem/module problem is not primarily a
+  top-module versus top-subsystem contradiction; it is widespread
+  detected-to-truth mapping loss in the emitted candidate ids
 
 ## Test And Acceptance Plan
 
