@@ -115,6 +115,11 @@ def test_object_level_examples_are_public_from_subpackages():
     assert "power_pressurization_hierarchy_smoke_localization_focus_drift" in flight_names
     assert "power_pressurization_hierarchy_smoke_localization_focus_saturation" in flight_names
     assert "power_pressurization_hierarchy_smoke_localization_focus_saturation_local" in flight_names
+    assert "power_pressurization_hierarchy_smoke_parameter_focus" in flight_names
+    assert "power_pressurization_hierarchy_smoke_parameter_focus_regulated" in flight_names
+    assert "power_pressurization_hierarchy_smoke_parameter_focus_accumulative" in flight_names
+    assert "power_pressurization_hierarchy_smoke_parameter_focus_discrete" in flight_names
+    assert "power_pressurization_hierarchy_smoke_parameter_focus_coupling" in flight_names
     assert "power_pressurization_hierarchy_medium" in flight_names
     assert "power_pressurization_hierarchy_composite_module_localization" in flight_names
     assert "power_pressurization_hierarchy_composite_subsystem_localization" in flight_names

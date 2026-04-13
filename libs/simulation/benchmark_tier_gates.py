@@ -18,6 +18,7 @@ from libs.simulation.runner import run_pipeline
 
 
 LOGGER_NAME = "s3ntinel.run_sim_benchmark_tier_gates"
+DEFAULT_BENCHMARK_TIER_GATE_SUITE_KEY = "localization"
 BENCHMARK_TIER_GATE_SUITE_NAME = "localization_benchmark_tier_gates"
 BENCHMARK_TIER_GATE_SUMMARY_FILENAME = "benchmark_tier_gate_suite_summary.json"
 BENCHMARK_TIER_GATE_MARKDOWN_FILENAME = "benchmark_tier_gate_suite_summary.md"
@@ -37,6 +38,14 @@ class BenchmarkTierGateSpec:
             "declared_benchmark_tier": self.declared_benchmark_tier,
             "description": self.description,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class BenchmarkTierGateSuiteSpec:
+    suite_key: str
+    suite_name: str
+    suite_interpretation: str
+    gate_specs: tuple[BenchmarkTierGateSpec, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,7 +92,9 @@ class BenchmarkTierGateRunSummary:
 
 @dataclass(frozen=True, slots=True)
 class BenchmarkTierGateSuiteSummary:
+    suite_key: str
     suite_name: str
+    suite_interpretation: str
     generated_at_utc: str
     suite_dir: str
     gate_specs: tuple[BenchmarkTierGateSpec, ...]
@@ -101,6 +112,7 @@ class BenchmarkTierGateSuiteSummary:
             if result.declared_target_alignment_status in {"met_target", "exceeded_target"}
         )
         return {
+            "suite_key": self.suite_key,
             "suite_name": self.suite_name,
             "generated_at_utc": self.generated_at_utc,
             "suite_dir": self.suite_dir,
@@ -110,14 +122,11 @@ class BenchmarkTierGateSuiteSummary:
             "gate_alignment_status_count": gate_alignment_status_count,
             "met_or_exceeded_gate_count": met_or_exceeded,
             "all_gates_met_or_exceeded": bool(self.gate_results) and met_or_exceeded == len(self.gate_results),
-            "suite_interpretation": (
-                "use this suite before the mixed composite bundle when evaluating anomaly changes "
-                "against the clean subsystem and module benchmark tiers"
-            ),
+            "suite_interpretation": self.suite_interpretation,
         }
 
 
-BENCHMARK_TIER_GATE_SPECS = (
+LOCALIZATION_BENCHMARK_TIER_GATE_SPECS = (
     BenchmarkTierGateSpec(
         gate_name="subsystem_tier_bias",
         flight_name="power_pressurization_hierarchy_smoke_localization_focus_bias",
@@ -132,11 +141,67 @@ BENCHMARK_TIER_GATE_SPECS = (
     ),
 )
 
+PARAMETER_BENCHMARK_TIER_GATE_SPECS = (
+    BenchmarkTierGateSpec(
+        gate_name="parameter_tier_regulated_saturation",
+        flight_name="power_pressurization_hierarchy_smoke_parameter_focus_regulated",
+        declared_benchmark_tier="parameter_visible_only",
+        description="Clean parameter-tier gate for the regulated saturation family on the smoke topology.",
+    ),
+    BenchmarkTierGateSpec(
+        gate_name="parameter_tier_accumulative_drift",
+        flight_name="power_pressurization_hierarchy_smoke_parameter_focus_accumulative",
+        declared_benchmark_tier="parameter_visible_only",
+        description="Clean parameter-tier gate for the accumulative drift family on the smoke topology.",
+    ),
+    BenchmarkTierGateSpec(
+        gate_name="parameter_tier_discrete_state_chatter",
+        flight_name="power_pressurization_hierarchy_smoke_parameter_focus_discrete",
+        declared_benchmark_tier="parameter_visible_only",
+        description="Clean parameter-tier gate for the discrete state-chatter family on the smoke topology.",
+    ),
+    BenchmarkTierGateSpec(
+        gate_name="parameter_tier_coupling_timing_jitter",
+        flight_name="power_pressurization_hierarchy_smoke_parameter_focus_coupling",
+        declared_benchmark_tier="parameter_visible_only",
+        description="Clean parameter-tier gate for the coupling timing-jitter family on the smoke topology.",
+    ),
+)
 
-def ordered_benchmark_tier_gate_specs() -> tuple[BenchmarkTierGateSpec, ...]:
+BENCHMARK_TIER_GATE_SUITE_SPECS = {
+    "localization": BenchmarkTierGateSuiteSpec(
+        suite_key="localization",
+        suite_name="localization_benchmark_tier_gates",
+        suite_interpretation=(
+            "use this suite before the mixed composite bundle when evaluating anomaly changes "
+            "against the clean subsystem and module benchmark tiers"
+        ),
+        gate_specs=LOCALIZATION_BENCHMARK_TIER_GATE_SPECS,
+    ),
+    "parameter": BenchmarkTierGateSuiteSpec(
+        suite_key="parameter",
+        suite_name="parameter_benchmark_tier_gates",
+        suite_interpretation=(
+            "use this suite before parameter-level anomaly tuning so regulated, accumulative, discrete, "
+            "and coupling/timing parameter visibility are screened on dedicated lower-tier smoke packs"
+        ),
+        gate_specs=PARAMETER_BENCHMARK_TIER_GATE_SPECS,
+    ),
+}
+
+
+def resolve_benchmark_tier_gate_suite_spec(suite_key: str | None = None) -> BenchmarkTierGateSuiteSpec:
+    return BENCHMARK_TIER_GATE_SUITE_SPECS.get(
+        str(suite_key or DEFAULT_BENCHMARK_TIER_GATE_SUITE_KEY),
+        BENCHMARK_TIER_GATE_SUITE_SPECS[DEFAULT_BENCHMARK_TIER_GATE_SUITE_KEY],
+    )
+
+
+def ordered_benchmark_tier_gate_specs(suite_key: str | None = None) -> tuple[BenchmarkTierGateSpec, ...]:
+    suite_spec = resolve_benchmark_tier_gate_suite_spec(suite_key)
     ordered_specs: list[BenchmarkTierGateSpec] = []
     for tier in BENCHMARK_RECOVERABILITY_LADDER:
-        ordered_specs.extend(spec for spec in BENCHMARK_TIER_GATE_SPECS if spec.declared_benchmark_tier == tier)
+        ordered_specs.extend(spec for spec in suite_spec.gate_specs if spec.declared_benchmark_tier == tier)
     return tuple(ordered_specs)
 
 
@@ -155,13 +220,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--write-mode", default="overwrite", choices=("overwrite", "append", "merge"))
     parser.add_argument("--min-warm", default=1, type=int, help="Conformal minimum warm size")
     parser.add_argument("--phase-count", type=int, default=4, help="Detected phase count")
+    parser.add_argument(
+        "--suite",
+        default=DEFAULT_BENCHMARK_TIER_GATE_SUITE_KEY,
+        choices=tuple(sorted(BENCHMARK_TIER_GATE_SUITE_SPECS)),
+        help="Benchmark-tier gate suite to run",
+    )
     parser.set_defaults(start_stage=None, end_stage=None, replay_run_dir=None)
     return parser.parse_args()
 
 
-def _timestamped_suite_dir(base_dir: str | Path) -> Path:
+def _timestamped_suite_dir(base_dir: str | Path, *, suite_spec: BenchmarkTierGateSuiteSpec) -> Path:
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    return Path(base_dir) / f"{timestamp}_{BENCHMARK_TIER_GATE_SUITE_NAME}"
+    return Path(base_dir) / f"{timestamp}_{suite_spec.suite_name}"
 
 
 def _text_value(value: Any) -> str | None:
@@ -228,13 +299,17 @@ def build_benchmark_tier_gate_suite_summary(
     *,
     suite_dir: Path,
     gate_results: tuple[BenchmarkTierGateRunSummary, ...],
+    suite_key: str | None = None,
     gate_specs: tuple[BenchmarkTierGateSpec, ...] | None = None,
 ) -> BenchmarkTierGateSuiteSummary:
+    suite_spec = resolve_benchmark_tier_gate_suite_spec(suite_key)
     return BenchmarkTierGateSuiteSummary(
-        suite_name=BENCHMARK_TIER_GATE_SUITE_NAME,
+        suite_key=suite_spec.suite_key,
+        suite_name=suite_spec.suite_name,
+        suite_interpretation=suite_spec.suite_interpretation,
         generated_at_utc=datetime.now(timezone.utc).isoformat(),
         suite_dir=str(suite_dir),
-        gate_specs=ordered_benchmark_tier_gate_specs() if gate_specs is None else gate_specs,
+        gate_specs=ordered_benchmark_tier_gate_specs(suite_spec.suite_key) if gate_specs is None else gate_specs,
         gate_results=gate_results,
     )
 
@@ -292,14 +367,20 @@ def write_benchmark_tier_gate_suite_report(
     return payload
 
 
-def run_benchmark_tier_gate_suite(base_config: PipelineRunConfig) -> tuple[Path, dict[str, Any]]:
+def run_benchmark_tier_gate_suite(
+    base_config: PipelineRunConfig,
+    *,
+    suite_key: str | None = None,
+) -> tuple[Path, dict[str, Any]]:
     logger = get_logger(LOGGER_NAME)
-    suite_dir = _timestamped_suite_dir(base_config.base_dir)
+    suite_spec = resolve_benchmark_tier_gate_suite_spec(suite_key)
+    ordered_gate_specs = ordered_benchmark_tier_gate_specs(suite_spec.suite_key)
+    suite_dir = _timestamped_suite_dir(base_config.base_dir, suite_spec=suite_spec)
     runs_dir = suite_dir / "runs"
     runs_dir.mkdir(parents=True, exist_ok=True)
     gate_results: list[BenchmarkTierGateRunSummary] = []
 
-    for gate_spec in ordered_benchmark_tier_gate_specs():
+    for gate_spec in ordered_gate_specs:
         gate_config = replace(
             base_config,
             base_dir=str(runs_dir),
@@ -312,7 +393,8 @@ def run_benchmark_tier_gate_suite(base_config: PipelineRunConfig) -> tuple[Path,
         )
         existing_run_dirs = set(runs_dir.glob(f"*_{gate_spec.flight_name}"))
         logger.info(
-            "benchmark_tier_gate_start gate=%s flight=%s declared_benchmark_tier=%s suite_dir=%s",
+            "benchmark_tier_gate_start suite=%s gate=%s flight=%s declared_benchmark_tier=%s suite_dir=%s",
+            suite_spec.suite_key,
             gate_spec.gate_name,
             gate_spec.flight_name,
             gate_spec.declared_benchmark_tier,
@@ -341,11 +423,13 @@ def run_benchmark_tier_gate_suite(base_config: PipelineRunConfig) -> tuple[Path,
     summary = build_benchmark_tier_gate_suite_summary(
         suite_dir=suite_dir,
         gate_results=tuple(gate_results),
-        gate_specs=ordered_benchmark_tier_gate_specs(),
+        suite_key=suite_spec.suite_key,
+        gate_specs=ordered_gate_specs,
     )
     payload = write_benchmark_tier_gate_suite_report(suite_dir=suite_dir, summary=summary)
     logger.info(
-        "benchmark_tier_gate_suite_complete suite_dir=%s all_gates_met_or_exceeded=%s",
+        "benchmark_tier_gate_suite_complete suite=%s suite_dir=%s all_gates_met_or_exceeded=%s",
+        suite_spec.suite_key,
         suite_dir,
         payload.get("all_gates_met_or_exceeded"),
     )
@@ -355,11 +439,12 @@ def run_benchmark_tier_gate_suite(base_config: PipelineRunConfig) -> tuple[Path,
 def main() -> None:
     args = parse_args()
     config = PipelineRunConfig.from_args(args)
-    suite_dir, payload = run_benchmark_tier_gate_suite(config)
+    suite_dir, payload = run_benchmark_tier_gate_suite(config, suite_key=str(args.suite))
     print(
         json.dumps(
             {
                 "suite_dir": str(suite_dir),
+                "suite_key": payload.get("suite_key"),
                 "summary_path": str(Path(suite_dir) / "reports" / BENCHMARK_TIER_GATE_SUMMARY_FILENAME),
                 "all_gates_met_or_exceeded": payload.get("all_gates_met_or_exceeded"),
                 "gate_alignment_status_count": payload.get("gate_alignment_status_count"),

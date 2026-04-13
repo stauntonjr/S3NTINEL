@@ -31,6 +31,23 @@ def test_ordered_benchmark_tier_gate_specs_follow_ladder_order():
     ]
 
 
+def test_ordered_benchmark_tier_gate_specs_follow_parameter_suite_order():
+    specs = ordered_benchmark_tier_gate_specs("parameter")
+
+    assert [spec.gate_name for spec in specs] == [
+        "parameter_tier_regulated_saturation",
+        "parameter_tier_accumulative_drift",
+        "parameter_tier_discrete_state_chatter",
+        "parameter_tier_coupling_timing_jitter",
+    ]
+    assert [spec.declared_benchmark_tier for spec in specs] == [
+        "parameter_visible_only",
+        "parameter_visible_only",
+        "parameter_visible_only",
+        "parameter_visible_only",
+    ]
+
+
 def test_benchmark_tier_gate_suite_summary_writes_grouped_payload(tmp_path: Path):
     specs = ordered_benchmark_tier_gate_specs()
     module_run_dir = tmp_path / "runs" / "20260412T200000Z_power_pressurization_hierarchy_smoke_localization_focus_drift"
@@ -112,6 +129,7 @@ def test_benchmark_tier_gate_suite_summary_writes_grouped_payload(tmp_path: Path
     summary = build_benchmark_tier_gate_suite_summary(
         suite_dir=tmp_path,
         gate_results=gate_results,
+        suite_key="localization",
         gate_specs=specs,
     )
     payload = write_benchmark_tier_gate_suite_report(
@@ -126,6 +144,83 @@ def test_benchmark_tier_gate_suite_summary_writes_grouped_payload(tmp_path: Path
         "module_tier_drift",
         "subsystem_tier_bias",
     ]
+    assert payload["suite_key"] == "localization"
     assert payload["gate_results"][1]["dominant_subsystem_match_rate"] == 1.0
     assert (tmp_path / "reports" / BENCHMARK_TIER_GATE_SUMMARY_FILENAME).exists()
     assert (tmp_path / "reports" / BENCHMARK_TIER_GATE_MARKDOWN_FILENAME).exists()
+
+
+def test_benchmark_tier_gate_suite_summary_writes_parameter_suite_payload(tmp_path: Path):
+    specs = ordered_benchmark_tier_gate_specs("parameter")
+    regulated_run_dir = tmp_path / "runs" / "20260412T200000Z_power_pressurization_hierarchy_smoke_parameter_focus_regulated"
+    accum_run_dir = tmp_path / "runs" / "20260412T200100Z_power_pressurization_hierarchy_smoke_parameter_focus_accumulative"
+    discrete_run_dir = tmp_path / "runs" / "20260412T200200Z_power_pressurization_hierarchy_smoke_parameter_focus_discrete"
+    coupling_run_dir = tmp_path / "runs" / "20260412T200300Z_power_pressurization_hierarchy_smoke_parameter_focus_coupling"
+
+    for run_dir, observed_tier in (
+        (regulated_run_dir, "parameter_visible_only"),
+        (accum_run_dir, "module_recoverable"),
+        (discrete_run_dir, "parameter_visible_only"),
+        (coupling_run_dir, "parameter_visible_only"),
+    ):
+        _write_json(
+            run_dir / "reports" / "simulation_benchmark_audit_summary.json",
+            {
+                "fault_window_audit_cases": [
+                    {
+                        "declared_target_alignment_status": "met_target" if observed_tier == "parameter_visible_only" else "exceeded_target",
+                        "observed_recoverability_strength_tier": observed_tier,
+                        "recommended_review_action": "keep_parameter_tier_gate",
+                    }
+                ]
+            },
+        )
+        _write_json(
+            run_dir / "reports" / "score_validation_summary.json",
+            {
+                "detected_fault_window_rate": 1.0,
+                "emit_ready_fault_window_rate": 1.0,
+            },
+        )
+        _write_json(
+            run_dir / "reports" / "attribution_validation_summary.json",
+            {
+                "telemetry_parameter_match_rate": 1.0,
+                "telemetry_selected_parameter_match_rate": 0.75,
+                "dominant_subsystem_match_rate": 0.0,
+                "dominant_module_match_rate": 0.0,
+                "top_subsystem_candidate_present_rate": 0.0,
+                "top_module_candidate_present_rate": 0.0,
+            },
+        )
+
+    gate_results = tuple(
+        build_benchmark_tier_gate_run_summary(
+            gate_spec=spec,
+            run_dir=run_dir,
+            run_status="success",
+        )
+        for spec, run_dir in zip(specs, (regulated_run_dir, accum_run_dir, discrete_run_dir, coupling_run_dir), strict=True)
+    )
+    summary = build_benchmark_tier_gate_suite_summary(
+        suite_dir=tmp_path,
+        gate_results=gate_results,
+        suite_key="parameter",
+        gate_specs=specs,
+    )
+    payload = write_benchmark_tier_gate_suite_report(
+        suite_dir=tmp_path,
+        summary=summary,
+    )
+
+    assert payload["suite_key"] == "parameter"
+    assert payload["suite_name"] == "parameter_benchmark_tier_gates"
+    assert payload["all_gates_met_or_exceeded"] is True
+    assert payload["met_or_exceeded_gate_count"] == 4
+    assert payload["gate_alignment_status_count"] == {"exceeded_target": 1, "met_target": 3}
+    assert [result["gate_name"] for result in payload["gate_results"]] == [
+        "parameter_tier_regulated_saturation",
+        "parameter_tier_accumulative_drift",
+        "parameter_tier_discrete_state_chatter",
+        "parameter_tier_coupling_timing_jitter",
+    ]

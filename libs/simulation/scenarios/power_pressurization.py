@@ -2593,3 +2593,36 @@ def build_power_pressurization_localization_focus_flight_spec(
         localization_focus_saturation_variant=saturation_variant,
         benchmark_fault_target_overrides=effective_target_overrides,
     )
+
+
+def build_power_pressurization_parameter_focus_flight_spec(
+    *,
+    seed: int | None = None,
+    benchmark_fault_types: tuple[str, ...] | None = ("saturation", "drift", "state_chatter", "timing_jitter"),
+    benchmark_suite_name: str = "parameter_focus",
+    flight_name: str = "power_pressurization_hierarchy_smoke_parameter_focus",
+    benchmark_fault_target_overrides: dict[str, str] | None = None,
+) -> FlightSpec:
+    base_scenario = build_power_pressurization_scenario_spec(scale="smoke", seed=seed)
+    focus_scenario = replace(
+        base_scenario,
+        stochasticity=_localization_focus_stochasticity(base_scenario.stochasticity),
+    )
+    effective_target_overrides = {
+        "saturation": "parameter_visible_only",
+        "drift": "parameter_visible_only",
+        "state_chatter": "parameter_visible_only",
+        "timing_jitter": "parameter_visible_only",
+    }
+    if benchmark_fault_target_overrides:
+        effective_target_overrides.update(
+            {str(key): str(value) for key, value in benchmark_fault_target_overrides.items()}
+        )
+    return _build_power_pressurization_flight_from_scenario(
+        scenario=focus_scenario,
+        benchmark_recoverability_targets=("module_recoverable", "subsystem_recoverable"),
+        benchmark_suite_name=benchmark_suite_name,
+        benchmark_fault_types=benchmark_fault_types,
+        flight_name_override=flight_name,
+        benchmark_fault_target_overrides=effective_target_overrides,
+    )

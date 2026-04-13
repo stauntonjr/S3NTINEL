@@ -34,6 +34,7 @@ from libs.simulation.phase.spec import (
 from libs.simulation.scenarios import (
     build_power_pressurization_flight_spec,
     build_power_pressurization_localization_focus_flight_spec,
+    build_power_pressurization_parameter_focus_flight_spec,
 )
 
 
@@ -1194,6 +1195,61 @@ def build_power_pressurization_hierarchy_smoke_localization_focus_saturation_loc
     )
 
 
+def build_power_pressurization_hierarchy_smoke_parameter_focus_flight_spec(
+    *,
+    seed: int | None = None,
+) -> FlightSpec:
+    return build_power_pressurization_parameter_focus_flight_spec(seed=seed)
+
+
+def build_power_pressurization_hierarchy_smoke_parameter_focus_regulated_flight_spec(
+    *,
+    seed: int | None = None,
+) -> FlightSpec:
+    return build_power_pressurization_parameter_focus_flight_spec(
+        seed=seed,
+        benchmark_fault_types=("saturation",),
+        benchmark_suite_name="parameter_focus_regulated",
+        flight_name="power_pressurization_hierarchy_smoke_parameter_focus_regulated",
+    )
+
+
+def build_power_pressurization_hierarchy_smoke_parameter_focus_accumulative_flight_spec(
+    *,
+    seed: int | None = None,
+) -> FlightSpec:
+    return build_power_pressurization_parameter_focus_flight_spec(
+        seed=seed,
+        benchmark_fault_types=("drift",),
+        benchmark_suite_name="parameter_focus_accumulative",
+        flight_name="power_pressurization_hierarchy_smoke_parameter_focus_accumulative",
+    )
+
+
+def build_power_pressurization_hierarchy_smoke_parameter_focus_discrete_flight_spec(
+    *,
+    seed: int | None = None,
+) -> FlightSpec:
+    return build_power_pressurization_parameter_focus_flight_spec(
+        seed=seed,
+        benchmark_fault_types=("state_chatter",),
+        benchmark_suite_name="parameter_focus_discrete",
+        flight_name="power_pressurization_hierarchy_smoke_parameter_focus_discrete",
+    )
+
+
+def build_power_pressurization_hierarchy_smoke_parameter_focus_coupling_flight_spec(
+    *,
+    seed: int | None = None,
+) -> FlightSpec:
+    return build_power_pressurization_parameter_focus_flight_spec(
+        seed=seed,
+        benchmark_fault_types=("timing_jitter",),
+        benchmark_suite_name="parameter_focus_coupling",
+        flight_name="power_pressurization_hierarchy_smoke_parameter_focus_coupling",
+    )
+
+
 def get_flight_builders() -> dict[str, FlightBuilder]:
     return {
         "coupled_module": build_coupled_module_flight_spec,
@@ -1219,6 +1275,21 @@ def get_flight_builders() -> dict[str, FlightBuilder]:
         ),
         "power_pressurization_hierarchy_smoke_localization_focus_saturation_local": (
             build_power_pressurization_hierarchy_smoke_localization_focus_saturation_local_flight_spec
+        ),
+        "power_pressurization_hierarchy_smoke_parameter_focus": (
+            build_power_pressurization_hierarchy_smoke_parameter_focus_flight_spec
+        ),
+        "power_pressurization_hierarchy_smoke_parameter_focus_regulated": (
+            build_power_pressurization_hierarchy_smoke_parameter_focus_regulated_flight_spec
+        ),
+        "power_pressurization_hierarchy_smoke_parameter_focus_accumulative": (
+            build_power_pressurization_hierarchy_smoke_parameter_focus_accumulative_flight_spec
+        ),
+        "power_pressurization_hierarchy_smoke_parameter_focus_discrete": (
+            build_power_pressurization_hierarchy_smoke_parameter_focus_discrete_flight_spec
+        ),
+        "power_pressurization_hierarchy_smoke_parameter_focus_coupling": (
+            build_power_pressurization_hierarchy_smoke_parameter_focus_coupling_flight_spec
         ),
         "power_pressurization_hierarchy_medium": build_power_pressurization_hierarchy_medium_flight_spec,
         "power_pressurization_hierarchy_composite": build_power_pressurization_hierarchy_composite_flight_spec,
@@ -1259,6 +1330,21 @@ def build_named_flight_spec(flight_name: str, *, seed: int | None = None) -> Fli
         ),
         "power_pressurization_hierarchy_smoke_localization_focus_saturation_local": (
             build_power_pressurization_hierarchy_smoke_localization_focus_saturation_local_flight_spec
+        ),
+        "power_pressurization_hierarchy_smoke_parameter_focus": (
+            build_power_pressurization_hierarchy_smoke_parameter_focus_flight_spec
+        ),
+        "power_pressurization_hierarchy_smoke_parameter_focus_regulated": (
+            build_power_pressurization_hierarchy_smoke_parameter_focus_regulated_flight_spec
+        ),
+        "power_pressurization_hierarchy_smoke_parameter_focus_accumulative": (
+            build_power_pressurization_hierarchy_smoke_parameter_focus_accumulative_flight_spec
+        ),
+        "power_pressurization_hierarchy_smoke_parameter_focus_discrete": (
+            build_power_pressurization_hierarchy_smoke_parameter_focus_discrete_flight_spec
+        ),
+        "power_pressurization_hierarchy_smoke_parameter_focus_coupling": (
+            build_power_pressurization_hierarchy_smoke_parameter_focus_coupling_flight_spec
         ),
         "power_pressurization_hierarchy_medium": build_power_pressurization_hierarchy_medium_flight_spec,
         "power_pressurization_hierarchy_composite": build_power_pressurization_hierarchy_composite_flight_spec,

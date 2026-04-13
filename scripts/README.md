@@ -44,7 +44,9 @@ Incremental patches:
     - a consolidated console log at `logs/run.log`
 - Run the canonical benchmark-tier gate suite into one grouped bundle:
   - `python -m scripts.run_sim_benchmark_tier_gates --base-dir data/simulation_gate_runs`
-  - this runs the dedicated `bias` and `drift` smoke benchmark gates as one suite and writes:
+  - default `--suite localization` runs the dedicated `bias` and `drift` smoke benchmark gates as one suite
+  - `--suite parameter` runs the dedicated regulated / accumulative / discrete / coupling parameter-tier smoke gates as one suite
+  - writes:
     - per-gate child run bundles under `runs/`
     - `reports/benchmark_tier_gate_suite_summary.json`
     - `reports/benchmark_tier_gate_suite_summary.md`
@@ -60,6 +62,11 @@ Incremental patches:
     - `power_pressurization_hierarchy_smoke_localization_focus_drift`
     - `power_pressurization_hierarchy_smoke_localization_focus_saturation`
     - `power_pressurization_hierarchy_smoke_localization_focus_saturation_local`
+    - `power_pressurization_hierarchy_smoke_parameter_focus`
+    - `power_pressurization_hierarchy_smoke_parameter_focus_regulated`
+    - `power_pressurization_hierarchy_smoke_parameter_focus_accumulative`
+    - `power_pressurization_hierarchy_smoke_parameter_focus_discrete`
+    - `power_pressurization_hierarchy_smoke_parameter_focus_coupling`
   - current smoke-benchmark intent:
     - `bias` is the clean subsystem-localization acceptance gate
     - `drift` is the clean module-localization acceptance gate
@@ -69,6 +76,11 @@ Incremental patches:
     - `bias_load_monitor` is a subsystem-vs-module separation probe and still misses the module target
     - `saturation` is parameter-visible-only
     - `saturation_local` is detection-only
+    - `parameter_focus` is the grouped lower-tier parameter benchmark family:
+      - `regulated` uses saturation
+      - `accumulative` uses drift
+      - `discrete` uses state chatter
+      - `coupling` uses timing jitter
   - use `python -m scripts.run_sim_benchmark_tier_gates ...` when anomaly work
     should be judged against the clean subsystem/module gates instead of the
     mixed composite bundle

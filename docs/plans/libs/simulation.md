@@ -314,6 +314,91 @@ If saturation is revisited again, do it as a simulation-design problem:
 
 Do not treat saturation as a current module-localization acceptance gate.
 
+### Parameter-tier benchmark status
+
+The validation harness is now capable of measuring benchmark-aware parameter
+scope performance, and the simulator now exposes a dedicated grouped
+`parameter_visible_only` smoke suite.
+
+Current implemented parameter-tier gate family:
+
+- canonical grouped runner:
+  - `python -m scripts.run_sim_benchmark_tier_gates --suite parameter --base-dir ...`
+- grouped report:
+  - `reports/benchmark_tier_gate_suite_summary.json`
+- family packs:
+  - `power_pressurization_hierarchy_smoke_parameter_focus_regulated`
+  - `power_pressurization_hierarchy_smoke_parameter_focus_accumulative`
+  - `power_pressurization_hierarchy_smoke_parameter_focus_discrete`
+  - `power_pressurization_hierarchy_smoke_parameter_focus_coupling`
+
+Measured grouped result on:
+
+- `/tmp/s3ntinel_parameter_tier_gates/20260413T012741Z_parameter_benchmark_tier_gates`
+
+Observed outcome:
+
+- suite status:
+  - `all_gates_met_or_exceeded = false`
+  - alignment counts:
+    - `met_target = 1`
+    - `exceeded_target = 2`
+    - `missed_target = 1`
+- by family:
+  - regulated `saturation`
+    - observed `parameter_visible_only`
+    - detected `1/1`
+    - emit-ready `1/1`
+    - telemetry parameter match `1/1`
+    - alignment `met_target`
+  - accumulative `drift`
+    - observed `module_recoverable`
+    - detected `1/1`
+    - emit-ready `1/1`
+    - telemetry parameter match `1/1`
+    - alignment `exceeded_target`
+  - discrete `state_chatter`
+    - observed `undetected`
+    - detected `0/1`
+    - emit-ready `0/1`
+    - telemetry parameter match `0/1`
+    - alignment `missed_target`
+  - coupling `timing_jitter`
+    - observed `module_recoverable`
+    - detected `1/1`
+    - emit-ready `1/1`
+    - telemetry parameter match `1/1`
+    - event parameter match `1/1`
+    - alignment `exceeded_target`
+
+Implication:
+
+- the parameter tier is now real and useful, not hypothetical
+- parameter-tier coverage is no longer blocked on missing benchmark supply
+- the next simulation bottleneck inside that tier is the discrete family, which
+  currently fails at detection before parameter visibility can even be judged
+
+### Next simulation work for the parameter tier
+
+The dedicated parameter-tier suite now exists, so the next work is narrower:
+
+1. keep the current regulated, accumulative, and coupling family packs as the
+   canonical lower-tier acceptance set
+2. redesign the discrete family so it becomes at least a stable
+   `parameter_visible_only` benchmark instead of an `undetected` case
+3. only after that, decide whether parameter-tier coverage also needs an
+   additional illegal-transition pack
+
+Practical interpretation:
+
+- regulated `saturation` is a valid parameter-tier gate
+- accumulative `drift` and coupling `timing_jitter` currently overachieve and
+  should stay in the parameter suite as lower-tier smoke screens, even though
+  they can recover structure
+- discrete `state_chatter` is the current weak point and should be treated as a
+  simulation-design or detection-signal problem before more parameter-level
+  anomaly tuning
+
 ### Recoverability development phases
 
 Simulation improvement should now proceed as an explicit recoverability ladder,
@@ -385,11 +470,13 @@ The current smoke-family results already imply the next phase assignments:
 
 So the next simulation-design work should prioritize:
 
-1. strengthening lower-tier parameter labeling where it is still weak
-2. then building a cleaner `bias` path from parameter visibility to module
+1. building the missing dedicated parameter-tier benchmark suite across
+   multiple anomaly classes
+2. then strengthening lower-tier parameter labeling where it is still weak
+3. then building a cleaner `bias` path from parameter visibility to module
    recoverability, likely by separating `MOD_PWR_LOAD_MON` from sibling
    `MOD_COMP_DRIVE` evidence rather than staying on shared-source voltage
-3. only after that, expanding harder subsystem- and system-level scenario packs
+4. only after that, expanding harder subsystem- and system-level scenario packs
 
 ## B. Realism, Phase Context, And Anomaly/Violation Integration
 

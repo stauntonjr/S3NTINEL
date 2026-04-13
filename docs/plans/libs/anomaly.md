@@ -57,6 +57,25 @@ Benchmark discipline for the next anomaly passes:
 - canonical grouped runner:
   - `python -m scripts.run_sim_benchmark_tier_gates --base-dir ...`
 
+Parameter-tier discipline:
+
+- use the dedicated grouped lower-tier suite before any parameter-level tuning:
+  - `python -m scripts.run_sim_benchmark_tier_gates --suite parameter --base-dir ...`
+- current measured suite result on
+  `/tmp/s3ntinel_parameter_tier_gates/20260413T012741Z_parameter_benchmark_tier_gates`:
+  - regulated `saturation`: `met_target`
+  - accumulative `drift`: `exceeded_target`
+  - coupling `timing_jitter`: `exceeded_target`
+  - discrete `state_chatter`: `missed_target` at the `detection` scope
+- implication:
+  - generic parameter-ranking work is not the first missing capability
+  - the current lower-tier bottleneck is discrete-family detectability
+  - parameter-ranking or parameter-detection tuning should therefore remain
+    secondary to:
+    - discrete parameter-tier simulation redesign or detection fixes
+    - composite detection fixes
+    - composite subsystem-rollup fixes
+
 ## Current Architecture Constraints
 
 ### 1. Canonical scoring path is now Spark-only
@@ -667,13 +686,16 @@ The next active anomaly sequence should now be:
 1. keep the current accumulation-channel baseline
 2. do not advance the rejected broad event-discordance expansion
 3. do not advance the current dual-view reconstruction design
-4. if `event_discordance` is revisited again, constrain it to a much narrower
+4. do not prioritize generic new parameter-level optimization until the
+   discrete parameter-tier gate is at least detectable in the dedicated lower-
+   tier suite
+5. if `event_discordance` is revisited again, constrain it to a much narrower
    auxiliary localization cue and replay-gate it before carrying more
    complexity forward
-5. if reconstruction is revisited again, constrain it to a narrower auxiliary
+6. if reconstruction is revisited again, constrain it to a narrower auxiliary
    signal and replay-gate it as well; benchmark-tier smoke gates are necessary
    but not sufficient acceptance if the mixed composite replay stays flat
-6. only then any further candidate-generation or hierarchy revisit
+7. only then any further candidate-generation or hierarchy revisit
 
 That ordering is intentional.
 
@@ -693,6 +715,35 @@ At that point, a follow-on implementation may target a smaller auxiliary
 reconstruction cue or a more discriminating generic source-versus-consequence
 signal, but only if it can preserve the current level-view localization
 behavior on replay.
+
+Latest composite benchmark-tier ledger result:
+
+- eligible composite windows: `18`
+- first failed scope count:
+  - `detection`: `4`
+  - `parameter`: `0`
+  - `subsystem`: `12`
+  - `module`: `1`
+  - `met_target`: `1`
+
+Latest grouped parameter-tier gate result:
+
+- suite:
+  - `/tmp/s3ntinel_parameter_tier_gates/20260413T012741Z_parameter_benchmark_tier_gates`
+- alignment count:
+  - `met_target`: `1`
+  - `exceeded_target`: `2`
+  - `missed_target`: `1`
+- current lower-tier blocker:
+  - `parameter_tier_discrete_state_chatter` missed at the `detection` scope
+
+So the current composite replay is not bottlenecked at parameter visibility for
+eligible subsystem/module windows. The immediate anomaly bottleneck is later in
+the stack:
+
+- detection on a small timing/discrete subset
+- subsystem recovery on the majority of eligible windows
+- module recovery on a small remainder
 
 ## Test And Acceptance Plan
 

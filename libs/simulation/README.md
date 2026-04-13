@@ -235,6 +235,11 @@ such as:
 - `power_pressurization_hierarchy_smoke_localization_focus_bias_drift`
 - `power_pressurization_hierarchy_smoke_localization_focus_saturation`
 - `power_pressurization_hierarchy_smoke_localization_focus_saturation_local`
+- `power_pressurization_hierarchy_smoke_parameter_focus`
+- `power_pressurization_hierarchy_smoke_parameter_focus_regulated`
+- `power_pressurization_hierarchy_smoke_parameter_focus_accumulative`
+- `power_pressurization_hierarchy_smoke_parameter_focus_discrete`
+- `power_pressurization_hierarchy_smoke_parameter_focus_coupling`
 
 The composite benchmark packs are filtered views of the canonical authored
 scenario, not separate simulators.
@@ -284,13 +289,35 @@ Current measured benchmark intent:
 - `power_pressurization_hierarchy_smoke_localization_focus_saturation_local`
   - use as a `detection_only` benchmark
 
+The dedicated parameter-tier smoke family is:
+
+- `power_pressurization_hierarchy_smoke_parameter_focus`
+  - grouped lower-tier smoke pack spanning:
+    - regulated `saturation`
+    - accumulative `drift`
+    - discrete `state_chatter`
+    - coupling `timing_jitter`
+  - all windows are intentionally retargeted to `parameter_visible_only`
+- `power_pressurization_hierarchy_smoke_parameter_focus_regulated`
+  - single regulated parameter-tier gate
+- `power_pressurization_hierarchy_smoke_parameter_focus_accumulative`
+  - single accumulative parameter-tier gate
+- `power_pressurization_hierarchy_smoke_parameter_focus_discrete`
+  - single discrete/event-shaped parameter-tier gate
+- `power_pressurization_hierarchy_smoke_parameter_focus_coupling`
+  - single coupling/timing-driven parameter-tier gate
+
 The canonical grouped acceptance harness for those clean gates is:
 
 - `python -m scripts.run_sim_benchmark_tier_gates --base-dir ...`
-  - runs the dedicated `bias` and `drift` packs as one suite
+  - default `--suite localization` runs the dedicated `bias` and `drift` packs
+    as one suite
+  - `--suite parameter` runs the dedicated regulated / accumulative / discrete
+    / coupling lower-tier parameter packs as one suite
   - writes `reports/benchmark_tier_gate_suite_summary.json`
   - should be preferred over the mixed composite bundle when screening anomaly
-    changes against the clean subsystem and module tiers
+    changes against either the clean subsystem/module tiers or the dedicated
+    parameter tier
 
 ## Authoring model
 

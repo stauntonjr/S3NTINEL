@@ -24,6 +24,11 @@ from libs.simulation.flight.examples import (
     build_power_pressurization_hierarchy_smoke_localization_focus_saturation_local_flight_spec,
     build_power_pressurization_hierarchy_smoke_localization_focus_saturation_flight_spec,
     build_power_pressurization_hierarchy_smoke_localization_focus_flight_spec,
+    build_power_pressurization_hierarchy_smoke_parameter_focus_accumulative_flight_spec,
+    build_power_pressurization_hierarchy_smoke_parameter_focus_coupling_flight_spec,
+    build_power_pressurization_hierarchy_smoke_parameter_focus_discrete_flight_spec,
+    build_power_pressurization_hierarchy_smoke_parameter_focus_flight_spec,
+    build_power_pressurization_hierarchy_smoke_parameter_focus_regulated_flight_spec,
     build_power_pressurization_hierarchy_smoke_flight_spec,
     build_power_chain_flight_spec,
     build_pressurization_flight_spec,
@@ -463,3 +468,64 @@ def test_named_builder_resolves_smoke_localization_focus_family_packs():
     assert drift_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_localization_focus_drift"
     assert saturation_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_localization_focus_saturation"
     assert saturation_local_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_localization_focus_saturation_local"
+
+
+def test_smoke_parameter_focus_family_packs_filter_fault_types():
+    focus_suite = build_power_pressurization_hierarchy_smoke_parameter_focus_flight_spec()
+    regulated_suite = build_power_pressurization_hierarchy_smoke_parameter_focus_regulated_flight_spec()
+    accumulative_suite = build_power_pressurization_hierarchy_smoke_parameter_focus_accumulative_flight_spec()
+    discrete_suite = build_power_pressurization_hierarchy_smoke_parameter_focus_discrete_flight_spec()
+    coupling_suite = build_power_pressurization_hierarchy_smoke_parameter_focus_coupling_flight_spec()
+
+    assert focus_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_parameter_focus"
+    assert focus_suite.metadata["benchmark_suite_name"] == "parameter_focus"
+    assert focus_suite.metadata["benchmark_fault_types"] == ["saturation", "drift", "state_chatter", "timing_jitter"]
+    assert focus_suite.metadata["benchmark_recoverability_targets"] == ["parameter_visible_only"]
+    assert len(focus_suite.misbehavior_program_spec.windows) == 4
+    assert {
+        str(window.context["violation_type"]): str(window.metadata["benchmark_recoverability_target"])
+        for window in focus_suite.misbehavior_program_spec.windows
+    } == {
+        "saturation": "parameter_visible_only",
+        "drift": "parameter_visible_only",
+        "state_chatter": "parameter_visible_only",
+        "timing_jitter": "parameter_visible_only",
+    }
+
+    assert regulated_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_parameter_focus_regulated"
+    assert regulated_suite.metadata["benchmark_fault_types"] == ["saturation"]
+    assert len(regulated_suite.misbehavior_program_spec.windows) == 1
+    assert regulated_suite.misbehavior_program_spec.windows[0].context["violation_type"] == "saturation"
+    assert regulated_suite.misbehavior_program_spec.windows[0].metadata["benchmark_recoverability_target"] == "parameter_visible_only"
+
+    assert accumulative_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_parameter_focus_accumulative"
+    assert accumulative_suite.metadata["benchmark_fault_types"] == ["drift"]
+    assert len(accumulative_suite.misbehavior_program_spec.windows) == 1
+    assert accumulative_suite.misbehavior_program_spec.windows[0].context["violation_type"] == "drift"
+    assert accumulative_suite.misbehavior_program_spec.windows[0].metadata["benchmark_recoverability_target"] == "parameter_visible_only"
+
+    assert discrete_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_parameter_focus_discrete"
+    assert discrete_suite.metadata["benchmark_fault_types"] == ["state_chatter"]
+    assert len(discrete_suite.misbehavior_program_spec.windows) == 1
+    assert discrete_suite.misbehavior_program_spec.windows[0].context["violation_type"] == "state_chatter"
+    assert discrete_suite.misbehavior_program_spec.windows[0].metadata["benchmark_recoverability_target"] == "parameter_visible_only"
+
+    assert coupling_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_parameter_focus_coupling"
+    assert coupling_suite.metadata["benchmark_fault_types"] == ["timing_jitter"]
+    assert len(coupling_suite.misbehavior_program_spec.windows) == 1
+    assert coupling_suite.misbehavior_program_spec.windows[0].context["violation_type"] == "timing_jitter"
+    assert coupling_suite.misbehavior_program_spec.windows[0].metadata["benchmark_recoverability_target"] == "parameter_visible_only"
+
+
+def test_named_builder_resolves_smoke_parameter_focus_family_packs():
+    focus_suite = build_named_flight_spec("power_pressurization_hierarchy_smoke_parameter_focus")
+    regulated_suite = build_named_flight_spec("power_pressurization_hierarchy_smoke_parameter_focus_regulated")
+    accumulative_suite = build_named_flight_spec("power_pressurization_hierarchy_smoke_parameter_focus_accumulative")
+    discrete_suite = build_named_flight_spec("power_pressurization_hierarchy_smoke_parameter_focus_discrete")
+    coupling_suite = build_named_flight_spec("power_pressurization_hierarchy_smoke_parameter_focus_coupling")
+
+    assert focus_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_parameter_focus"
+    assert regulated_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_parameter_focus_regulated"
+    assert accumulative_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_parameter_focus_accumulative"
+    assert discrete_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_parameter_focus_discrete"
+    assert coupling_suite.metadata["flight_name"] == "power_pressurization_hierarchy_smoke_parameter_focus_coupling"
