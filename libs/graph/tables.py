@@ -9,6 +9,7 @@ from libs.io.schemas.graph import (
     EVENT_GRAPH_SCHEMA,
     FUSED_GRAPH_SCHEMA,
     GRAPH_PARAMETER_UNIVERSE_SCHEMA,
+    HIERARCHY_EDGE_EVIDENCE_SCHEMA,
     HIERARCHY_SENSOR_MAP_SCHEMA,
     LAG_GRAPH_SCHEMA,
     LAG_PROFILE_SCHEMA,
@@ -255,7 +256,147 @@ class HierarchySensorMapTable(Table):
         return cls(dataframe=dataframe)
 
 
+@dataclass(frozen=True)
+class HierarchyEdgeEvidenceTable(Table):
+    @classmethod
+    def spark_schema(cls):
+        return HIERARCHY_EDGE_EVIDENCE_SCHEMA()
+
+    @classmethod
+    def from_graph_hierarchy(
+        cls,
+        *,
+        hierarchy: "GraphHierarchy",
+        lag_graph_df: "DataFrame",
+        spark: "SparkSession",
+    ) -> "HierarchyEdgeEvidenceTable":
+        from pyspark.sql import functions as F
+
+        edge_columns = [field.name for field in HIERARCHY_EDGE_EVIDENCE_SCHEMA().fields]
+        records = [
+            {
+                "parameter_name_u": str(row.get("parameter_name_u") or ""),
+                "parameter_name_v": str(row.get("parameter_name_v") or ""),
+                "rank_parameter_name_u": int(row.get("rank_parameter_name_u") or 0),
+                "rank_parameter_name_v": int(row.get("rank_parameter_name_v") or 0),
+                "precision_weight": float(row.get("precision_weight") or 0.0),
+                "event_weight": float(row.get("event_weight") or 0.0),
+                "lag_weight": float(row.get("lag_weight") or 0.0),
+                "fused_weight": float(row.get("fused_weight") or 0.0),
+                "module_affinity_weight": float(row.get("module_affinity_weight") or 0.0),
+                "lag_count_u_to_v": None,
+                "lag_weight_u_to_v": None,
+                "mean_lag_seconds_u_to_v": None,
+                "lag_count_v_to_u": None,
+                "lag_weight_v_to_u": None,
+                "mean_lag_seconds_v_to_u": None,
+                "system_id": str(row.get("system_id") or ""),
+                "subsystem_id": str(row.get("subsystem_id") or ""),
+                "module_id": str(row.get("module_id") or ""),
+                "hierarchy_edge_role": str(row.get("hierarchy_edge_role") or "retained_module_mutual_topk"),
+            }
+            for row in hierarchy.retained_module_edge_rows.to_dict(orient="records")
+        ]
+        evidence_df = (
+            spark.createDataFrame(records, schema=HIERARCHY_EDGE_EVIDENCE_SCHEMA())
+            if records
+            else spark.createDataFrame([], schema=HIERARCHY_EDGE_EVIDENCE_SCHEMA())
+        )
+        forward_lag = lag_graph_df.select(
+            F.col("parameter_name_u").alias("lag_parameter_name_u"),
+            F.col("parameter_name_v").alias("lag_parameter_name_v"),
+            F.col("lag_count").cast("int").alias("lag_count_u_to_v"),
+            F.col("lag_weight").cast("double").alias("lag_weight_u_to_v"),
+            F.col("mean_lag_seconds").cast("double").alias("mean_lag_seconds_u_to_v"),
+        )
+        reverse_lag = lag_graph_df.select(
+            F.col("parameter_name_u").alias("lag_parameter_name_v"),
+            F.col("parameter_name_v").alias("lag_parameter_name_u"),
+            F.col("lag_count").cast("int").alias("lag_count_v_to_u"),
+            F.col("lag_weight").cast("double").alias("lag_weight_v_to_u"),
+            F.col("mean_lag_seconds").cast("double").alias("mean_lag_seconds_v_to_u"),
+        )
+        return cls(
+            dataframe=(
+                evidence_df.drop(
+                    "lag_count_u_to_v",
+                    "lag_weight_u_to_v",
+                    "mean_lag_seconds_u_to_v",
+                    "lag_count_v_to_u",
+                    "lag_weight_v_to_u",
+                    "mean_lag_seconds_v_to_u",
+                )
+                .join(
+                    forward_lag,
+                    (F.col("parameter_name_u") == F.col("lag_parameter_name_u"))
+                    & (F.col("parameter_name_v") == F.col("lag_parameter_name_v")),
+                    how="left",
+                )
+                .drop("lag_parameter_name_u", "lag_parameter_name_v")
+                .join(
+                    reverse_lag,
+                    (F.col("parameter_name_u") == F.col("lag_parameter_name_u"))
+                    & (F.col("parameter_name_v") == F.col("lag_parameter_name_v")),
+                    how="left",
+                )
+                .drop("lag_parameter_name_u", "lag_parameter_name_v")
+                .select(*edge_columns)
+            )
+        )
+
+
+@dataclass(frozen=True)
+class HierarchyArtifactSet:
+    sensor_map: HierarchySensorMapTable
+    edge_evidence: HierarchyEdgeEvidenceTable
+
+    @classmethod
+    def from_fused_graph(
+        cls,
+        fused_df: "DataFrame",
+        *,
+        lag_graph_df: "DataFrame",
+        parameter_names: list[str],
+        min_fused_edge_weight: float,
+        hierarchy_top_k_per_parameter_name: int,
+        hierarchy_subsystem_min_edge_weight: float | None = None,
+        hierarchy_system_min_edge_weight: float | None = None,
+        datatype_profile_df: "DataFrame | None" = None,
+        behavior_profile_df: "DataFrame | None" = None,
+    ) -> "HierarchyArtifactSet":
+        from libs.graph.hierarchy_artifacts import GraphHierarchy, HierarchySpec
+
+        hierarchy = GraphHierarchy.from_fused_spark(
+            fused_df,
+            parameter_names=parameter_names,
+            spec=HierarchySpec(
+                min_edge_weight=min_fused_edge_weight,
+                top_k_per_parameter_name=hierarchy_top_k_per_parameter_name,
+                subsystem_min_edge_weight=hierarchy_subsystem_min_edge_weight,
+                system_min_edge_weight=hierarchy_system_min_edge_weight,
+            ),
+            datatype_profile_df=datatype_profile_df,
+            behavior_profile_df=behavior_profile_df,
+        )
+        spark = fused_df.sparkSession
+        sensor_map_df = (
+            spark.createDataFrame(hierarchy.rows, schema=HIERARCHY_SENSOR_MAP_SCHEMA())
+            if not hierarchy.rows.empty
+            else spark.createDataFrame([], schema=HIERARCHY_SENSOR_MAP_SCHEMA())
+        )
+        return cls(
+            sensor_map=HierarchySensorMapTable(dataframe=sensor_map_df),
+            edge_evidence=HierarchyEdgeEvidenceTable.from_graph_hierarchy(
+                hierarchy=hierarchy,
+                lag_graph_df=lag_graph_df,
+                spark=spark,
+            ),
+        )
+
+
 if TYPE_CHECKING:
-    from pyspark.sql import DataFrame
+    from pyspark.sql import DataFrame, SparkSession
+
+    from libs.graph.hierarchy_artifacts import GraphHierarchy
 
     from libs.graph.lag import LagBandSpec

@@ -294,6 +294,7 @@ def test_sim_runner_full_smoke_emits_bundle(monkeypatch, tmp_path):
     assert (run_dir / "reports" / "stages" / "50_build_graph_manifest.json").exists()
     assert (run_dir / "reports" / "stages" / "50_build_graph_evaluation.json").exists()
     assert (run_dir / "reports" / "stages" / "60_fit_hierarchy_manifest.json").exists()
+    assert (run_dir / "reports" / "hierarchy_edge_evidence_summary.json").exists()
     assert (run_dir / "reports" / "stages" / "70_phase_fit_manifest.json").exists()
     assert (run_dir / "reports" / "stages" / "72_phase_label_centroids_manifest.json").exists()
     assert (run_dir / "reports" / "stages" / "80_window_scores_raw_manifest.json").exists()

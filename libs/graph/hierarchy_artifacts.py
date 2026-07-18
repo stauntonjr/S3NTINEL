@@ -3,10 +3,14 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 import os
+from typing import TYPE_CHECKING
 
 import pandas as pd
 
 from libs.graph.hierarchy import _connected_components_from_edges, assign_hierarchy_from_weighted_edges
+
+if TYPE_CHECKING:
+    from pyspark.sql import DataFrame
 
 
 @dataclass(frozen=True)
@@ -105,6 +109,7 @@ def _module_edge_is_compatible(
 class GraphHierarchy:
     spec: HierarchySpec
     rows: pd.DataFrame
+    retained_module_edge_rows: pd.DataFrame
 
     @classmethod
     def from_fused(
@@ -147,6 +152,11 @@ class GraphHierarchy:
             keep_neighbors[parameter_name] = {neighbor for _, neighbor in ranked[: max(int(spec.top_k_per_parameter_name), 1)]}
 
         retained_edges: list[tuple[str, str, float]] = []
+        retained_edge_rows: list[dict[str, object]] = []
+        neighbor_rank_by_pair: dict[tuple[str, str], int] = {}
+        for parameter_name, neighbors in ranked_neighbors.items():
+            for rank, (_, neighbor) in enumerate(sorted(neighbors, key=lambda item: (-item[0], item[1])), start=1):
+                neighbor_rank_by_pair[(parameter_name, neighbor)] = rank
         for row in filtered_rows:
             a = str(row["parameter_name_u"])
             b = str(row["parameter_name_v"])
@@ -156,6 +166,15 @@ class GraphHierarchy:
                 and _module_edge_is_compatible(a, b, compatibility_by_parameter=compatibility_by_parameter)
             ):
                 retained_edges.append((a, b, float(row["module_affinity_weight"])))
+                retained_edge_rows.append(
+                    {
+                        **row,
+                        "parameter_name_u": min(a, b),
+                        "parameter_name_v": max(a, b),
+                        "rank_parameter_name_u": int(neighbor_rank_by_pair[(min(a, b), max(a, b))]),
+                        "rank_parameter_name_v": int(neighbor_rank_by_pair[(max(a, b), min(a, b))]),
+                    }
+                )
         rollup_edges = [
             (str(row["parameter_name_u"]), str(row["parameter_name_v"]), float(row["fused_weight"]))
             for row in filtered_rows
@@ -181,7 +200,23 @@ class GraphHierarchy:
                 for row in hierarchy_rows
             ]
         )
-        return cls(spec=spec, rows=out)
+        hierarchy_by_parameter = {
+            str(row["parameter_name"]): row
+            for row in out.to_dict(orient="records")
+        }
+        edge_evidence = pd.DataFrame.from_records(
+            [
+                {
+                    **row,
+                    "system_id": str(hierarchy_by_parameter[row["parameter_name_u"]]["system_id"]),
+                    "subsystem_id": str(hierarchy_by_parameter[row["parameter_name_u"]]["subsystem_id"]),
+                    "module_id": str(hierarchy_by_parameter[row["parameter_name_u"]]["module_id"]),
+                    "hierarchy_edge_role": "retained_module_mutual_topk",
+                }
+                for row in retained_edge_rows
+            ]
+        )
+        return cls(spec=spec, rows=out, retained_module_edge_rows=edge_evidence)
 
     @classmethod
     def from_fused_spark(
@@ -199,7 +234,7 @@ class GraphHierarchy:
         max_rollup_edge_universe = int(os.getenv("S3NTINEL_MAX_HIERARCHY_ROLLUP_EDGE_UNIVERSE", "250000"))
         parameter_set = {str(item) for item in parameter_names if str(item)}
         if not parameter_set:
-            return cls(spec=spec, rows=cls.empty_rows())
+            return cls(spec=spec, rows=cls.empty_rows(), retained_module_edge_rows=cls.empty_retained_module_edge_rows())
         parameter_names_sorted = sorted(parameter_set)
         spark = fused_df.sparkSession
         compatibility_by_parameter = _module_compatibility_by_parameter(
@@ -261,11 +296,15 @@ class GraphHierarchy:
                         for row in hierarchy_rows
                     ]
                 ),
+                retained_module_edge_rows=cls.empty_retained_module_edge_rows(),
             )
 
         edges = filtered.select(
             "parameter_name_u",
             "parameter_name_v",
+            "precision_weight",
+            "event_weight",
+            "lag_weight",
             "fused_weight",
             "module_affinity_weight",
             F.least("parameter_name_u", "parameter_name_v").alias("parameter_name_min"),
@@ -296,19 +335,44 @@ class GraphHierarchy:
         retained_neighbors = neighbors.withColumn("rank", F.row_number().over(rank_window)).where(
             F.col("rank") <= F.lit(max(int(spec.top_k_per_parameter_name), 1))
         )
-        mutual_pairs = retained_neighbors.alias("left").join(
-            retained_neighbors.alias("right"),
+        retained_neighbor_ranks = retained_neighbors.select("parameter_name", "neighbor", "rank")
+        mutual_pairs = retained_neighbor_ranks.alias("left").join(
+            retained_neighbor_ranks.alias("right"),
             (F.col("left.parameter_name") == F.col("right.neighbor"))
             & (F.col("left.neighbor") == F.col("right.parameter_name")),
             how="inner",
         ).select(
             F.least(F.col("left.parameter_name"), F.col("left.neighbor")).alias("parameter_name_min"),
             F.greatest(F.col("left.parameter_name"), F.col("left.neighbor")).alias("parameter_name_max"),
+            F.when(
+                F.col("left.parameter_name") < F.col("left.neighbor"),
+                F.col("left.rank"),
+            )
+            .otherwise(F.col("right.rank"))
+            .cast("int")
+            .alias("rank_parameter_name_min"),
+            F.when(
+                F.col("left.parameter_name") > F.col("left.neighbor"),
+                F.col("left.rank"),
+            )
+            .otherwise(F.col("right.rank"))
+            .cast("int")
+            .alias("rank_parameter_name_max"),
         ).distinct()
 
         retained_rows = (
             edges.join(mutual_pairs, on=["parameter_name_min", "parameter_name_max"], how="inner")
-            .select("parameter_name_u", "parameter_name_v", "module_affinity_weight")
+            .select(
+                "parameter_name_min",
+                "parameter_name_max",
+                "rank_parameter_name_min",
+                "rank_parameter_name_max",
+                "precision_weight",
+                "event_weight",
+                "lag_weight",
+                "fused_weight",
+                "module_affinity_weight",
+            )
             .limit(max_rollup_edge_universe + 1)
             .collect()
         )
@@ -318,11 +382,11 @@ class GraphHierarchy:
                 f"edge count exceeds S3NTINEL_MAX_HIERARCHY_ROLLUP_EDGE_UNIVERSE={max_rollup_edge_universe}."
             )
         retained_edges = [
-            (str(row["parameter_name_u"]), str(row["parameter_name_v"]), float(row["module_affinity_weight"]))
+            (str(row["parameter_name_min"]), str(row["parameter_name_max"]), float(row["module_affinity_weight"]))
             for row in retained_rows
             if _module_edge_is_compatible(
-                str(row["parameter_name_u"]),
-                str(row["parameter_name_v"]),
+                str(row["parameter_name_min"]),
+                str(row["parameter_name_max"]),
                 compatibility_by_parameter=compatibility_by_parameter,
             )
         ]
@@ -453,25 +517,76 @@ class GraphHierarchy:
             }
             for parameter_name in parameter_names_sorted
         ]
+        hierarchy_df = pd.DataFrame(
+            [
+                {
+                    "parameter_name": str(row["parameter_name"]),
+                    "system_id": str(row["system_id"]),
+                    "subsystem_id": str(row["subsystem_id"]),
+                    "module_id": str(row["module_id"]),
+                    "hierarchy_source": "v2_fused_graph_mutual_topk_levels",
+                    "hierarchy_profile_id": "HIER_V2",
+                }
+                for row in hierarchy_rows
+            ]
+        )
+        hierarchy_by_parameter = {
+            str(row["parameter_name"]): row
+            for row in hierarchy_df.to_dict(orient="records")
+        }
+        retained_module_edge_rows = pd.DataFrame.from_records(
+            [
+                {
+                    "parameter_name_u": str(row["parameter_name_min"]),
+                    "parameter_name_v": str(row["parameter_name_max"]),
+                    "rank_parameter_name_u": int(row["rank_parameter_name_min"]),
+                    "rank_parameter_name_v": int(row["rank_parameter_name_max"]),
+                    "precision_weight": float(row["precision_weight"]),
+                    "event_weight": float(row["event_weight"]),
+                    "lag_weight": float(row["lag_weight"]),
+                    "fused_weight": float(row["fused_weight"]),
+                    "module_affinity_weight": float(row["module_affinity_weight"]),
+                    "system_id": str(hierarchy_by_parameter[str(row["parameter_name_min"])]["system_id"]),
+                    "subsystem_id": str(hierarchy_by_parameter[str(row["parameter_name_min"])]["subsystem_id"]),
+                    "module_id": str(hierarchy_by_parameter[str(row["parameter_name_min"])]["module_id"]),
+                    "hierarchy_edge_role": "retained_module_mutual_topk",
+                }
+                for row in retained_rows
+                if _module_edge_is_compatible(
+                    str(row["parameter_name_min"]),
+                    str(row["parameter_name_max"]),
+                    compatibility_by_parameter=compatibility_by_parameter,
+                )
+            ]
+        )
         return cls(
             spec=spec,
-            rows=pd.DataFrame(
-                [
-                    {
-                        "parameter_name": str(row["parameter_name"]),
-                        "system_id": str(row["system_id"]),
-                        "subsystem_id": str(row["subsystem_id"]),
-                        "module_id": str(row["module_id"]),
-                        "hierarchy_source": "v2_fused_graph_mutual_topk_levels",
-                        "hierarchy_profile_id": "HIER_V2",
-                    }
-                    for row in hierarchy_rows
-                ]
-            ),
+            rows=hierarchy_df,
+            retained_module_edge_rows=retained_module_edge_rows,
         )
 
     @staticmethod
     def empty_rows() -> pd.DataFrame:
         return pd.DataFrame(
             columns=["parameter_name", "system_id", "subsystem_id", "module_id", "hierarchy_source", "hierarchy_profile_id"]
+        )
+
+    @staticmethod
+    def empty_retained_module_edge_rows() -> pd.DataFrame:
+        return pd.DataFrame(
+            columns=[
+                "parameter_name_u",
+                "parameter_name_v",
+                "rank_parameter_name_u",
+                "rank_parameter_name_v",
+                "precision_weight",
+                "event_weight",
+                "lag_weight",
+                "fused_weight",
+                "module_affinity_weight",
+                "system_id",
+                "subsystem_id",
+                "module_id",
+                "hierarchy_edge_role",
+            ]
         )

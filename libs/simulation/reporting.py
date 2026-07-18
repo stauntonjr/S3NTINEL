@@ -214,6 +214,30 @@ HIERARCHY_LABEL_SUBSYSTEM_VIEW = ArtifactView(
     ("parameter_name", "subsystem_id"),
     ("parameter_name",),
 )
+HIERARCHY_EDGE_EVIDENCE_VIEW = ArtifactView(
+    "hierarchy_edge_evidence",
+    (
+        "parameter_name_u",
+        "parameter_name_v",
+        "rank_parameter_name_u",
+        "rank_parameter_name_v",
+        "precision_weight",
+        "event_weight",
+        "lag_weight",
+        "fused_weight",
+        "module_affinity_weight",
+        "lag_count_u_to_v",
+        "lag_weight_u_to_v",
+        "mean_lag_seconds_u_to_v",
+        "lag_count_v_to_u",
+        "lag_weight_v_to_u",
+        "mean_lag_seconds_v_to_u",
+        "system_id",
+        "subsystem_id",
+        "module_id",
+    ),
+    ("parameter_name_u", "parameter_name_v"),
+)
 COUPLING_TRUTH_VIEW = ArtifactView(
     "coupling_misbehavior_windows",
     (
@@ -328,6 +352,7 @@ VALIDATION_ARTIFACT_VIEWS = (
     HIERARCHY_LABEL_VIEW,
     HIERARCHY_SUBSYSTEM_VIEW,
     HIERARCHY_LABEL_SUBSYSTEM_VIEW,
+    HIERARCHY_EDGE_EVIDENCE_VIEW,
     COUPLING_TRUTH_VIEW,
     LAG_GRAPH_VIEW,
     PRECISION_GRAPH_VIEW,
@@ -477,6 +502,65 @@ def _build_coupling_validation_summary(
         fused_graph_df=_records_frame(tables, FUSED_GRAPH_VIEW),
         expected_coupling_signatures=expected_coupling_signatures,
     )
+
+
+def _build_hierarchy_edge_evidence_summary(
+    tables: RunArtifactBundle,
+    *,
+    expected_coupling_signatures: tuple[dict[str, Any], ...],
+) -> dict[str, Any]:
+    evidence_df = tables.pandas(HIERARCHY_EDGE_EVIDENCE_VIEW)
+    if evidence_df.empty:
+        return {"status": "skipped", "reason": "missing or empty hierarchy edge evidence artifact"}
+
+    edge_index = {
+        (str(row["parameter_name_u"]), str(row["parameter_name_v"])): row
+        for row in evidence_df.to_dict(orient="records")
+    }
+    coupling_matches = []
+    for signature in expected_coupling_signatures:
+        parameter_name_u = str(signature.get("parameter_name_u") or "")
+        parameter_name_v = str(signature.get("parameter_name_v") or "")
+        key = tuple(sorted((parameter_name_u, parameter_name_v)))
+        evidence = edge_index.get(key)
+        expected_direction_matches_evidence = (
+            evidence is not None and parameter_name_u == str(evidence["parameter_name_u"])
+        )
+        forward_suffix = "u_to_v" if expected_direction_matches_evidence else "v_to_u"
+        reverse_suffix = "v_to_u" if expected_direction_matches_evidence else "u_to_v"
+
+        def optional_number(column: str) -> int | float | None:
+            if evidence is None:
+                return None
+            value = evidence.get(column)
+            if value is None or pd.isna(value):
+                return None
+            return int(value) if column.startswith("lag_count_") else float(value)
+
+        coupling_matches.append(
+            {
+                "coupling_id": str(signature.get("coupling_id") or ""),
+                "parameter_name_u": parameter_name_u,
+                "parameter_name_v": parameter_name_v,
+                "retained_in_hierarchy": evidence is not None,
+                "module_id": evidence.get("module_id") if evidence is not None else None,
+                "lag_count_u_to_v": optional_number(f"lag_count_{forward_suffix}"),
+                "lag_weight_u_to_v": optional_number(f"lag_weight_{forward_suffix}"),
+                "mean_lag_seconds_u_to_v": optional_number(f"mean_lag_seconds_{forward_suffix}"),
+                "lag_count_v_to_u": optional_number(f"lag_count_{reverse_suffix}"),
+                "lag_weight_v_to_u": optional_number(f"lag_weight_{reverse_suffix}"),
+                "mean_lag_seconds_v_to_u": optional_number(f"mean_lag_seconds_{reverse_suffix}"),
+            }
+        )
+    return {
+        "status": "ok",
+        "retained_module_edge_count": int(len(evidence_df)),
+        "retained_edge_with_forward_lag_count": int(evidence_df["lag_weight_u_to_v"].notna().sum()),
+        "retained_edge_with_reverse_lag_count": int(evidence_df["lag_weight_v_to_u"].notna().sum()),
+        "expected_coupling_signature_count": int(len(coupling_matches)),
+        "expected_coupling_retained_edge_count": int(sum(row["retained_in_hierarchy"] for row in coupling_matches)),
+        "expected_coupling_matches": coupling_matches,
+    }
 
 
 def _build_misbehavior_score_summary(tables: RunArtifactBundle) -> dict[str, Any]:
@@ -1790,6 +1874,10 @@ def write_validation_reports(
                 )
                 if can_validate_hierarchy
                 else _skipped_report(reason="missing hierarchy sensor map artifact")
+            ),
+            "hierarchy_edge_evidence_summary.json": _build_hierarchy_edge_evidence_summary(
+                tables,
+                expected_coupling_signatures=tuple(validation_expectations.get("expected_coupling_signatures", ()) or ()),
             ),
             "coupling_validation_summary.json": (
                 _build_coupling_validation_summary(

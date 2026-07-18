@@ -109,6 +109,7 @@ class PipelineArtifactPaths:
     transition_graph: str
     fused_graph: str
     graph_parameter_universe: str
+    hierarchy_edge_evidence: str
     hierarchy_sensor_map: str
     phase_windows: str
     phase_baselines: str
@@ -317,6 +318,10 @@ def load_pipeline_artifact_paths() -> PipelineArtifactPaths:
         graph_parameter_universe=_env_str(
             "S3NTINEL_GRAPH_PARAMETER_UNIVERSE_TABLE_PATH",
             "data/delta/graph_parameter_universe",
+        ),
+        hierarchy_edge_evidence=_env_str(
+            "S3NTINEL_HIERARCHY_EDGE_EVIDENCE_TABLE_PATH",
+            "data/delta/hierarchy_edge_evidence",
         ),
         hierarchy_sensor_map=_env_str(
             "S3NTINEL_HIERARCHY_SENSOR_MAP_TABLE_PATH",

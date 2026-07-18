@@ -10,7 +10,7 @@ from libs.graph import (
     collapse_lag_profile_spark_table,
     EventGraphTable,
     FusedGraphTable,
-    GraphParameterUniverseTable,
+    HierarchyArtifactSet,
     HierarchySensorMapTable,
     LagBandSpec,
     LagCandidatePairsFrame,
@@ -83,18 +83,33 @@ def test_spark_graph_tables_produce_graph_families_and_hierarchy(spark):
             min_lag_count=1,
         )
     )
-    hierarchy_df = HierarchySensorMapTable.from_fused_graph(
+    hierarchy_artifacts = HierarchyArtifactSet.from_fused_graph(
         fused_sdf,
+        lag_graph_df=lag_sdf,
         parameter_names=[row["parameter_name"] for row in parameter_universe_sdf.collect()],
         min_fused_edge_weight=0.0,
         hierarchy_top_k_per_parameter_name=3,
-    ).to_dataframe().toPandas()
+    )
+    hierarchy_df = hierarchy_artifacts.sensor_map.to_dataframe().toPandas()
+    hierarchy_edge_evidence_df = hierarchy_artifacts.edge_evidence.to_dataframe().toPandas()
 
     assert set(["parameter_name_u", "parameter_name_v", "edge_family"]).issubset(event_sdf.columns)
     assert set(["parameter_name_u", "parameter_name_v", "mean_lag_seconds", "edge_family"]).issubset(lag_sdf.columns)
     assert set(["parameter_name_u", "parameter_name_v", "precedence_count", "precedence_weight", "edge_family"]).issubset(transition_sdf.columns)
     assert set(["parameter_name_u", "parameter_name_v", "fused_weight", "edge_family"]).issubset(fused_sdf.columns)
     assert set(["parameter_name", "system_id", "subsystem_id", "module_id"]).issubset(hierarchy_df.columns)
+    assert set(
+        [
+            "parameter_name_u",
+            "parameter_name_v",
+            "rank_parameter_name_u",
+            "rank_parameter_name_v",
+            "lag_weight_u_to_v",
+            "lag_weight_v_to_u",
+            "hierarchy_edge_role",
+        ]
+    ).issubset(hierarchy_edge_evidence_df.columns)
+    assert len(hierarchy_edge_evidence_df) <= len(fused_sdf.toPandas())
     assert len(hierarchy_df) >= 1
 
 
@@ -228,19 +243,6 @@ def test_build_graph_stage_evaluation_report_spark_reports_band_skew_and_sensiti
 
 def test_spark_graph_tables_feed_fusion_helper(spark):
     _, events_sdf, windows_sdf, window_features_df = _build_window_features_pdf_with_events(spark)
-    backbone_sdf = spark.createDataFrame(
-        [
-            {
-                "backbone_version": 2,
-                "selected_sensors_c": ["ENG_TEMP_1"],
-                "all_sensors": ["ENG_TEMP_1", "HYD_PRESS_1"],
-                "weights_b": [[1.0, 0.0]],
-                "lambda_ridge": 1.0,
-                "training_window_count": 2,
-            }
-        ]
-    )
-
     event_sdf = EventGraphTable.from_events_and_windows(
         events_sdf,
         windows_sdf,

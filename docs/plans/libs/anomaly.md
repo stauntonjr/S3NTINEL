@@ -14,13 +14,34 @@ Shared library dependencies covered here:
 - `libs/graph`
 
 For current implementation ownership, prefer:
-- [libs/scoring/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/scoring/README.md)
-- [libs/anomaly/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/anomaly/README.md)
-- [libs/graph/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/graph/README.md)
-- [docs/current/v2_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/current/v2_architecture.md)
-- [docs/current/phase_validation_semantics.md](/home/jrs/code/S3NTINEL/sentinel/docs/current/phase_validation_semantics.md)
+- [libs/scoring/README.md](../../../libs/scoring/README.md)
+- [libs/anomaly/README.md](../../../libs/anomaly/README.md)
+- [libs/graph/README.md](../../../libs/graph/README.md)
+- [docs/current/v2_architecture.md](../../current/v2_architecture.md)
+- [docs/current/phase_validation_semantics.md](../../current/phase_validation_semantics.md)
 
 ## Current Baseline
+
+### 2026-07 resume checkpoint
+
+The current working-tree validation supersedes the older `/tmp` replay paths
+below. The authored-fault composite replay at
+`data/simulation_runs/20260718T024330Z_power_pressurization_hierarchy_composite`
+completed stages `00` through `95` and produced:
+
+- `320` calibrated windows
+- `94` `emit_ready` windows
+- `94` window attribution rows
+- `27,517` telemetry attribution rows
+- `345` event attribution rows
+- `18` detected fault windows out of `18`
+- `15` fault windows with emitted results (`0.8333`)
+
+The next anomaly pass should use the persisted validation reports from this
+replay, especially `reports/score_validation_summary.json` and
+`reports/misbehavior_attribution_validation_summary.json`. The immediate target
+is subsystem/module candidate mapping and ranking, not another broad scoring or
+calibration rewrite.
 
 The current kept baseline is good enough to support targeted anomaly work:
 
@@ -192,7 +213,7 @@ Implication:
 - there was no dominant `truth_subsystem_present_but_lost` bucket on this
   replay, so another winner-rollup pass should not be the next move
 
-### Add a validator breakdown for misses
+### Implemented diagnostic breakdown
 
 For reconstruction-dominated anomaly windows, classify misses into:
 
@@ -209,6 +230,39 @@ These labels should be derived from existing persisted outputs:
 - truth parameter/module/subsystem mapping
 - detected hierarchy map
 
+`misbehavior_attribution_validation_summary.json` and
+`attribution_validation_summary.json` now also include
+`hierarchy_cluster_alignment_validation`. For both inferred subsystems and
+modules it records cluster membership, the dominant simulator label, strict
+plurality mappability, and weighted/mean plurality purity. Dynamic inferred
+IDs are intentionally not compared as literal strings to simulator IDs.
+
+Use this surface before tuning the ranking path:
+
+- high truth visibility in telemetry but low candidate recovery points to the
+  top-parameter/top-candidate cuts or rollup ranking
+- low cluster purity points upstream to inferred hierarchy construction
+- low telemetry truth visibility points to parameter candidate generation or
+  evidence contamination, not hierarchy ranking
+
+On the refreshed authored-fault composite replay, weighted plurality purity is
+`0.4464` for inferred subsystems and `0.5357` for inferred modules. The report
+shows two mixed subsystem clusters and four mixed module clusters; a strict
+plurality can still be very weak (for example, `5/27` parameters). Treat
+strict-plurality mappability as an identifier-resolution rule, not as evidence
+of a high-quality inferred hierarchy.
+
+### Hierarchy Edge Traceability
+
+Stage `60` now persists `hierarchy_edge_evidence`, the exact mutual-top-k fused
+edges retained to form modules. Each row includes both endpoint ranks, precision,
+event, lag, fused, and module-affinity weights, final hierarchy IDs, and directed
+lag-graph evidence for both endpoint directions. The corresponding
+`hierarchy_edge_evidence_summary.json` maps each configured simulator coupling
+signature onto the canonical retained edge and normalizes lag fields back to the
+declared coupling direction. A missing retained edge is a hierarchy-selection
+result, not a claim that the simulator omitted the coupling.
+
 ### Acceptance
 
 This pass is diagnostic-only. It should not change model behavior.
@@ -216,6 +270,8 @@ This pass is diagnostic-only. It should not change model behavior.
 Success criteria:
 
 - the new failure buckets appear in attribution validation
+- hierarchy-cluster mapping confidence and purity are visible in both
+  attribution summaries
 - the output is stable on empty or no-match cases
 - the replay metrics above remain unchanged
 

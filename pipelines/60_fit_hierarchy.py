@@ -1,7 +1,7 @@
-"""Fit hierarchy artifacts from fused graph and the persisted graph parameter universe."""
+"""Fit hierarchy mapping and retained-edge evidence from fused graph artifacts."""
 import time
 
-from libs.graph import HierarchySensorMapTable
+from libs.graph import HierarchyArtifactSet
 from libs.io.delta import get_spark, read_table, write_table
 from libs.perf import (
     build_artifact_manifest,
@@ -35,6 +35,8 @@ def run() -> None:
     datatype_profile_path = runtime.artifacts.parameter_datatype_profile
     behavior_profile_path = runtime.artifacts.parameter_behavior_profile
     hierarchy_map_path = runtime.artifacts.hierarchy_sensor_map
+    hierarchy_edge_evidence_path = runtime.artifacts.hierarchy_edge_evidence
+    lag_graph_path = runtime.artifacts.lag_graph
     table_format = runtime.execution.table_format
     write_mode = runtime.execution.fit_write_mode
     min_fused_edge_weight = runtime.settings.graph.fusion.min_fused_edge_weight
@@ -43,6 +45,7 @@ def run() -> None:
     hierarchy_system_min_edge_weight = runtime.settings.hierarchy.system_min_edge_weight
 
     fused_df = read_table(spark, fused_graph_path, fmt=table_format)
+    lag_graph_df = read_table(spark, lag_graph_path, fmt=table_format)
     parameter_universe_df = read_table(spark, graph_parameter_universe_path, fmt=table_format)
     datatype_profile_df = read_table(spark, datatype_profile_path, fmt=table_format)
     behavior_profile_df = read_table(spark, behavior_profile_path, fmt=table_format)
@@ -57,8 +60,9 @@ def run() -> None:
     timing_ms["parameter_universe_collect"] = _elapsed_ms(started)
 
     started = time.perf_counter()
-    hierarchy_df = HierarchySensorMapTable.from_fused_graph(
+    hierarchy_artifacts = HierarchyArtifactSet.from_fused_graph(
         fused_df,
+        lag_graph_df=lag_graph_df,
         parameter_names=parameter_names,
         min_fused_edge_weight=min_fused_edge_weight,
         hierarchy_top_k_per_parameter_name=hierarchy_top_k_per_sensor,
@@ -66,11 +70,14 @@ def run() -> None:
         hierarchy_system_min_edge_weight=hierarchy_system_min_edge_weight,
         datatype_profile_df=datatype_profile_df,
         behavior_profile_df=behavior_profile_df,
-    ).to_dataframe()
+    )
+    hierarchy_df = hierarchy_artifacts.sensor_map.to_dataframe()
+    hierarchy_edge_evidence_df = hierarchy_artifacts.edge_evidence.to_dataframe()
     timing_ms["hierarchy_build"] = _elapsed_ms(started)
 
     started = time.perf_counter()
     write_table(hierarchy_df, path=hierarchy_map_path, mode=write_mode, fmt=table_format)
+    write_table(hierarchy_edge_evidence_df, path=hierarchy_edge_evidence_path, mode=write_mode, fmt=table_format)
     timing_ms["output_write"] = _elapsed_ms(started)
 
     fused_count = int(fused_df.count())
@@ -78,6 +85,7 @@ def run() -> None:
     datatype_profile_count = int(datatype_profile_df.count())
     behavior_profile_count = int(behavior_profile_df.count())
     hierarchy_count = int(hierarchy_df.count())
+    hierarchy_edge_evidence_count = int(hierarchy_edge_evidence_df.count())
 
     log_params_if_active(
         {
@@ -95,11 +103,13 @@ def run() -> None:
             "datatype_profile_path": datatype_profile_path,
             "behavior_profile_path": behavior_profile_path,
             "hierarchy_map_path": hierarchy_map_path,
+            "hierarchy_edge_evidence_path": hierarchy_edge_evidence_path,
             "fused_edge_count": fused_count,
             "graph_parameter_universe_count": parameter_universe_count,
             "datatype_profile_count": datatype_profile_count,
             "behavior_profile_count": behavior_profile_count,
             "hierarchy_sensor_count": hierarchy_count,
+            "hierarchy_edge_evidence_count": hierarchy_edge_evidence_count,
             "min_fused_edge_weight": min_fused_edge_weight,
             "hierarchy_top_k_per_sensor": hierarchy_top_k_per_sensor,
             "hierarchy_subsystem_min_edge_weight": hierarchy_subsystem_min_edge_weight,
@@ -122,6 +132,7 @@ def run() -> None:
         },
         input_artifacts={
             "fused_graph": build_artifact_manifest(path=fused_graph_path, dataframe=fused_df, row_count=fused_count),
+            "lag_graph": build_artifact_manifest(path=lag_graph_path, dataframe=lag_graph_df, row_count=int(lag_graph_df.count())),
             "graph_parameter_universe": build_artifact_manifest(
                 path=graph_parameter_universe_path,
                 dataframe=parameter_universe_df,
@@ -144,17 +155,29 @@ def run() -> None:
                 dataframe=hierarchy_df,
                 row_count=hierarchy_count,
             ),
+            "hierarchy_edge_evidence": build_artifact_manifest(
+                path=hierarchy_edge_evidence_path,
+                dataframe=hierarchy_edge_evidence_df,
+                row_count=hierarchy_edge_evidence_count,
+            ),
         },
-        replayable_from=["fused_graph", "graph_parameter_universe", "parameter_datatype_profile", "parameter_behavior_profile"],
+        replayable_from=[
+            "fused_graph",
+            "lag_graph",
+            "graph_parameter_universe",
+            "parameter_datatype_profile",
+            "parameter_behavior_profile",
+        ],
     )
     log_stage_manifest_if_active(stage_manifest, runtime.report_paths.manifest_artifact_path)
     LOGGER.info(
-        "pipeline=fit_hierarchy format=%s write_mode=%s fused_edges=%s parameter_universe=%s hierarchy_sensors=%s timing_ms=%s",
+        "pipeline=fit_hierarchy format=%s write_mode=%s fused_edges=%s parameter_universe=%s hierarchy_sensors=%s hierarchy_edges=%s timing_ms=%s",
         table_format,
         write_mode,
         fused_count,
         parameter_universe_count,
         hierarchy_count,
+        hierarchy_edge_evidence_count,
         {key: round(value, 1) for key, value in timing_ms.items()},
     )
 

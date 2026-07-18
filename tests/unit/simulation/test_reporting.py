@@ -42,6 +42,58 @@ def test_build_misbehavior_attribution_summary_uses_full_hierarchy_views(monkeyp
     assert list(captured["hierarchy_label_df"].columns) == ["parameter_name", "system_id", "subsystem_id", "module_id"]
 
 
+def test_hierarchy_edge_evidence_summary_normalizes_to_expected_coupling_direction():
+    evidence_rows = pd.DataFrame(
+        [
+            {
+                "parameter_name_u": "actuator_position_pct",
+                "parameter_name_v": "outflow_cmd_pct",
+                "module_id": "MOD_0001",
+                "lag_count_u_to_v": 2,
+                "lag_weight_u_to_v": 0.25,
+                "mean_lag_seconds_u_to_v": 1.5,
+                "lag_count_v_to_u": None,
+                "lag_weight_v_to_u": float("nan"),
+                "mean_lag_seconds_v_to_u": float("nan"),
+            }
+        ]
+    )
+
+    class FakeTables:
+        def pandas(self, view):
+            assert view is reporting.HIERARCHY_EDGE_EVIDENCE_VIEW
+            return evidence_rows.copy()
+
+    summary = reporting._build_hierarchy_edge_evidence_summary(
+        FakeTables(),
+        expected_coupling_signatures=(
+            {
+                "coupling_id": "coupling-1",
+                "parameter_name_u": "outflow_cmd_pct",
+                "parameter_name_v": "actuator_position_pct",
+            },
+        ),
+    )
+
+    assert summary["status"] == "ok"
+    assert summary["expected_coupling_retained_edge_count"] == 1
+    assert summary["expected_coupling_matches"] == [
+        {
+            "coupling_id": "coupling-1",
+            "parameter_name_u": "outflow_cmd_pct",
+            "parameter_name_v": "actuator_position_pct",
+            "retained_in_hierarchy": True,
+            "module_id": "MOD_0001",
+            "lag_count_u_to_v": None,
+            "lag_weight_u_to_v": None,
+            "mean_lag_seconds_u_to_v": None,
+            "lag_count_v_to_u": 2,
+            "lag_weight_v_to_u": 0.25,
+            "mean_lag_seconds_v_to_u": 1.5,
+        }
+    ]
+
+
 def test_build_simulation_benchmark_audit_summary_classifies_recoverability_tiers():
     class FakeFlight:
         metadata = {"flight_name": "power_chain"}

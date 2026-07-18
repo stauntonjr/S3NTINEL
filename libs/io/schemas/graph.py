@@ -70,6 +70,28 @@ HIERARCHY_SENSOR_MAP_COLUMNS = [
     "hierarchy_profile_id",
 ]
 
+HIERARCHY_EDGE_EVIDENCE_COLUMNS = [
+    "parameter_name_u",
+    "parameter_name_v",
+    "rank_parameter_name_u",
+    "rank_parameter_name_v",
+    "precision_weight",
+    "event_weight",
+    "lag_weight",
+    "fused_weight",
+    "module_affinity_weight",
+    "lag_count_u_to_v",
+    "lag_weight_u_to_v",
+    "mean_lag_seconds_u_to_v",
+    "lag_count_v_to_u",
+    "lag_weight_v_to_u",
+    "mean_lag_seconds_v_to_u",
+    "system_id",
+    "subsystem_id",
+    "module_id",
+    "hierarchy_edge_role",
+]
+
 
 def PRECISION_GRAPH_SCHEMA():
     T = _types()
@@ -174,5 +196,32 @@ def HIERARCHY_SENSOR_MAP_SCHEMA():
             T.StructField("module_id", T.StringType(), True),
             T.StructField("hierarchy_source", T.StringType(), True),
             T.StructField("hierarchy_profile_id", T.StringType(), True),
+        ]
+    )
+
+
+def HIERARCHY_EDGE_EVIDENCE_SCHEMA():
+    T = _types()
+    return T.StructType(
+        [
+            T.StructField("parameter_name_u", T.StringType(), False),
+            T.StructField("parameter_name_v", T.StringType(), False),
+            T.StructField("rank_parameter_name_u", T.IntegerType(), False),
+            T.StructField("rank_parameter_name_v", T.IntegerType(), False),
+            T.StructField("precision_weight", T.DoubleType(), False),
+            T.StructField("event_weight", T.DoubleType(), False),
+            T.StructField("lag_weight", T.DoubleType(), False),
+            T.StructField("fused_weight", T.DoubleType(), False),
+            T.StructField("module_affinity_weight", T.DoubleType(), False),
+            T.StructField("lag_count_u_to_v", T.IntegerType(), True),
+            T.StructField("lag_weight_u_to_v", T.DoubleType(), True),
+            T.StructField("mean_lag_seconds_u_to_v", T.DoubleType(), True),
+            T.StructField("lag_count_v_to_u", T.IntegerType(), True),
+            T.StructField("lag_weight_v_to_u", T.DoubleType(), True),
+            T.StructField("mean_lag_seconds_v_to_u", T.DoubleType(), True),
+            T.StructField("system_id", T.StringType(), False),
+            T.StructField("subsystem_id", T.StringType(), False),
+            T.StructField("module_id", T.StringType(), False),
+            T.StructField("hierarchy_edge_role", T.StringType(), False),
         ]
     )
