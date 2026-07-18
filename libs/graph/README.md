@@ -21,7 +21,7 @@ It does not own:
 - `event.py`
 - `fused.py`
 - `lag.py`
-  - lag-band specs, multi-band lag profile construction, and collapse to legacy lag graph
+  - lag-band specs, multi-band lag profile construction, and lag-graph collapse
 - `hierarchy_artifacts.py`
   - hierarchy rollup over fused graph evidence
 - `data.py`

@@ -1,62 +1,34 @@
 # Documentation
 
-This directory contains the longer-form conceptual and architectural notes for the repo.
+This directory contains cross-package documentation. Start with the root
+[README](../README.md) for orientation, then choose the document class that
+matches the task. See [documentation conventions](reference/documentation_conventions.md)
+for authority and maintenance rules.
 
-Use these docs for:
-- theory and math
-- architectural rationale
-- planning and taxonomy
-- subject-matter guidance
+## Find The Right Document
 
-Use the newer area READMEs near the code for:
-- current package ownership
-- current module names
-- current entrypoints
-- current artifact/schema locations
+- **Run or modify a stage:** [pipelines/README.md](../pipelines/README.md), then the owning package README.
+- **Understand the operational motivation:** [A-MATS, AFDX, and CBM+ operational context](design/operational_context.md).
+- **Understand the active system contract:** [V2 architecture](current/v2_architecture.md).
+- **Understand durable names and schemas:** [glossary](reference/glossary.md) and [IO schemas](../libs/io/schemas/README.md).
+- **Understand a design decision:** [graph and hierarchy design](design/graph_hierarchy_design.md), [anomaly attribution design](design/anomaly_attribution_design.md), or [artifact replay design](design/artifact_replay_design.md).
+- **Work on simulation:** [simulation architecture](simulation/simulation_architecture.md) and [avionics guidance](simulation/avionics_simulation_guidelines.md).
+- **Review a proposal:** [plans/README.md](plans/README.md). Plans are non-authoritative.
+- **Inspect a generated structural snapshot:** [architecture/README.md](architecture/README.md).
 
-Recommended orientation order:
+## Directory Roles
 
-1. [README.md](../README.md)
-2. [libs/README.md](../libs/README.md)
-3. [pipelines/README.md](../pipelines/README.md)
-4. the package-level README for the area you are editing
-5. the deeper conceptual notes in this directory
+- `current/`: active cross-package architecture, workflow, validation, and complexity contracts.
+- `reference/`: stable taxonomy, schema, theory, and documentation conventions.
+- `design/`: active design rationale, boundaries, and invariants.
+- `simulation/`: simulator-specific guidance and diagrams.
+- `research/`: exploratory evaluation and research context.
+- `plans/`: non-authoritative proposals and sequencing.
+- `archive/`: historical source material; not an active implementation contract.
+- `architecture/`: generated C4 and repository-map artifacts.
 
-Directory layout:
-- `current/`
-  - active implementation-facing docs
-  - start here for architecture, workflow, validation, and complexity
-- `reference/`
-  - stable taxonomy, schema, and theory reference docs
-- `design/`
-  - design notes and detailed architecture/spec material
-- `simulation/`
-  - simulator-specific guidance and diagrams
-- `plans/`
-  - roadmap and proposal docs
-  - non-authoritative for current behavior
-- `research/`
-  - exploratory or research-note material
-- `architecture/`
-  - generated architecture snapshot subtree
-  - non-authoritative until regenerated
+## Notes
 
-Useful starting points:
-- [current/v2_architecture.md](current/v2_architecture.md)
-- [current/fitting_workflow.md](current/fitting_workflow.md)
-- [current/phase_validation_semantics.md](current/phase_validation_semantics.md)
-- [current/computational_complexity_report.md](current/computational_complexity_report.md)
-- [reference/theory_foundations.md](reference/theory_foundations.md)
-- [design/artifact_replay_design.md](design/artifact_replay_design.md)
-- [simulation/simulation_architecture.md](simulation/simulation_architecture.md)
-- [plans/README.md](plans/README.md)
-- [plans/libs/README.md](plans/libs/README.md)
-- [plans/libs/anomaly.md](plans/libs/anomaly.md)
-- [plans/libs/simulation.md](plans/libs/simulation.md)
-- [architecture/README.md](architecture/README.md)
-
-Notes:
-- These docs preserve conceptual material even where the code-level READMEs are now the primary implementation guide.
-- If a conceptual doc and a package README disagree on current implementation ownership, prefer the package README.
-- Production modeling semantics live in the canonical Spark `Table` / `Frame` owners; local pandas code is limited to bounded validation/reporting/evaluation and final test assertions.
-- `docs/architecture/` is a generated snapshot subtree. If it lags behind current code ownership, treat it as stale until regenerated and prefer the package READMEs plus current code.
+Package READMEs, current code, schemas, and tests own current implementation
+behavior. `docs/architecture/` is a generated snapshot; regenerate it rather
+than manually repairing drift.

@@ -431,7 +431,7 @@ or fields folded into `window_scores_raw` first:
 - `misbehavior_detail_detected`
 - `misbehavior_confidence_detected`
 
-## 8. Suggested first implementation scope
+## 8. Notes
 
 Do not try to cover all families at once.
 
@@ -463,7 +463,8 @@ But it does need one additional semantic layer:
 - evidence channels already exist
 - misbehavior classification does not
 
-So the clean next step is:
+The implementation sequence is maintained in the
+[anomaly plan](../plans/libs/anomaly.md):
 
 1. define `misbehavior_family_label` in simulation
 2. add `misbehavior_family_detected` to the scoring/anomaly path

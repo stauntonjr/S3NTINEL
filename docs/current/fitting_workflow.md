@@ -63,7 +63,7 @@ Artifacts:
 
 Purpose:
 - derive primitive evidence from telemetry and then infer nominal behavior-family semantics
-- support validation, routing, and future richer downstream behavior-aware logic
+- support validation, routing, and downstream behavior-aware logic
 
 The current design is two-layer:
 

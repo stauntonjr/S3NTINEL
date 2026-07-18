@@ -105,7 +105,7 @@ These are still intentionally simple:
 - `enable` / `inhibit` semantics are binary, not analog
 - latent updates are direct transforms, not dynamic state equations
 - target-port propagation uses the emitted clean value first, then observed value as fallback
-- the legacy flat `mode_gate` field remains only as a compatibility fallback; the
-  active semantics are source/target scoped gates
+- the flat `mode_gate` field remains only as a compatibility fallback; the active
+  semantics are source/target scoped gates
 
 Those are reasonable simplifications for the current seam review.

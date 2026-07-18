@@ -1,555 +1,241 @@
 # Glossary
 
-This glossary records the active code/data taxonomy for the S3NTINEL V2 path.
+This is the contract glossary for the active S3NTINEL data flow. Use its
+canonical names in code, schemas, persisted artifacts, reports, and cross-package
+documentation. It is organized by the order in which telemetry becomes a
+validated attribution result, not by pipeline stage ownership.
 
-It is not a marketing glossary. It is a contract glossary: the names here are meant
-to line up with code, tables, schemas, and reports.
+For stage composition, use [pipelines/README.md](../../pipelines/README.md).
+For current artifact contracts, use [V2 architecture](../current/v2_architecture.md).
 
-Use this document when naming:
+## 1. Telemetry And Parameter Semantics
 
-- directories
-- modules
-- functions
-- persisted fields
-- output tables
-- report sections
+### A-MATS, AFDX, CBM+, and BLADE
 
-## 1. Core entities
+These are operating-context terms, not persisted S3NTINEL artifact names.
 
-### tail
+- **A-MATS:** Advanced Maintenance and Troubleshooting Suite, the motivating
+  aircraft-side data-collection program for this project.
+- **AFDX / ARINC 664 Part 7:** deterministic switched-Ethernet avionics network
+  from which the target signal feed is derived; it is not the S3NTINEL telemetry
+  schema.
+- **CBM+:** condition-based maintenance context that uses equipment condition
+  and operational evidence to support maintenance decisions.
+- **BLADE:** Basing and Logistics Analytics Data Environment, the broader
+  logistics and analytics setting relevant to downstream CBM+ use.
 
-An aircraft identifier.
+See [operational_context.md](../design/operational_context.md) for source
+background and the boundary between this target context and the active V2
+implementation.
 
-Canonical field:
-- `tail_id`
+### tail and flight
 
-### flight
+An aircraft identity and one telemetry run for that aircraft.
 
-A single run/session for a tail.
-
-Canonical field:
-- `flight_id`
+Canonical fields: `tail_id`, `flight_id`.
 
 ### parameter
 
-A telemetry channel. This is the canonical term used across the active path instead
-of the older generic term `sensor`.
-
-Canonical field:
-- `parameter_name`
-
-Deprecated/internal fallback only:
-- `sensor`
+A telemetry channel. `parameter_name` is the canonical persisted field. Use
+`sensor` only where an external API or a current compatibility boundary fixes that
+spelling.
 
 ### parameter value
 
-The observed telemetry value passed downstream to profilers, detectors, window
-features, backbone fitting, phase fitting, and scoring.
+The observed telemetry value consumed by profilers, detectors, windows, and
+structural fitting. Canonical field: `parameter_value`.
 
-Canonical field:
-- `parameter_value`
-
-### clean parameter value
-
-The simulator-side clean value before observation noise and measurement effects.
-
-Canonical field:
-- `parameter_value_clean`
+`parameter_value_clean` is the simulator-side pre-observation value used for
+truth and debugging; it is not a production fitting input.
 
 ### timestamp
 
-A UTC timestamp associated with a telemetry sample, event, or attributed record.
+UTC instant for telemetry, event, and attribution rows. Canonical field:
+`timestamp_utc`. `ts` is limited to short-lived local variables.
 
-Canonical field:
-- `timestamp_utc`
+### coupling ID label
 
-Deprecated/internal fallback only:
-- `ts`
+Simulator truth label identifying an authored coupling relationship. Canonical
+field: `coupling_id_label`. It supports simulation coupling validation and does
+not determine the learned hierarchy directly.
 
-### window
+### source labels and detected outputs
 
-A time segment used for aggregation, phase fitting, scoring, and anomaly attribution.
+`*_label` fields are simulator or source truth; `*_detected` fields are model
+outputs. Examples include `event_type_label`, `event_type_detected`,
+`phase_label`, `phase_id_detected`, `anomaly_type_label`, and
+`anomaly_type_detected`.
 
-Canonical field:
-- `win_id`
+## 2. Profiles, Events, Windows, And Phases
 
-Related fields:
-- `t_start`
-- `t_end`
-- `duration_ms`
-- `event_count`
+### parameter datatype profile
 
-## 2. Labels vs detected outputs
-
-S3NTINEL uses `*_label` for simulator/source labels and `*_detected` for model outputs.
-
-### event misbehavior label
-
-Misbehavior-driven event proxy label emitted from the simulator path today.
-
-Canonical field:
-- `event_misbehavior_label`
-
-### event label
-
-Canonical event-truth label for behavior/signal-grounded simulator event semantics.
-
-Canonical field:
-- `event_type_label`
-
-### event detected
-
-Event type emitted by the event detector.
-
-Canonical field:
-- `event_type_detected`
-
-### anomaly labels
-
-Simulator/source anomaly labels.
-
-Canonical fields:
-- `anomaly_type_label`
-- `anomaly_score_label`
-
-### anomaly detected
-
-Reserved detector-side anomaly outputs.
-
-Canonical fields:
-- `anomaly_type_detected`
-- `anomaly_score_detected`
-
-These may exist as placeholder columns even when not fully implemented.
-
-### phase label
-
-Simulation truth for the phase.
-
-Canonical field:
-- `phase_label`
-
-### phase detected
-
-Detected/assigned phase outputs.
-
-Canonical fields:
-- `phase_id_detected`
-- `phase_state_detected`
-- `phase_confidence_detected`
-- `distance_to_centroid_detected`
-
-## 3. Datatype taxonomy
-
-### datatype label
-
-Simulator/source datatype for a parameter.
-
-Canonical field:
-- `parameter_datatype_label`
-
-### datatype profiled
-
-Profiler-inferred datatype for a parameter.
-
-Canonical field:
-- `parameter_datatype_profiled`
-
-### sampling rate
-
-If carried as label/profiled fields, use:
-
-- `sampling_rate_label_hz`
-- `sampling_rate_profiled_hz`
-
-These are preferred over unlabeled generic `sampling_rate_hz` in persisted interfaces.
-
-### datatype profile artifact
-
-The one-off fitted parameter metadata artifact that establishes datatype and observed
-rate semantics before structural fitting.
-
-Recommended artifact name:
-- `parameter_datatype_profile`
-
-## 4. Behavior taxonomy
-
-### behavior label
-
-Simulation/source behavior-family label for a parameter.
-
-Canonical field:
-- `behavior_family_label`
-
-Optional future companion:
-- `behavior_traits_label`
-
-### behavior profiled
-
-Profiler-inferred behavior-family label for a parameter.
-
-Planned canonical fields:
-- `behavior_family_profiled`
-- `behavior_profile_confidence`
-
-Optional future companion fields:
-- `regulated_score_profiled`
-- `tracking_score_profiled`
-- `inertial_score_profiled`
-- `accumulative_score_profiled`
-- `discrete_state_score_profiled`
-
-### behavior primitive profiled
-
-Primitive evidence derived from telemetry before final behavior-family scoring.
-
-Canonical artifact:
-- `parameter_behavior_primitive_profile`
-
-Typical fields:
-- `persistent_run_strength_profiled`
-- `reversal_rate_profiled`
-- `center_occupancy_profiled`
-- `excursion_return_ratio_profiled`
-- `monotone_accumulation_score_profiled`
-- `tracking_error_score_profiled`
-- `tracking_recovery_score_profiled`
-- `lagged_response_score_profiled`
-
-### behavior profile artifact
-
-The one-off fitted parameter metadata artifact that establishes nominal behavior
-family semantics before structural fitting and inference.
-
-Recommended artifact name:
-- `parameter_behavior_primitive_profile`
-- `parameter_behavior_profile`
-
-## 5. Misbehavior taxonomy
-
-### misbehavior label
-
-Simulation/source misbehavior-family label.
-
-Canonical fields:
-- `misbehavior_family_label`
-- `misbehavior_detail_label`
-
-### misbehavior detected
-
-Detector/runtime misbehavior-family output.
-
-Planned canonical fields:
-- `misbehavior_family_detected`
-- `misbehavior_detail_detected`
-- `misbehavior_confidence_detected`
-
-## 6. Representations
-
-### window feature row
-
-The one-window feature representation used for backbone fitting, graph fitting,
-phase fitting, and related structural computations.
-
-Typical contents:
-- robust-scaled continuous end-of-window snapshot
-- categorical end state
-- event counts
-- drift-oriented summaries
-
-### window_features
-
-The many-window artifact built from per-window feature rows.
-
-Math shorthand:
-- `x_w`
-
-Comment alias:
-- provisional window vector
-
-### window_s
-
-The final structure representation used for phase and scoring logic.
-
-Math shorthand:
-- `s_w`
-
-Comment alias:
-- structure vector
-
-Typical contents:
-- backbone-restricted continuous block
-- compact event summaries
-- compact categorical summaries
-- compact window summary scalars
-
-### continuous vector at window end
-
-Concrete persisted field inside window-like artifacts.
-
-Canonical field:
-- `continuous_vector_t_end_scaled`
+Reusable metadata from stage `10` that classifies a parameter and records its
+observed cadence. Canonical artifact: `parameter_datatype_profile`.
 
 ### continuous scaling profile
 
-The reusable robust-scaling metadata artifact for continuous parameters.
+Reusable robust-scaling metadata for continuous parameters. Canonical artifact:
+`continuous_scaling_profile`. Principal fields include `parameter_name`,
+`scaling_center_median`, and `scaling_iqr`.
 
-Recommended artifact name:
-- `continuous_scaling_profile`
+### parameter behavior profiles
 
-Expected fields:
-- `parameter_name`
-- `scaling_center_median`
-- `scaling_iqr`
+`parameter_behavior_primitive_profile` contains telemetry-derived primitive
+evidence. `parameter_behavior_profile` contains nominal behavior-family metadata,
+including `behavior_family_profiled` and `behavior_profile_confidence`.
 
-## 7. Backbone taxonomy
+### event
 
-### backbone
+A detector-emitted occurrence associated with a parameter and timestamp.
+Canonical detector field: `event_type_detected`. Canonical artifact: `events`.
 
-The selected continuous sensor subset and associated reconstruction weights.
+### window and window policy profile
 
-Canonical table:
-- `backbone`
+A window is a time segment used for aggregation, phase fitting, scoring, and
+attribution. Its canonical identity field is `win_id`; common bounds are
+`t_start`, `t_end`, and `duration_ms`.
 
-Important fields:
-- `selected_sensors_c`
-- `all_sensors`
-- `weights_b`
-- `lambda_ridge`
-- `training_window_count`
+`window_policy_profile` is the fitted ranked candidate policy artifact. The row
+where `is_selected=true` supplies the active adaptive-window policy.
 
-### backbone sensor energy
+### window features and window structure
 
-Per-parameter energy used for backbone selection diagnostics and reporting.
+`window_features` is the persisted many-window representation used for backbone,
+graph, and phase fitting. `continuous_vector_t_end_scaled` is its end-of-window
+continuous snapshot. `window_s` is the compact structure representation used by
+phase and scoring logic.
 
-Canonical table:
-- `backbone_sensor_energy`
+### phase windows and phase baselines
 
-Important fields:
-- `parameter_name`
-- `energy`
-- `support_count`
+`phase_windows` enriches windows with detected phase assignments and structure
+summaries. `phase_baselines` contains per-tail detected phase baseline/centroid
+artifacts. `phase_state_detected` distinguishes `stable` from
+`transition_region` without adding a separate primary phase taxonomy.
 
-## 8. Graph taxonomy
+## 3. Backbone And Graph Artifacts
+
+### backbone and backbone sensor energy
+
+`backbone` records the selected continuous parameter subset and reconstruction
+weights. `backbone_sensor_energy` records per-parameter energy and support used
+for diagnostics and selection.
 
 ### precision graph
 
-Continuous conditional-dependence graph over backbone-selected parameters.
-
-Canonical table:
-- `precision_graph`
-
-Weight semantics:
-- absolute partial correlation
+`precision_graph` is the continuous conditional-dependence graph over
+backbone-selected parameters. Its edge weight is absolute partial correlation.
 
 ### event graph
 
-Same-window event co-occurrence graph over parameters.
-
-Canonical table:
-- `event_graph`
-
-Weight semantics:
-- positive normalized PMI
+`event_graph` is the same-window event co-occurrence graph. Its edge weight is
+positive normalized PMI.
 
 ### lag profile
 
-Band-aware lag relationship profile over parameters.
-
-Canonical table:
-- `lag_profile`
-
-Weight semantics:
-- per-band row-normalized lagged conditional probability with short-lag discount
-
-Important fields:
-- `lag_band`
-- `support_flight_count`
+`lag_profile` is the first-class directed, band-aware nearest-prior event
+relationship artifact. It retains lag-band and support information, including
+`lag_band` and `support_flight_count`. Its weight is a per-band row-normalized
+lagged conditional probability with a short-lag discount.
 
 ### lag graph
 
-Directed lagged event relationship graph over parameters.
-
-Canonical table:
-- `lag_graph`
-
-Weight semantics:
-- collapsed compatibility view derived from `lag_profile`
+`lag_graph` is the collapsed directed lag representation derived from
+`lag_profile`. It supplies a compact lag input to graph fusion; use `lag_profile`
+when inspecting band-level lag evidence.
 
 ### transition graph
 
-Directed immediate-precedence event graph over parameters.
-
-Canonical table:
-- `transition_graph`
-
-Weight semantics:
-- row-normalized transition probability
+`transition_graph` records directed immediate-precedence event relationships.
+Its edge weight is a row-normalized transition probability.
 
 ### fused graph
 
-Weighted combination of the active graph components used for hierarchy assignment.
+`fused_graph` is the weighted combination of precision, event, lag, and
+transition evidence used by hierarchy fitting. It is relationship evidence, not a
+hierarchy assignment.
 
-Canonical table:
-- `fused_graph`
+### graph parameter universe
+
+`graph_parameter_universe` is the bounded canonical parameter set persisted
+between graph construction and hierarchy fitting. It prevents the hierarchy stage
+from inventing or silently dropping graph-domain parameters during replay.
+
+## 4. Hierarchy Artifacts And Evidence
 
 ### hierarchy sensor map
 
-The resolved hierarchy assignment for parameters.
+`hierarchy_sensor_map` is the resolved parameter-to-module, subsystem, and system
+assignment. Important fields include `parameter_name`, `module_id`,
+`subsystem_id`, and `system_id`.
 
-Canonical table:
-- `hierarchy_sensor_map`
+### hierarchy edge evidence
 
-Important fields:
-- `parameter_name`
-- `module_id`
-- `subsystem_id`
-- `system_id`
+`hierarchy_edge_evidence` contains the mutual-top-k fused edges retained for the
+module-level hierarchy decision. It records endpoint ranks, component weights,
+assigned hierarchy IDs, and directed lag evidence in both directions.
 
-## 9. Phase artifacts
+### hierarchy-edge evidence report
 
-### phase windows
+`hierarchy_edge_evidence_summary.json` maps configured simulation coupling
+signatures to retained canonical hierarchy edges. It is a diagnostic report, not
+a persisted graph table and not a claim that all simulated couplings must appear
+as hierarchy edges.
 
-Window-level rows enriched with detected phase assignments and structure summaries.
+## 5. Scoring, Attribution, And Validation
 
-Canonical table:
-- `phase_windows`
+### raw and calibrated window scores
 
-### phase baselines
+`window_scores_raw` holds pre-calibration window scores and their component
+evidence. The active components are `regime_deviation`, `reconstruction_error`,
+`event_discordance`, `bound_violation`, `accumulation_violation`,
+`response_violation`, `state_violation`, and `coherence_break`.
 
-Per-tail phase baseline/centroid artifacts.
-
-Canonical table:
-- `phase_baselines`
-
-## 10. Scoring artifacts
-
-### raw window scores
-
-Pre-calibration window-level scores.
-
-Canonical table:
-- `window_scores_raw`
-
-Important fields include:
-- `global_score`
-- `dominant_score_component`
-- `score_component_scores`
-- `subsystem_scores`
-- `dominant_subsystem_id`
-- `dominant_module_id`
-
-Current canonical score components are:
-- `regime_deviation`
-- `reconstruction_error`
-- `event_discordance`
-- `bound_violation`
-- `accumulation_violation`
-- `response_violation`
-- `state_violation`
-- `coherence_break`
-
-`subsystem_scores` remains in the schema for compatibility, but the canonical
-Spark scorer currently writes an empty map there.
-
-### calibrated window scores
-
-Post-calibration window-level scores.
-
-Canonical table:
-- `window_scores_calibrated`
-
-## 11. Anomaly attribution artifacts
+`window_scores_calibrated` adds phase-conditioned calibration and the conservative
+`emit_ready` decision. `subsystem_scores` remains a schema compatibility field;
+the active scorer uses dominant and ranked localization fields instead.
 
 ### anomaly window attribution
 
-Primary anomaly-window fact table.
-
-Canonical table:
-- `anomaly_window_attribution`
-
-Grain:
-- one row per anomalous/scored window
+`anomaly_window_attribution` is the primary anomaly fact table, with one row per
+emitted or scored anomaly window. Its identity is `(tail_id, flight_id, win_id)`.
 
 ### anomaly telemetry attribution
 
-Telemetry attribution rows associated with an anomaly window.
-
-Canonical table:
-- `anomaly_telemetry_attribution`
-
-Grain:
-- `(tail_id, flight_id, win_id, timestamp_utc, parameter_name)`
+`anomaly_telemetry_attribution` contains parameter and telemetry evidence local
+to an anomaly window. Its grain is `(tail_id, flight_id, win_id, timestamp_utc,
+parameter_name)`.
 
 ### anomaly event attribution
 
-Event attribution rows associated with an anomaly window.
+`anomaly_event_attribution` contains detected-event evidence local to an anomaly
+window. Its grain adds `event_type_detected` to the telemetry attribution key.
 
-Canonical table:
-- `anomaly_event_attribution`
+### misbehavior truth and recoverability
 
-Grain:
-- `(tail_id, flight_id, win_id, timestamp_utc, parameter_name, event_type_detected)`
+`misbehavior_family_label` and `misbehavior_detail_label` identify simulator
+truth. Validation reports distinguish what is observable at parameter,
+module, subsystem, or detection-only scope so a lower-level observable anomaly is
+not assessed as a failed higher-level localization claim.
 
-## 12. Preferred naming rules
+### validation harness
 
-### Prefer explicit table names over vague names
+The validation harness joins run configuration, stage manifests, model-validation
+metrics, performance information, and simulator context into an experiment-facing
+bundle. Its reports are the canonical comparison surface for iterative simulation
+evaluation.
 
-Use:
-- `window_scores_raw`
-- `window_scores_calibrated`
-- `anomaly_window_attribution`
+## 6. Naming Rules
 
-Avoid:
-- `scores`
-- `calibrated`
-- `anomalies`
+- Prefer explicit artifact names such as `window_scores_raw` over generic names
+  such as `scores`.
+- Prefer `parameter_name` over generic `sensor` in persisted interfaces.
+- Prefer `timestamp_utc` over `ts` in persisted interfaces.
+- Use `*_label` for source truth and `*_detected` for model outputs.
+- State the grain of every attribution table.
+- Do not create parallel aliases for a durable artifact or field.
 
-### Prefer `parameter_name` over `sensor`
+## Notes
 
-Use `sensor` only where:
-
-- a legacy fallback must be tolerated, or
-- an external dependency already fixes the name
-
-### Prefer `timestamp_utc` over `ts`
-
-Use `ts` only as a local transient variable if necessary.
-
-### Prefer `*_label` and `*_detected`
-
-Avoid:
-- `truth_*`
-- unlabeled ambiguous fields where the semantics are source-vs-model dependent
-
-### Prefer explicit grain in attribution tables
-
-Primary anomaly fact:
-- `anomaly_window_attribution`
-
-Child/detail tables:
-- `anomaly_telemetry_attribution`
-- `anomaly_event_attribution`
-
-## 13. Deprecated terminology
-
-These terms should not appear in new code or active persisted interfaces:
-
-- `truth_*`
-- `sim_event_type`
-- bare detector `event_type` in persisted outputs
-- `signatures`
-- `pivot_block`
-- `cur_block`
-- `event_block`
-- `cat_block`
-- `subsystem_map`
-- generic `anomalies` as the primary active output table name
-
-## 14. Maintenance rule
-
-When a new field, function, or table is introduced:
-
-1. prefer a name already present in this glossary
-2. if a new term is necessary, update this glossary
-3. do not introduce parallel aliases unless there is a short-lived migration reason
+When a new durable field, function, or artifact crosses package boundaries, add
+it here and update its owning schema and package README in the same change.

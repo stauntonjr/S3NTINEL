@@ -488,7 +488,7 @@ Current behavior:
 
 Current limitations:
 - rate-aware downstream modeling is still coarse; the pipeline mostly recovers observed cadence rather than using rate as a first-class structural feature
-- the simpler legacy example flights still behave as fixed-rate-per-tick scenarios unless explicitly authored otherwise
+- the simpler example flights still behave as fixed-rate-per-tick scenarios unless explicitly authored otherwise
 
 ### Ports
 

@@ -44,7 +44,7 @@ The active architecture is V2. Notebook analysis should follow:
   - `lag_graph` is the collapsed compatibility view consumed by downstream fusion
 - canonical label/detected naming only
 
-Legacy notebooks were removed. Recreate notebooks from the active V2 pipeline artifacts only.
+Removed notebooks should be recreated only from active pipeline artifacts.
 
 Notebook cleanup rules:
 

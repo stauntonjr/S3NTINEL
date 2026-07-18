@@ -9,7 +9,7 @@ It does not contain:
 - regression assertions
 - production runtime logic
 
-Those belong in [`tests/`](./../tests/README.md).
+Those belong in [`tests/`](../../tests/README.md).
 
 ## How To Use
 

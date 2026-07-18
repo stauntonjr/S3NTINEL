@@ -15,7 +15,7 @@ For current implementation surfaces, the main builder modules are:
 - [libs/events/continuous.py](../../libs/events/continuous.py)
 - [libs/windows/pipeline.py](../../libs/windows/pipeline.py)
 - [libs/windows/features.py](../../libs/windows/features.py)
-- [libs/backbone/pipeline.py](../../libs/backbone/pipeline.py)
+- [libs/backbone/fit.py](../../libs/backbone/fit.py)
 - [libs/graph/pipeline.py](../../libs/graph/pipeline.py)
 - [libs/graph/hierarchy_artifacts.py](../../libs/graph/hierarchy_artifacts.py)
 - [libs/phase/pipeline.py](../../libs/phase/pipeline.py)
@@ -173,7 +173,7 @@ Two codepaths matter:
 - event graph: upper-triangular same-window parameter pairing, `O(K_w^2)` per window
 - lag profile: candidate-pruned nearest-prior pairing across same and adjacent lag buckets, `O(sum_v n_{b,v} * c_v * (m_{b,u} + m_{b-1,u}))` per bucket in the current implementation
 
-The lag-profile path is still the most dangerous part of stage `50` because local density is driven by wall-clock event concentration, not by the window policy. The current code collapses `lag_profile` into a legacy `lag_graph` afterward, but that collapse is linear in the materialized profile rows and is not the asymptotic hotspot.
+The lag-profile path is still the most dangerous part of stage `50` because local density is driven by wall-clock event concentration, not by the window policy. The current code collapses `lag_profile` into `lag_graph` afterward, but that collapse is linear in the materialized profile rows and is not the asymptotic hotspot.
 
 Before the multi-band redesign, the lag term was better approximated as:
 
@@ -629,7 +629,7 @@ Primary code:
 
 - [pipelines/40_backbone_fit.py](../../pipelines/40_backbone_fit.py)
 - [libs/windows/features.py](../../libs/windows/features.py)
-- [libs/backbone/pipeline.py](../../libs/backbone/pipeline.py)
+- [libs/backbone/fit.py](../../libs/backbone/fit.py)
 - [libs/backbone/fit.py](../../libs/backbone/fit.py)
 
 Dominant work:
@@ -1012,7 +1012,7 @@ For the current codebase:
   - graph construction complexity, which is still dominated by pair expansion
   - graph evaluation/reporting complexity, which is currently the largest measured sub-step inside the stage
 - stage `90` is no longer dominated by universal emission, but it still creates large attribution materializations relative to `A`
-- sampling-rate skew already dominates raw-row cost, while flight-length skew is the most likely future partition-level hotspot once multi-flight fleet runs become common
+- sampling-rate skew already dominates raw-row cost; flight-length skew is the likely partition-level hotspot in multi-flight fleet runs
 
 If the workload grows materially, the first places to rework are:
 

@@ -218,7 +218,8 @@ Incremental patches:
     - `reports/performance_profile_summary.md`
   - variant failures are recorded in the summary by default; the run only exits non-zero if every variant fails
   - pass `--fail-on-variant-error` if you want any failed variant to make the benchmark command fail
-  - TODO: this profiler still compares tuning variants on fixed workloads; dataset-size scale sweep is a planned follow-up
+  - the profiler compares tuning variants on fixed workloads; dataset-size scale
+    evaluation is outside its current scope
  - Inspect an existing simulation run and list replayable stage boundaries:
    - `python -m scripts.report_sim_replay --latest --base-dir data/simulation_runs`
    - or inspect a specific run:

@@ -372,7 +372,7 @@ Schema additions for the kept implementation:
   - `backbone_delta_reconstruction_error`
   - `backbone_delta_residual_by_parameter`
 
-Keep the existing legacy fields by emitting fused views:
+Keep the existing compatibility fields by emitting fused views:
 
 - `backbone_reconstruction_error`
 - `backbone_residual_by_parameter`

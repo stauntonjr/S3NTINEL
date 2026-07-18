@@ -62,7 +62,7 @@ That means:
 - downstream stages normally consume the persisted profile rather than recomputing it
   continuously
 
-An optional streaming behavior monitor may still exist later for:
+An optional streaming behavior monitor, if introduced, would cover:
 
 - new parameter bootstrap
 - confidence collapse
@@ -70,7 +70,7 @@ An optional streaming behavior monitor may still exist later for:
 
 but that monitor is secondary to the fitted metadata artifact.
 
-## 2. Canonical planned fields
+## 2. Canonical fields
 
 Simulation/source side:
 
@@ -351,7 +351,7 @@ Suggested additions:
   - extend or sibling-validator for:
     - `behavior_family_profiled` vs `behavior_family_label`
 
-For the proposed shared package and per-family file layout, see:
+For the shared package and per-family file layout, see:
 
 - [behavior_family_architecture.md](behavior_family_architecture.md)
 - [behavior_family_skeletons.md](behavior_family_skeletons.md)

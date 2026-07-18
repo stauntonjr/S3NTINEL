@@ -54,6 +54,7 @@ mlflow.db
 mlruns/
 *.egg-info/
 repo_maps/
+docs/archive/
 .codex/*
 !.codex/skills/
 !.codex/skills/**

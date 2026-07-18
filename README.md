@@ -1,325 +1,88 @@
-# S3NTINEL Codebase
+# S3NTINEL
 
-S3NTINEL stands for Structural Streaming Sparse Event Nexus for Telemetry Inference with Network Envelope Learning.
+S3NTINEL is a Spark-oriented telemetry anomaly-detection and attribution system
+with a simulation validation harness. Its operating motivation is fleet-scale
+analysis of A-MATS-captured signal feeds from ARINC 664 Part 7 (AFDX) avionics
+networks, where a useful result must identify not only an unusual window, but
+also its likely system, subsystem, module, parameter, and supporting event
+context. The active V2 implementation consumes normalized telemetry; it does not
+yet claim a live A-MATS, AFDX, or BLADE integration.
 
-## Active architecture
+## At A Glance
 
-The active path is now the V2 pipeline. Use [v2_architecture.md](../docs/current/v2_architecture.md) as the source of truth for current fitting/inference semantics.
-Use [theory_foundations.md](../docs/reference/theory_foundations.md) for the mathematical/statistical interpretation of the active representations, graph weights, and scoring quantities.
-Use [glossary.md](../docs/reference/glossary.md) for the active code/data taxonomy and naming rules.
-Use [avionics_simulation_guidelines.md](../docs/simulation/avionics_simulation_guidelines.md) for domain guidance on avionics-system behavior, coupling, and simulation inputs.
-Use [artifact_replay_design.md](../docs/design/artifact_replay_design.md) for artifact persistence, replay, cache, and MLflow lineage design.
-Use [simulation_architecture.md](../docs/simulation/simulation_architecture.md) for the proposed next simulation architecture and extensibility model.
-Use [behavior_profiling_design.md](../docs/design/behavior_profiling_design.md) for the behavior-profile artifact and the mirrored profiling design for simulation behavior semantics.
-Use [fitting_workflow.md](../docs/current/fitting_workflow.md) for the intended one-off fitting sequence for datatype profiling, robust scaling, behavior profiling, and backbone fitting.
-Use [computational_complexity_report.md](../docs/current/computational_complexity_report.md) for a stage-by-stage workload and scaling analysis grounded in the current code and a checked-in simulation bundle.
-Use [behavior_family_architecture.md](../docs/design/behavior_family_architecture.md) and [behavior_family_skeletons.md](../docs/design/behavior_family_skeletons.md) for the per-family file/class layout.
-Use [misbehavior_taxonomy.md](../docs/reference/misbehavior_taxonomy.md) for the planned structured deviation/anomaly ontology.
-Use [anomaly_injection_and_backbone_validation.md](../docs/research/anomaly_injection_and_backbone_validation.md) for anomaly-injection design and backbone-fit validation guidance.
+**What:** a persisted fitting and inference pipeline that turns raw telemetry into
+structural models, calibrated anomaly scores, and attribution artifacts.
 
-### Active fitting path
+**Why:** CBM+ needs evidence that helps maintainers and fleet-reliability teams
+investigate high-dimensional telemetry, not an opaque collection of point
+anomalies. The pipeline recovers phase-aware structural context so users can
+reason about where an anomaly belongs and what evidence supports it.
 
-1. `pipelines/00_ingest_raw.py`
-2. `pipelines/10_parameter_profiles_fit.py`
-3. `pipelines/12_behavior_profiles_fit.py`
-4. `pipelines/15_event_profiles_fit.py`
-5. `pipelines/20_events_extract.py`
-6. `pipelines/25_window_policy_profile.py`
-7. `pipelines/30_windows_adaptive.py`
-8. `pipelines/40_backbone_fit.py`
-9. `pipelines/50_build_graph.py`
-10. `pipelines/60_fit_hierarchy.py`
+**How:** profile parameters, extract events, adaptively window telemetry, fit a
+backbone and relationship graphs, derive a hierarchy and phase model, score
+windows, calibrate emissions, and materialize anomaly attribution artifacts.
 
-Run with:
+**Who it is for:** A-MATS and CBM+ maintainers, fleet-reliability analysts, and
+sustainment teams who need auditable telemetry evidence. Data, platform, and ML
+engineers build, operate, and validate that capability.
 
-- `python -m pipelines.97_run_fitting_pipeline`
+For the A-MATS, AFDX, CBM+, and BLADE context, including current integration
+boundaries, see [operational context](docs/design/operational_context.md).
 
-### Active inference path
+## Start Here
 
-1. `pipelines/70_phase_fit.py`
-2. `pipelines/80_window_scores_raw.py`
-3. `pipelines/85_window_scores_calibrate.py`
-4. `pipelines/90_anomaly_attribution.py`
-5. `pipelines/95_emit_explorer_bundle.py`
+1. Create the supported local environment: `conda env create -f environment.spark35.yml`.
+2. Run the canonical structural smoke: `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format parquet`.
+3. Read the active [architecture contract](docs/current/v2_architecture.md) and
+   [pipeline stage index](pipelines/README.md).
+4. Use [docs/README.md](docs/README.md) to choose a current contract, reference,
+   design rationale, simulator guide, or plan.
 
-Run with:
+The active local baseline is the `sentinel-spark35` conda environment on Python
+3.11, Spark 3.5.1, and Delta 3.0.0. For normal local smoke work, use parquet
+unless the Spark runtime has Delta JVM jars available.
 
-- `python -m pipelines.98_run_inference_pipeline`
+## Current Workflow
 
-### Simulation validation extension
+The production path has two grouped runners:
 
-`pipelines/72_phase_label_centroids.py` is not part of the production inference
-runner. It is a simulation-validation stage that requires truth phase labels and
-builds label-conditioned centroid comparison artifacts after stage 70.
+1. Fitting, stages `00` through `60`: `python -m pipelines.97_run_fitting_pipeline`
+2. Inference, stages `70` through `95`: `python -m pipelines.98_run_inference_pipeline`
 
-### V2 artifacts
+`python -m pipelines.99_run_full_pipeline` runs both under one parent MLflow
+run. The simulation-validation-only stage `72_phase_label_centroids.py` runs
+between stages `70` and `80` when truth phase labels are available.
 
-- `backbone`
-- `backbone_sensor_energy`
-- `parameter_behavior_primitive_profile`
-- `phase_windows`
-- `phase_baselines`
-- `window_scores_raw`
-- `window_scores_calibrated`
-- `window_policy_profile`
-- `precision_graph`
-- `event_graph`
-- `lag_profile`
-- `lag_graph`
-- `transition_graph`
-- `fused_graph`
-- `hierarchy_sensor_map`
-  - graph components and `fused_graph` are now built in Spark; only the final
-    hierarchy assignment remains driver-side on the pruned fused edge set
+For the complete stage-to-artifact mapping, replay behavior, and individual
+entrypoints, use [pipelines/README.md](pipelines/README.md). The authoritative
+artifact and field vocabulary is the [glossary](docs/reference/glossary.md).
 
-## Repo layout
+## Architecture And Design
 
-- `conf/defaults.yaml`: checked-in baseline defaults.
-- `libs/config/`: typed runtime, artifact-path, and tuning config loaders.
-- `pipelines/`: ordered job entrypoints (`00_...` through `99_...`).
-- `libs/`: reusable domain modules (`backbone`, `graph`, `events`, `windows`, `phase`, `scoring`, `conformal`, `io`, `anomaly`).
-- `notebooks/`: exploratory and validation notebooks.
-  Notebook workflow and kernel registration guidance live in [notebooks/README.md](../notebooks/README.md).
-- `scripts/`: local-to-AVD handoff helpers (bundle/patch export-import).
-- `docs/current/v2_architecture.md`: architecture and contract source of truth.
-- `docs/architecture/`: generated C4 workspace, repo maps, LOC skew reports, and architecture-tooling annotations.
-- `docs/current/`: active implementation-facing architecture, workflow, validation, and complexity notes.
-- `docs/reference/`: stable taxonomy, schema, and theory reference docs.
-- `docs/design/`: design specs for replay, profiling, and behavior-family layout.
-- `docs/simulation/`: simulation-specific guidance, diagrams, and architecture notes.
-- `docs/plans/`: forward-looking roadmap and proposal docs; non-authoritative for current behavior.
-- `docs/research/`: exploratory or research-note material.
+- [V2 architecture](docs/current/v2_architecture.md): active contracts and artifacts.
+- [Fitting workflow](docs/current/fitting_workflow.md): reusable metadata and structural fitting sequence.
+- [Graph and hierarchy design](docs/design/graph_hierarchy_design.md): graph fusion, hierarchy construction, and retained evidence.
+- [Anomaly attribution design](docs/design/anomaly_attribution_design.md): score channels, localization, artifacts, and validation.
+- [Artifact replay design](docs/design/artifact_replay_design.md): persistence, lineage, and replay invariants.
+- [Simulation guidance](docs/simulation/avionics_simulation_guidelines.md): domain constraints for coherent simulation inputs.
 
-## Pipeline order
+## Repository Map
 
-1. `pipelines/00_ingest_raw.py`
-2. `pipelines/10_parameter_profiles_fit.py`
-3. `pipelines/12_behavior_profiles_fit.py`
-4. `pipelines/15_event_profiles_fit.py`
-5. `pipelines/20_events_extract.py`
-6. `pipelines/25_window_policy_profile.py`
-7. `pipelines/30_windows_adaptive.py`
-8. `pipelines/40_backbone_fit.py`
-9. `pipelines/50_build_graph.py`
-10. `pipelines/60_fit_hierarchy.py`
-11. `pipelines/70_phase_fit.py`
-12. `pipelines/80_window_scores_raw.py`
-13. `pipelines/85_window_scores_calibrate.py`
-14. `pipelines/90_anomaly_attribution.py`
-15. `pipelines/95_emit_explorer_bundle.py`
+- `conf/`: checked-in runtime defaults.
+- `pipelines/`: ordered stage entrypoints and grouped runners.
+- `libs/`: reusable Spark-domain libraries and persisted artifact owners.
+- `scripts/`: smoke, simulation, validation, and handoff utilities.
+- `notebooks/`: exploratory and validation notebooks; see [notebooks/README.md](notebooks/README.md).
+- `docs/`: current contracts, reference vocabulary, design rationale, simulation notes, research notes, and non-authoritative plans.
+- `docs/architecture/`: generated C4 and repository-map snapshot; regenerate rather than editing by hand.
 
-The simulation `full` runner inserts `pipelines/72_phase_label_centroids.py`
-between stages 70 and 80 when truth phase labels are available.
+## Development Checks
 
-## Quick start
+- Markdown contract: `python tools/check_markdown_docs.py`
+- Unit and integration tests: `pytest`
+- Lint: `ruff check .`
 
-- Install editable package: `pip install -e .`
-- Install dev extras for local checks: `pip install -e .[dev]`
-- Install Spark extras for Spark/Delta pipelines and Spark-backed tests: `pip install -e .[dev,spark]`
-- Recommended Spark env spec: `conda env create -f environment.spark35.yml`
-- Run any pipeline stage directly: `python -m pipelines.00_ingest_raw`
-- Run structural fitting stages together (00 -> 60) under one parent MLflow run: `python -m pipelines.97_run_fitting_pipeline`
-- Run inference stages together (70 -> 95) under one parent MLflow run: `python -m pipelines.98_run_inference_pipeline`
-- Run fitting: `python -m pipelines.97_run_fitting_pipeline`
-- Run inference: `python -m pipelines.98_run_inference_pipeline`
-- Run unit tests: `pytest`
-- Run parameter profile fitting stage directly: `python -m pipelines.10_parameter_profiles_fit`
-- Run V2 backbone fitting stage directly: `python -m pipelines.40_backbone_fit`
-- Run V2 graph fitting stage directly: `python -m pipelines.50_build_graph`
-- Run hierarchy fitting stage directly: `python -m pipelines.60_fit_hierarchy`
-- Run full pipeline under one parent MLflow run: `python -m pipelines.99_run_full_pipeline`
-- Pipeline module commands assume default table/input paths exist (for example `data/input/raw_telemetry`) or that `S3NTINEL_*` path environment variables are set.
-- First-run example (bash):
-	- `export S3NTINEL_RAW_INPUT_PATH=data/input/raw_telemetry`
-	- `export S3NTINEL_RAW_TABLE_PATH=data/delta/raw_telemetry`
-	- `export S3NTINEL_TABLE_FORMAT=parquet`
-- Active Spark baseline: `sentinel-spark35` on Python `3.11` with Spark `3.5.1` and Delta `3.0.0`.
-- Local smoke/default recommendation: use `sentinel-spark35` and `S3NTINEL_TABLE_FORMAT=parquet` unless your Spark runtime already has Delta JVM jars available. The `delta-spark` Python package alone is not sufficient for offline Delta writes.
-- For larger local simulation bundles on a 16 GB class laptop, use the built-in profile:
-	- `export S3NTINEL_SPARK_PROFILE=laptop_large_sim`
-	- this applies `local[4]`, `spark.driver.memory=8g`, `spark.driver.maxResultSize=2g`, `spark.sql.shuffle.partitions=16`, `spark.default.parallelism=8`, adaptive execution, Kryo serialization, and a dedicated local spill dir under `/tmp`
-	- you can still override any individual setting with the explicit env vars below
-- To use the benchmark-winning larger sequence segments with the same laptop Spark settings, use:
-	- `export S3NTINEL_SPARK_PROFILE=laptop_large_sim_large_segments`
-	- this keeps the same Spark runtime config as `laptop_large_sim` and also applies:
-		- event segments: `100000` rows / `1800000` ms
-		- window segments: `100000` rows / `1800000` ms
-		- phase segments: `10000` rows / `3600000` ms
-- Spark bootstrap also supports:
-	- `S3NTINEL_DELTA_JAR_PATH=/abs/path/to/delta.jar[,more.jar]`
-	- `S3NTINEL_SPARK_EXTRA_JARS=/abs/path/to/extra.jar[,more.jar]`
-	- `S3NTINEL_DELTA_ALLOW_MAVEN=false` to disable Maven fallback when you want local jars only
-	- `S3NTINEL_SPARK_DRIVER_MEMORY=8g`
-	- `S3NTINEL_SPARK_DRIVER_MAX_RESULT_SIZE=2g`
-	- `S3NTINEL_SPARK_EXECUTOR_MEMORY=4g`
-	- `S3NTINEL_SPARK_LOCAL_DIR=/tmp/s3ntinel-spark-local`
-	- `S3NTINEL_SPARK_SQL_ADAPTIVE_ENABLED=true`
-	- `S3NTINEL_SPARK_SQL_ADAPTIVE_COALESCE_PARTITIONS_ENABLED=true`
-	- `S3NTINEL_SPARK_SQL_ADAPTIVE_LOCAL_SHUFFLE_READER_ENABLED=true`
-	- `S3NTINEL_SPARK_SERIALIZER=org.apache.spark.serializer.KryoSerializer`
-- Generate deterministic sample test data: `python -m scripts.generate_sample_data --base-dir data --mode overwrite`
-- Run end-to-end smoke test (00->90, including behavior and event profiling): `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format parquet --min-warm 1`
-- Smoke test now seeds a deterministic `sensor_subsystem_map` and asserts emitted anomaly quality gates: non-empty output, no duplicate `(tail_id, flight_id, win_id)`, at least one non-null `panel_context`, and at least one populated `subsystems[].top_sensors`.
-- For stage-80 merge idempotence validation in smoke: `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format delta --min-warm 1 --write-mode merge`
-- Merge smoke checks require a Spark runtime with Delta JVM classes available.
-- Run the canonical segmented smoke pipeline: `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format parquet`
-- Run grouped fitting+inference per partition row from any manifest: `python -m scripts.run_partition_manifest_jobs --partition-manifest-path data/smoke/_partition_manifest --manifest-format parquet --job grouped --jobs-base-dir data/fleet_jobs_grouped --table-format parquet --write-mode overwrite`
-- Run the simulation/event-detection evaluation harness: `python -m scripts.run_sim_detection_eval --output-json reports/eda/sim_detection_eval_report.json`
-- Use handoff helpers for AVD transfer: see `scripts/README.md`
-- Update checked-in defaults in `conf/defaults.yaml`; use `libs/config/pipeline.py` and `pipelines/common.py` as the runtime config boundary.
-- CI workflow: `.github/workflows/ci.yml` runs tests on push/PR.
-
-## Event taxonomy coverage
-
-- Continuous: `extrema` (with payload `legacy_type=max|min`), `threshold`, `slope_pos|slope_neg`, `drift_guard`, `switch`, `oscillation`.
-- Categorical: `state_enter`, `state_exit`, `transition`, `dropped`, `dwell_bucket`, `dwell_guard`, `dwell_violation`, `illegal_transition`.
-- Graph artifacts: cooccurrence and precedence belong in graph outputs, not the active V2 detector event contract.
-- Legacy name mapping: `CAT_CHANGE -> transition`, `DWELL_GUARD -> dwell_guard`, `EXTREMA/max/min -> extrema` with payload kind/legacy type.
-
-## Simulation notes
-
-- `libs/simulation/experiment_setup.py` simulator outputs now return telemetry + phase labels only (`simulate_fleet_dataset`, `simulate_fleet_dataset_spark`).
-- Simulators keep explicit label metadata in telemetry: true event labels (`event_type_label`), a misbehavior-driven event proxy label (`event_misbehavior_label`), and anomaly labels (`anomaly_type_label`, `anomaly_score_label`).
-- Stage `10_parameter_profiles_fit.py` now emits four parameter metadata artifacts:
-	- `parameter_datatype_profile`
-	- `continuous_scaling_profile`
-	- `parameter_behavior_primitive_profile`
-	- `parameter_behavior_profile`
-- Behavior profiling is now primitive-first:
-	- Spark derives telemetry-based primitive evidence per parameter
-	- family scoring consumes that primitive artifact to emit `parameter_behavior_profile`
-- The active family taxonomy now includes `tracking` in addition to `regulated`, `inertial`, `accumulative`, `discrete_state`, and `mixed_unknown`.
-- Event rows should be derived from telemetry via detector tooling (`pipelines/20_events_extract.py`, or `libs.events` builders).
-- For system-level behavior, coupling, and dynamics priors, use [docs/simulation/avionics_simulation_guidelines.md](../docs/simulation/avionics_simulation_guidelines.md).
-- For the next extensible simulator design, use [docs/simulation/simulation_architecture.md](../docs/simulation/simulation_architecture.md).
-- Optional causal delay realism is available in `flight_setup.causal_delay` via:
-	- `mode` (`random_pair` default, or `fixed_group` for legacy behavior)
-	- `default_lag_sec` (default baseline lag in seconds; defaults to `0`)
-	- `random_pair_delay_sec` (`{"min": 0.0, "max": ...}` positive-only extra delay range per sensor)
-	- `jitter_sec_std` (Gaussian jitter stddev in seconds; optional)
-	- `jitter_cap_steps` (max absolute jitter clamp in sample steps; default `3`)
-	- `seed_offset` (optional deterministic offset for per-flight pair-delay sampling)
-	- `per_corr_group_sec` (map of `corr_group -> delay_seconds`, used as group baseline and for `fixed_group` mode)
-	- `startup_fill` (`hold_first` default, or `hold_current`)
-
-## Sample DataFrames for testing
-
-- Modules: `libs.testing.data` and `libs.testing.seed`
-- Includes builders for `raw_input`, `raw_telemetry`, `events`, `windows`, `phase_windows`, `window_scores_raw`, and `window_scores_calibrated`.
-- Main helper: `seed_sample_dataset(spark, base_dir="data")` writes all sample datasets for local smoke tests.
-
-## Stage I/O defaults
-
-- `20_events_extract` continuous event typing:
-	- `S3NTINEL_EVENT_DELTA_THRESHOLD` controls `threshold` event emission.
-	- `S3NTINEL_EVENT_SLOPE_ABS_THRESHOLD` controls the minimum signed delta magnitude required for slope-run detection.
-	- `S3NTINEL_EVENT_SLOPE_MIN_PERSISTENCE_SAMPLES` controls how many consecutive above-threshold samples a slope run must persist before the first `slope_pos|slope_neg` event emits.
-	- `S3NTINEL_EVENT_SLOPE_REEMIT_RATIO` controls how much stronger a continuing run must become before another `slope_pos|slope_neg` event emits.
-	- When `S3NTINEL_EVENT_DELTA_THRESHOLD <= 0`, `threshold` events are disabled; continuous runs still emit `slope_pos|slope_neg`, but the slope channel is run-based rather than per-sample.
-
-- `25_window_policy_profile` writes:
-    - `S3NTINEL_WINDOW_POLICY_PROFILE_TABLE_PATH` (default `data/delta/window_policy_profile`)
-    - the artifact contains candidate `max_ms` / `event_threshold` policies ranked from the detected event stream
-    - stage `30` consumes the row where `is_selected=true` when the profile artifact is present
-    - the stage also writes `reports/stages/25_window_policy_profile_evaluation.json`, a bounded evaluation report covering candidate frontier, closure mix, downstream cost proxies, and flight-subset stability for the selected policy
-- `40_backbone_fit` reads normalized telemetry and adaptive windows and writes backbone artifacts:
-	- `S3NTINEL_BACKBONE_TABLE_PATH` (default `data/delta/backbone`)
-	- `S3NTINEL_BACKBONE_SENSOR_ENERGY_TABLE_PATH` (default `data/delta/backbone_sensor_energy`)
-	- key controls:
-		- `S3NTINEL_BACKBONE_SENSOR_COUNT`
-		- `S3NTINEL_BACKBONE_RIDGE_LAMBDA`
-		- `S3NTINEL_BACKBONE_EVENT_PRIOR_ALPHA`
-	- `window_features.continuous_vector_t_end(_scaled)` now always comes from raw telemetry ZOH at `t_end`
-	- run-based continuous events enter backbone only through `window_features.continuous_event_summary`, which affects sensor ranking but not the final ridge solve
-- `50_build_graph` writes:
-		- `S3NTINEL_PRECISION_GRAPH_TABLE_PATH`
-		- `S3NTINEL_EVENT_GRAPH_TABLE_PATH`
-		- `S3NTINEL_LAG_PROFILE_TABLE_PATH`
-		- `S3NTINEL_LAG_GRAPH_TABLE_PATH`
-		- `S3NTINEL_TRANSITION_GRAPH_TABLE_PATH`
-		- `S3NTINEL_FUSED_GRAPH_TABLE_PATH`
-		- `S3NTINEL_GRAPH_PARAMETER_UNIVERSE_TABLE_PATH`
-		- key graph defaults now come from the typed config layer backed by `conf/defaults.yaml`
-		- `lag_profile` is the persisted per-band nearest-prior lag artifact; `lag_graph` remains the collapsed compatibility view used by downstream fusion
-		- important override families:
-			- `S3NTINEL_V2_EVENT_GRAPH_*`
-			- `S3NTINEL_V2_LAG_GRAPH_*`
-			- `S3NTINEL_V2_TRANSITION_GRAPH_*`
-			- `S3NTINEL_V2_GRAPH_*`
-			- `S3NTINEL_PRECISION_GRAPH_RIDGE_LAMBDA`
-			- `S3NTINEL_V2_MIN_ABS_PARTIAL_CORR`
-- `60_fit_hierarchy` writes:
-	- `S3NTINEL_HIERARCHY_SENSOR_MAP_TABLE_PATH` (default `data/delta/hierarchy_sensor_map`)
-	- key hierarchy defaults now come from:
-		- `hierarchy.top_k_per_parameter_name`
-		- `hierarchy.subsystem_min_edge_weight`
-		- `hierarchy.system_min_edge_weight`
-- `70_phase_fit` writes:
-	- `S3NTINEL_PHASE_WINDOWS_TABLE_PATH` (default `data/delta/phase_windows`)
-	- `S3NTINEL_PHASE_BASELINES_TABLE_PATH` (default `data/delta/phase_baselines`)
-- `80_window_scores_raw` reads phase windows + phase baselines and writes:
-	- `S3NTINEL_WINDOW_SCORES_RAW_TABLE_PATH` (default `data/delta/window_scores_raw`)
-	- The canonical scorer is the Spark `WindowScoresRawTable` path; local in-memory score assembly is intentionally unsupported.
-	- The raw score schema preserves `subsystem_scores` for compatibility, but the current scorer writes it as an empty map and uses dominant localization fields instead.
-	- Severity thresholds are configurable for normalized score scale:
-		- `S3NTINEL_SEVERITY_LOW_THRESHOLD` (default `0.25`)
-		- `S3NTINEL_SEVERITY_MEDIUM_THRESHOLD` (default `0.75`)
-		- `S3NTINEL_SEVERITY_HIGH_THRESHOLD` (default `1.50`)
-- `85_window_scores_calibrate` reads raw window scores and writes:
-	- `S3NTINEL_WINDOW_SCORES_CALIBRATED_TABLE_PATH` (default `data/delta/window_scores_calibrated`)
-	- `S3NTINEL_MIN_WARM` (optional override; defaults to config value)
-- `90_anomaly_attribution` reads calibrated window scores + phase windows + windows and writes:
-	- `S3NTINEL_ANOMALY_WINDOW_ATTRIBUTION_TABLE_PATH` (default `data/delta/anomaly_window_attribution`)
-	- `S3NTINEL_ANOMALY_TELEMETRY_ATTRIBUTION_TABLE_PATH` (default `data/delta/anomaly_telemetry_attribution`)
-	- `S3NTINEL_ANOMALY_EVENT_ATTRIBUTION_TABLE_PATH` (default `data/delta/anomaly_event_attribution`)
-	- `S3NTINEL_WRITE_MODE` defaults to `merge` for this stage, enforcing upsert semantics on `(tail_id, flight_id, win_id)`.
-	- Required inputs for V2 emission:
-		- `S3NTINEL_EVENTS_TABLE_PATH`
-		- `S3NTINEL_HIERARCHY_SENSOR_MAP_TABLE_PATH`
-		- `S3NTINEL_RAW_TABLE_PATH`
-	- Stage 90 carries forward dominant and ranked subsystem/module localization targets and enriches them with window-local telemetry and event context.
-	- Stage 90 populates `panel_context` from window-local ASCII/LCD text features.
-	- `S3NTINEL_SUBSYSTEM_TOP_SENSORS_K` controls top sensors per subsystem in anomaly payload (default `5`).
-- `scripts/smoke_test_pipeline.py` synthetic seed scaling options:
-	- `--tail-count` (default `1`)
-	- `--flights-per-tail` (default `1`)
-	- `--sensor-count` (default `3`)
-	- `--timestamp-count` (default `12`)
-	- `--step-ms` (default `100`)
-- `30_windows_adaptive` windowing:
-    - consumes `window_policy_profile` when present and otherwise falls back to the configured policy
-	- `S3NTINEL_WINDOW_STRATEGY` is retained as a run-setting surface but only `segmented` is supported by the canonical builder
-	- `S3NTINEL_WINDOW_INACTIVITY_TIMEOUT_MS` controls timeout-based closure for the segmented builder (default `0` = disabled)
-
-## v1 conventions
-
-- Canonical naming: first `N` is `Nexus`, second `N` is `Network`.
-- Output partitioning: `tail_id`, `flight_id`, `date_utc`.
-- Anomaly identity key: `tail_id`, `flight_id`, `win_id`.
-- Conformal warm-up: hold emissions until warm, then flush backlog with original timestamps.
-- Performance annotations: use `@hot_path` from `libs.perf.annotations` for machine-discoverable critical functions.
-- Runtime timing logs: use `@log_wall_time` and `get_logger` from `libs.perf` to emit wall-clock execution metrics.
-
-## MLflow integration
-
-- Pipeline `run()` functions are decorated with `@track_mlflow_run(...)` for stage-level run tracking.
-- `pipelines/99_run_full_pipeline.py` creates a parent run; each stage appears as a nested child run.
-- Wall-time metrics are logged to both logger output and active MLflow runs.
-- Parent run summary is logged as `reports/pipeline_run_summary.json` with per-stage status and elapsed time.
-- Full simulation reports are written as `reports/full_run_report.json` and `reports/full_run_report.md`.
-- The full run report now includes a compact `window_policy_profile` section sourced from `reports/stages/25_window_policy_profile_evaluation.json` when that stage ran.
-- Use helpers in `libs.perf.mlflow` for additional tracking:
-	- `log_params_if_active(...)`
-	- `log_metric_if_active(...)`
-	- `log_dict_artifact_if_active(...)`
-	- `log_artifact_if_active(...)`
-	- `register_model_if_available(...)`
-
-These helpers no-op when MLflow is not available, allowing local development without Databricks dependencies.
-
-## Test fixtures
-
-- Shared Spark fixtures live in `tests/conftest.py`:
-	- `spark`: standard local SparkSession with pinned `PYSPARK_PYTHON`/`PYSPARK_DRIVER_PYTHON` and matching Spark configs.
-	- `spark_delta`: Delta-enabled SparkSession that auto-skips when Delta JVM classes are unavailable.
-- Spark-heavy regression tests should consume these shared fixtures instead of defining per-file SparkSession setup.
+The documented package ownership and current entrypoints live next to the code.
+Treat `docs/current/`, package READMEs, schemas, and tests as the source of truth
+for current behavior; [plans](docs/plans/README.md) describe non-authoritative
+next steps only.

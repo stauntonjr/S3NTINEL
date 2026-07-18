@@ -137,5 +137,5 @@ It does not imply:
 - a pairwise transition taxonomy in production inference
 - a fleet-learned revisitable transition model
 
-Those remain possible future extensions, but they are not part of the current
-phase contract.
+Those extensions are outside the current phase contract. Related proposals belong
+in [plans](../plans/README.md).

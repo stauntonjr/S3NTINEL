@@ -53,6 +53,32 @@ simulation-validation workflow between stages 70 and 80.
 
 Grouped execution is coordinated by `pipelines/_pipeline_runner.py`.
 
+### Stage To Artifact Index
+
+This is an execution index, not an artifact glossary. Use
+[`docs/reference/glossary.md`](../docs/reference/glossary.md) for canonical
+artifact and field meanings, and [`docs/current/v2_architecture.md`](../docs/current/v2_architecture.md)
+for active contracts.
+
+| Stage | Primary persisted outputs |
+| --- | --- |
+| `00_ingest_raw.py` | `raw_telemetry` |
+| `10_parameter_profiles_fit.py` | `parameter_datatype_profile`, `continuous_scaling_profile` |
+| `12_behavior_profiles_fit.py` | `parameter_behavior_primitive_profile`, `parameter_behavior_profile` |
+| `15_event_profiles_fit.py` | `parameter_event_profile` |
+| `20_events_extract.py` | `events` |
+| `25_window_policy_profile.py` | `window_policy_profile`, selected-policy evaluation report |
+| `30_windows_adaptive.py` | `windows` |
+| `40_backbone_fit.py` | `window_features`, `backbone`, `backbone_sensor_energy` |
+| `50_build_graph.py` | `precision_graph`, `event_graph`, `lag_profile`, `lag_graph`, `transition_graph`, `fused_graph`, `graph_parameter_universe` |
+| `60_fit_hierarchy.py` | `hierarchy_sensor_map`, `hierarchy_edge_evidence` |
+| `70_phase_fit.py` | `phase_windows`, `phase_baselines` |
+| `72_phase_label_centroids.py` | `phase_label_centroids` (simulation validation only) |
+| `80_window_scores_raw.py` | `window_scores_raw` |
+| `85_window_scores_calibrate.py` | `window_scores_calibrated` |
+| `90_anomaly_attribution.py` | `anomaly_window_attribution`, `anomaly_telemetry_attribution`, `anomaly_event_attribution` |
+| `95_emit_explorer_bundle.py` | `explorer_bundle` |
+
 ## Contents
 
 - `00`, `10`, `12`, `15`, `20`, `25`, `30`, `40`, `50`, `60`, `70`, `72`, `80`, `85`, `90`, `95`
@@ -81,8 +107,8 @@ The stage model is:
 
 Stages are intentionally thin wrappers around `libs/*` code.
 
-`50_build_graph.py` now emits both a first-class `lag_profile` artifact and the
-collapsed legacy `lag_graph` compatibility view.
+`50_build_graph.py` emits both a first-class `lag_profile` artifact and the
+collapsed `lag_graph` representation used by downstream fusion.
 
 ## Data / Artifacts
 

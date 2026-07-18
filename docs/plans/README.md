@@ -18,6 +18,9 @@ Do not use plans as the source of truth for current behavior. For that, prefer:
 - `libs/`
   - library-owned plan docs mirroring the `libs/` repo structure
   - use [libs/README.md](libs/README.md) as the main index
+- `docs/`
+  - documentation-owned plans for navigation, terminology, and documentation tooling
+  - use [docs/README.md](docs/README.md) as the main index
 - avoid flat topic files at this root level
 - add future repo-mirrored subtrees only when there is a real ownership boundary, for example `pipelines/` or `scripts/`
 
@@ -47,6 +50,11 @@ The current resume order is:
   - current phase-simulation next step
 - [libs/windows.md](libs/windows.md)
   - deferred windows representation note
+
+## Completed Plans
+
+- [docs/documentation_quality_plan.md](docs/documentation_quality_plan.md)
+  - documentation quality, navigation, terminology, and design-rationale work
 
 ## Maintenance Rules
 
