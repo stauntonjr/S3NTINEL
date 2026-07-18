@@ -298,6 +298,7 @@ libs.graph.precision  (libs/graph/precision.py)
 
 libs.graph.tables  (libs/graph/tables.py)
   -> internal:
+     - libs.graph.hierarchy_artifacts
      - libs.graph.lag
      - libs.graph.pipeline
      - libs.io.schemas.graph
@@ -639,6 +640,15 @@ libs.simulation.aircraft.spec  (libs/simulation/aircraft/spec.py)
      - libs.simulation.coupling.spec
      - libs.simulation.system.spec
 
+libs.simulation.benchmark_tier_gates  (libs/simulation/benchmark_tier_gates.py)
+  -> internal:
+     - libs.perf
+     - libs.simulation.cli
+     - libs.simulation.fault.spec
+     - libs.simulation.run_bundle
+     - libs.simulation.run_context
+     - libs.simulation.runner
+
 libs.simulation.cli  (libs/simulation/cli.py)
   -> internal:
      - libs.simulation.flight.examples
@@ -836,6 +846,7 @@ libs.simulation.reporting  (libs/simulation/reporting.py)
      - libs.phase
      - libs.profiling.validator
      - libs.scoring.validator
+     - libs.simulation.fault.spec
      - libs.simulation.report_tables
      - libs.simulation.run_context
      - libs.testing.assertions
@@ -879,6 +890,7 @@ libs.simulation.scenarios.power_pressurization  (libs/simulation/scenarios/power
      - libs.simulation.coupling.examples
      - libs.simulation.coupling.spec
      - libs.simulation.fault.examples
+     - libs.simulation.fault.spec
      - libs.simulation.flight.spec
      - libs.simulation.module.spec
      - libs.simulation.parameter.examples
@@ -962,6 +974,7 @@ libs.simulation.tail.runtime  (libs/simulation/tail/runtime.py)
 libs.simulation.validation_harness  (libs/simulation/validation_harness.py)
   -> internal:
      - libs.simulation
+     - libs.simulation.fault.spec
      - libs.simulation.phase.runtime
      - libs.simulation.run_bundle
      - libs.simulation.run_context
@@ -1301,6 +1314,10 @@ scripts.report_sim_replay  (scripts/report_sim_replay.py)
 scripts.run_partition_manifest_jobs  (scripts/run_partition_manifest_jobs.py)
   -> internal:
      - libs.io.delta
+
+scripts.run_sim_benchmark_tier_gates  (scripts/run_sim_benchmark_tier_gates.py)
+  -> internal:
+     - libs.simulation.benchmark_tier_gates
 
 scripts.run_sim_pipeline  (scripts/run_sim_pipeline.py)
   -> internal:

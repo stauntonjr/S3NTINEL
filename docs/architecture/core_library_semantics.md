@@ -47,10 +47,10 @@ flowchart TB
 | --- | --- | --- | --- | --- | ---: | ---: |
 | AnomalySubsystemContextFrame | `libs.anomaly.frames` | Frame Artifact | frame artifact for Anomaly Subsystem Context within libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation | No extracted dataclass fields. | 0 | 135 |
 | AnomalyPanelContextFrame | `libs.anomaly.frames` | Frame Artifact | frame artifact for Anomaly Panel Context within libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation | No extracted dataclass fields. | 0 | 135 |
-| AnomalyParameterLocalizationFrame | `libs.anomaly.frames` | Frame Artifact | frame artifact for Anomaly Parameter Localization within libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation | No extracted dataclass fields. | 0 | 547 |
+| AnomalyParameterLocalizationFrame | `libs.anomaly.frames` | Frame Artifact | frame artifact for Anomaly Parameter Localization within libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation | No extracted dataclass fields. | 0 | 560 |
 | AnomalyAttributionContextFrame | `libs.anomaly.frames` | Frame Artifact | frame artifact for Anomaly Attribution Context within libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation | No extracted dataclass fields. | 0 | 37 |
 | AnomalyArtifactSet | `libs.anomaly.pipeline` | Artifact Bundle | artifact bundle for Anomaly within libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation | Carries window_attribution: AnomalyWindowAttributionTable, telemetry_attribution: AnomalyTelemetryAttributionTable, event_attribution: AnomalyEventAttributionTable. | 3 | 4 |
-| AnomalyAttributionPlan | `libs.anomaly.pipeline` | Execution Plan | execution plan for Anomaly Attribution within libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation | Carries top_k_per_subsystem: int = 5. | 1 | 142 |
+| AnomalyAttributionPlan | `libs.anomaly.pipeline` | Execution Plan | execution plan for Anomaly Attribution within libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation | Carries top_k_per_subsystem: int = 5. | 1 | 144 |
 | AnomalyWindowAttributionTable | `libs.anomaly.tables` | Table Artifact | table artifact for Anomaly Window Attribution within libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation | Carries partition_by: tuple[str, ...] = ('tail_id',). | 1 | 120 |
 | AnomalyTelemetryAttributionTable | `libs.anomaly.tables` | Table Artifact | table artifact for Anomaly Telemetry Attribution within libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation | Carries partition_by: tuple[str, ...] = ('tail_id',). | 1 | 84 |
 | AnomalyEventAttributionTable | `libs.anomaly.tables` | Table Artifact | table artifact for Anomaly Event Attribution within libs/anomaly owns downstream anomaly attribution artifacts and attribution-vs-truth validation | Carries partition_by: tuple[str, ...] = ('tail_id',). | 1 | 46 |
@@ -673,7 +673,7 @@ flowchart TB
 | Dataclass | Module | Semantic Kind | Represents | Payload Shape | Fields | LOC |
 | --- | --- | --- | --- | --- | ---: | ---: |
 | PipelineExecutionSettings | `libs.config.pipeline` | Configuration | configuration for Pipeline Execution within modules grouped under libs.config | Carries table_format: str, raw_output_format: str, write_mode: str, fit_write_mode: str. | 4 | 5 |
-| PipelineArtifactPaths | `libs.config.pipeline` | Domain Dataclass | Pipeline Artifact Paths within typed pipeline configuration derived from defaults.yaml plus env overrides | Carries raw_input: str, raw_table: str, parameter_datatype_profile: str, continuous_scaling_profile: str, +27 more. | 31 | 32 |
+| PipelineArtifactPaths | `libs.config.pipeline` | Domain Dataclass | Pipeline Artifact Paths within typed pipeline configuration derived from defaults.yaml plus env overrides | Carries raw_input: str, raw_table: str, parameter_datatype_profile: str, continuous_scaling_profile: str, +28 more. | 32 | 33 |
 | EventSettings | `libs.config.pipeline` | Configuration | configuration for Event within modules grouped under libs.config | Carries delta_threshold: float, slope_source: str, ema_alpha: float, slope_threshold_mode: str, +11 more. | 15 | 16 |
 | ProfilingSettings | `libs.config.pipeline` | Configuration | configuration for Profiling within modules grouped under libs.config | Carries numeric_ratio_threshold: float, categorical_cardinality_max: int, behavior_significant_diff_threshold: float, behavior_center_band_width: float, +5 more. | 9 | 10 |
 | WindowingSettings | `libs.config.pipeline` | Configuration | configuration for Windowing within modules grouped under libs.config | Carries min_sampling_rate_hz: float, max_ms: int, min_ms: int, event_threshold: int, +2 more. | 6 | 7 |
@@ -711,7 +711,7 @@ flowchart TB
 - Module: `libs.config.pipeline`
 - Semantic kind: Domain Dataclass
 - Represents: Pipeline Artifact Paths within typed pipeline configuration derived from defaults.yaml plus env overrides
-- Payload shape: Carries raw_input: str, raw_table: str, parameter_datatype_profile: str, continuous_scaling_profile: str, +27 more.
+- Payload shape: Carries raw_input: str, raw_table: str, parameter_datatype_profile: str, continuous_scaling_profile: str, +28 more.
 
 | Field | Type | Default | Role |
 | --- | --- | --- | --- |
@@ -736,6 +736,7 @@ flowchart TB
 | transition_graph | str |  | artifact or table reference |
 | fused_graph | str |  | artifact or table reference |
 | graph_parameter_universe | str |  | descriptive or categorical value |
+| hierarchy_edge_evidence | str |  | descriptive or categorical value |
 | hierarchy_sensor_map | str |  | descriptive or categorical value |
 | phase_windows | str |  | artifact or table reference |
 | phase_baselines | str |  | artifact or table reference |
@@ -1592,7 +1593,7 @@ No extracted dataclass fields.
 
 libs/graph owns graph-domain models built from telemetry windows and events.
 
-Dataclasses detected: `24`
+Dataclasses detected: `26`
 
 ```mermaid
 flowchart TB
@@ -1619,7 +1620,7 @@ flowchart TB
     core_libraries_graph_libs_graph_hierarchy_artifacts --> core_libraries_graph_libs_graph_hierarchy_artifacts_hierarchyspec
     core_libraries_graph_libs_graph_hierarchy_artifacts_modulecompatibilityprofile["ModuleCompatibilityProfile\nCarries datatype: str | None = None, behavior_family: str | None = None."]
     core_libraries_graph_libs_graph_hierarchy_artifacts --> core_libraries_graph_libs_graph_hierarchy_artifacts_modulecompatibilityprofile
-    core_libraries_graph_libs_graph_hierarchy_artifacts_graphhierarchy["GraphHierarchy\nCarries spec: HierarchySpec, rows: pd.DataFrame."]
+    core_libraries_graph_libs_graph_hierarchy_artifacts_graphhierarchy["GraphHierarchy\nCarries spec: HierarchySpec, rows: pd.DataFrame, retained_module_edge..."]
     core_libraries_graph_libs_graph_hierarchy_artifacts --> core_libraries_graph_libs_graph_hierarchy_artifacts_graphhierarchy
     core_libraries_graph_libs_graph_lag["lag.py"]
     core_libraries_graph --> core_libraries_graph_libs_graph_lag
@@ -1657,6 +1658,10 @@ flowchart TB
     core_libraries_graph_libs_graph_tables --> core_libraries_graph_libs_graph_tables_graphparameteruniversetable
     core_libraries_graph_libs_graph_tables_hierarchysensormaptable["HierarchySensorMapTable\nNo extracted dataclass fields."]
     core_libraries_graph_libs_graph_tables --> core_libraries_graph_libs_graph_tables_hierarchysensormaptable
+    core_libraries_graph_libs_graph_tables_hierarchyedgeevidencetable["HierarchyEdgeEvidenceTable\nNo extracted dataclass fields."]
+    core_libraries_graph_libs_graph_tables --> core_libraries_graph_libs_graph_tables_hierarchyedgeevidencetable
+    core_libraries_graph_libs_graph_tables_hierarchyartifactset["HierarchyArtifactSet\nCarries sensor_map: HierarchySensorMapTable, edge_evidence: Hierarchy..."]
+    core_libraries_graph_libs_graph_tables --> core_libraries_graph_libs_graph_tables_hierarchyartifactset
     core_libraries_graph_libs_graph_transition["transition.py"]
     core_libraries_graph --> core_libraries_graph_libs_graph_transition
     core_libraries_graph_libs_graph_transition_transitiongraphspec["TransitionGraphSpec\nCarries min_count: int = 1."]
@@ -1674,7 +1679,7 @@ flowchart TB
 | FusedGraph | `libs.graph.fused` | Domain Dataclass | Fused Graph within libs/graph owns graph-domain models built from telemetry windows and events | Carries spec: FusedGraphSpec, edges: pd.DataFrame. | 2 | 52 |
 | HierarchySpec | `libs.graph.hierarchy_artifacts` | Specification | specification for Hierarchy within libs/graph owns graph-domain models built from telemetry windows and events | Carries min_edge_weight: float = 0.05, top_k_per_parameter_name: int = 3, subsystem_min_edge_weight: float | None = None, system_min_edge_weight: float | None = None. | 4 | 5 |
 | ModuleCompatibilityProfile | `libs.graph.hierarchy_artifacts` | Profile | profile for Module Compatibility within libs/graph owns graph-domain models built from telemetry windows and events | Carries datatype: str | None = None, behavior_family: str | None = None. | 2 | 3 |
-| GraphHierarchy | `libs.graph.hierarchy_artifacts` | Domain Dataclass | Graph Hierarchy within libs/graph owns graph-domain models built from telemetry windows and events | Carries spec: HierarchySpec, rows: pd.DataFrame. | 2 | 373 |
+| GraphHierarchy | `libs.graph.hierarchy_artifacts` | Domain Dataclass | Graph Hierarchy within libs/graph owns graph-domain models built from telemetry windows and events | Carries spec: HierarchySpec, rows: pd.DataFrame, retained_module_edge_rows: pd.DataFrame. | 3 | 484 |
 | LagBandSpec | `libs.graph.lag` | Specification | specification for Lag Band within libs/graph owns graph-domain models built from telemetry windows and events | Carries name: str, lower_seconds: float, upper_seconds: float, combine_weight: float. | 4 | 5 |
 | GraphBuildStepDiagnostics | `libs.graph.pipeline` | Domain Dataclass | Graph Build Step Diagnostics within graph artifact builders for spark fitting stages | Carries step_name: str, row_count: int, timing_ms: float. | 3 | 4 |
 | GraphBuildDiagnostics | `libs.graph.pipeline` | Domain Dataclass | Graph Build Diagnostics within graph artifact builders for spark fitting stages | Carries steps: list[GraphBuildStepDiagnostics], total_timing_ms: float. | 2 | 16 |
@@ -1689,6 +1694,8 @@ flowchart TB
 | FusedGraphTable | `libs.graph.tables` | Table Artifact | table artifact for Fused Graph within libs/graph owns graph-domain models built from telemetry windows and events | No extracted dataclass fields. | 0 | 28 |
 | GraphParameterUniverseTable | `libs.graph.tables` | Table Artifact | table artifact for Graph Parameter Universe within libs/graph owns graph-domain models built from telemetry windows and events | No extracted dataclass fields. | 0 | 25 |
 | HierarchySensorMapTable | `libs.graph.tables` | Table Artifact | table artifact for Hierarchy Sensor Map within libs/graph owns graph-domain models built from telemetry windows and events | No extracted dataclass fields. | 0 | 33 |
+| HierarchyEdgeEvidenceTable | `libs.graph.tables` | Table Artifact | table artifact for Hierarchy Edge Evidence within libs/graph owns graph-domain models built from telemetry windows and events | No extracted dataclass fields. | 0 | 86 |
+| HierarchyArtifactSet | `libs.graph.tables` | Artifact Bundle | artifact bundle for Hierarchy within libs/graph owns graph-domain models built from telemetry windows and events | Carries sensor_map: HierarchySensorMapTable, edge_evidence: HierarchyEdgeEvidenceTable. | 2 | 46 |
 | TransitionGraphSpec | `libs.graph.transition` | Specification | specification for Transition Graph within libs/graph owns graph-domain models built from telemetry windows and events | Carries min_count: int = 1. | 1 | 2 |
 | TransitionGraph | `libs.graph.transition` | Domain Dataclass | Transition Graph within libs/graph owns graph-domain models built from telemetry windows and events | Carries spec: TransitionGraphSpec, edges: pd.DataFrame. | 2 | 67 |
 
@@ -1788,12 +1795,13 @@ flowchart TB
 - Module: `libs.graph.hierarchy_artifacts`
 - Semantic kind: Domain Dataclass
 - Represents: Graph Hierarchy within libs/graph owns graph-domain models built from telemetry windows and events
-- Payload shape: Carries spec: HierarchySpec, rows: pd.DataFrame.
+- Payload shape: Carries spec: HierarchySpec, rows: pd.DataFrame, retained_module_edge_rows: pd.DataFrame.
 
 | Field | Type | Default | Role |
 | --- | --- | --- | --- |
 | spec | HierarchySpec |  | domain model or execution contract |
 | rows | pd.DataFrame |  | domain model or execution contract |
+| retained_module_edge_rows | pd.DataFrame |  | domain model or execution contract |
 
 #### LagBandSpec
 
@@ -1939,6 +1947,27 @@ No extracted dataclass fields.
 - Payload shape: No extracted dataclass fields.
 
 No extracted dataclass fields.
+
+#### HierarchyEdgeEvidenceTable
+
+- Module: `libs.graph.tables`
+- Semantic kind: Table Artifact
+- Represents: table artifact for Hierarchy Edge Evidence within libs/graph owns graph-domain models built from telemetry windows and events
+- Payload shape: No extracted dataclass fields.
+
+No extracted dataclass fields.
+
+#### HierarchyArtifactSet
+
+- Module: `libs.graph.tables`
+- Semantic kind: Artifact Bundle
+- Represents: artifact bundle for Hierarchy within libs/graph owns graph-domain models built from telemetry windows and events
+- Payload shape: Carries sensor_map: HierarchySensorMapTable, edge_evidence: HierarchyEdgeEvidenceTable.
+
+| Field | Type | Default | Role |
+| --- | --- | --- | --- |
+| sensor_map | HierarchySensorMapTable |  | domain model or execution contract |
+| edge_evidence | HierarchyEdgeEvidenceTable |  | domain model or execution contract |
 
 #### TransitionGraphSpec
 
@@ -2613,7 +2642,7 @@ flowchart TB
 
 This package contains the simulation domain model only. It does not own.
 
-Dataclasses detected: `62`
+Dataclasses detected: `66`
 
 ```mermaid
 flowchart TB
@@ -2628,6 +2657,16 @@ flowchart TB
     core_libraries_simulation --> core_libraries_simulation_libs_simulation_aircraft_spec
     core_libraries_simulation_libs_simulation_aircraft_spec_aircraftspec["AircraftSpec\nCarries aircraft_id: str, systems: tuple[SystemSpec, ...], couplings:..."]
     core_libraries_simulation_libs_simulation_aircraft_spec --> core_libraries_simulation_libs_simulation_aircraft_spec_aircraftspec
+    core_libraries_simulation_libs_simulation_benchmark_tier_gates["benchmark_tier_gates.py"]
+    core_libraries_simulation --> core_libraries_simulation_libs_simulation_benchmark_tier_gates
+    core_libraries_simulation_libs_simulation_benchmark_tier_gates_benchmarktiergatespec["BenchmarkTierGateSpec\nCarries gate_name: str, flight_name: str, declared_benchmark_tier: st..."]
+    core_libraries_simulation_libs_simulation_benchmark_tier_gates --> core_libraries_simulation_libs_simulation_benchmark_tier_gates_benchmarktiergatespec
+    core_libraries_simulation_libs_simulation_benchmark_tier_gates_benchmarktiergatesuitespec["BenchmarkTierGateSuiteSpec\nCarries suite_key: str, suite_name: str, suite_interpretation: str, g..."]
+    core_libraries_simulation_libs_simulation_benchmark_tier_gates --> core_libraries_simulation_libs_simulation_benchmark_tier_gates_benchmarktiergatesuitespec
+    core_libraries_simulation_libs_simulation_benchmark_tier_gates_benchmarktiergaterunsummary["BenchmarkTierGateRunSummary\nCarries gate_name: str, flight_name: str, declared_benchmark_tier: st..."]
+    core_libraries_simulation_libs_simulation_benchmark_tier_gates --> core_libraries_simulation_libs_simulation_benchmark_tier_gates_benchmarktiergaterunsummary
+    core_libraries_simulation_libs_simulation_benchmark_tier_gates_benchmarktiergatesuitesummary["BenchmarkTierGateSuiteSummary\nCarries suite_key: str, suite_name: str, suite_interpretation: str, g..."]
+    core_libraries_simulation_libs_simulation_benchmark_tier_gates --> core_libraries_simulation_libs_simulation_benchmark_tier_gates_benchmarktiergatesuitesummary
     core_libraries_simulation_libs_simulation_coupling_runtime["runtime.py"]
     core_libraries_simulation --> core_libraries_simulation_libs_simulation_coupling_runtime
     core_libraries_simulation_libs_simulation_coupling_runtime_delayedtransfer["DelayedTransfer\nCarries effective_timestamp_utc: datetime, value: object | None, meta..."]
@@ -2809,6 +2848,10 @@ flowchart TB
 | AircraftIndex | `libs.simulation.aircraft.runtime` | Domain Dataclass | Aircraft Index within live aircraft runtime objects | Carries systems_by_id: Mapping[str, System], subsystems_by_id: Mapping[str, object], modules_by_id: Mapping[str, Module]. | 3 | 4 |
 | Aircraft | `libs.simulation.aircraft.runtime` | Domain Dataclass | Aircraft within live aircraft runtime objects | Carries id: str, systems: tuple[System, ...], _index: AircraftIndex = field(repr=False), _outgoing_couplings_by_source_module: Mapping[str, tuple[Coupling, ...]] = field(repr=False). | 4 | 103 |
 | AircraftSpec | `libs.simulation.aircraft.spec` | Specification | specification for Aircraft within this package contains the simulation domain model only. it does not own | Carries aircraft_id: str, systems: tuple[SystemSpec, ...], couplings: tuple[CouplingSpec, ...] = (), metadata: dict[str, Any] = field(default_factory=dict). | 4 | 47 |
+| BenchmarkTierGateSpec | `libs.simulation.benchmark_tier_gates` | Specification | specification for Benchmark Tier Gate within this package contains the simulation domain model only. it does not own | Carries gate_name: str, flight_name: str, declared_benchmark_tier: str, description: str. | 4 | 13 |
+| BenchmarkTierGateSuiteSpec | `libs.simulation.benchmark_tier_gates` | Specification | specification for Benchmark Tier Gate Suite within this package contains the simulation domain model only. it does not own | Carries suite_key: str, suite_name: str, suite_interpretation: str, gate_specs: tuple[BenchmarkTierGateSpec, ...]. | 4 | 5 |
+| BenchmarkTierGateRunSummary | `libs.simulation.benchmark_tier_gates` | Domain Dataclass | Benchmark Tier Gate Run Summary within canonical benchmark-tier gate suite for simulation-backed anomaly evaluation | Carries gate_name: str, flight_name: str, declared_benchmark_tier: str, run_dir: str | None, +13 more. | 17 | 39 |
+| BenchmarkTierGateSuiteSummary | `libs.simulation.benchmark_tier_gates` | Domain Dataclass | Benchmark Tier Gate Suite Summary within canonical benchmark-tier gate suite for simulation-backed anomaly evaluation | Carries suite_key: str, suite_name: str, suite_interpretation: str, generated_at_utc: str, +3 more. | 7 | 33 |
 | DelayedTransfer | `libs.simulation.coupling.runtime` | Domain Dataclass | Delayed Transfer within live coupling runtime objects | Carries effective_timestamp_utc: datetime, value: object | None, metadata: dict[str, Any] = field(default_factory=dict). | 3 | 4 |
 | DelayedTransferKey | `libs.simulation.coupling.runtime` | Domain Dataclass | Delayed Transfer Key within live coupling runtime objects | Carries source_module_id: str, source_port_name: str, target_module_id: str, target_port_name: str, +9 more. | 13 | 14 |
 | DelayedTransferQueue | `libs.simulation.coupling.runtime` | Domain Dataclass | Delayed Transfer Queue within live coupling runtime objects | Carries transfers: list[DelayedTransfer] = field(default_factory=list). | 1 | 21 |
@@ -2817,11 +2860,11 @@ flowchart TB
 | _ContinuousRunState | `libs.simulation.event_truth` | Runtime State | runtime state for Continuous Run within this package contains the simulation domain model only. it does not own | Carries sign: int = 0, length: int = 0, peak_abs_delta: float = 0.0. | 3 | 4 |
 | MisbehaviorStepContext | `libs.simulation.fault.runtime` | Domain Dataclass | Misbehavior Step Context within misbehavior program runtime helpers with deprecated fault aliases | Carries parameter_context_by_module: dict[str, dict[str, dict[str, Any]]], coupling_context_by_id: dict[str, dict[str, Any]]. | 2 | 3 |
 | MisbehaviorProgram | `libs.simulation.fault.runtime` | Domain Dataclass | Misbehavior Program within misbehavior program runtime helpers with deprecated fault aliases | Carries spec: MisbehaviorProgramSpec. | 1 | 28 |
-| MisbehaviorWindowSpec | `libs.simulation.fault.spec` | Specification | specification for Misbehavior Window within this package contains the simulation domain model only. it does not own | Carries start_step: int, end_step_exclusive: int, context: dict[str, Any], subject_kind: Literal['parameter', 'coupling'] = 'parameter', +4 more. | 8 | 20 |
+| MisbehaviorWindowSpec | `libs.simulation.fault.spec` | Specification | specification for Misbehavior Window within this package contains the simulation domain model only. it does not own | Carries start_step: int, end_step_exclusive: int, context: dict[str, Any], subject_kind: Literal['parameter', 'coupling'] = 'parameter', +4 more. | 8 | 26 |
 | MisbehaviorProgramSpec | `libs.simulation.fault.spec` | Specification | specification for Misbehavior Program within this package contains the simulation domain model only. it does not own | Carries windows: tuple[MisbehaviorWindowSpec, ...] = (), metadata: dict[str, Any] = field(default_factory=dict). | 2 | 3 |
 | Fleet | `libs.simulation.fleet.runtime` | Domain Dataclass | Fleet within live fleet runtime objects | Carries id: str, tails: tuple[Tail, ...], metadata: dict[str, Any] = field(default_factory=dict), _tails_by_id: dict[str, Tail] = field(init=False, repr=False). | 4 | 46 |
 | FlightTick | `libs.simulation.flight.runtime` | Domain Dataclass | Flight Tick within live flight runtime objects | Carries tail_id: str, flight_id: str, step_index: int, timestamp_utc: datetime, +4 more. | 8 | 90 |
-| InputProgram | `libs.simulation.flight.runtime` | Domain Dataclass | Input Program within live flight runtime objects | Carries spec: InputProgramSpec. | 1 | 34 |
+| InputProgram | `libs.simulation.flight.runtime` | Domain Dataclass | Input Program within live flight runtime objects | Carries spec: InputProgramSpec. | 1 | 37 |
 | Flight | `libs.simulation.flight.runtime` | Domain Dataclass | Flight within live flight runtime objects | Carries spec: FlightSpec, tail: Tail, flight_id: str, start_timestamp_utc: datetime, +7 more. | 11 | 149 |
 | StepInputSpec | `libs.simulation.flight.spec` | Specification | specification for Step Input within this package contains the simulation domain model only. it does not own | Carries context: dict[str, Any] = field(default_factory=dict), latent_state: dict[str, float] = field(default_factory=dict). | 2 | 3 |
 | InputProgramSpec | `libs.simulation.flight.spec` | Specification | specification for Input Program within this package contains the simulation domain model only. it does not own | Carries steps: tuple[dict[str, dict[str, StepInputSpec]], ...], hold_last_step: bool = True, metadata: dict[str, Any] = field(default_factory=dict). | 3 | 4 |
@@ -2832,7 +2875,7 @@ flowchart TB
 | EngineeringPerformanceReport | `libs.simulation.full_run_report` | Domain Dataclass | Engineering Performance Report within full-run engineering and modeling report rendering for simulation bundles | Carries overall: dict[str, Any], stages: tuple[StageRunReport, ...], scale_signature: dict[str, Any]. | 3 | 11 |
 | FullRunReport | `libs.simulation.full_run_report` | Domain Dataclass | Full Run Report within full-run engineering and modeling report rendering for simulation bundles | Carries report_version: str, status: str | None, run_dir: str, modeling_performance: dict[str, Any], +2 more. | 6 | 17 |
 | LatentUpdate | `libs.simulation.module.runtime` | Domain Dataclass | Latent Update within live module runtime objects | Carries latent_name: str, source_name: str, source_kind: str = 'input_port', gain: float = 1.0, +6 more. | 10 | 65 |
-| Module | `libs.simulation.module.runtime` | Domain Dataclass | Module within live module runtime objects | Carries id: str, system_id: str, subsystem_id: str, family: str | None, +8 more. | 12 | 337 |
+| Module | `libs.simulation.module.runtime` | Domain Dataclass | Module within live module runtime objects | Carries id: str, system_id: str, subsystem_id: str, family: str | None, +8 more. | 12 | 338 |
 | LatentUpdateSpec | `libs.simulation.module.spec` | Specification | specification for Latent Update within this package contains the simulation domain model only. it does not own | Carries latent_name: str, source_name: str, source_kind: LatentSourceKind = 'input_port', gain: float = 1.0, +6 more. | 10 | 38 |
 | ModuleSpec | `libs.simulation.module.spec` | Specification | specification for Module within this package contains the simulation domain model only. it does not own | Carries module_id: str, subsystem_id: str, system_id: str, module_family: str | None = None, +8 more. | 12 | 13 |
 | Parameter | `libs.simulation.parameter.runtime` | Domain Dataclass | Parameter within live parameter runtime objects | Carries name: str, system_id: str, subsystem_id: str, module_id: str, +12 more. | 16 | 61 |
@@ -2911,6 +2954,78 @@ flowchart TB
 | systems | tuple[SystemSpec, ...] |  | ordered or grouped values |
 | couplings | tuple[CouplingSpec, ...] | () | ordered or grouped values |
 | metadata | dict[str, Any] | field(default_factory=dict) | lookup or grouped mapping |
+
+#### BenchmarkTierGateSpec
+
+- Module: `libs.simulation.benchmark_tier_gates`
+- Semantic kind: Specification
+- Represents: specification for Benchmark Tier Gate within this package contains the simulation domain model only. it does not own
+- Payload shape: Carries gate_name: str, flight_name: str, declared_benchmark_tier: str, description: str.
+
+| Field | Type | Default | Role |
+| --- | --- | --- | --- |
+| gate_name | str |  | descriptive or categorical value |
+| flight_name | str |  | descriptive or categorical value |
+| declared_benchmark_tier | str |  | descriptive or categorical value |
+| description | str |  | descriptive or categorical value |
+
+#### BenchmarkTierGateSuiteSpec
+
+- Module: `libs.simulation.benchmark_tier_gates`
+- Semantic kind: Specification
+- Represents: specification for Benchmark Tier Gate Suite within this package contains the simulation domain model only. it does not own
+- Payload shape: Carries suite_key: str, suite_name: str, suite_interpretation: str, gate_specs: tuple[BenchmarkTierGateSpec, ...].
+
+| Field | Type | Default | Role |
+| --- | --- | --- | --- |
+| suite_key | str |  | descriptive or categorical value |
+| suite_name | str |  | descriptive or categorical value |
+| suite_interpretation | str |  | descriptive or categorical value |
+| gate_specs | tuple[BenchmarkTierGateSpec, ...] |  | domain model or execution contract |
+
+#### BenchmarkTierGateRunSummary
+
+- Module: `libs.simulation.benchmark_tier_gates`
+- Semantic kind: Domain Dataclass
+- Represents: Benchmark Tier Gate Run Summary within canonical benchmark-tier gate suite for simulation-backed anomaly evaluation
+- Payload shape: Carries gate_name: str, flight_name: str, declared_benchmark_tier: str, run_dir: str | None, +13 more.
+
+| Field | Type | Default | Role |
+| --- | --- | --- | --- |
+| gate_name | str |  | descriptive or categorical value |
+| flight_name | str |  | descriptive or categorical value |
+| declared_benchmark_tier | str |  | descriptive or categorical value |
+| run_dir | str | None |  | domain payload field |
+| run_status | str |  | descriptive or categorical value |
+| error_message | str | None |  | domain payload field |
+| declared_target_alignment_status | str | None |  | domain payload field |
+| observed_recoverability_strength_tier | str | None |  | domain payload field |
+| recommended_review_action | str | None |  | domain payload field |
+| detected_fault_window_rate | float | None |  | domain payload field |
+| emit_ready_fault_window_rate | float | None |  | domain payload field |
+| telemetry_parameter_match_rate | float | None |  | domain payload field |
+| telemetry_selected_parameter_match_rate | float | None |  | domain payload field |
+| dominant_subsystem_match_rate | float | None |  | domain payload field |
+| dominant_module_match_rate | float | None |  | domain payload field |
+| top_subsystem_candidate_present_rate | float | None |  | domain payload field |
+| top_module_candidate_present_rate | float | None |  | domain payload field |
+
+#### BenchmarkTierGateSuiteSummary
+
+- Module: `libs.simulation.benchmark_tier_gates`
+- Semantic kind: Domain Dataclass
+- Represents: Benchmark Tier Gate Suite Summary within canonical benchmark-tier gate suite for simulation-backed anomaly evaluation
+- Payload shape: Carries suite_key: str, suite_name: str, suite_interpretation: str, generated_at_utc: str, +3 more.
+
+| Field | Type | Default | Role |
+| --- | --- | --- | --- |
+| suite_key | str |  | descriptive or categorical value |
+| suite_name | str |  | descriptive or categorical value |
+| suite_interpretation | str |  | descriptive or categorical value |
+| generated_at_utc | str |  | descriptive or categorical value |
+| suite_dir | str |  | descriptive or categorical value |
+| gate_specs | tuple[BenchmarkTierGateSpec, ...] |  | domain model or execution contract |
+| gate_results | tuple[BenchmarkTierGateRunSummary, ...] |  | ordered or grouped values |
 
 #### DelayedTransfer
 

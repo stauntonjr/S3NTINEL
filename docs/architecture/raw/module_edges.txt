@@ -134,6 +134,7 @@ libs.graph.pipeline -> libs.io.schemas
 libs.graph.pipeline -> libs.perf.annotations
 libs.graph.pipeline -> libs.perf.logger
 libs.graph.precision -> libs.io.pandas_spark
+libs.graph.tables -> libs.graph.hierarchy_artifacts
 libs.graph.tables -> libs.graph.lag
 libs.graph.tables -> libs.graph.pipeline
 libs.graph.tables -> libs.io.schemas.graph
@@ -294,6 +295,12 @@ libs.simulation.aircraft.runtime -> libs.simulation.module.runtime
 libs.simulation.aircraft.runtime -> libs.simulation.system.runtime
 libs.simulation.aircraft.spec -> libs.simulation.coupling.spec
 libs.simulation.aircraft.spec -> libs.simulation.system.spec
+libs.simulation.benchmark_tier_gates -> libs.perf
+libs.simulation.benchmark_tier_gates -> libs.simulation.cli
+libs.simulation.benchmark_tier_gates -> libs.simulation.fault.spec
+libs.simulation.benchmark_tier_gates -> libs.simulation.run_bundle
+libs.simulation.benchmark_tier_gates -> libs.simulation.run_context
+libs.simulation.benchmark_tier_gates -> libs.simulation.runner
 libs.simulation.cli -> libs.simulation.flight.examples
 libs.simulation.coupling -> libs.simulation.coupling.examples
 libs.simulation.coupling -> libs.simulation.coupling.runtime
@@ -378,6 +385,7 @@ libs.simulation.reporting -> libs.io.schemas.profiling
 libs.simulation.reporting -> libs.phase
 libs.simulation.reporting -> libs.profiling.validator
 libs.simulation.reporting -> libs.scoring.validator
+libs.simulation.reporting -> libs.simulation.fault.spec
 libs.simulation.reporting -> libs.simulation.report_tables
 libs.simulation.reporting -> libs.simulation.run_context
 libs.simulation.reporting -> libs.testing.assertions
@@ -403,6 +411,7 @@ libs.simulation.scenarios.power_pressurization -> libs.simulation.aircraft.spec
 libs.simulation.scenarios.power_pressurization -> libs.simulation.coupling.examples
 libs.simulation.scenarios.power_pressurization -> libs.simulation.coupling.spec
 libs.simulation.scenarios.power_pressurization -> libs.simulation.fault.examples
+libs.simulation.scenarios.power_pressurization -> libs.simulation.fault.spec
 libs.simulation.scenarios.power_pressurization -> libs.simulation.flight.spec
 libs.simulation.scenarios.power_pressurization -> libs.simulation.module.spec
 libs.simulation.scenarios.power_pressurization -> libs.simulation.parameter.examples
@@ -447,6 +456,7 @@ libs.simulation.tail.runtime -> libs.simulation.aircraft.spec
 libs.simulation.tail.runtime -> libs.simulation.flight.runtime
 libs.simulation.tail.runtime -> libs.simulation.flight.spec
 libs.simulation.validation_harness -> libs.simulation
+libs.simulation.validation_harness -> libs.simulation.fault.spec
 libs.simulation.validation_harness -> libs.simulation.phase.runtime
 libs.simulation.validation_harness -> libs.simulation.run_bundle
 libs.simulation.validation_harness -> libs.simulation.run_context
@@ -612,6 +622,7 @@ scripts.profile_pipeline_performance -> libs.simulation.cli
 scripts.profile_pipeline_performance -> libs.tuning
 scripts.report_sim_replay -> libs.simulation.replay_report
 scripts.run_partition_manifest_jobs -> libs.io.delta
+scripts.run_sim_benchmark_tier_gates -> libs.simulation.benchmark_tier_gates
 scripts.run_sim_pipeline -> libs.simulation.run_cli
 scripts.smoke_test_pipeline -> libs.graph
 scripts.smoke_test_pipeline -> libs.io.delta

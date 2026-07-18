@@ -11,7 +11,7 @@ libs/anomaly/__init__.py  [loc=32]
     - from libs.anomaly.tables import AnomalyEventAttributionTable, AnomalyTelemetryAttributionTable, AnomalyWindowAttributionTable
     - from libs.anomaly.validator import validate_attribution_against_fault_truth, validate_attribution_against_misbehavior_truth
 
-libs/anomaly/frames.py  [loc=982]
+libs/anomaly/frames.py  [loc=996]
   doc: Typed Spark frames for reusable anomaly attribution context.
   imports:
     - from __future__ import annotations
@@ -24,50 +24,51 @@ libs/anomaly/frames.py  [loc=982]
   constants:
     - ANOMALY_LOCALIZATION_PARAMETER_TOP_K
     - ANOMALY_LOCALIZATION_TARGET_TOP_K
+    - ANOMALY_PARAMETER_SELECTION_TOP_K
   functions:
-    - def _normalized_clamped_avg_expr(*columns: 'Column') -> 'Column'  [lines 25-33, loc=9]
-    - def _component_score_expr(component_scores_col: str, channel_name: str) -> 'Column'  [lines 36-39, loc=4]
-    - def _log_component_weight_expr(component_scores_col: str, channel_name: str) -> 'Column'  [lines 42-61, loc=20]
-    - def mapped_events_in_supported_windows(*, events_df: 'DataFrame', windows_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame') -> 'DataFrame'  [lines 64-112, loc=49]
+    - def _normalized_clamped_avg_expr(*columns: 'Column') -> 'Column'  [lines 26-34, loc=9]
+    - def _component_score_expr(component_scores_col: str, channel_name: str) -> 'Column'  [lines 37-40, loc=4]
+    - def _log_component_weight_expr(component_scores_col: str, channel_name: str) -> 'Column'  [lines 43-62, loc=20]
+    - def mapped_events_in_supported_windows(*, events_df: 'DataFrame', windows_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame') -> 'DataFrame'  [lines 65-113, loc=49]
   classes:
-    - @dataclass(frozen=True) class AnomalySubsystemContextFrame(Frame)  [lines 116-250, loc=135]
+    - @dataclass(frozen=True) class AnomalySubsystemContextFrame(Frame)  [lines 117-251, loc=135]
       methods:
         - @classmethod
         - @hot_path
-        - def from_events_and_windows(cls, events_df: 'DataFrame', windows_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', *, top_k_per_subsystem: int) -> 'AnomalySubsystemContextFrame'  [lines 119-250, loc=132]
-    - @dataclass(frozen=True) class AnomalyPanelContextFrame(Frame)  [lines 254-388, loc=135]
+        - def from_events_and_windows(cls, events_df: 'DataFrame', windows_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', *, top_k_per_subsystem: int) -> 'AnomalySubsystemContextFrame'  [lines 120-251, loc=132]
+    - @dataclass(frozen=True) class AnomalyPanelContextFrame(Frame)  [lines 255-389, loc=135]
       methods:
         - @classmethod
         - @hot_path
-        - def from_raw_and_windows(cls, raw_df: 'DataFrame', windows_df: 'DataFrame', *, max_items: int = 5) -> 'AnomalyPanelContextFrame'  [lines 257-388, loc=132]
-    - @dataclass(frozen=True) class AnomalyParameterLocalizationFrame(Frame)  [lines 392-938, loc=547]
+        - def from_raw_and_windows(cls, raw_df: 'DataFrame', windows_df: 'DataFrame', *, max_items: int = 5) -> 'AnomalyPanelContextFrame'  [lines 258-389, loc=132]
+    - @dataclass(frozen=True) class AnomalyParameterLocalizationFrame(Frame)  [lines 393-952, loc=560]
       methods:
-        - def _module_support_df(self) -> 'DataFrame'  [lines 393-414, loc=22]
+        - def _module_support_df(self) -> 'DataFrame'  [lines 394-415, loc=22]
         - @classmethod
         - @hot_path
-        - def from_calibrated_phase_windows_events_and_hierarchy(cls, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', parameter_behavior_profile_df: 'DataFrame | None' = None, top_k_per_window: int = ANOMALY_LOCALIZATION_PARAMETER_TOP_K) -> 'AnomalyParameterLocalizationFrame'  [lines 418-821, loc=404]
+        - def from_calibrated_phase_windows_events_and_hierarchy(cls, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', parameter_behavior_profile_df: 'DataFrame | None' = None, top_k_per_window: int = ANOMALY_PARAMETER_SELECTION_TOP_K) -> 'AnomalyParameterLocalizationFrame'  [lines 419-822, loc=404]
         - @hot_path
-        - def localized_targets_df(self, *, top_k_per_window: int = ANOMALY_LOCALIZATION_TARGET_TOP_K) -> 'DataFrame'  [lines 824-927, loc=104]
+        - def localized_targets_df(self, *, top_k_per_window: int = ANOMALY_LOCALIZATION_TARGET_TOP_K, parameter_support_top_k: int | None = None) -> 'DataFrame'  [lines 825-938, loc=114]
         - @hot_path
-        - def dominant_targets_df(self) -> 'DataFrame'  [lines 930-938, loc=9]
-    - @dataclass(frozen=True) class AnomalyAttributionContextFrame(Frame)  [lines 942-978, loc=37]
+        - def dominant_targets_df(self) -> 'DataFrame'  [lines 941-952, loc=12]
+    - @dataclass(frozen=True) class AnomalyAttributionContextFrame(Frame)  [lines 956-992, loc=37]
       methods:
         - @classmethod
         - @hot_path
-        - def from_context_frames(cls, *, subsystem_context: AnomalySubsystemContextFrame, panel_context: AnomalyPanelContextFrame) -> 'AnomalyAttributionContextFrame'  [lines 945-978, loc=34]
+        - def from_context_frames(cls, *, subsystem_context: AnomalySubsystemContextFrame, panel_context: AnomalyPanelContextFrame) -> 'AnomalyAttributionContextFrame'  [lines 959-992, loc=34]
 
-libs/anomaly/pipeline.py  [loc=176]
+libs/anomaly/pipeline.py  [loc=179]
   doc: Spark adapters for anomaly attribution artifacts.
   imports:
     - from __future__ import annotations
     - from dataclasses import dataclass
-    - from libs.anomaly.frames import AnomalyAttributionContextFrame, AnomalyPanelContextFrame, AnomalyParameterLocalizationFrame, AnomalySubsystemContextFrame
+    - from libs.anomaly.frames import AnomalyAttributionContextFrame, AnomalyPanelContextFrame, ANOMALY_LOCALIZATION_PARAMETER_TOP_K, AnomalyParameterLocalizationFrame, AnomalySubsystemContextFrame
     - from libs.anomaly.tables import AnomalyEventAttributionTable, AnomalyTelemetryAttributionTable, AnomalyWindowAttributionTable
     - from libs.perf.annotations import hot_path
     - from typing import TYPE_CHECKING
     - from pyspark.sql import DataFrame
   classes:
-    - @dataclass(frozen=True) class AnomalyArtifactSet  [lines 22-25, loc=4]
+    - @dataclass(frozen=True) class AnomalyArtifactSet  [lines 23-26, loc=4]
       attributes:
         - window_attribution
         - telemetry_attribution
@@ -76,17 +77,17 @@ libs/anomaly/pipeline.py  [loc=176]
         - window_attribution: AnomalyWindowAttributionTable
         - telemetry_attribution: AnomalyTelemetryAttributionTable
         - event_attribution: AnomalyEventAttributionTable
-    - @dataclass(frozen=True) class AnomalyAttributionPlan  [lines 29-170, loc=142]
+    - @dataclass(frozen=True) class AnomalyAttributionPlan  [lines 30-173, loc=144]
       attributes:
         - top_k_per_subsystem
       fields:
         - top_k_per_subsystem: int = 5
       methods:
-        - def build_window_attribution(self, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame', windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', raw_df: 'DataFrame', parameter_behavior_profile_df: 'DataFrame | None' = None, localization_targets_df: 'DataFrame | None' = None) -> AnomalyWindowAttributionTable  [lines 32-72, loc=41]
-        - def build_telemetry_attribution(self, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame | None' = None, windows_df: 'DataFrame', events_df: 'DataFrame | None' = None, raw_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', parameter_behavior_profile_df: 'DataFrame | None' = None, parameter_localization_df: 'DataFrame | None' = None) -> AnomalyTelemetryAttributionTable  [lines 74-106, loc=33]
-        - def build_event_attribution(self, *, calibrated_df: 'DataFrame', windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame') -> AnomalyEventAttributionTable  [lines 108-121, loc=14]
+        - def build_window_attribution(self, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame', windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', raw_df: 'DataFrame', parameter_behavior_profile_df: 'DataFrame | None' = None, localization_targets_df: 'DataFrame | None' = None) -> AnomalyWindowAttributionTable  [lines 33-73, loc=41]
+        - def build_telemetry_attribution(self, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame | None' = None, windows_df: 'DataFrame', events_df: 'DataFrame | None' = None, raw_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', parameter_behavior_profile_df: 'DataFrame | None' = None, parameter_localization_df: 'DataFrame | None' = None) -> AnomalyTelemetryAttributionTable  [lines 75-107, loc=33]
+        - def build_event_attribution(self, *, calibrated_df: 'DataFrame', windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame') -> AnomalyEventAttributionTable  [lines 109-122, loc=14]
         - @hot_path
-        - def build(self, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame', windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', raw_df: 'DataFrame', parameter_behavior_profile_df: 'DataFrame | None' = None) -> AnomalyArtifactSet  [lines 124-170, loc=47]
+        - def build(self, *, calibrated_df: 'DataFrame', phase_windows_df: 'DataFrame', windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame', raw_df: 'DataFrame', parameter_behavior_profile_df: 'DataFrame | None' = None) -> AnomalyArtifactSet  [lines 125-173, loc=49]
 
 libs/anomaly/tables.py  [loc=277]
   doc: Typed Spark tables for anomaly attribution artifacts.
@@ -130,7 +131,7 @@ libs/anomaly/tables.py  [loc=277]
         - @classmethod
         - def from_calibrated_windows_events_and_hierarchy(cls, *, calibrated_df: 'DataFrame', windows_df: 'DataFrame', events_df: 'DataFrame', hierarchy_sensor_map_df: 'DataFrame') -> 'AnomalyEventAttributionTable'  [lines 236-273, loc=38]
 
-libs/anomaly/validator.py  [loc=1175]
+libs/anomaly/validator.py  [loc=1327]
   doc: Anomaly attribution validation against simulator misbehavior truth with fault wrappers.
   imports:
     - from __future__ import annotations
@@ -145,24 +146,27 @@ libs/anomaly/validator.py  [loc=1175]
     - def _empty_module_localization_validation() -> dict[str, Any]  [lines 54-73, loc=20]
     - def _empty_channel_localization_validation() -> dict[str, Any]  [lines 76-89, loc=14]
     - def _empty_reconstruction_localization_validation() -> dict[str, Any]  [lines 92-115, loc=24]
-    - def _sorted_non_empty_string_values(df: pd.DataFrame, column: str) -> list[str]  [lines 118-127, loc=10]
-    - def _records_with_none_for_missing(df: pd.DataFrame) -> list[dict[str, Any]]  [lines 130-131, loc=2]
-    - def _sorted_detected_candidate_ids(df: pd.DataFrame, column: str) -> list[str]  [lines 134-158, loc=25]
-    - def _resolve_truth_candidate_ids(detected_candidate_ids: list[str], truth_map: 'DetectedLocalizationTruthMap') -> list[str]  [lines 161-170, loc=10]
-    - def _top_ranked_selected_parameter_details(telemetry_selected_hits: pd.DataFrame, *, truth_parameter_to_subsystem: dict[str, str], truth_parameter_to_module: dict[str, str]) -> dict[str, Any]  [lines 173-218, loc=46]
-    - def _classify_reconstruction_localization_failure(*, dominant_score_component: str, truth_parameter: str, truth_subsystem: str, truth_module: str, dominant_subsystem_match: bool, dominant_module_match: bool, telemetry_selected_truth_subsystem_present: bool, telemetry_selected_truth_module_present: bool, top_subsystem_candidate_present: bool, top_module_candidate_present: bool, top_ranked_selected_parameter_name: str | None, top_ranked_selected_parameter_truth_subsystem: str | None, top_ranked_selected_parameter_truth_module: str | None) -> str | None  [lines 221-261, loc=41]
-    - def _rate_by_score_component(per_truth_df: pd.DataFrame, *, value_column: str, require_mappable_column: str | None = None) -> dict[str, float]  [lines 264-284, loc=21]
-    - def _truth_parameter_to_subsystem_map(hierarchy_label_df: pd.DataFrame | None) -> dict[str, str]  [lines 633-639, loc=7]
-    - def _truth_parameter_to_module_map(hierarchy_label_df: pd.DataFrame | None) -> dict[str, str]  [lines 642-648, loc=7]
-    - def _build_parameter_localization_validation(per_truth_df: pd.DataFrame) -> dict[str, Any]  [lines 651-734, loc=84]
-    - def _build_module_localization_validation(per_truth_df: pd.DataFrame) -> dict[str, Any]  [lines 737-792, loc=56]
-    - def _build_channel_localization_validation(per_truth_df: pd.DataFrame) -> dict[str, Any]  [lines 795-876, loc=82]
-    - def _build_reconstruction_localization_validation(per_truth_df: pd.DataFrame) -> dict[str, Any]  [lines 879-968, loc=90]
-    - def build_fault_attribution_summary_from_misbehavior_summary(summary: dict[str, Any]) -> dict[str, Any]  [lines 971-1020, loc=50]
-    - def validate_attribution_against_misbehavior_truth(*, raw_telemetry_df: pd.DataFrame, windows_df: pd.DataFrame, anomaly_window_attribution_df: pd.DataFrame, anomaly_telemetry_attribution_df: pd.DataFrame, anomaly_event_attribution_df: pd.DataFrame, hierarchy_sensor_map_df: pd.DataFrame | None = None, hierarchy_label_df: pd.DataFrame | None = None) -> dict[str, Any]  [lines 1023-1152, loc=130]
-    - def validate_attribution_against_fault_truth(*, raw_telemetry_df: pd.DataFrame, windows_df: pd.DataFrame, anomaly_window_attribution_df: pd.DataFrame, anomaly_telemetry_attribution_df: pd.DataFrame, anomaly_event_attribution_df: pd.DataFrame, hierarchy_sensor_map_df: pd.DataFrame | None = None, hierarchy_label_df: pd.DataFrame | None = None) -> dict[str, Any]  [lines 1155-1175, loc=21]
+    - def _empty_hierarchy_cluster_alignment_validation() -> dict[str, Any]  [lines 118-152, loc=35]
+    - def _build_detected_cluster_alignment(*, hierarchy_sensor_map_df: pd.DataFrame | None, hierarchy_label_df: pd.DataFrame | None, detected_id_field: str, truth_id_field: str) -> dict[str, Any]  [lines 155-234, loc=80]
+    - def _build_hierarchy_cluster_alignment_validation(*, hierarchy_sensor_map_df: pd.DataFrame | None, hierarchy_label_df: pd.DataFrame | None) -> dict[str, Any]  [lines 237-257, loc=21]
+    - def _sorted_non_empty_string_values(df: pd.DataFrame, column: str) -> list[str]  [lines 260-269, loc=10]
+    - def _records_with_none_for_missing(df: pd.DataFrame) -> list[dict[str, Any]]  [lines 272-273, loc=2]
+    - def _sorted_detected_candidate_ids(df: pd.DataFrame, column: str) -> list[str]  [lines 276-300, loc=25]
+    - def _resolve_truth_candidate_ids(detected_candidate_ids: list[str], truth_map: 'DetectedLocalizationTruthMap') -> list[str]  [lines 303-312, loc=10]
+    - def _top_ranked_selected_parameter_details(telemetry_selected_hits: pd.DataFrame, *, truth_parameter_to_subsystem: dict[str, str], truth_parameter_to_module: dict[str, str]) -> dict[str, Any]  [lines 315-360, loc=46]
+    - def _classify_reconstruction_localization_failure(*, dominant_score_component: str, truth_parameter: str, truth_subsystem: str, truth_module: str, dominant_subsystem_match: bool, dominant_module_match: bool, telemetry_selected_truth_subsystem_present: bool, telemetry_selected_truth_module_present: bool, top_subsystem_candidate_present: bool, top_module_candidate_present: bool, top_ranked_selected_parameter_name: str | None, top_ranked_selected_parameter_truth_subsystem: str | None, top_ranked_selected_parameter_truth_module: str | None) -> str | None  [lines 363-403, loc=41]
+    - def _rate_by_score_component(per_truth_df: pd.DataFrame, *, value_column: str, require_mappable_column: str | None = None) -> dict[str, float]  [lines 406-426, loc=21]
+    - def _truth_parameter_to_subsystem_map(hierarchy_label_df: pd.DataFrame | None) -> dict[str, str]  [lines 775-781, loc=7]
+    - def _truth_parameter_to_module_map(hierarchy_label_df: pd.DataFrame | None) -> dict[str, str]  [lines 784-790, loc=7]
+    - def _build_parameter_localization_validation(per_truth_df: pd.DataFrame) -> dict[str, Any]  [lines 793-876, loc=84]
+    - def _build_module_localization_validation(per_truth_df: pd.DataFrame) -> dict[str, Any]  [lines 879-934, loc=56]
+    - def _build_channel_localization_validation(per_truth_df: pd.DataFrame) -> dict[str, Any]  [lines 937-1018, loc=82]
+    - def _build_reconstruction_localization_validation(per_truth_df: pd.DataFrame) -> dict[str, Any]  [lines 1021-1110, loc=90]
+    - def build_fault_attribution_summary_from_misbehavior_summary(summary: dict[str, Any]) -> dict[str, Any]  [lines 1113-1166, loc=54]
+    - def validate_attribution_against_misbehavior_truth(*, raw_telemetry_df: pd.DataFrame, windows_df: pd.DataFrame, anomaly_window_attribution_df: pd.DataFrame, anomaly_telemetry_attribution_df: pd.DataFrame, anomaly_event_attribution_df: pd.DataFrame, hierarchy_sensor_map_df: pd.DataFrame | None = None, hierarchy_label_df: pd.DataFrame | None = None) -> dict[str, Any]  [lines 1169-1304, loc=136]
+    - def validate_attribution_against_fault_truth(*, raw_telemetry_df: pd.DataFrame, windows_df: pd.DataFrame, anomaly_window_attribution_df: pd.DataFrame, anomaly_telemetry_attribution_df: pd.DataFrame, anomaly_event_attribution_df: pd.DataFrame, hierarchy_sensor_map_df: pd.DataFrame | None = None, hierarchy_label_df: pd.DataFrame | None = None) -> dict[str, Any]  [lines 1307-1327, loc=21]
   classes:
-    - @dataclass(frozen=True) class DetectedLocalizationTruthMap  [lines 288-342, loc=55]
+    - @dataclass(frozen=True) class DetectedLocalizationTruthMap  [lines 430-484, loc=55]
       attributes:
         - detected_to_truth_id
         - ambiguous_detected_ids
@@ -171,9 +175,9 @@ libs/anomaly/validator.py  [loc=1175]
         - ambiguous_detected_ids: set[str]
       methods:
         - @classmethod
-        - def from_hierarchy_frames(cls, *, hierarchy_sensor_map_df: pd.DataFrame | None, hierarchy_label_df: pd.DataFrame | None, detected_id_field: str, truth_id_field: str) -> 'DetectedLocalizationTruthMap'  [lines 293-336, loc=44]
-        - def resolve(self, detected_id: str) -> tuple[str | None, bool]  [lines 338-342, loc=5]
-    - @dataclass(frozen=True) class _TruthWindowAttributionMatch  [lines 346-630, loc=285]
+        - def from_hierarchy_frames(cls, *, hierarchy_sensor_map_df: pd.DataFrame | None, hierarchy_label_df: pd.DataFrame | None, detected_id_field: str, truth_id_field: str) -> 'DetectedLocalizationTruthMap'  [lines 435-478, loc=44]
+        - def resolve(self, detected_id: str) -> tuple[str | None, bool]  [lines 480-484, loc=5]
+    - @dataclass(frozen=True) class _TruthWindowAttributionMatch  [lines 488-772, loc=285]
       attributes:
         - truth_window_id
         - dominant_subsystem_match
@@ -206,7 +210,7 @@ libs/anomaly/validator.py  [loc=1175]
         - payload: dict[str, Any]
       methods:
         - @classmethod
-        - def from_truth_record(cls, *, truth: dict[str, Any], windows_df: pd.DataFrame, anomaly_window_attribution_df: pd.DataFrame, anomaly_telemetry_attribution_df: pd.DataFrame, anomaly_event_attribution_df: pd.DataFrame, subsystem_truth_map: DetectedLocalizationTruthMap, module_truth_map: DetectedLocalizationTruthMap, truth_parameter_to_subsystem: dict[str, str], truth_parameter_to_module: dict[str, str], truth_window_id_field: str, truth_start_field: str, truth_end_field: str) -> '_TruthWindowAttributionMatch'  [lines 363-630, loc=268]
+        - def from_truth_record(cls, *, truth: dict[str, Any], windows_df: pd.DataFrame, anomaly_window_attribution_df: pd.DataFrame, anomaly_telemetry_attribution_df: pd.DataFrame, anomaly_event_attribution_df: pd.DataFrame, subsystem_truth_map: DetectedLocalizationTruthMap, module_truth_map: DetectedLocalizationTruthMap, truth_parameter_to_subsystem: dict[str, str], truth_parameter_to_module: dict[str, str], truth_window_id_field: str, truth_start_field: str, truth_end_field: str) -> '_TruthWindowAttributionMatch'  [lines 505-772, loc=268]
 
 libs/architecture/__init__.py  [loc=14]
   doc: Architecture extraction and rendering helpers.
@@ -1064,7 +1068,7 @@ libs/behavior/base.py  [loc=129]
         - violator: BehaviorViolator
         - expectation: BehaviorExpectation
 
-libs/behavior/discrete_state.py  [loc=185]
+libs/behavior/discrete_state.py  [loc=182]
   doc: Discrete-state behavior bundle: generator, profiler, validator, and violator.
   imports:
     - from __future__ import annotations
@@ -1100,15 +1104,15 @@ libs/behavior/discrete_state.py  [loc=185]
     - class DiscreteStateProfiler(BehaviorProfiler)  [lines 83-100, loc=18]
       methods:
         - def profile(self, *, parameter_name: str, features: Mapping[str, float | str | None]) -> BehaviorProfileResult  [lines 84-100, loc=17]
-    - class DiscreteStateViolator(BehaviorViolator)  [lines 103-160, loc=58]
+    - class DiscreteStateViolator(BehaviorViolator)  [lines 103-157, loc=55]
       methods:
-        - def violate_stream(self, *, parameter_name: str, generated_stream: Iterable[BehaviorSample], context: Mapping[str, Any]) -> Iterator[BehaviorSample]  [lines 104-160, loc=57]
-    - class DiscreteStateExpectation(BehaviorExpectation)  [lines 163-174, loc=12]
+        - def violate_stream(self, *, parameter_name: str, generated_stream: Iterable[BehaviorSample], context: Mapping[str, Any]) -> Iterator[BehaviorSample]  [lines 104-157, loc=54]
+    - class DiscreteStateExpectation(BehaviorExpectation)  [lines 160-171, loc=12]
       methods:
-        - def evaluate(self, *, generated_rows: pd.DataFrame, profile_result: BehaviorProfileResult) -> dict[str, float | bool | str]  [lines 164-174, loc=11]
-    - class DiscreteStateBehavior(Behavior)  [lines 177-185, loc=9]
+        - def evaluate(self, *, generated_rows: pd.DataFrame, profile_result: BehaviorProfileResult) -> dict[str, float | bool | str]  [lines 161-171, loc=11]
+    - class DiscreteStateBehavior(Behavior)  [lines 174-182, loc=9]
       methods:
-        - def __init__(self) -> None  [lines 178-185, loc=8]
+        - def __init__(self) -> None  [lines 175-182, loc=8]
 
 libs/behavior/inertial.py  [loc=188]
   doc: Inertial behavior bundle: generator, profiler, validator, and violator.
@@ -1497,7 +1501,7 @@ libs/config/__init__.py  [loc=19]
   imports:
     - from libs.config.pipeline import PipelineArtifactPaths, PipelineContextSettings, PipelineExecutionSettings, load_pipeline_artifact_paths, load_pipeline_context_settings, load_pipeline_execution_settings
 
-libs/config/pipeline.py  [loc=623]
+libs/config/pipeline.py  [loc=628]
   doc: Typed pipeline configuration derived from defaults.yaml plus env overrides.
   imports:
     - from __future__ import annotations
@@ -1514,9 +1518,9 @@ libs/config/pipeline.py  [loc=623]
     - def _config_optional_float(config: dict[str, Any], path: list[str], default: float | None) -> float | None  [lines 50-58, loc=9]
     - def _config_str(config: dict[str, Any], path: list[str], default: str) -> str  [lines 61-67, loc=7]
     - def _config_list(config: dict[str, Any], path: list[str], default: list[Any]) -> list[Any]  [lines 70-78, loc=9]
-    - def load_pipeline_execution_settings() -> PipelineExecutionSettings  [lines 264-271, loc=8]
-    - def load_pipeline_artifact_paths() -> PipelineArtifactPaths  [lines 274-352, loc=79]
-    - def load_pipeline_context_settings(config: dict[str, Any]) -> PipelineContextSettings  [lines 355-623, loc=269]
+    - def load_pipeline_execution_settings() -> PipelineExecutionSettings  [lines 265-272, loc=8]
+    - def load_pipeline_artifact_paths() -> PipelineArtifactPaths  [lines 275-357, loc=83]
+    - def load_pipeline_context_settings(config: dict[str, Any]) -> PipelineContextSettings  [lines 360-628, loc=269]
   classes:
     - @dataclass(frozen=True) class PipelineExecutionSettings  [lines 82-86, loc=5]
       attributes:
@@ -1529,7 +1533,7 @@ libs/config/pipeline.py  [loc=623]
         - raw_output_format: str
         - write_mode: str
         - fit_write_mode: str
-    - @dataclass(frozen=True) class PipelineArtifactPaths  [lines 90-121, loc=32]
+    - @dataclass(frozen=True) class PipelineArtifactPaths  [lines 90-122, loc=33]
       attributes:
         - raw_input
         - raw_table
@@ -1552,6 +1556,7 @@ libs/config/pipeline.py  [loc=623]
         - transition_graph
         - fused_graph
         - graph_parameter_universe
+        - hierarchy_edge_evidence
         - hierarchy_sensor_map
         - phase_windows
         - phase_baselines
@@ -1584,6 +1589,7 @@ libs/config/pipeline.py  [loc=623]
         - transition_graph: str
         - fused_graph: str
         - graph_parameter_universe: str
+        - hierarchy_edge_evidence: str
         - hierarchy_sensor_map: str
         - phase_windows: str
         - phase_baselines: str
@@ -1594,7 +1600,7 @@ libs/config/pipeline.py  [loc=623]
         - anomaly_telemetry_attribution: str
         - anomaly_event_attribution: str
         - explorer_bundle: str
-    - @dataclass(frozen=True) class EventSettings  [lines 125-140, loc=16]
+    - @dataclass(frozen=True) class EventSettings  [lines 126-141, loc=16]
       attributes:
         - delta_threshold
         - slope_source
@@ -1627,7 +1633,7 @@ libs/config/pipeline.py  [loc=623]
         - repeatability_aggressiveness: float = 1.0
         - drift_conservatism: float = 1.0
         - chatter_suppression: float = 1.0
-    - @dataclass(frozen=True) class ProfilingSettings  [lines 144-153, loc=10]
+    - @dataclass(frozen=True) class ProfilingSettings  [lines 145-154, loc=10]
       attributes:
         - numeric_ratio_threshold
         - categorical_cardinality_max
@@ -1648,7 +1654,7 @@ libs/config/pipeline.py  [loc=623]
         - behavior_mixed_unknown_low_score_threshold: float
         - behavior_mixed_unknown_ambiguous_score_threshold: float
         - behavior_mixed_unknown_ambiguous_margin_threshold: float
-    - @dataclass(frozen=True) class WindowingSettings  [lines 157-163, loc=7]
+    - @dataclass(frozen=True) class WindowingSettings  [lines 158-164, loc=7]
       attributes:
         - min_sampling_rate_hz
         - max_ms
@@ -1663,7 +1669,7 @@ libs/config/pipeline.py  [loc=623]
         - event_threshold: int
         - inactivity_timeout_ms: int
         - strategy: str
-    - @dataclass(frozen=True) class BackboneSettings  [lines 167-171, loc=5]
+    - @dataclass(frozen=True) class BackboneSettings  [lines 168-172, loc=5]
       attributes:
         - sensor_count
         - ridge_lambda
@@ -1674,7 +1680,7 @@ libs/config/pipeline.py  [loc=623]
         - ridge_lambda: float
         - max_sensor_universe: int
         - event_prior_alpha: float
-    - @dataclass(frozen=True) class EventGraphSettings  [lines 175-178, loc=4]
+    - @dataclass(frozen=True) class EventGraphSettings  [lines 176-179, loc=4]
       attributes:
         - min_count
         - min_npmi
@@ -1683,7 +1689,7 @@ libs/config/pipeline.py  [loc=623]
         - min_count: int
         - min_npmi: float
         - top_k_per_parameter_name: int
-    - @dataclass(frozen=True) class LagBandSettings  [lines 182-186, loc=5]
+    - @dataclass(frozen=True) class LagBandSettings  [lines 183-187, loc=5]
       attributes:
         - name
         - lower_seconds
@@ -1694,7 +1700,7 @@ libs/config/pipeline.py  [loc=623]
         - lower_seconds: float
         - upper_seconds: float
         - combine_weight: float
-    - @dataclass(frozen=True) class LagGraphSettings  [lines 190-195, loc=6]
+    - @dataclass(frozen=True) class LagGraphSettings  [lines 191-196, loc=6]
       attributes:
         - tau_max_seconds
         - min_count
@@ -1707,12 +1713,12 @@ libs/config/pipeline.py  [loc=623]
         - max_mean_lag_seconds: float | None
         - top_k_outgoing: int
         - bands: tuple[LagBandSettings, ...]
-    - @dataclass(frozen=True) class TransitionGraphSettings  [lines 199-200, loc=2]
+    - @dataclass(frozen=True) class TransitionGraphSettings  [lines 200-201, loc=2]
       attributes:
         - min_count
       fields:
         - min_count: int
-    - @dataclass(frozen=True) class GraphFusionSettings  [lines 204-208, loc=5]
+    - @dataclass(frozen=True) class GraphFusionSettings  [lines 205-209, loc=5]
       attributes:
         - alpha
         - beta
@@ -1723,7 +1729,7 @@ libs/config/pipeline.py  [loc=623]
         - beta: float
         - gamma: float
         - min_fused_edge_weight: float
-    - @dataclass(frozen=True) class GraphSettings  [lines 212-219, loc=8]
+    - @dataclass(frozen=True) class GraphSettings  [lines 213-220, loc=8]
       attributes:
         - precision_ridge_lambda
         - min_abs_partial_corr
@@ -1740,7 +1746,7 @@ libs/config/pipeline.py  [loc=623]
         - lag: LagGraphSettings
         - transition: TransitionGraphSettings
         - fusion: GraphFusionSettings
-    - @dataclass(frozen=True) class HierarchySettings  [lines 223-226, loc=4]
+    - @dataclass(frozen=True) class HierarchySettings  [lines 224-227, loc=4]
       attributes:
         - top_k_per_parameter_name
         - subsystem_min_edge_weight
@@ -1749,7 +1755,7 @@ libs/config/pipeline.py  [loc=623]
         - top_k_per_parameter_name: int
         - subsystem_min_edge_weight: float | None
         - system_min_edge_weight: float | None
-    - @dataclass(frozen=True) class PhaseSettings  [lines 230-237, loc=8]
+    - @dataclass(frozen=True) class PhaseSettings  [lines 231-238, loc=8]
       attributes:
         - phase_count
         - detect_sensor_count
@@ -1766,19 +1772,19 @@ libs/config/pipeline.py  [loc=623]
         - stable_drift_quantile: float
         - transition_penalty: float
         - min_dwell_windows: int
-    - @dataclass(frozen=True) class ScoringSettings  [lines 241-243, loc=3]
+    - @dataclass(frozen=True) class ScoringSettings  [lines 242-244, loc=3]
       attributes:
         - max_bridge_reference_rows
         - min_warm
       fields:
         - max_bridge_reference_rows: int
         - min_warm: int
-    - @dataclass(frozen=True) class AnomalySettings  [lines 247-248, loc=2]
+    - @dataclass(frozen=True) class AnomalySettings  [lines 248-249, loc=2]
       attributes:
         - subsystem_top_sensors_k
       fields:
         - subsystem_top_sensors_k: int
-    - @dataclass(frozen=True) class PipelineContextSettings  [lines 252-261, loc=10]
+    - @dataclass(frozen=True) class PipelineContextSettings  [lines 253-262, loc=10]
       attributes:
         - profiling
         - events
@@ -2387,12 +2393,12 @@ libs/events/validator.py  [loc=690]
         - start_ts: datetime
         - end_ts: datetime
 
-libs/graph/__init__.py  [loc=49]
+libs/graph/__init__.py  [loc=53]
   doc: Spark graph artifact builders and validation helpers for the active V2 fitting pipeline.
   imports:
     - from libs.graph.lag import LagBandSpec, LagProfileGraph, resolve_lag_band_specs
     - from libs.graph.pipeline import build_graph_components_with_diagnostics_spark_table, collapse_lag_profile_spark_table, retain_event_graph_top_k, retain_lag_graph_top_k
-    - from libs.graph.tables import EventGraphTable, FusedGraphTable, GraphParameterUniverseTable, HierarchySensorMapTable, LagCandidatePairsFrame, LagGraphTable, LagProfileTable, PrecisionGraphTable, TransitionGraphTable
+    - from libs.graph.tables import EventGraphTable, FusedGraphTable, GraphParameterUniverseTable, HierarchyArtifactSet, HierarchyEdgeEvidenceTable, HierarchySensorMapTable, LagCandidatePairsFrame, LagGraphTable, LagProfileTable, PrecisionGraphTable, TransitionGraphTable
     - from libs.graph.validator import build_coupling_validation_summary, build_graph_validation_summary, validate_expected_graph_signatures, validate_hierarchy_recovery
 
 libs/graph/data.py  [loc=134]
@@ -2533,22 +2539,24 @@ libs/graph/hierarchy.py  [loc=171]
     - def assign_subsystems_from_weighted_edges(sensor_ids: list[str], edges: list[tuple[str, str, float]], *, min_edge_weight: float) -> dict[str, str]  [lines 59-75, loc=17]
     - def assign_hierarchy_from_weighted_edges(sensor_ids: list[str], edges: list[tuple[str, str, float]], *, module_min_edge_weight: float, subsystem_min_edge_weight: float | None = None, system_min_edge_weight: float | None = None, rollup_edges: list[tuple[str, str, float]] | None = None) -> list[dict[str, str]]  [lines 78-171, loc=94]
 
-libs/graph/hierarchy_artifacts.py  [loc=477]
+libs/graph/hierarchy_artifacts.py  [loc=592]
   imports:
     - from __future__ import annotations
     - from collections import defaultdict
     - from dataclasses import dataclass
     - import os
+    - from typing import TYPE_CHECKING
     - import pandas as pd
     - from libs.graph.hierarchy import _connected_components_from_edges, assign_hierarchy_from_weighted_edges
+    - from pyspark.sql import DataFrame
   functions:
-    - def _module_affinity_weight(row: dict[str, object]) -> float  [lines 26-32, loc=7]
-    - def _normalized_datatype(value: object) -> str | None  [lines 35-41, loc=7]
-    - def _normalized_behavior_family(value: object) -> str | None  [lines 44-48, loc=5]
-    - def _module_compatibility_by_parameter(*, parameter_names: list[str], datatype_profile_df: pd.DataFrame | None, behavior_profile_df: pd.DataFrame | None) -> dict[str, ModuleCompatibilityProfile]  [lines 51-84, loc=34]
-    - def _module_edge_is_compatible(left_parameter: str, right_parameter: str, *, compatibility_by_parameter: dict[str, ModuleCompatibilityProfile]) -> bool  [lines 87-101, loc=15]
+    - def _module_affinity_weight(row: dict[str, object]) -> float  [lines 30-36, loc=7]
+    - def _normalized_datatype(value: object) -> str | None  [lines 39-45, loc=7]
+    - def _normalized_behavior_family(value: object) -> str | None  [lines 48-52, loc=5]
+    - def _module_compatibility_by_parameter(*, parameter_names: list[str], datatype_profile_df: pd.DataFrame | None, behavior_profile_df: pd.DataFrame | None) -> dict[str, ModuleCompatibilityProfile]  [lines 55-88, loc=34]
+    - def _module_edge_is_compatible(left_parameter: str, right_parameter: str, *, compatibility_by_parameter: dict[str, ModuleCompatibilityProfile]) -> bool  [lines 91-105, loc=15]
   classes:
-    - @dataclass(frozen=True) class HierarchySpec  [lines 13-17, loc=5]
+    - @dataclass(frozen=True) class HierarchySpec  [lines 17-21, loc=5]
       attributes:
         - min_edge_weight
         - top_k_per_parameter_name
@@ -2559,27 +2567,31 @@ libs/graph/hierarchy_artifacts.py  [loc=477]
         - top_k_per_parameter_name: int = 3
         - subsystem_min_edge_weight: float | None = None
         - system_min_edge_weight: float | None = None
-    - @dataclass(frozen=True) class ModuleCompatibilityProfile  [lines 21-23, loc=3]
+    - @dataclass(frozen=True) class ModuleCompatibilityProfile  [lines 25-27, loc=3]
       attributes:
         - datatype
         - behavior_family
       fields:
         - datatype: str | None = None
         - behavior_family: str | None = None
-    - @dataclass(frozen=True) class GraphHierarchy  [lines 105-477, loc=373]
+    - @dataclass(frozen=True) class GraphHierarchy  [lines 109-592, loc=484]
       attributes:
         - spec
         - rows
+        - retained_module_edge_rows
       fields:
         - spec: HierarchySpec
         - rows: pd.DataFrame
+        - retained_module_edge_rows: pd.DataFrame
       methods:
         - @classmethod
-        - def from_fused(cls, fused_df: pd.DataFrame, parameter_names: list[str], *, spec: HierarchySpec, datatype_profile_df: pd.DataFrame | None = None, behavior_profile_df: pd.DataFrame | None = None) -> GraphHierarchy  [lines 110-184, loc=75]
+        - def from_fused(cls, fused_df: pd.DataFrame, parameter_names: list[str], *, spec: HierarchySpec, datatype_profile_df: pd.DataFrame | None = None, behavior_profile_df: pd.DataFrame | None = None) -> GraphHierarchy  [lines 115-219, loc=105]
         - @classmethod
-        - def from_fused_spark(cls, fused_df: 'DataFrame', *, parameter_names: list[str], spec: HierarchySpec, datatype_profile_df: 'DataFrame | None' = None, behavior_profile_df: 'DataFrame | None' = None) -> GraphHierarchy  [lines 187-471, loc=285]
+        - def from_fused_spark(cls, fused_df: 'DataFrame', *, parameter_names: list[str], spec: HierarchySpec, datatype_profile_df: 'DataFrame | None' = None, behavior_profile_df: 'DataFrame | None' = None) -> GraphHierarchy  [lines 222-566, loc=345]
         - @staticmethod
-        - def empty_rows() -> pd.DataFrame  [lines 474-477, loc=4]
+        - def empty_rows() -> pd.DataFrame  [lines 569-572, loc=4]
+        - @staticmethod
+        - def empty_retained_module_edge_rows() -> pd.DataFrame  [lines 575-592, loc=18]
 
 libs/graph/lag.py  [loc=302]
   imports:
@@ -2728,70 +2740,87 @@ libs/graph/precision.py  [loc=156]
         - @staticmethod
         - def empty_edges() -> pd.DataFrame  [lines 155-156, loc=2]
 
-libs/graph/tables.py  [loc=261]
+libs/graph/tables.py  [loc=402]
   doc: Typed Spark tables for graph artifact boundaries.
   imports:
     - from __future__ import annotations
     - from dataclasses import dataclass
     - from typing import TYPE_CHECKING
-    - from libs.io.schemas.graph import EVENT_GRAPH_SCHEMA, FUSED_GRAPH_SCHEMA, GRAPH_PARAMETER_UNIVERSE_SCHEMA, HIERARCHY_SENSOR_MAP_SCHEMA, LAG_GRAPH_SCHEMA, LAG_PROFILE_SCHEMA, PRECISION_GRAPH_SCHEMA, TRANSITION_GRAPH_SCHEMA
+    - from libs.io.schemas.graph import EVENT_GRAPH_SCHEMA, FUSED_GRAPH_SCHEMA, GRAPH_PARAMETER_UNIVERSE_SCHEMA, HIERARCHY_EDGE_EVIDENCE_SCHEMA, HIERARCHY_SENSOR_MAP_SCHEMA, LAG_GRAPH_SCHEMA, LAG_PROFILE_SCHEMA, PRECISION_GRAPH_SCHEMA, TRANSITION_GRAPH_SCHEMA
     - from libs.pyspark import Frame
     - from libs.pyspark import Table
-    - from pyspark.sql import DataFrame
+    - from pyspark.sql import DataFrame, SparkSession
+    - from libs.graph.hierarchy_artifacts import GraphHierarchy
     - from libs.graph.lag import LagBandSpec
   classes:
-    - @dataclass(frozen=True) class PrecisionGraphTable(Table)  [lines 23-51, loc=29]
+    - @dataclass(frozen=True) class PrecisionGraphTable(Table)  [lines 24-52, loc=29]
       methods:
         - @classmethod
-        - def spark_schema(cls)  [lines 25-26, loc=2]
+        - def spark_schema(cls)  [lines 26-27, loc=2]
         - @classmethod
-        - def from_window_features(cls, window_features_df: 'DataFrame', *, selected_sensors: list[str], ridge_lambda: float, min_abs_partial_corr: float) -> 'PrecisionGraphTable'  [lines 29-51, loc=23]
-    - @dataclass(frozen=True) class EventGraphTable(Table)  [lines 55-80, loc=26]
+        - def from_window_features(cls, window_features_df: 'DataFrame', *, selected_sensors: list[str], ridge_lambda: float, min_abs_partial_corr: float) -> 'PrecisionGraphTable'  [lines 30-52, loc=23]
+    - @dataclass(frozen=True) class EventGraphTable(Table)  [lines 56-81, loc=26]
       methods:
         - @classmethod
-        - def spark_schema(cls)  [lines 57-58, loc=2]
+        - def spark_schema(cls)  [lines 58-59, loc=2]
         - @classmethod
-        - def from_events_and_windows(cls, events_df: 'DataFrame', windows_df: 'DataFrame', *, min_count: int, min_npmi: float, top_k_per_parameter_name: int) -> 'EventGraphTable'  [lines 61-80, loc=20]
-    - @dataclass(frozen=True) class LagCandidatePairsFrame(Frame)  [lines 84-89, loc=6]
+        - def from_events_and_windows(cls, events_df: 'DataFrame', windows_df: 'DataFrame', *, min_count: int, min_npmi: float, top_k_per_parameter_name: int) -> 'EventGraphTable'  [lines 62-81, loc=20]
+    - @dataclass(frozen=True) class LagCandidatePairsFrame(Frame)  [lines 85-90, loc=6]
       methods:
         - @classmethod
-        - def from_graphs(cls, event_df: 'DataFrame', transition_df: 'DataFrame') -> 'LagCandidatePairsFrame'  [lines 86-89, loc=4]
-    - @dataclass(frozen=True) class LagProfileTable(Table)  [lines 93-116, loc=24]
+        - def from_graphs(cls, event_df: 'DataFrame', transition_df: 'DataFrame') -> 'LagCandidatePairsFrame'  [lines 87-90, loc=4]
+    - @dataclass(frozen=True) class LagProfileTable(Table)  [lines 94-117, loc=24]
       methods:
         - @classmethod
-        - def spark_schema(cls)  [lines 95-96, loc=2]
+        - def spark_schema(cls)  [lines 96-97, loc=2]
         - @classmethod
-        - def from_events(cls, events_df: 'DataFrame', *, tau_max_seconds: float, bands: 'tuple[LagBandSpec, ...] | None' = None, candidate_pairs_df: 'DataFrame | None' = None) -> 'LagProfileTable'  [lines 99-116, loc=18]
-    - @dataclass(frozen=True) class LagGraphTable(Table)  [lines 120-147, loc=28]
+        - def from_events(cls, events_df: 'DataFrame', *, tau_max_seconds: float, bands: 'tuple[LagBandSpec, ...] | None' = None, candidate_pairs_df: 'DataFrame | None' = None) -> 'LagProfileTable'  [lines 100-117, loc=18]
+    - @dataclass(frozen=True) class LagGraphTable(Table)  [lines 121-148, loc=28]
       methods:
         - @classmethod
-        - def spark_schema(cls)  [lines 122-123, loc=2]
+        - def spark_schema(cls)  [lines 123-124, loc=2]
         - @classmethod
-        - def from_profile(cls, lag_profile_df: 'DataFrame', *, tau_max_seconds: float, bands: 'tuple[LagBandSpec, ...] | None', min_count: int, max_mean_lag_seconds: float | None, top_k_outgoing: int) -> 'LagGraphTable'  [lines 126-147, loc=22]
-    - @dataclass(frozen=True) class TransitionGraphTable(Table)  [lines 151-160, loc=10]
+        - def from_profile(cls, lag_profile_df: 'DataFrame', *, tau_max_seconds: float, bands: 'tuple[LagBandSpec, ...] | None', min_count: int, max_mean_lag_seconds: float | None, top_k_outgoing: int) -> 'LagGraphTable'  [lines 127-148, loc=22]
+    - @dataclass(frozen=True) class TransitionGraphTable(Table)  [lines 152-161, loc=10]
       methods:
         - @classmethod
-        - def spark_schema(cls)  [lines 153-154, loc=2]
+        - def spark_schema(cls)  [lines 154-155, loc=2]
         - @classmethod
-        - def from_events(cls, events_df: 'DataFrame', *, min_count: int) -> 'TransitionGraphTable'  [lines 157-160, loc=4]
-    - @dataclass(frozen=True) class FusedGraphTable(Table)  [lines 164-191, loc=28]
+        - def from_events(cls, events_df: 'DataFrame', *, min_count: int) -> 'TransitionGraphTable'  [lines 158-161, loc=4]
+    - @dataclass(frozen=True) class FusedGraphTable(Table)  [lines 165-192, loc=28]
       methods:
         - @classmethod
-        - def spark_schema(cls)  [lines 166-167, loc=2]
+        - def spark_schema(cls)  [lines 167-168, loc=2]
         - @classmethod
-        - def from_component_tables(cls, precision_df: 'DataFrame', event_df: 'DataFrame', lag_df: 'DataFrame', *, alpha: float, beta: float, gamma: float) -> 'FusedGraphTable'  [lines 170-191, loc=22]
-    - @dataclass(frozen=True) class GraphParameterUniverseTable(Table)  [lines 195-219, loc=25]
+        - def from_component_tables(cls, precision_df: 'DataFrame', event_df: 'DataFrame', lag_df: 'DataFrame', *, alpha: float, beta: float, gamma: float) -> 'FusedGraphTable'  [lines 171-192, loc=22]
+    - @dataclass(frozen=True) class GraphParameterUniverseTable(Table)  [lines 196-220, loc=25]
       methods:
         - @classmethod
-        - def spark_schema(cls)  [lines 197-198, loc=2]
+        - def spark_schema(cls)  [lines 198-199, loc=2]
         - @classmethod
-        - def from_component_tables(cls, event_df: 'DataFrame', lag_df: 'DataFrame', transition_df: 'DataFrame', *, backbone_all_sensors: list[str], max_graph_sensor_universe: int) -> tuple['GraphParameterUniverseTable', list[str]]  [lines 201-219, loc=19]
-    - @dataclass(frozen=True) class HierarchySensorMapTable(Table)  [lines 223-255, loc=33]
+        - def from_component_tables(cls, event_df: 'DataFrame', lag_df: 'DataFrame', transition_df: 'DataFrame', *, backbone_all_sensors: list[str], max_graph_sensor_universe: int) -> tuple['GraphParameterUniverseTable', list[str]]  [lines 202-220, loc=19]
+    - @dataclass(frozen=True) class HierarchySensorMapTable(Table)  [lines 224-256, loc=33]
       methods:
         - @classmethod
-        - def spark_schema(cls)  [lines 225-226, loc=2]
+        - def spark_schema(cls)  [lines 226-227, loc=2]
         - @classmethod
-        - def from_fused_graph(cls, fused_df: 'DataFrame', *, parameter_names: list[str], min_fused_edge_weight: float, hierarchy_top_k_per_parameter_name: int, hierarchy_subsystem_min_edge_weight: float | None = None, hierarchy_system_min_edge_weight: float | None = None, datatype_profile_df: 'DataFrame | None' = None, behavior_profile_df: 'DataFrame | None' = None) -> 'HierarchySensorMapTable'  [lines 229-255, loc=27]
+        - def from_fused_graph(cls, fused_df: 'DataFrame', *, parameter_names: list[str], min_fused_edge_weight: float, hierarchy_top_k_per_parameter_name: int, hierarchy_subsystem_min_edge_weight: float | None = None, hierarchy_system_min_edge_weight: float | None = None, datatype_profile_df: 'DataFrame | None' = None, behavior_profile_df: 'DataFrame | None' = None) -> 'HierarchySensorMapTable'  [lines 230-256, loc=27]
+    - @dataclass(frozen=True) class HierarchyEdgeEvidenceTable(Table)  [lines 260-345, loc=86]
+      methods:
+        - @classmethod
+        - def spark_schema(cls)  [lines 262-263, loc=2]
+        - @classmethod
+        - def from_graph_hierarchy(cls, *, hierarchy: 'GraphHierarchy', lag_graph_df: 'DataFrame', spark: 'SparkSession') -> 'HierarchyEdgeEvidenceTable'  [lines 266-345, loc=80]
+    - @dataclass(frozen=True) class HierarchyArtifactSet  [lines 349-394, loc=46]
+      attributes:
+        - sensor_map
+        - edge_evidence
+      fields:
+        - sensor_map: HierarchySensorMapTable
+        - edge_evidence: HierarchyEdgeEvidenceTable
+      methods:
+        - @classmethod
+        - def from_fused_graph(cls, fused_df: 'DataFrame', *, lag_graph_df: 'DataFrame', parameter_names: list[str], min_fused_edge_weight: float, hierarchy_top_k_per_parameter_name: int, hierarchy_subsystem_min_edge_weight: float | None = None, hierarchy_system_min_edge_weight: float | None = None, datatype_profile_df: 'DataFrame | None' = None, behavior_profile_df: 'DataFrame | None' = None) -> 'HierarchyArtifactSet'  [lines 354-394, loc=41]
 
 libs/graph/transition.py  [loc=94]
   imports:
@@ -3317,14 +3346,14 @@ libs/io/pandas_spark.py  [loc=78]
     - def spark_safe_value(value: Any) -> Any  [lines 67-72, loc=6]
     - def pandas_records_for_spark(frame: pd.DataFrame) -> list[dict[str, Any]]  [lines 75-78, loc=4]
 
-libs/io/schemas/__init__.py  [loc=178]
+libs/io/schemas/__init__.py  [loc=183]
   doc: Persisted table schemas and ordered column contracts for active artifacts.
   imports:
     - from libs.io.schemas.anomaly import ANOMALY_EVENT_ATTRIBUTION_COLUMNS, ANOMALY_EVENT_ATTRIBUTION_SCHEMA, ANOMALY_TELEMETRY_ATTRIBUTION_COLUMNS, ANOMALY_TELEMETRY_ATTRIBUTION_SCHEMA, ANOMALY_WINDOW_ATTRIBUTION_COLUMNS, ANOMALY_WINDOW_ATTRIBUTION_SCHEMA
     - from libs.io.schemas.backbone import BACKBONE_COLUMNS, BACKBONE_SCHEMA, BACKBONE_SENSOR_ENERGY_COLUMNS, BACKBONE_SENSOR_ENERGY_SCHEMA
     - from libs.io.schemas.events import EVENTS_COLUMNS, EVENTS_SCHEMA
     - from libs.io.schemas.explorer import EXPLORER_ANOMALY_MARKERS_COLUMNS, EXPLORER_ANOMALY_WINDOWS_COLUMNS, EXPLORER_EVENT_MARKERS_COLUMNS, EXPLORER_PARAMETER_CATALOG_COLUMNS, EXPLORER_PHASE_INTERVALS_COLUMNS, EXPLORER_TELEMETRY_COLUMNS
-    - from libs.io.schemas.graph import EVENT_GRAPH_COLUMNS, EVENT_GRAPH_SCHEMA, FUSED_GRAPH_COLUMNS, FUSED_GRAPH_SCHEMA, GRAPH_PARAMETER_UNIVERSE_COLUMNS, GRAPH_PARAMETER_UNIVERSE_SCHEMA, HIERARCHY_SENSOR_MAP_COLUMNS, HIERARCHY_SENSOR_MAP_SCHEMA, LAG_GRAPH_COLUMNS, LAG_GRAPH_SCHEMA, LAG_PROFILE_COLUMNS, LAG_PROFILE_SCHEMA, PRECISION_GRAPH_COLUMNS, PRECISION_GRAPH_SCHEMA, TRANSITION_GRAPH_COLUMNS, TRANSITION_GRAPH_SCHEMA
+    - from libs.io.schemas.graph import EVENT_GRAPH_COLUMNS, EVENT_GRAPH_SCHEMA, FUSED_GRAPH_COLUMNS, FUSED_GRAPH_SCHEMA, GRAPH_PARAMETER_UNIVERSE_COLUMNS, GRAPH_PARAMETER_UNIVERSE_SCHEMA, HIERARCHY_EDGE_EVIDENCE_COLUMNS, HIERARCHY_EDGE_EVIDENCE_SCHEMA, HIERARCHY_SENSOR_MAP_COLUMNS, HIERARCHY_SENSOR_MAP_SCHEMA, LAG_GRAPH_COLUMNS, LAG_GRAPH_SCHEMA, LAG_PROFILE_COLUMNS, LAG_PROFILE_SCHEMA, PRECISION_GRAPH_COLUMNS, PRECISION_GRAPH_SCHEMA, TRANSITION_GRAPH_COLUMNS, TRANSITION_GRAPH_SCHEMA
     - from libs.io.schemas.phase import PHASE_BASELINES_COLUMNS, PHASE_BASELINES_SCHEMA, PHASE_LABEL_CENTROIDS_COLUMNS, PHASE_LABEL_CENTROIDS_SCHEMA, PHASE_WINDOWS_COLUMNS, PHASE_WINDOWS_SCHEMA
     - from libs.io.schemas.profiling import CONTINUOUS_SCALING_PROFILE_COLUMNS, CONTINUOUS_SCALING_PROFILE_SCHEMA, PARAMETER_BEHAVIOR_PRIMITIVE_PROFILE_COLUMNS, PARAMETER_BEHAVIOR_PRIMITIVE_PROFILE_SCHEMA, PARAMETER_BEHAVIOR_PROFILE_COLUMNS, PARAMETER_BEHAVIOR_PROFILE_SCHEMA, PARAMETER_DATATYPE_PROFILE_COLUMNS, PARAMETER_DATATYPE_PROFILE_SCHEMA, PARAMETER_EVENT_PROFILE_COLUMNS, PARAMETER_EVENT_PROFILE_SCHEMA
     - from libs.io.schemas.scoring import WINDOW_SCORES_CALIBRATED_COLUMNS, WINDOW_SCORES_CALIBRATED_SCHEMA, WINDOW_SCORES_RAW_COLUMNS, WINDOW_SCORES_RAW_SCHEMA
@@ -3366,11 +3395,12 @@ libs/io/schemas/explorer.py  [loc=94]
     - EXPLORER_PHASE_INTERVALS_COLUMNS
     - EXPLORER_TELEMETRY_COLUMNS
 
-libs/io/schemas/graph.py  [loc=178]
+libs/io/schemas/graph.py  [loc=227]
   constants:
     - EVENT_GRAPH_COLUMNS
     - FUSED_GRAPH_COLUMNS
     - GRAPH_PARAMETER_UNIVERSE_COLUMNS
+    - HIERARCHY_EDGE_EVIDENCE_COLUMNS
     - HIERARCHY_SENSOR_MAP_COLUMNS
     - LAG_GRAPH_COLUMNS
     - LAG_PROFILE_COLUMNS
@@ -3378,14 +3408,15 @@ libs/io/schemas/graph.py  [loc=178]
     - TRANSITION_GRAPH_COLUMNS
   functions:
     - def _types()  [lines 1-3, loc=3]
-    - def PRECISION_GRAPH_SCHEMA()  [lines 74-84, loc=11]
-    - def EVENT_GRAPH_SCHEMA()  [lines 87-97, loc=11]
-    - def LAG_GRAPH_SCHEMA()  [lines 100-111, loc=12]
-    - def LAG_PROFILE_SCHEMA()  [lines 114-127, loc=14]
-    - def TRANSITION_GRAPH_SCHEMA()  [lines 130-140, loc=11]
-    - def FUSED_GRAPH_SCHEMA()  [lines 143-155, loc=13]
-    - def GRAPH_PARAMETER_UNIVERSE_SCHEMA()  [lines 158-164, loc=7]
-    - def HIERARCHY_SENSOR_MAP_SCHEMA()  [lines 167-178, loc=12]
+    - def PRECISION_GRAPH_SCHEMA()  [lines 96-106, loc=11]
+    - def EVENT_GRAPH_SCHEMA()  [lines 109-119, loc=11]
+    - def LAG_GRAPH_SCHEMA()  [lines 122-133, loc=12]
+    - def LAG_PROFILE_SCHEMA()  [lines 136-149, loc=14]
+    - def TRANSITION_GRAPH_SCHEMA()  [lines 152-162, loc=11]
+    - def FUSED_GRAPH_SCHEMA()  [lines 165-177, loc=13]
+    - def GRAPH_PARAMETER_UNIVERSE_SCHEMA()  [lines 180-186, loc=7]
+    - def HIERARCHY_SENSOR_MAP_SCHEMA()  [lines 189-200, loc=12]
+    - def HIERARCHY_EDGE_EVIDENCE_SCHEMA()  [lines 203-227, loc=25]
 
 libs/io/schemas/phase.py  [loc=135]
   constants:
@@ -4886,6 +4917,129 @@ libs/simulation/aircraft/spec.py  [loc=59]
         - def iter_module_specs(self) -> tuple[object, ...]  [lines 19-25, loc=7]
         - def validate(self) -> None  [lines 27-59, loc=33]
 
+libs/simulation/benchmark_tier_gates.py  [loc=455]
+  doc: Canonical benchmark-tier gate suite for simulation-backed anomaly evaluation.
+  imports:
+    - from __future__ import annotations
+    - import argparse
+    - import json
+    - from dataclasses import dataclass, replace
+    - from datetime import datetime, timezone
+    - from pathlib import Path
+    - from typing import Any
+    - from libs.perf import get_logger
+    - from libs.simulation.cli import add_backbone_args, add_event_args, add_profile_args, add_source_args, add_window_args
+    - from libs.simulation.fault.spec import BENCHMARK_RECOVERABILITY_LADDER
+    - from libs.simulation.run_bundle import load_json_if_exists
+    - from libs.simulation.run_context import PipelineRunConfig
+    - from libs.simulation.runner import run_pipeline
+  constants:
+    - BENCHMARK_TIER_GATE_MARKDOWN_FILENAME
+    - BENCHMARK_TIER_GATE_SUITE_NAME
+    - BENCHMARK_TIER_GATE_SUITE_SPECS
+    - BENCHMARK_TIER_GATE_SUMMARY_FILENAME
+    - DEFAULT_BENCHMARK_TIER_GATE_SUITE_KEY
+    - LOCALIZATION_BENCHMARK_TIER_GATE_SPECS
+    - LOGGER_NAME
+    - PARAMETER_BENCHMARK_TIER_GATE_SPECS
+  functions:
+    - def resolve_benchmark_tier_gate_suite_spec(suite_key: str | None = None) -> BenchmarkTierGateSuiteSpec  [lines 193-197, loc=5]
+    - def ordered_benchmark_tier_gate_specs(suite_key: str | None = None) -> tuple[BenchmarkTierGateSpec, ...]  [lines 200-205, loc=6]
+    - def parse_args() -> argparse.Namespace  [lines 208-230, loc=23]
+    - def _timestamped_suite_dir(base_dir: str | Path, *, suite_spec: BenchmarkTierGateSuiteSpec) -> Path  [lines 233-235, loc=3]
+    - def _text_value(value: Any) -> str | None  [lines 238-242, loc=5]
+    - def _float_value(value: Any) -> float | None  [lines 245-251, loc=7]
+    - def _latest_new_run_dir(*, runs_dir: Path, flight_name: str, before: set[Path]) -> Path | None  [lines 254-258, loc=5]
+    - def build_benchmark_tier_gate_run_summary(*, gate_spec: BenchmarkTierGateSpec, run_dir: Path | None, run_status: str, error_message: str | None = None) -> BenchmarkTierGateRunSummary  [lines 261-295, loc=35]
+    - def build_benchmark_tier_gate_suite_summary(*, suite_dir: Path, gate_results: tuple[BenchmarkTierGateRunSummary, ...], suite_key: str | None = None, gate_specs: tuple[BenchmarkTierGateSpec, ...] | None = None) -> BenchmarkTierGateSuiteSummary  [lines 298-314, loc=17]
+    - def render_benchmark_tier_gate_suite_markdown(summary: BenchmarkTierGateSuiteSummary) -> str  [lines 317-348, loc=32]
+    - def write_benchmark_tier_gate_suite_report(*, suite_dir: Path, summary: BenchmarkTierGateSuiteSummary) -> dict[str, Any]  [lines 351-367, loc=17]
+    - def run_benchmark_tier_gate_suite(base_config: PipelineRunConfig, *, suite_key: str | None = None) -> tuple[Path, dict[str, Any]]  [lines 370-436, loc=67]
+    - def main() -> None  [lines 439-455, loc=17]
+  classes:
+    - @dataclass(frozen=True, slots=True) class BenchmarkTierGateSpec  [lines 28-40, loc=13]
+      attributes:
+        - gate_name
+        - flight_name
+        - declared_benchmark_tier
+        - description
+      fields:
+        - gate_name: str
+        - flight_name: str
+        - declared_benchmark_tier: str
+        - description: str
+      methods:
+        - def to_payload(self) -> dict[str, Any]  [lines 34-40, loc=7]
+    - @dataclass(frozen=True, slots=True) class BenchmarkTierGateSuiteSpec  [lines 44-48, loc=5]
+      attributes:
+        - suite_key
+        - suite_name
+        - suite_interpretation
+        - gate_specs
+      fields:
+        - suite_key: str
+        - suite_name: str
+        - suite_interpretation: str
+        - gate_specs: tuple[BenchmarkTierGateSpec, ...]
+    - @dataclass(frozen=True, slots=True) class BenchmarkTierGateRunSummary  [lines 52-90, loc=39]
+      attributes:
+        - gate_name
+        - flight_name
+        - declared_benchmark_tier
+        - run_dir
+        - run_status
+        - error_message
+        - declared_target_alignment_status
+        - observed_recoverability_strength_tier
+        - recommended_review_action
+        - detected_fault_window_rate
+        - emit_ready_fault_window_rate
+        - telemetry_parameter_match_rate
+        - telemetry_selected_parameter_match_rate
+        - dominant_subsystem_match_rate
+        - dominant_module_match_rate
+        - top_subsystem_candidate_present_rate
+        - top_module_candidate_present_rate
+      fields:
+        - gate_name: str
+        - flight_name: str
+        - declared_benchmark_tier: str
+        - run_dir: str | None
+        - run_status: str
+        - error_message: str | None
+        - declared_target_alignment_status: str | None
+        - observed_recoverability_strength_tier: str | None
+        - recommended_review_action: str | None
+        - detected_fault_window_rate: float | None
+        - emit_ready_fault_window_rate: float | None
+        - telemetry_parameter_match_rate: float | None
+        - telemetry_selected_parameter_match_rate: float | None
+        - dominant_subsystem_match_rate: float | None
+        - dominant_module_match_rate: float | None
+        - top_subsystem_candidate_present_rate: float | None
+        - top_module_candidate_present_rate: float | None
+      methods:
+        - def to_payload(self) -> dict[str, Any]  [lines 71-90, loc=20]
+    - @dataclass(frozen=True, slots=True) class BenchmarkTierGateSuiteSummary  [lines 94-126, loc=33]
+      attributes:
+        - suite_key
+        - suite_name
+        - suite_interpretation
+        - generated_at_utc
+        - suite_dir
+        - gate_specs
+        - gate_results
+      fields:
+        - suite_key: str
+        - suite_name: str
+        - suite_interpretation: str
+        - generated_at_utc: str
+        - suite_dir: str
+        - gate_specs: tuple[BenchmarkTierGateSpec, ...]
+        - gate_results: tuple[BenchmarkTierGateRunSummary, ...]
+      methods:
+        - def to_payload(self) -> dict[str, Any]  [lines 103-126, loc=24]
+
 libs/simulation/cli.py  [loc=178]
   doc: Shared CLI helpers for simulation scripts.
   imports:
@@ -5173,14 +5327,29 @@ libs/simulation/fault/runtime.py  [loc=131]
         - def context_for_step(self, step_index: int) -> dict[str, dict[str, dict[str, Any]]]  [lines 124-125, loc=2]
         - def coupling_context_for_step(self, step_index: int) -> dict[str, dict[str, Any]]  [lines 127-128, loc=2]
 
-libs/simulation/fault/spec.py  [loc=39]
+libs/simulation/fault/spec.py  [loc=143]
   doc: Misbehavior program specification objects with deprecated fault aliases.
   imports:
     - from __future__ import annotations
     - from dataclasses import dataclass, field
     - from typing import Any, Literal
+  constants:
+    - BENCHMARK_OPTIMIZATION_SCOPE_ORDER
+    - BENCHMARK_RECOVERABILITY_LADDER
+    - BENCHMARK_RECOVERABILITY_TARGETS
+    - OBSERVED_RECOVERABILITY_STRENGTH_TIERS
+    - _BENCHMARK_ELIGIBLE_TARGETS_BY_SCOPE
+    - _OBSERVED_RECOVERABILITY_STRENGTH_RANK
+  functions:
+    - def observed_recoverability_strength_rank(label: str | None) -> int  [lines 49-50, loc=2]
+    - def recoverability_target_alignment_status(*, observed_tier: str | None, declared_target: str | None) -> str  [lines 53-62, loc=10]
+    - def benchmark_eligible_declared_tiers_for_scope(scope: str | None) -> tuple[str, ...]  [lines 65-66, loc=2]
+    - def benchmark_scope_includes_declared_tier(*, scope: str | None, declared_tier: str | None) -> bool  [lines 69-70, loc=2]
+    - def resolve_window_fault_window_id(window: Any) -> str | None  [lines 112-118, loc=7]
+    - def resolve_window_benchmark_recoverability_target(window: Any) -> str | None  [lines 121-128, loc=8]
+    - def resolve_window_fault_type(window: Any) -> str | None  [lines 131-143, loc=13]
   classes:
-    - @dataclass(frozen=True, slots=True) class MisbehaviorWindowSpec  [lines 10-29, loc=20]
+    - @dataclass(frozen=True, slots=True) class MisbehaviorWindowSpec  [lines 74-99, loc=26]
       attributes:
         - start_step
         - end_step_exclusive
@@ -5200,8 +5369,8 @@ libs/simulation/fault/spec.py  [loc=39]
         - coupling_id: str | None = None
         - metadata: dict[str, Any] = field(default_factory=dict)
       methods:
-        - def __post_init__(self) -> None  [lines 20-29, loc=10]
-    - @dataclass(frozen=True, slots=True) class MisbehaviorProgramSpec  [lines 33-35, loc=3]
+        - def __post_init__(self) -> None  [lines 84-99, loc=16]
+    - @dataclass(frozen=True, slots=True) class MisbehaviorProgramSpec  [lines 103-105, loc=3]
       attributes:
         - windows
         - metadata
@@ -5266,7 +5435,7 @@ libs/simulation/flight/__init__.py  [loc=54]
     - def build_pressurization_flight_spec() -> FlightSpec  [lines 30-33, loc=4]
     - def list_flight_names() -> tuple[str, ...]  [lines 36-39, loc=4]
 
-libs/simulation/flight/examples.py  [loc=1066]
+libs/simulation/flight/examples.py  [loc=1374]
   doc: Example flight specs.
   imports:
     - from __future__ import annotations
@@ -5277,7 +5446,7 @@ libs/simulation/flight/examples.py  [loc=1066]
     - from libs.simulation.flight.spec import FlightSpec, InitialStateSpec, InputProgramSpec, StepInputSpec
     - from libs.simulation.phase.examples import build_constant_phase_program_spec
     - from libs.simulation.phase.spec import PhaseEnvelopeSpec, PhaseProgramSpec, PhaseScheduleSpec, PhaseSegmentSpec
-    - from libs.simulation.scenarios import build_power_pressurization_flight_spec
+    - from libs.simulation.scenarios import build_power_pressurization_flight_spec, build_power_pressurization_localization_focus_flight_spec, build_power_pressurization_parameter_focus_flight_spec
   constants:
     - _LEGACY_BUILD_POWER_PRESSURIZATION_HIERARCHY_COMPOSITE_FLIGHT_SPEC
     - _REALISTIC_ALLOWED_COUPLING_MISBEHAVIORS
@@ -5285,43 +5454,58 @@ libs/simulation/flight/examples.py  [loc=1066]
     - _REALISTIC_DT_SECONDS
     - _REALISTIC_PHASE_SEGMENTS
   functions:
-    - def _step_inputs(*, module_id: str, parameter_name: str, contexts: tuple[dict[str, object], ...]) -> tuple[dict[str, dict[str, StepInputSpec]], ...]  [lines 40-48, loc=9]
-    - def build_coupled_module_flight_spec() -> FlightSpec  [lines 51-83, loc=33]
-    - def build_power_chain_flight_spec() -> FlightSpec  [lines 86-137, loc=52]
-    - def build_pressurization_flight_spec() -> FlightSpec  [lines 140-222, loc=83]
-    - def _composite_phase_for_step(step_index: int) -> str  [lines 225-232, loc=8]
-    - def _composite_aircraft_state_targets(step_index: int) -> tuple[float, float]  [lines 235-250, loc=16]
-    - def _composite_power_targets(step_index: int) -> tuple[str, str]  [lines 253-258, loc=6]
-    - def _build_composite_step(step_index: int) -> dict[str, dict[str, StepInputSpec]]  [lines 261-349, loc=89]
-    - def build_power_pressurization_hierarchy_composite_flight_spec() -> FlightSpec  [lines 352-491, loc=140]
-    - def _realistic_branch_suffix(branch_index: int) -> str  [lines 524-525, loc=2]
-    - def _realistic_branch_parameter_name(parameter_name: str, branch_index: int) -> str  [lines 528-529, loc=2]
-    - def _phase_duration_steps(seconds: float) -> int  [lines 532-533, loc=2]
-    - def _realistic_phase_segment_specs() -> tuple[PhaseSegmentSpec, ...]  [lines 536-540, loc=5]
-    - def _realistic_total_steps() -> int  [lines 543-544, loc=2]
-    - def _realistic_phase_ranges() -> tuple[tuple[str, int, int], ...]  [lines 547-554, loc=8]
-    - def _realistic_phase_progress(step_index: int) -> tuple[str, float]  [lines 557-564, loc=8]
-    - def _ease_in_out(progress: float) -> float  [lines 567-569, loc=3]
-    - def _branch_profile(branch_index: int) -> dict[str, float]  [lines 572-579, loc=8]
-    - def _aircraft_state_targets(step_index: int) -> tuple[float, float]  [lines 582-597, loc=16]
-    - def _power_states(step_index: int) -> tuple[str, str]  [lines 600-607, loc=8]
-    - def _branch_step(branch_index: int, step_index: int) -> dict[str, dict[str, StepInputSpec]]  [lines 610-718, loc=109]
-    - def _build_realistic_steps(*, branch_count: int) -> tuple[dict[str, dict[str, StepInputSpec]], ...]  [lines 721-730, loc=10]
-    - def _clone_branch_initial_state(values_by_module: dict[str, dict[str, object]], *, branch_count: int) -> dict[str, dict[str, object]]  [lines 733-743, loc=11]
-    - def _clone_phase_program(legacy_phase_program: PhaseProgramSpec, *, branch_count: int) -> PhaseProgramSpec  [lines 746-781, loc=36]
-    - def _branch_coupling_id(base_coupling_id: str, branch_index: int) -> str  [lines 784-785, loc=2]
-    - def _mission_step_for_phase(phase_label: str, *, offset_seconds: float) -> int  [lines 788-794, loc=7]
-    - def _build_realistic_misbehavior_program(*, branch_count: int) -> Any  [lines 797-930, loc=134]
-    - def _build_realistic_validation_expectations(*, branch_count: int) -> dict[str, object]  [lines 933-973, loc=41]
-    - def _build_realistic_power_pressurization_hierarchy_flight_spec(*, scale: str) -> FlightSpec  [lines 976-1024, loc=49]
-    - def build_power_pressurization_hierarchy_smoke_flight_spec(*, seed: int | None = None) -> FlightSpec  [lines 1027-1028, loc=2]
-    - def build_power_pressurization_hierarchy_medium_flight_spec(*, seed: int | None = None) -> FlightSpec  [lines 1031-1032, loc=2]
-    - def build_power_pressurization_hierarchy_composite_flight_spec(*, seed: int | None = None) -> FlightSpec  [lines 1035-1036, loc=2]
-    - def get_flight_builders() -> dict[str, FlightBuilder]  [lines 1039-1047, loc=9]
-    - def list_flight_names() -> tuple[str, ...]  [lines 1050-1051, loc=2]
-    - def build_named_flight_spec(flight_name: str, *, seed: int | None = None) -> FlightSpec  [lines 1054-1066, loc=13]
+    - def _step_inputs(*, module_id: str, parameter_name: str, contexts: tuple[dict[str, object], ...]) -> tuple[dict[str, dict[str, StepInputSpec]], ...]  [lines 44-52, loc=9]
+    - def _misbehavior_window_metadata(*, misbehavior_window_id: str, fault_window_id: str, fault_family_label: str, benchmark_recoverability_target: str, extra_metadata: dict[str, object] | None = None) -> dict[str, object]  [lines 55-71, loc=17]
+    - def build_coupled_module_flight_spec() -> FlightSpec  [lines 74-106, loc=33]
+    - def build_power_chain_flight_spec() -> FlightSpec  [lines 109-160, loc=52]
+    - def build_pressurization_flight_spec() -> FlightSpec  [lines 163-245, loc=83]
+    - def _composite_phase_for_step(step_index: int) -> str  [lines 248-255, loc=8]
+    - def _composite_aircraft_state_targets(step_index: int) -> tuple[float, float]  [lines 258-273, loc=16]
+    - def _composite_power_targets(step_index: int) -> tuple[str, str]  [lines 276-281, loc=6]
+    - def _build_composite_step(step_index: int) -> dict[str, dict[str, StepInputSpec]]  [lines 284-372, loc=89]
+    - def build_power_pressurization_hierarchy_composite_flight_spec() -> FlightSpec  [lines 375-539, loc=165]
+    - def _realistic_branch_suffix(branch_index: int) -> str  [lines 572-573, loc=2]
+    - def _realistic_branch_parameter_name(parameter_name: str, branch_index: int) -> str  [lines 576-577, loc=2]
+    - def _phase_duration_steps(seconds: float) -> int  [lines 580-581, loc=2]
+    - def _realistic_phase_segment_specs() -> tuple[PhaseSegmentSpec, ...]  [lines 584-588, loc=5]
+    - def _realistic_total_steps() -> int  [lines 591-592, loc=2]
+    - def _realistic_phase_ranges() -> tuple[tuple[str, int, int], ...]  [lines 595-602, loc=8]
+    - def _realistic_phase_progress(step_index: int) -> tuple[str, float]  [lines 605-612, loc=8]
+    - def _ease_in_out(progress: float) -> float  [lines 615-617, loc=3]
+    - def _branch_profile(branch_index: int) -> dict[str, float]  [lines 620-627, loc=8]
+    - def _aircraft_state_targets(step_index: int) -> tuple[float, float]  [lines 630-645, loc=16]
+    - def _power_states(step_index: int) -> tuple[str, str]  [lines 648-655, loc=8]
+    - def _branch_step(branch_index: int, step_index: int) -> dict[str, dict[str, StepInputSpec]]  [lines 658-766, loc=109]
+    - def _build_realistic_steps(*, branch_count: int) -> tuple[dict[str, dict[str, StepInputSpec]], ...]  [lines 769-778, loc=10]
+    - def _clone_branch_initial_state(values_by_module: dict[str, dict[str, object]], *, branch_count: int) -> dict[str, dict[str, object]]  [lines 781-791, loc=11]
+    - def _clone_phase_program(legacy_phase_program: PhaseProgramSpec, *, branch_count: int) -> PhaseProgramSpec  [lines 794-829, loc=36]
+    - def _branch_coupling_id(base_coupling_id: str, branch_index: int) -> str  [lines 832-833, loc=2]
+    - def _mission_step_for_phase(phase_label: str, *, offset_seconds: float) -> int  [lines 836-842, loc=7]
+    - def _build_realistic_misbehavior_program(*, branch_count: int) -> Any  [lines 845-992, loc=148]
+    - def _build_realistic_validation_expectations(*, branch_count: int) -> dict[str, object]  [lines 995-1035, loc=41]
+    - def _build_realistic_power_pressurization_hierarchy_flight_spec(*, scale: str) -> FlightSpec  [lines 1038-1086, loc=49]
+    - def build_power_pressurization_hierarchy_smoke_flight_spec(*, seed: int | None = None) -> FlightSpec  [lines 1089-1090, loc=2]
+    - def build_power_pressurization_hierarchy_medium_flight_spec(*, seed: int | None = None) -> FlightSpec  [lines 1093-1094, loc=2]
+    - def build_power_pressurization_hierarchy_composite_flight_spec(*, seed: int | None = None) -> FlightSpec  [lines 1097-1098, loc=2]
+    - def build_power_pressurization_hierarchy_composite_module_localization_flight_spec(*, seed: int | None = None) -> FlightSpec  [lines 1101-1110, loc=10]
+    - def build_power_pressurization_hierarchy_composite_subsystem_localization_flight_spec(*, seed: int | None = None) -> FlightSpec  [lines 1113-1122, loc=10]
+    - def build_power_pressurization_hierarchy_smoke_localization_focus_flight_spec(*, seed: int | None = None) -> FlightSpec  [lines 1125-1129, loc=5]
+    - def build_power_pressurization_hierarchy_smoke_localization_focus_bias_drift_flight_spec(*, seed: int | None = None) -> FlightSpec  [lines 1132-1141, loc=10]
+    - def build_power_pressurization_hierarchy_smoke_localization_focus_bias_flight_spec(*, seed: int | None = None) -> FlightSpec  [lines 1144-1153, loc=10]
+    - def build_power_pressurization_hierarchy_smoke_localization_focus_bias_load_monitor_flight_spec(*, seed: int | None = None) -> FlightSpec  [lines 1156-1166, loc=11]
+    - def build_power_pressurization_hierarchy_smoke_localization_focus_drift_flight_spec(*, seed: int | None = None) -> FlightSpec  [lines 1169-1178, loc=10]
+    - def build_power_pressurization_hierarchy_smoke_localization_focus_saturation_flight_spec(*, seed: int | None = None) -> FlightSpec  [lines 1181-1191, loc=11]
+    - def build_power_pressurization_hierarchy_smoke_localization_focus_saturation_local_flight_spec(*, seed: int | None = None) -> FlightSpec  [lines 1194-1205, loc=12]
+    - def build_power_pressurization_hierarchy_smoke_parameter_focus_flight_spec(*, seed: int | None = None) -> FlightSpec  [lines 1208-1212, loc=5]
+    - def build_power_pressurization_hierarchy_smoke_parameter_focus_regulated_flight_spec(*, seed: int | None = None) -> FlightSpec  [lines 1215-1224, loc=10]
+    - def build_power_pressurization_hierarchy_smoke_parameter_focus_accumulative_flight_spec(*, seed: int | None = None) -> FlightSpec  [lines 1227-1236, loc=10]
+    - def build_power_pressurization_hierarchy_smoke_parameter_focus_discrete_flight_spec(*, seed: int | None = None) -> FlightSpec  [lines 1239-1248, loc=10]
+    - def build_power_pressurization_hierarchy_smoke_parameter_focus_coupling_flight_spec(*, seed: int | None = None) -> FlightSpec  [lines 1251-1260, loc=10]
+    - def get_flight_builders() -> dict[str, FlightBuilder]  [lines 1263-1313, loc=51]
+    - def list_flight_names() -> tuple[str, ...]  [lines 1316-1317, loc=2]
+    - def build_named_flight_spec(flight_name: str, *, seed: int | None = None) -> FlightSpec  [lines 1320-1374, loc=55]
 
-libs/simulation/flight/runtime.py  [loc=302]
+libs/simulation/flight/runtime.py  [loc=305]
   doc: Live flight runtime objects.
   imports:
     - from __future__ import annotations
@@ -5367,7 +5551,7 @@ libs/simulation/flight/runtime.py  [loc=302]
         - def telemetry_rows(self) -> list[dict[str, object]]  [lines 46-91, loc=46]
         - def _should_emit_sample(self, rate_hz: object) -> bool  [lines 93-103, loc=11]
         - def phase_row(self) -> dict[str, object]  [lines 105-113, loc=9]
-    - @dataclass(slots=True) class InputProgram  [lines 117-150, loc=34]
+    - @dataclass(slots=True) class InputProgram  [lines 117-153, loc=37]
       attributes:
         - spec
       fields:
@@ -5376,8 +5560,8 @@ libs/simulation/flight/runtime.py  [loc=302]
         - @classmethod
         - def from_spec(cls, spec: InputProgramSpec) -> 'InputProgram'  [lines 121-122, loc=2]
         - def _step_template(self, step_index: int) -> dict[str, dict[str, StepInputSpec]]  [lines 124-131, loc=8]
-        - def step_inputs_for_step(self, *, step_index: int, dt_seconds: float) -> dict[str, dict[str, BehaviorStepInput]]  [lines 133-150, loc=18]
-    - @dataclass(slots=True) class Flight  [lines 154-302, loc=149]
+        - def step_inputs_for_step(self, *, step_index: int, dt_seconds: float) -> dict[str, dict[str, BehaviorStepInput]]  [lines 133-153, loc=21]
+    - @dataclass(slots=True) class Flight  [lines 157-305, loc=149]
       attributes:
         - spec
         - tail
@@ -5404,18 +5588,18 @@ libs/simulation/flight/runtime.py  [loc=302]
         - _initial_state_applied: bool = field(default=False, repr=False)
       methods:
         - @classmethod
-        - def from_spec(cls, spec: FlightSpec, *, tail_id: str = '', flight_id: str = '', start_timestamp_utc: datetime | None = None, behavior_registry: BehaviorRegistry | None = None) -> 'Flight'  [lines 168-187, loc=20]
+        - def from_spec(cls, spec: FlightSpec, *, tail_id: str = '', flight_id: str = '', start_timestamp_utc: datetime | None = None, behavior_registry: BehaviorRegistry | None = None) -> 'Flight'  [lines 171-190, loc=20]
         - @classmethod
-        - def from_tail(cls, tail: Tail, spec: FlightSpec, *, flight_id: str = '', start_timestamp_utc: datetime | None = None) -> 'Flight'  [lines 190-206, loc=17]
+        - def from_tail(cls, tail: Tail, spec: FlightSpec, *, flight_id: str = '', start_timestamp_utc: datetime | None = None) -> 'Flight'  [lines 193-209, loc=17]
         - @property
-        - def aircraft(self) -> 'Aircraft'  [lines 209-210, loc=2]
+        - def aircraft(self) -> 'Aircraft'  [lines 212-213, loc=2]
         - @property
-        - def fault_program(self) -> FaultProgram  [lines 213-214, loc=2]
+        - def fault_program(self) -> FaultProgram  [lines 216-217, loc=2]
         - @property
-        - def tail_id(self) -> str  [lines 217-218, loc=2]
-        - def step(self, *, dt_seconds: float, apply_faults: bool = True) -> FlightTick  [lines 220-271, loc=52]
-        - def iter_ticks(self, *, n_steps: int, dt_seconds: float, apply_faults: bool = True)  [lines 273-284, loc=12]
-        - def simulate_rows(self, *, n_steps: int, dt_seconds: float, apply_faults: bool = True) -> tuple[list[dict[str, object]], list[dict[str, object]]]  [lines 286-302, loc=17]
+        - def tail_id(self) -> str  [lines 220-221, loc=2]
+        - def step(self, *, dt_seconds: float, apply_faults: bool = True) -> FlightTick  [lines 223-274, loc=52]
+        - def iter_ticks(self, *, n_steps: int, dt_seconds: float, apply_faults: bool = True)  [lines 276-287, loc=12]
+        - def simulate_rows(self, *, n_steps: int, dt_seconds: float, apply_faults: bool = True) -> tuple[list[dict[str, object]], list[dict[str, object]]]  [lines 289-305, loc=17]
 
 libs/simulation/flight/spec.py  [loc=112]
   doc: Flight specification objects.
@@ -5473,7 +5657,7 @@ libs/simulation/flight/spec.py  [loc=112]
       methods:
         - def __post_init__(self) -> None  [lines 102-112, loc=11]
 
-libs/simulation/full_run_report.py  [loc=474]
+libs/simulation/full_run_report.py  [loc=489]
   doc: Full-run engineering and modeling report rendering for simulation bundles.
   imports:
     - from __future__ import annotations
@@ -5493,18 +5677,18 @@ libs/simulation/full_run_report.py  [loc=474]
     - WINDOW_POLICY_PHASE_LABELS_VIEW
     - WINDOW_POLICY_WINDOWS_VIEW
   functions:
-    - def _payload(validation_payloads: dict[str, Any] | None, report_key: str) -> dict[str, Any] | None  [lines 121-123, loc=3]
-    - def _stage_modeling_sections(validation_payloads: dict[str, Any] | None) -> dict[str, dict[str, Any]]  [lines 126-133, loc=8]
-    - def _build_modeling_performance_summary(validation_payloads: dict[str, Any] | None) -> dict[str, Any]  [lines 136-141, loc=6]
-    - def _build_stage_engineering_sections(*, paths: RunPaths, pipeline_summary: dict[str, Any], validation_payloads: dict[str, Any] | None) -> tuple[StageRunReport, ...]  [lines 144-181, loc=38]
-    - def _build_scale_signature(*, manifest: dict[str, Any], validation_payloads: dict[str, Any] | None, stage_sections: tuple[StageRunReport, ...]) -> dict[str, Any]  [lines 184-222, loc=39]
-    - def _build_engineering_performance_summary(*, paths: RunPaths, manifest: dict[str, Any], summary_artifact_path: str | None, validation_payloads: dict[str, Any] | None) -> EngineeringPerformanceReport  [lines 225-258, loc=34]
-    - def _build_truth_phase_window_supply_summary(*, spark: Any | None, paths: RunPaths, table_format: str | None) -> dict[str, Any]  [lines 261-287, loc=27]
-    - def _build_window_policy_profile_summary_without_stage25(*, spark: Any | None, paths: RunPaths, table_format: str | None, reason: str) -> dict[str, Any]  [lines 290-335, loc=46]
-    - def _build_window_policy_profile_summary(*, spark: Any | None, paths: RunPaths, table_format: str | None) -> dict[str, Any]  [lines 338-393, loc=56]
-    - def _append_json_section(lines: list[str], heading: str, payload: dict[str, Any] | None) -> None  [lines 396-399, loc=4]
-    - def _render_markdown(report: dict[str, Any]) -> str  [lines 402-442, loc=41]
-    - def write_full_run_report(*, spark: Any | None = None, paths: RunPaths, manifest: dict[str, Any], summary_artifact_path: str | None, validation_payloads: dict[str, Any] | None, table_format: str | None = None) -> dict[str, Any]  [lines 445-474, loc=30]
+    - def _payload(validation_payloads: dict[str, Any] | None, report_key: str) -> dict[str, Any] | None  [lines 136-138, loc=3]
+    - def _stage_modeling_sections(validation_payloads: dict[str, Any] | None) -> dict[str, dict[str, Any]]  [lines 141-148, loc=8]
+    - def _build_modeling_performance_summary(validation_payloads: dict[str, Any] | None) -> dict[str, Any]  [lines 151-156, loc=6]
+    - def _build_stage_engineering_sections(*, paths: RunPaths, pipeline_summary: dict[str, Any], validation_payloads: dict[str, Any] | None) -> tuple[StageRunReport, ...]  [lines 159-196, loc=38]
+    - def _build_scale_signature(*, manifest: dict[str, Any], validation_payloads: dict[str, Any] | None, stage_sections: tuple[StageRunReport, ...]) -> dict[str, Any]  [lines 199-237, loc=39]
+    - def _build_engineering_performance_summary(*, paths: RunPaths, manifest: dict[str, Any], summary_artifact_path: str | None, validation_payloads: dict[str, Any] | None) -> EngineeringPerformanceReport  [lines 240-273, loc=34]
+    - def _build_truth_phase_window_supply_summary(*, spark: Any | None, paths: RunPaths, table_format: str | None) -> dict[str, Any]  [lines 276-302, loc=27]
+    - def _build_window_policy_profile_summary_without_stage25(*, spark: Any | None, paths: RunPaths, table_format: str | None, reason: str) -> dict[str, Any]  [lines 305-350, loc=46]
+    - def _build_window_policy_profile_summary(*, spark: Any | None, paths: RunPaths, table_format: str | None) -> dict[str, Any]  [lines 353-408, loc=56]
+    - def _append_json_section(lines: list[str], heading: str, payload: dict[str, Any] | None) -> None  [lines 411-414, loc=4]
+    - def _render_markdown(report: dict[str, Any]) -> str  [lines 417-457, loc=41]
+    - def write_full_run_report(*, spark: Any | None = None, paths: RunPaths, manifest: dict[str, Any], summary_artifact_path: str | None, validation_payloads: dict[str, Any] | None, table_format: str | None = None) -> dict[str, Any]  [lines 460-489, loc=30]
   classes:
     - @dataclass(frozen=True) class StageModelingSection  [lines 17-19, loc=3]
       attributes:
@@ -5573,7 +5757,7 @@ libs/simulation/module/examples.py  [loc=53]
     - def build_single_parameter_module_spec(*, module_id: str, subsystem_id: str, system_id: str, module_family: str, parameter_spec: ParameterSpec, input_ports: Iterable[PortSpec] = (), output_ports: Iterable[PortSpec] = (), latent_variables: Iterable[str] = (), latent_update_specs: Iterable[LatentUpdateSpec] = ()) -> ModuleSpec  [lines 12-34, loc=23]
     - def build_discrete_output_module_spec(*, module_id: str, subsystem_id: str, system_id: str, module_family: str, parameter_spec: ParameterSpec, output_ports: Iterable[PortSpec] = ()) -> ModuleSpec  [lines 37-53, loc=17]
 
-libs/simulation/module/runtime.py  [loc=431]
+libs/simulation/module/runtime.py  [loc=432]
   doc: Live module runtime objects.
   imports:
     - from __future__ import annotations
@@ -5618,7 +5802,7 @@ libs/simulation/module/runtime.py  [loc=431]
         - def _coerce_float(value: object, *, default: float) -> float  [lines 55-59, loc=5]
         - def resolve_value(self, module: 'Module', *, context_values: Mapping[str, object]) -> float  [lines 61-80, loc=20]
         - def apply(self, module: 'Module', *, context_values: Mapping[str, object]) -> None  [lines 82-91, loc=10]
-    - @dataclass(slots=True) class Module  [lines 95-431, loc=337]
+    - @dataclass(slots=True) class Module  [lines 95-432, loc=338]
       attributes:
         - id
         - system_id
@@ -5657,9 +5841,9 @@ libs/simulation/module/runtime.py  [loc=431]
         - def apply_latent_updates(self, step_inputs_by_parameter: Mapping[str, BehaviorStepInput]) -> None  [lines 211-221, loc=11]
         - def hydrate_step_inputs_from_latent_state(self, step_inputs_by_parameter: Mapping[str, BehaviorStepInput]) -> dict[str, BehaviorStepInput]  [lines 223-235, loc=13]
         - def resolve_initial_state(self, initial_state_by_parameter: Mapping[str, Any]) -> dict[str, Any]  [lines 237-250, loc=14]
-        - def iter_samples(self, *, step_inputs_by_parameter: Mapping[str, BehaviorStepInput], initial_state_by_parameter: Mapping[str, Any] | None = None, fault_context_by_parameter: Mapping[str, Mapping[str, Any]] | None = None, apply_faults: bool = True) -> Iterator[BehaviorSample]  [lines 252-363, loc=112]
-        - def apply_sample(self, sample: BehaviorSample, *, timestamp_utc: datetime | None = None) -> None  [lines 365-384, loc=20]
-        - def step(self, *, modules_by_id: Mapping[str, 'Module'], raw_step_inputs: Mapping[str, BehaviorStepInput], outgoing_couplings: tuple[Coupling, ...] = (), initial_state_by_parameter: Mapping[str, Any] | None = None, fault_context_by_parameter: Mapping[str, Mapping[str, Any]] | None = None, coupling_misbehavior_context_by_id: Mapping[str, Mapping[str, Any]] | None = None, apply_faults: bool = True, timestamp_utc: datetime | None = None, current_phase_label: str | None = None) -> list[BehaviorSample]  [lines 386-431, loc=46]
+        - def iter_samples(self, *, step_inputs_by_parameter: Mapping[str, BehaviorStepInput], initial_state_by_parameter: Mapping[str, Any] | None = None, fault_context_by_parameter: Mapping[str, Mapping[str, Any]] | None = None, apply_faults: bool = True) -> Iterator[BehaviorSample]  [lines 252-364, loc=113]
+        - def apply_sample(self, sample: BehaviorSample, *, timestamp_utc: datetime | None = None) -> None  [lines 366-385, loc=20]
+        - def step(self, *, modules_by_id: Mapping[str, 'Module'], raw_step_inputs: Mapping[str, BehaviorStepInput], outgoing_couplings: tuple[Coupling, ...] = (), initial_state_by_parameter: Mapping[str, Any] | None = None, fault_context_by_parameter: Mapping[str, Mapping[str, Any]] | None = None, coupling_misbehavior_context_by_id: Mapping[str, Mapping[str, Any]] | None = None, apply_faults: bool = True, timestamp_utc: datetime | None = None, current_phase_label: str | None = None) -> list[BehaviorSample]  [lines 387-432, loc=46]
 
 libs/simulation/module/spec.py  [loc=69]
   doc: Module specification objects.
@@ -6136,7 +6320,7 @@ libs/simulation/report_tables.py  [loc=76]
         - def report_frame(self, view: ArtifactView) -> ReportFrame  [lines 72-73, loc=2]
         - def pandas(self, view: ArtifactView) -> pd.DataFrame  [lines 75-76, loc=2]
 
-libs/simulation/reporting.py  [loc=635]
+libs/simulation/reporting.py  [loc=1907]
   doc: Validation report generation for simulation pipeline runs.
   imports:
     - from __future__ import annotations
@@ -6150,6 +6334,7 @@ libs/simulation/reporting.py  [loc=635]
     - from libs.phase import validate_detected_phases_from_tables
     - from libs.profiling.validator import build_profile_validation_summary
     - from libs.scoring.validator import validate_scores_against_misbehavior_windows
+    - from libs.simulation.fault.spec import BENCHMARK_OPTIMIZATION_SCOPE_ORDER, BENCHMARK_RECOVERABILITY_LADDER, BENCHMARK_RECOVERABILITY_TARGETS, OBSERVED_RECOVERABILITY_STRENGTH_TIERS, benchmark_eligible_declared_tiers_for_scope, benchmark_scope_includes_declared_tier, recoverability_target_alignment_status, resolve_window_benchmark_recoverability_target, resolve_window_fault_window_id
     - from libs.simulation.report_tables import ArtifactView, RunArtifactBundle
     - from libs.simulation.run_context import RunPaths, write_manifest
     - from libs.testing.assertions import REQUIRED_DETECTED_COLUMNS, REQUIRED_LABEL_COLUMNS, REQUIRED_PROFILER_VALIDATOR_LABEL_COLUMNS, assert_no_banned_columns, assert_no_bare_detector_event_type, assert_required_columns
@@ -6165,6 +6350,7 @@ libs/simulation/reporting.py  [loc=635]
     - DETECTED_EVENT_VIEW
     - EVENTS_VIEW
     - FUSED_GRAPH_VIEW
+    - HIERARCHY_EDGE_EVIDENCE_VIEW
     - HIERARCHY_LABEL_SUBSYSTEM_VIEW
     - HIERARCHY_LABEL_VIEW
     - HIERARCHY_SENSOR_MAP_VIEW
@@ -6184,35 +6370,69 @@ libs/simulation/reporting.py  [loc=635]
     - VALIDATION_ARTIFACT_VIEWS
     - WINDOWS_SCORE_VIEW
     - WINDOWS_VIEW
+    - _BENCHMARK_FAILURE_SCOPE_ORDER
+    - _BENCHMARK_REVIEW_ACTION_BY_TIER
+    - _BENCHMARK_REVIEW_PRIORITY_BY_TIER
+    - _BENCHMARK_REVIEW_PRIORITY_ORDER
+    - _DECLARED_TARGET_ALIGNMENT_ORDER
+    - _ELIGIBLE_COMPOSITE_BENCHMARK_TIERS
   functions:
-    - def _records_frame(tables: RunArtifactBundle, view: ArtifactView) -> pd.DataFrame  [lines 344-345, loc=2]
-    - def _skipped_report(*, reason: str) -> dict[str, Any]  [lines 348-352, loc=5]
-    - def _has_artifact(tables: RunArtifactBundle, artifact_name: str) -> bool  [lines 355-356, loc=2]
-    - def _build_label_contract_summary(*, raw_telemetry_sdf: Any | None, events_sdf: Any | None) -> dict[str, Any]  [lines 359-408, loc=50]
-    - def _build_profile_validation_summary(tables: RunArtifactBundle) -> dict[str, Any]  [lines 411-417, loc=7]
-    - def _build_event_validation_summary(tables: RunArtifactBundle, *, tolerance_seconds: float = 0.5) -> dict[str, Any]  [lines 420-430, loc=11]
-    - def _build_phase_validation_summary(tables: RunArtifactBundle) -> dict[str, Any]  [lines 433-438, loc=6]
-    - def _build_graph_validation_summary(tables: RunArtifactBundle, *, expected_lag_edges: tuple[dict[str, str], ...], expected_fused_edges: tuple[dict[str, str], ...]) -> dict[str, Any]  [lines 441-454, loc=14]
-    - def _build_coupling_validation_summary(tables: RunArtifactBundle, *, expected_coupling_signatures: tuple[dict[str, Any], ...]) -> dict[str, Any]  [lines 457-468, loc=12]
-    - def _build_misbehavior_score_summary(tables: RunArtifactBundle) -> dict[str, Any]  [lines 471-477, loc=7]
-    - def _build_misbehavior_window_summary(summary: dict[str, Any]) -> dict[str, Any]  [lines 480-489, loc=10]
-    - def _remap_windows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]  [lines 492-501, loc=10]
-    - def build_fault_score_summary_from_misbehavior(summary: dict[str, Any]) -> dict[str, Any]  [lines 504-522, loc=19]
-    - def _build_fault_window_summary(summary: dict[str, Any]) -> dict[str, Any]  [lines 525-534, loc=10]
-    - def _build_misbehavior_attribution_summary(tables: RunArtifactBundle) -> dict[str, Any]  [lines 537-546, loc=10]
-    - def build_fault_attribution_summary_from_misbehavior(summary: dict[str, Any]) -> dict[str, Any]  [lines 549-550, loc=2]
-    - def write_validation_reports(*, spark: Any, paths: RunPaths, flight: Any, table_format: str) -> dict[str, Any]  [lines 553-635, loc=83]
+    - def _records_frame(tables: RunArtifactBundle, view: ArtifactView) -> pd.DataFrame  [lines 380-381, loc=2]
+    - def _skipped_report(*, reason: str) -> dict[str, Any]  [lines 384-388, loc=5]
+    - def _has_artifact(tables: RunArtifactBundle, artifact_name: str) -> bool  [lines 391-392, loc=2]
+    - def _build_label_contract_summary(*, raw_telemetry_sdf: Any | None, events_sdf: Any | None) -> dict[str, Any]  [lines 395-444, loc=50]
+    - def _build_profile_validation_summary(tables: RunArtifactBundle) -> dict[str, Any]  [lines 447-453, loc=7]
+    - def _build_event_validation_summary(tables: RunArtifactBundle, *, tolerance_seconds: float = 0.5) -> dict[str, Any]  [lines 456-466, loc=11]
+    - def _build_phase_validation_summary(tables: RunArtifactBundle) -> dict[str, Any]  [lines 469-474, loc=6]
+    - def _build_graph_validation_summary(tables: RunArtifactBundle, *, expected_lag_edges: tuple[dict[str, str], ...], expected_fused_edges: tuple[dict[str, str], ...]) -> dict[str, Any]  [lines 477-490, loc=14]
+    - def _build_coupling_validation_summary(tables: RunArtifactBundle, *, expected_coupling_signatures: tuple[dict[str, Any], ...]) -> dict[str, Any]  [lines 493-504, loc=12]
+    - def _build_hierarchy_edge_evidence_summary(tables: RunArtifactBundle, *, expected_coupling_signatures: tuple[dict[str, Any], ...]) -> dict[str, Any]  [lines 507-563, loc=57]
+    - def _build_misbehavior_score_summary(tables: RunArtifactBundle) -> dict[str, Any]  [lines 566-572, loc=7]
+    - def _build_misbehavior_window_summary(summary: dict[str, Any]) -> dict[str, Any]  [lines 575-584, loc=10]
+    - def _remap_windows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]  [lines 587-596, loc=10]
+    - def build_fault_score_summary_from_misbehavior(summary: dict[str, Any]) -> dict[str, Any]  [lines 599-617, loc=19]
+    - def _build_fault_window_summary(summary: dict[str, Any]) -> dict[str, Any]  [lines 620-629, loc=10]
+    - def _bool_value(value: Any) -> bool  [lines 672-673, loc=2]
+    - def _int_value(value: Any) -> int  [lines 676-682, loc=7]
+    - def _float_value(value: Any) -> float | None  [lines 685-691, loc=7]
+    - def _text_value(value: Any, *, default: str = '') -> str  [lines 694-698, loc=5]
+    - def _list_text_values(value: Any) -> list[str]  [lines 701-707, loc=7]
+    - def _observed_recoverability_strength_tier(row: dict[str, Any]) -> str  [lines 710-723, loc=14]
+    - def _declared_target_alignment_status(*, observed_tier: str, declared_target: str) -> str  [lines 726-730, loc=5]
+    - def _group_review_priority(group: pd.DataFrame) -> str  [lines 733-741, loc=9]
+    - def _recoverability_summary_by_field(cases_df: pd.DataFrame, field: str) -> list[dict[str, Any]]  [lines 744-825, loc=82]
+    - def _normalized_declared_benchmark_tier(value: Any) -> str  [lines 828-830, loc=3]
+    - def _series_bool_mean(group: pd.DataFrame, column_name: str) -> float | None  [lines 833-836, loc=4]
+    - def _series_bool_sum(group: pd.DataFrame, column_name: str) -> int  [lines 839-842, loc=4]
+    - def _series_float_median(group: pd.DataFrame, column_name: str) -> float | None  [lines 845-851, loc=7]
+    - def _count_declared_tier_labels(group: pd.DataFrame, *, include_undeclared: bool) -> dict[str, int]  [lines 854-869, loc=16]
+    - def _fault_window_ids(group: pd.DataFrame) -> list[str]  [lines 872-875, loc=4]
+    - def _score_validation_by_benchmark_scope(cases_df: pd.DataFrame) -> dict[str, dict[str, Any]]  [lines 878-918, loc=41]
+    - def _attribution_validation_by_benchmark_scope(cases_df: pd.DataFrame) -> dict[str, dict[str, Any]]  [lines 921-954, loc=34]
+    - def _build_benchmark_scope_validation_summary(*, simulation_benchmark_audit_summary: dict[str, Any]) -> dict[str, Any]  [lines 957-1000, loc=44]
+    - def _score_validation_by_benchmark_tier(cases_df: pd.DataFrame) -> dict[str, dict[str, Any]]  [lines 1003-1038, loc=36]
+    - def _attribution_validation_by_benchmark_tier(cases_df: pd.DataFrame) -> dict[str, dict[str, Any]]  [lines 1041-1069, loc=29]
+    - def _join_composite_benchmark_cases(*, simulation_benchmark_audit_summary: dict[str, Any], fault_attribution_summary: dict[str, Any]) -> pd.DataFrame  [lines 1072-1118, loc=47]
+    - def _first_failed_benchmark_scope(row: dict[str, Any]) -> str  [lines 1121-1144, loc=24]
+    - def _eligible_composite_failure_summary_by_field(ledger_df: pd.DataFrame, field: str) -> list[dict[str, Any]]  [lines 1147-1219, loc=73]
+    - def _build_eligible_composite_benchmark_window_ledger(cases_df: pd.DataFrame) -> list[dict[str, Any]]  [lines 1222-1308, loc=87]
+    - def _build_benchmark_tier_validation_summary(*, simulation_benchmark_audit_summary: dict[str, Any], fault_attribution_summary: dict[str, Any]) -> dict[str, Any]  [lines 1311-1384, loc=74]
+    - def _build_benchmark_tier_scorecards(cases_df: pd.DataFrame) -> dict[str, dict[str, Any]]  [lines 1387-1477, loc=91]
+    - def _build_simulation_benchmark_audit_summary(*, flight: Any, fault_score_summary: dict[str, Any], fault_attribution_summary: dict[str, Any]) -> dict[str, Any]  [lines 1480-1787, loc=308]
+    - def _build_misbehavior_attribution_summary(tables: RunArtifactBundle) -> dict[str, Any]  [lines 1790-1799, loc=10]
+    - def build_fault_attribution_summary_from_misbehavior(summary: dict[str, Any]) -> dict[str, Any]  [lines 1802-1803, loc=2]
+    - def write_validation_reports(*, spark: Any, paths: RunPaths, flight: Any, table_format: str) -> dict[str, Any]  [lines 1806-1907, loc=102]
   classes:
-    - @dataclass(frozen=True) class ValidationReportSet  [lines 333-341, loc=9]
+    - @dataclass(frozen=True) class ValidationReportSet  [lines 369-377, loc=9]
       attributes:
         - payloads
       fields:
         - payloads: dict[str, dict[str, Any]]
       methods:
-        - def write(self, *, paths: RunPaths) -> None  [lines 336-338, loc=3]
-        - def to_payloads(self) -> dict[str, dict[str, Any]]  [lines 340-341, loc=2]
+        - def write(self, *, paths: RunPaths) -> None  [lines 372-374, loc=3]
+        - def to_payloads(self) -> dict[str, dict[str, Any]]  [lines 376-377, loc=2]
 
-libs/simulation/run_bundle.py  [loc=47]
+libs/simulation/run_bundle.py  [loc=50]
   imports:
     - from __future__ import annotations
     - import json
@@ -6222,9 +6442,9 @@ libs/simulation/run_bundle.py  [loc=47]
     - OPTIONAL_PIPELINE_SUMMARY_FILENAMES
     - VALIDATION_REPORT_FILENAMES
   functions:
-    - def load_json_if_exists(path: Path) -> dict[str, Any] | None  [lines 30-33, loc=4]
-    - def load_text_if_exists(path: Path) -> str | None  [lines 36-39, loc=4]
-    - def path_size_bytes(path: Path) -> int  [lines 42-47, loc=6]
+    - def load_json_if_exists(path: Path) -> dict[str, Any] | None  [lines 33-36, loc=4]
+    - def load_text_if_exists(path: Path) -> str | None  [lines 39-42, loc=4]
+    - def path_size_bytes(path: Path) -> int  [lines 45-50, loc=6]
 
 libs/simulation/run_cli.py  [loc=32]
   doc: CLI entrypoint for persisted simulation pipeline runs.
@@ -6238,7 +6458,7 @@ libs/simulation/run_cli.py  [loc=32]
     - def parse_args() -> argparse.Namespace  [lines 12-28, loc=17]
     - def main() -> None  [lines 31-32, loc=2]
 
-libs/simulation/run_context.py  [loc=577]
+libs/simulation/run_context.py  [loc=582]
   doc: Runtime context objects and manifest helpers for simulation pipeline runs.
   imports:
     - from __future__ import annotations
@@ -6261,17 +6481,17 @@ libs/simulation/run_context.py  [loc=577]
     - MODE_PLAN_BY_NAME
     - RUN_SETTING_ENVS
   functions:
-    - def resolve_flight_stochasticity(*, flight: FlightSpec, sim_seed: int | None = None) -> dict[str, Any]  [lines 193-204, loc=12]
+    - def resolve_flight_stochasticity(*, flight: FlightSpec, sim_seed: int | None = None) -> dict[str, Any]  [lines 195-206, loc=12]
     - @contextlib.contextmanager
-    - def tee_console(log_path: Path)  [lines 402-408, loc=7]
-    - def set_run_env(paths: RunPaths, config: PipelineRunConfig) -> dict[str, str | None]  [lines 411-465, loc=55]
-    - def restore_env(previous: dict[str, str | None]) -> None  [lines 468-473, loc=6]
-    - def run_mode(config: PipelineRunConfig) -> tuple[str, str, list[str], str]  [lines 476-491, loc=16]
-    - def write_manifest(path: Path, payload: dict[str, Any]) -> None  [lines 494-496, loc=3]
-    - def _summarize_artifacts(paths: RunPaths) -> dict[str, dict[str, Any]]  [lines 499-503, loc=5]
-    - def build_manifest(*, paths: RunPaths, config: PipelineRunConfig, flight: FlightSpec, status: str, error_message: str | None, start_utc: datetime, end_utc: datetime, elapsed_ms: float, seed_counts: dict[str, int]) -> dict[str, Any]  [lines 506-577, loc=72]
+    - def tee_console(log_path: Path)  [lines 404-410, loc=7]
+    - def set_run_env(paths: RunPaths, config: PipelineRunConfig) -> dict[str, str | None]  [lines 413-467, loc=55]
+    - def restore_env(previous: dict[str, str | None]) -> None  [lines 470-475, loc=6]
+    - def run_mode(config: PipelineRunConfig) -> tuple[str, str, list[str], str]  [lines 478-493, loc=16]
+    - def write_manifest(path: Path, payload: dict[str, Any]) -> None  [lines 496-498, loc=3]
+    - def _summarize_artifacts(paths: RunPaths) -> dict[str, dict[str, Any]]  [lines 501-505, loc=5]
+    - def build_manifest(*, paths: RunPaths, config: PipelineRunConfig, flight: FlightSpec, status: str, error_message: str | None, start_utc: datetime, end_utc: datetime, elapsed_ms: float, seed_counts: dict[str, int]) -> dict[str, Any]  [lines 508-582, loc=75]
   classes:
-    - @dataclass(frozen=True) class PipelineRunConfig  [lines 208-351, loc=144]
+    - @dataclass(frozen=True) class PipelineRunConfig  [lines 210-353, loc=144]
       attributes:
         - flight_name
         - tail_id
@@ -6370,23 +6590,23 @@ libs/simulation/run_context.py  [loc=577]
         - replay_run_dir: str | None = None
       methods:
         - @classmethod
-        - def from_args(cls, args: Any) -> 'PipelineRunConfig'  [lines 258-313, loc=56]
-        - def with_flight_defaults(self, *, flight: FlightSpec) -> 'PipelineRunConfig'  [lines 315-336, loc=22]
-        - def build_run_dir(self) -> Path  [lines 338-343, loc=6]
-        - def build_flight(self, *, flight: FlightSpec) -> Flight  [lines 345-351, loc=7]
-    - @dataclass(frozen=True) class RunPaths  [lines 355-370, loc=16]
+        - def from_args(cls, args: Any) -> 'PipelineRunConfig'  [lines 260-315, loc=56]
+        - def with_flight_defaults(self, *, flight: FlightSpec) -> 'PipelineRunConfig'  [lines 317-338, loc=22]
+        - def build_run_dir(self) -> Path  [lines 340-345, loc=6]
+        - def build_flight(self, *, flight: FlightSpec) -> Flight  [lines 347-353, loc=7]
+    - @dataclass(frozen=True) class RunPaths  [lines 357-372, loc=16]
       attributes:
         - run_dir
       fields:
         - run_dir: Path
       methods:
-        - def artifact_path(self, name: str) -> Path  [lines 358-359, loc=2]
-        - def artifact_paths(self) -> dict[str, Path]  [lines 361-362, loc=2]
+        - def artifact_path(self, name: str) -> Path  [lines 360-361, loc=2]
+        - def artifact_paths(self) -> dict[str, Path]  [lines 363-364, loc=2]
         - @property
-        - def log_path(self) -> Path  [lines 365-366, loc=2]
+        - def log_path(self) -> Path  [lines 367-368, loc=2]
         - @property
-        - def manifest_path(self) -> Path  [lines 369-370, loc=2]
-    - @dataclass(frozen=True) class PipelineRunResult  [lines 374-377, loc=4]
+        - def manifest_path(self) -> Path  [lines 371-372, loc=2]
+    - @dataclass(frozen=True) class PipelineRunResult  [lines 376-379, loc=4]
       attributes:
         - paths
         - status
@@ -6395,11 +6615,11 @@ libs/simulation/run_context.py  [loc=577]
         - paths: RunPaths
         - status: str
         - seed_counts: dict[str, int]
-    - class _TeeStream  [lines 380-398, loc=19]
+    - class _TeeStream  [lines 382-400, loc=19]
       methods:
-        - def __init__(self, *streams: Any) -> None  [lines 381-382, loc=2]
-        - def write(self, data: str) -> int  [lines 384-391, loc=8]
-        - def flush(self) -> None  [lines 393-398, loc=6]
+        - def __init__(self, *streams: Any) -> None  [lines 383-384, loc=2]
+        - def write(self, data: str) -> int  [lines 386-393, loc=8]
+        - def flush(self) -> None  [lines 395-400, loc=6]
 
 libs/simulation/runner.py  [loc=153]
   doc: Library entrypoint for persisted simulation pipeline runs.
@@ -6425,7 +6645,7 @@ libs/simulation/runner.py  [loc=153]
     - def _load_existing_seed_counts(paths: RunPaths) -> dict[str, int]  [lines 41-51, loc=11]
     - def run_pipeline(config: PipelineRunConfig) -> PipelineRunResult  [lines 54-153, loc=100]
 
-libs/simulation/scenarios/__init__.py  [loc=27]
+libs/simulation/scenarios/__init__.py  [loc=29]
   doc: Scenario-layer builders for realistic simulation presets.
   imports:
     - from __future__ import annotations
@@ -6433,9 +6653,9 @@ libs/simulation/scenarios/__init__.py  [loc=27]
   constants:
     - _POWER_PRESSURIZATION_EXPORTS
   functions:
-    - def __getattr__(name: str) -> Any  [lines 19-24, loc=6]
+    - def __getattr__(name: str) -> Any  [lines 21-26, loc=6]
 
-libs/simulation/scenarios/power_pressurization.py  [loc=2257]
+libs/simulation/scenarios/power_pressurization.py  [loc=2629]
   doc: Authored realistic power/pressurization scenario family.
   imports:
     - from __future__ import annotations
@@ -6448,6 +6668,7 @@ libs/simulation/scenarios/power_pressurization.py  [loc=2257]
     - from libs.simulation.coupling.examples import build_drive_coupling_spec, build_enable_coupling_spec
     - from libs.simulation.coupling.spec import CouplingSpec
     - from libs.simulation.fault.examples import build_misbehavior_program_spec, build_misbehavior_window_spec
+    - from libs.simulation.fault.spec import resolve_window_benchmark_recoverability_target, resolve_window_fault_type
     - from libs.simulation.flight.spec import FlightSpec, InitialStateSpec, InputProgramSpec, StepInputSpec
     - from libs.simulation.module.spec import LatentUpdateSpec, ModuleSpec
     - from libs.simulation.parameter.examples import build_categorical_parameter_spec, build_numeric_parameter_spec
@@ -6464,48 +6685,58 @@ libs/simulation/scenarios/power_pressurization.py  [loc=2257]
     - _PARTIAL_ACTIVATION_BY_DETAIL
     - _RATE_HZ_BY_PARAMETER
   functions:
-    - def _stable_seed(seed: int, *parts: str) -> int  [lines 196-201, loc=6]
-    - def _rng(seed: int, *parts: str) -> np.random.Generator  [lines 204-205, loc=2]
-    - def _replace_numeric_parameter(*, parameter_name: str, system_id: str, subsystem_id: str, module_id: str, behavior_family_label: str, unit: str, input_port_names: tuple[str, ...] = (), output_port_name: str | None = None, allowed_fault_families: tuple[str, ...] = (), metadata: dict[str, Any] | None = None) -> Any  [lines 208-232, loc=25]
-    - def _replace_categorical_parameter(*, parameter_name: str, system_id: str, subsystem_id: str, module_id: str, behavior_family_label: str, output_port_name: str | None = None, allowed_fault_families: tuple[str, ...] = (), metadata: dict[str, Any] | None = None) -> Any  [lines 235-255, loc=21]
-    - def _build_module_templates() -> dict[str, ModuleSpec]  [lines 258-893, loc=636]
-    - def _parameter_name(base_name: str, suffix: str) -> str  [lines 896-897, loc=2]
-    - def _module_id(base_name: str, suffix: str) -> str  [lines 900-901, loc=2]
-    - def _instantiate_role(role: StructuralRoleSpec, templates: dict[str, ModuleSpec]) -> _RoleInstance  [lines 904-913, loc=10]
-    - def _instantiate_module_template(instance: _RoleInstance, template: ModuleSpec) -> ModuleSpec  [lines 916-956, loc=41]
-    - def _smoke_roles() -> tuple[StructuralRoleSpec, ...]  [lines 959-1001, loc=43]
-    - def _medium_roles() -> tuple[StructuralRoleSpec, ...]  [lines 1004-1061, loc=58]
-    - def _composite_roles() -> tuple[StructuralRoleSpec, ...]  [lines 1064-1161, loc=98]
-    - def _roles_for_scale(scale: ScenarioScale) -> tuple[StructuralRoleSpec, ...]  [lines 1164-1171, loc=8]
-    - def build_power_pressurization_scenario_spec(*, scale: ScenarioScale, seed: int | None = None) -> PowerPressurizationScenarioSpec  [lines 1174-1187, loc=14]
-    - def _role_instances(scenario: PowerPressurizationScenarioSpec) -> dict[str, _RoleInstance]  [lines 1190-1195, loc=6]
-    - def _build_aircraft_systems(role_instances: dict[str, _RoleInstance], templates: dict[str, ModuleSpec]) -> tuple[Any, ...]  [lines 1198-1218, loc=21]
-    - def _build_power_role_couplings(instance: _RoleInstance) -> tuple[CouplingSpec, ...]  [lines 1221-1260, loc=40]
-    - def _build_backbone_couplings(*, backbone: _RoleInstance, control: _RoleInstance) -> tuple[CouplingSpec, ...]  [lines 1263-1296, loc=34]
-    - def _build_cabin_zone_couplings(*, backbone: _RoleInstance, control: _RoleInstance, bleed: _RoleInstance, cabin: _RoleInstance, controller_module_kind: str = 'MOD_PRESS_CTRL') -> tuple[CouplingSpec, ...]  [lines 1299-1378, loc=80]
-    - def _build_power_to_bleed_coupling(*, power: _RoleInstance, bleed: _RoleInstance) -> CouplingSpec  [lines 1381-1395, loc=15]
-    - def build_power_pressurization_aircraft_spec(*, scale: ScenarioScale) -> AircraftSpec  [lines 1398-1468, loc=71]
-    - def _role_profile(scenario: PowerPressurizationScenarioSpec, role: _RoleInstance) -> dict[str, float]  [lines 1471-1481, loc=11]
-    - def _phase_progress(mission: MissionProfileSpec, step_index: int) -> tuple[str, float]  [lines 1484-1494, loc=11]
-    - def _ease_in_out(progress: float) -> float  [lines 1497-1499, loc=3]
-    - def _aircraft_targets(mission: MissionProfileSpec, step_index: int) -> tuple[str, float, float]  [lines 1502-1517, loc=16]
-    - def _power_states(phase_label: str, progress: float, role_name: str) -> tuple[str, str]  [lines 1520-1534, loc=15]
-    - def _numeric_context(*, scenario: PowerPressurizationScenarioSpec, role: _RoleInstance, parameter_name: str, behavior_family: str, base_context: dict[str, Any], step_index: int) -> dict[str, Any]  [lines 1537-1550, loc=14]
-    - def _role_step_inputs(*, scenario: PowerPressurizationScenarioSpec, role: _RoleInstance, step_index: int, profile: dict[str, float]) -> dict[str, dict[str, StepInputSpec]]  [lines 1553-1817, loc=265]
-    - def _build_input_program(scenario: PowerPressurizationScenarioSpec) -> InputProgramSpec  [lines 1820-1845, loc=26]
-    - def _phase_mode_targets(phase_label: str) -> tuple[str, str, str, str]  [lines 1848-1855, loc=8]
-    - def _build_phase_program(scenario: PowerPressurizationScenarioSpec) -> PhaseProgramSpec  [lines 1858-1909, loc=52]
-    - def _initial_parameter_defaults(module_kind: str) -> dict[str, object]  [lines 1912-1926, loc=15]
-    - def _build_initial_state(scenario: PowerPressurizationScenarioSpec) -> InitialStateSpec  [lines 1929-1941, loc=13]
-    - def _mission_step_for_phase(scenario: PowerPressurizationScenarioSpec, phase_label: str, offset_seconds: float) -> int  [lines 1944-1950, loc=7]
-    - def _probability(scenario: PowerPressurizationScenarioSpec, detail_label: str) -> float  [lines 1953-1954, loc=2]
-    - def _window_rng_seed(scenario: PowerPressurizationScenarioSpec, window_id: str) -> int  [lines 1957-1958, loc=2]
-    - def _coupling_id(couplings: tuple[CouplingSpec, ...], *, source_module_id: str, source_port_name: str, target_module_id: str, target_port_name: str) -> str  [lines 1961-1970, loc=10]
-    - def _build_validation_expectations(*, scenario: PowerPressurizationScenarioSpec, aircraft: AircraftSpec) -> dict[str, object]  [lines 1973-2041, loc=69]
-    - def _build_misbehavior_program(*, scenario: PowerPressurizationScenarioSpec, aircraft: AircraftSpec) -> Any  [lines 2044-2240, loc=197]
-    - def build_power_pressurization_flight_spec(*, scale: ScenarioScale, seed: int | None = None) -> FlightSpec  [lines 2243-2257, loc=15]
+    - def _stable_seed(seed: int, *parts: str) -> int  [lines 202-207, loc=6]
+    - def _rng(seed: int, *parts: str) -> np.random.Generator  [lines 210-211, loc=2]
+    - def _replace_numeric_parameter(*, parameter_name: str, system_id: str, subsystem_id: str, module_id: str, behavior_family_label: str, unit: str, input_port_names: tuple[str, ...] = (), output_port_name: str | None = None, allowed_fault_families: tuple[str, ...] = (), metadata: dict[str, Any] | None = None) -> Any  [lines 214-238, loc=25]
+    - def _replace_categorical_parameter(*, parameter_name: str, system_id: str, subsystem_id: str, module_id: str, behavior_family_label: str, output_port_name: str | None = None, allowed_fault_families: tuple[str, ...] = (), metadata: dict[str, Any] | None = None) -> Any  [lines 241-261, loc=21]
+    - def _build_module_templates() -> dict[str, ModuleSpec]  [lines 264-899, loc=636]
+    - def _parameter_name(base_name: str, suffix: str) -> str  [lines 902-903, loc=2]
+    - def _module_id(base_name: str, suffix: str) -> str  [lines 906-907, loc=2]
+    - def _instantiate_role(role: StructuralRoleSpec, templates: dict[str, ModuleSpec]) -> _RoleInstance  [lines 910-919, loc=10]
+    - def _instantiate_module_template(instance: _RoleInstance, template: ModuleSpec) -> ModuleSpec  [lines 922-962, loc=41]
+    - def _smoke_roles() -> tuple[StructuralRoleSpec, ...]  [lines 965-1007, loc=43]
+    - def _medium_roles() -> tuple[StructuralRoleSpec, ...]  [lines 1010-1067, loc=58]
+    - def _composite_roles() -> tuple[StructuralRoleSpec, ...]  [lines 1070-1167, loc=98]
+    - def _roles_for_scale(scale: ScenarioScale) -> tuple[StructuralRoleSpec, ...]  [lines 1170-1177, loc=8]
+    - def build_power_pressurization_scenario_spec(*, scale: ScenarioScale, seed: int | None = None) -> PowerPressurizationScenarioSpec  [lines 1180-1193, loc=14]
+    - def _role_instances(scenario: PowerPressurizationScenarioSpec) -> dict[str, _RoleInstance]  [lines 1196-1201, loc=6]
+    - def _build_aircraft_systems(role_instances: dict[str, _RoleInstance], templates: dict[str, ModuleSpec]) -> tuple[Any, ...]  [lines 1204-1224, loc=21]
+    - def _build_power_role_couplings(instance: _RoleInstance) -> tuple[CouplingSpec, ...]  [lines 1227-1266, loc=40]
+    - def _build_backbone_couplings(*, backbone: _RoleInstance, control: _RoleInstance) -> tuple[CouplingSpec, ...]  [lines 1269-1302, loc=34]
+    - def _build_cabin_zone_couplings(*, backbone: _RoleInstance, control: _RoleInstance, bleed: _RoleInstance, cabin: _RoleInstance, controller_module_kind: str = 'MOD_PRESS_CTRL') -> tuple[CouplingSpec, ...]  [lines 1305-1384, loc=80]
+    - def _build_power_to_bleed_coupling(*, power: _RoleInstance, bleed: _RoleInstance) -> CouplingSpec  [lines 1387-1401, loc=15]
+    - def build_power_pressurization_aircraft_spec(*, scale: ScenarioScale) -> AircraftSpec  [lines 1404-1474, loc=71]
+    - def _role_profile(scenario: PowerPressurizationScenarioSpec, role: _RoleInstance) -> dict[str, float]  [lines 1477-1487, loc=11]
+    - def _phase_progress(mission: MissionProfileSpec, step_index: int) -> tuple[str, float]  [lines 1490-1500, loc=11]
+    - def _ease_in_out(progress: float) -> float  [lines 1503-1505, loc=3]
+    - def _aircraft_targets(mission: MissionProfileSpec, step_index: int) -> tuple[str, float, float]  [lines 1508-1523, loc=16]
+    - def _power_states(phase_label: str, progress: float, role_name: str) -> tuple[str, str]  [lines 1526-1540, loc=15]
+    - def _numeric_context(*, scenario: PowerPressurizationScenarioSpec, role: _RoleInstance, parameter_name: str, behavior_family: str, base_context: dict[str, Any], step_index: int) -> dict[str, Any]  [lines 1543-1556, loc=14]
+    - def _role_step_inputs(*, scenario: PowerPressurizationScenarioSpec, role: _RoleInstance, step_index: int, profile: dict[str, float]) -> dict[str, dict[str, StepInputSpec]]  [lines 1559-1823, loc=265]
+    - def _build_input_program(scenario: PowerPressurizationScenarioSpec) -> InputProgramSpec  [lines 1826-1851, loc=26]
+    - def _phase_mode_targets(phase_label: str) -> tuple[str, str, str, str]  [lines 1854-1861, loc=8]
+    - def _build_phase_program(scenario: PowerPressurizationScenarioSpec) -> PhaseProgramSpec  [lines 1864-1915, loc=52]
+    - def _initial_parameter_defaults(module_kind: str) -> dict[str, object]  [lines 1918-1932, loc=15]
+    - def _build_initial_state(scenario: PowerPressurizationScenarioSpec) -> InitialStateSpec  [lines 1935-1947, loc=13]
+    - def _mission_step_for_phase(scenario: PowerPressurizationScenarioSpec, phase_label: str, offset_seconds: float) -> int  [lines 1950-1956, loc=7]
+    - def _probability(scenario: PowerPressurizationScenarioSpec, detail_label: str) -> float  [lines 1959-1960, loc=2]
+    - def _window_rng_seed(scenario: PowerPressurizationScenarioSpec, window_id: str) -> int  [lines 1963-1964, loc=2]
+    - def _coupling_id(couplings: tuple[CouplingSpec, ...], *, source_module_id: str, source_port_name: str, target_module_id: str, target_port_name: str) -> str  [lines 1967-1976, loc=10]
+    - def _build_validation_expectations(*, scenario: PowerPressurizationScenarioSpec, aircraft: AircraftSpec) -> dict[str, object]  [lines 1979-2047, loc=69]
+    - def _misbehavior_window_metadata(*, misbehavior_window_id: str, fault_window_id: str, fault_family_label: str, benchmark_recoverability_target: str) -> dict[str, str]  [lines 2050-2062, loc=13]
+    - def _filter_misbehavior_program_by_benchmark_targets(*, program: Any, benchmark_recoverability_targets: tuple[str, ...] | None, benchmark_suite_name: str | None, fault_types: tuple[str, ...] | None = None) -> Any  [lines 2065-2104, loc=40]
+    - def _build_misbehavior_program(*, scenario: PowerPressurizationScenarioSpec, aircraft: AircraftSpec) -> Any  [lines 2107-2313, loc=207]
+    - def _build_power_pressurization_flight_from_scenario(*, scenario: PowerPressurizationScenarioSpec, benchmark_recoverability_targets: tuple[str, ...] | None = None, benchmark_suite_name: str | None = None, benchmark_fault_types: tuple[str, ...] | None = None, flight_name_override: str | None = None, localization_focus_bias_variant: LocalizationFocusBiasVariant = 'shared_source', localization_focus_saturation_variant: LocalizationFocusSaturationVariant = 'shared_supply', benchmark_fault_target_overrides: dict[str, str] | None = None) -> FlightSpec  [lines 2316-2386, loc=71]
+    - def _localization_focus_stochasticity(stochasticity: ScenarioStochasticSpec) -> ScenarioStochasticSpec  [lines 2389-2407, loc=19]
+    - def _find_role_instance_for_parameter_name(*, scenario: PowerPressurizationScenarioSpec, base_parameter_name: str, parameter_name: str, required_module_kind: str | None = None) -> _RoleInstance | None  [lines 2410-2422, loc=13]
+    - def _rewrite_localization_focus_saturation_windows(*, program, scenario: PowerPressurizationScenarioSpec, saturation_variant: LocalizationFocusSaturationVariant)  [lines 2425-2471, loc=47]
+    - def _rewrite_localization_focus_bias_windows(*, program, scenario: PowerPressurizationScenarioSpec, bias_variant: LocalizationFocusBiasVariant)  [lines 2474-2525, loc=52]
+    - def _override_benchmark_targets_by_fault_type(*, program, benchmark_fault_target_overrides: dict[str, str] | None)  [lines 2528-2544, loc=17]
+    - def build_power_pressurization_flight_spec(*, scale: ScenarioScale, seed: int | None = None, benchmark_recoverability_targets: tuple[str, ...] | None = None, benchmark_suite_name: str | None = None, benchmark_fault_types: tuple[str, ...] | None = None) -> FlightSpec  [lines 2547-2561, loc=15]
+    - def build_power_pressurization_localization_focus_flight_spec(*, seed: int | None = None, benchmark_fault_types: tuple[str, ...] | None = ('bias', 'saturation', 'drift'), benchmark_suite_name: str = 'localization_focus', flight_name: str = 'power_pressurization_hierarchy_smoke_localization_focus', bias_variant: LocalizationFocusBiasVariant = 'shared_source', saturation_variant: LocalizationFocusSaturationVariant = 'shared_supply', benchmark_fault_target_overrides: dict[str, str] | None = None) -> FlightSpec  [lines 2564-2596, loc=33]
+    - def build_power_pressurization_parameter_focus_flight_spec(*, seed: int | None = None, benchmark_fault_types: tuple[str, ...] | None = ('saturation', 'drift', 'state_chatter', 'timing_jitter'), benchmark_suite_name: str = 'parameter_focus', flight_name: str = 'power_pressurization_hierarchy_smoke_parameter_focus', benchmark_fault_target_overrides: dict[str, str] | None = None) -> FlightSpec  [lines 2599-2629, loc=31]
   classes:
-    - @dataclass(frozen=True, slots=True) class StructuralRoleSpec  [lines 91-100, loc=10]
+    - @dataclass(frozen=True, slots=True) class StructuralRoleSpec  [lines 97-106, loc=10]
       attributes:
         - role_name
         - role_kind
@@ -6526,7 +6757,7 @@ libs/simulation/scenarios/power_pressurization.py  [loc=2257]
         - parameter_suffix: str = ''
         - shared: bool = False
         - metadata: dict[str, Any] = field(default_factory=dict)
-    - @dataclass(frozen=True, slots=True) class MissionProfileSpec  [lines 104-111, loc=8]
+    - @dataclass(frozen=True, slots=True) class MissionProfileSpec  [lines 110-117, loc=8]
       attributes:
         - dt_seconds
         - phase_segments
@@ -6537,8 +6768,8 @@ libs/simulation/scenarios/power_pressurization.py  [loc=2257]
         - metadata: dict[str, Any] = field(default_factory=dict)
       methods:
         - @property
-        - def total_steps(self) -> int  [lines 110-111, loc=2]
-    - @dataclass(frozen=True, slots=True) class ScenarioStochasticSpec  [lines 115-150, loc=36]
+        - def total_steps(self) -> int  [lines 116-117, loc=2]
+    - @dataclass(frozen=True, slots=True) class ScenarioStochasticSpec  [lines 121-156, loc=36]
       attributes:
         - seed
         - profile_name
@@ -6558,8 +6789,8 @@ libs/simulation/scenarios/power_pressurization.py  [loc=2257]
         - coupling_lag_jitter_seconds: float = 0.4
         - misbehavior_activation_probability_by_detail: dict[str, float] = field(default_factory=lambda: dict(_PARTIAL_ACTIVATION_BY_DETAIL))
       methods:
-        - def to_payload(self) -> dict[str, Any]  [lines 140-150, loc=11]
-    - @dataclass(frozen=True, slots=True) class PowerPressurizationScenarioSpec  [lines 154-186, loc=33]
+        - def to_payload(self) -> dict[str, Any]  [lines 146-156, loc=11]
+    - @dataclass(frozen=True, slots=True) class PowerPressurizationScenarioSpec  [lines 160-192, loc=33]
       attributes:
         - scale
         - flight_name
@@ -6575,8 +6806,8 @@ libs/simulation/scenarios/power_pressurization.py  [loc=2257]
         - stochasticity: ScenarioStochasticSpec
         - structural_roles: tuple[StructuralRoleSpec, ...]
       methods:
-        - def to_metadata(self) -> dict[str, Any]  [lines 162-186, loc=25]
-    - @dataclass(frozen=True, slots=True) class _RoleInstance  [lines 190-193, loc=4]
+        - def to_metadata(self) -> dict[str, Any]  [lines 168-192, loc=25]
+    - @dataclass(frozen=True, slots=True) class _RoleInstance  [lines 196-199, loc=4]
       attributes:
         - spec
         - module_ids_by_kind
@@ -6780,7 +7011,7 @@ libs/simulation/tail/runtime.py  [loc=72]
         - def start_flight(self, spec: 'FlightSpec', *, flight_id: str = '', start_timestamp_utc: datetime | None = None) -> 'Flight'  [lines 49-65, loc=17]
         - def record_flight(self, flight: 'Flight') -> None  [lines 67-72, loc=6]
 
-libs/simulation/validation_harness.py  [loc=796]
+libs/simulation/validation_harness.py  [loc=830]
   doc: Unified validation harness report for iterative simulation tuning runs.
   imports:
     - from __future__ import annotations
@@ -6789,33 +7020,34 @@ libs/simulation/validation_harness.py  [loc=796]
     - from dataclasses import dataclass
     - from pathlib import Path
     - from typing import TYPE_CHECKING, Any
+    - from libs.simulation.fault.spec import BENCHMARK_RECOVERABILITY_TARGETS, resolve_window_benchmark_recoverability_target, resolve_window_fault_window_id
     - from libs.simulation.phase.runtime import PhaseProgram
     - from libs.simulation.run_bundle import load_json_if_exists
     - from libs.simulation.run_context import RunPaths, resolve_flight_stochasticity, write_manifest
     - from libs.simulation import FlightSpec
   functions:
-    - def _append_path(prefix: str, part: str) -> str  [lines 105-106, loc=2]
-    - def _flatten_parameter_records(payload: Any, *, scope_name: str, source_path: str | None, prefix: str = '') -> list[HarnessParameterRecord]  [lines 109-149, loc=41]
-    - def _is_finite_numeric(value: Any) -> bool  [lines 152-157, loc=6]
-    - def _flatten_numeric_metric_records(payload: Any, *, category: str, scope_name: str, subscope_name: str, prefix: str = '') -> list[HarnessMetricRecord]  [lines 160-208, loc=49]
-    - def _count_values(values: list[str]) -> dict[str, int]  [lines 211-215, loc=5]
-    - def _window_detail_label(window: Any) -> str  [lines 218-229, loc=12]
-    - def _window_family_label(window: Any) -> str  [lines 232-240, loc=9]
-    - def _summarize_parameter_catalog(flight: 'FlightSpec') -> dict[str, Any]  [lines 243-271, loc=29]
-    - def _summarize_hierarchy(flight: 'FlightSpec') -> dict[str, Any]  [lines 274-294, loc=21]
-    - def _summarize_input_program(*, flight: 'FlightSpec', n_steps: int, dt_seconds: float) -> dict[str, Any]  [lines 297-333, loc=37]
-    - def _summarize_phases(*, flight: 'FlightSpec', n_steps: int, dt_seconds: float) -> dict[str, Any]  [lines 336-378, loc=43]
-    - def _summarize_misbehavior_program(*, flight: 'FlightSpec', dt_seconds: float) -> dict[str, Any]  [lines 381-420, loc=40]
-    - def _build_simulation_context(*, flight: 'FlightSpec', manifest: dict[str, Any]) -> dict[str, Any]  [lines 423-450, loc=28]
-    - def _build_stage_harness(*, engineering_stages: list[dict[str, Any]]) -> tuple[tuple[StageValidationHarness, ...], dict[str, dict[str, Any]], list[HarnessParameterRecord]]  [lines 453-483, loc=31]
-    - def _build_validation_metric_records(*, overall_validation: dict[str, Any], stage_harness: tuple[StageValidationHarness, ...]) -> list[HarnessMetricRecord]  [lines 486-511, loc=26]
-    - def _build_compute_metric_records(*, engineering_performance: dict[str, Any], stage_harness: tuple[StageValidationHarness, ...]) -> list[HarnessMetricRecord]  [lines 514-547, loc=34]
-    - def _build_bottleneck_stages(stage_harness: tuple[StageValidationHarness, ...]) -> list[dict[str, Any]]  [lines 550-567, loc=18]
-    - def _build_methodology(*, workload_signature: dict[str, Any], fit_parameter_count: int, validation_metric_count: int, compute_metric_count: int, bottleneck_stages: list[dict[str, Any]]) -> dict[str, Any]  [lines 570-612, loc=43]
-    - def _render_markdown(report: dict[str, Any]) -> str  [lines 615-708, loc=94]
-    - def write_validation_harness_report(*, paths: RunPaths, manifest: dict[str, Any], full_run_report: dict[str, Any], flight: 'FlightSpec') -> dict[str, Any]  [lines 711-796, loc=86]
+    - def _append_path(prefix: str, part: str) -> str  [lines 110-111, loc=2]
+    - def _flatten_parameter_records(payload: Any, *, scope_name: str, source_path: str | None, prefix: str = '') -> list[HarnessParameterRecord]  [lines 114-154, loc=41]
+    - def _is_finite_numeric(value: Any) -> bool  [lines 157-162, loc=6]
+    - def _flatten_numeric_metric_records(payload: Any, *, category: str, scope_name: str, subscope_name: str, prefix: str = '') -> list[HarnessMetricRecord]  [lines 165-213, loc=49]
+    - def _count_values(values: list[str]) -> dict[str, int]  [lines 216-220, loc=5]
+    - def _window_detail_label(window: Any) -> str  [lines 223-234, loc=12]
+    - def _window_family_label(window: Any) -> str  [lines 237-245, loc=9]
+    - def _summarize_parameter_catalog(flight: 'FlightSpec') -> dict[str, Any]  [lines 248-276, loc=29]
+    - def _summarize_hierarchy(flight: 'FlightSpec') -> dict[str, Any]  [lines 279-299, loc=21]
+    - def _summarize_input_program(*, flight: 'FlightSpec', n_steps: int, dt_seconds: float) -> dict[str, Any]  [lines 302-338, loc=37]
+    - def _summarize_phases(*, flight: 'FlightSpec', n_steps: int, dt_seconds: float) -> dict[str, Any]  [lines 341-383, loc=43]
+    - def _summarize_misbehavior_program(*, flight: 'FlightSpec', dt_seconds: float) -> dict[str, Any]  [lines 386-454, loc=69]
+    - def _build_simulation_context(*, flight: 'FlightSpec', manifest: dict[str, Any]) -> dict[str, Any]  [lines 457-484, loc=28]
+    - def _build_stage_harness(*, engineering_stages: list[dict[str, Any]]) -> tuple[tuple[StageValidationHarness, ...], dict[str, dict[str, Any]], list[HarnessParameterRecord]]  [lines 487-517, loc=31]
+    - def _build_validation_metric_records(*, overall_validation: dict[str, Any], stage_harness: tuple[StageValidationHarness, ...]) -> list[HarnessMetricRecord]  [lines 520-545, loc=26]
+    - def _build_compute_metric_records(*, engineering_performance: dict[str, Any], stage_harness: tuple[StageValidationHarness, ...]) -> list[HarnessMetricRecord]  [lines 548-581, loc=34]
+    - def _build_bottleneck_stages(stage_harness: tuple[StageValidationHarness, ...]) -> list[dict[str, Any]]  [lines 584-601, loc=18]
+    - def _build_methodology(*, workload_signature: dict[str, Any], fit_parameter_count: int, validation_metric_count: int, compute_metric_count: int, bottleneck_stages: list[dict[str, Any]]) -> dict[str, Any]  [lines 604-646, loc=43]
+    - def _render_markdown(report: dict[str, Any]) -> str  [lines 649-742, loc=94]
+    - def write_validation_harness_report(*, paths: RunPaths, manifest: dict[str, Any], full_run_report: dict[str, Any], flight: 'FlightSpec') -> dict[str, Any]  [lines 745-830, loc=86]
   classes:
-    - @dataclass(frozen=True) class HarnessParameterRecord  [lines 20-34, loc=15]
+    - @dataclass(frozen=True) class HarnessParameterRecord  [lines 25-39, loc=15]
       attributes:
         - scope_name
         - parameter_path
@@ -6827,8 +7059,8 @@ libs/simulation/validation_harness.py  [loc=796]
         - value: Any
         - source_path: str | None = None
       methods:
-        - def to_payload(self) -> dict[str, Any]  [lines 26-34, loc=9]
-    - @dataclass(frozen=True) class HarnessMetricRecord  [lines 38-52, loc=15]
+        - def to_payload(self) -> dict[str, Any]  [lines 31-39, loc=9]
+    - @dataclass(frozen=True) class HarnessMetricRecord  [lines 43-57, loc=15]
       attributes:
         - category
         - scope_name
@@ -6842,8 +7074,8 @@ libs/simulation/validation_harness.py  [loc=796]
         - metric_path: str
         - value: float | int
       methods:
-        - def to_payload(self) -> dict[str, Any]  [lines 45-52, loc=8]
-    - @dataclass(frozen=True) class StageValidationHarness  [lines 56-72, loc=17]
+        - def to_payload(self) -> dict[str, Any]  [lines 50-57, loc=8]
+    - @dataclass(frozen=True) class StageValidationHarness  [lines 61-77, loc=17]
       attributes:
         - stage_script
         - stage_manifest_path
@@ -6857,8 +7089,8 @@ libs/simulation/validation_harness.py  [loc=796]
         - validation_metrics: dict[str, Any]
         - compute_performance: dict[str, Any]
       methods:
-        - def to_payload(self) -> dict[str, Any]  [lines 63-72, loc=10]
-    - @dataclass(frozen=True) class ValidationHarnessReport  [lines 76-102, loc=27]
+        - def to_payload(self) -> dict[str, Any]  [lines 68-77, loc=10]
+    - @dataclass(frozen=True) class ValidationHarnessReport  [lines 81-107, loc=27]
       attributes:
         - report_version
         - status
@@ -6884,7 +7116,7 @@ libs/simulation/validation_harness.py  [loc=796]
         - stage_harness: tuple[StageValidationHarness, ...]
         - methodology: dict[str, Any]
       methods:
-        - def to_payload(self) -> dict[str, Any]  [lines 89-102, loc=14]
+        - def to_payload(self) -> dict[str, Any]  [lines 94-107, loc=14]
 
 libs/spark_sequence/__init__.py  [loc=23]
   doc: Shared segmented sequence utilities for Spark-first stateful pipelines.
@@ -7043,7 +7275,7 @@ libs/testing/evaluation.py  [loc=138]
     - def _event_ts(event: dict[str, Any]) -> datetime  [lines 26-32, loc=7]
     - def evaluate_event_detection(label_events: list[dict[str, Any]], detected_events: list[dict[str, Any]], tolerance_seconds: float = 0.5, tolerance_by_type_seconds: dict[str, float] | None = None) -> dict[str, Any]  [lines 35-138, loc=104]
 
-libs/testing/seed.py  [loc=111]
+libs/testing/seed.py  [loc=140]
   doc: Dataset seeding helpers for smoke and integration workflows.
   imports:
     - from __future__ import annotations
@@ -7054,7 +7286,7 @@ libs/testing/seed.py  [loc=111]
     - from libs.testing.data import create_sample_calibrated_df, create_sample_events_df, create_sample_hierarchy_sensor_map_label_df, create_sample_phase_labels_df, create_sample_phase_windows_df, create_sample_raw_input_df, create_sample_raw_table_df, create_sample_scores_df, create_sample_windows_df, create_scaled_raw_input_df
     - from pyspark.sql import DataFrame, SparkSession
   functions:
-    - def seed_sample_dataset(spark: 'SparkSession', base_dir: str = 'data', mode: str = 'overwrite', table_format: str = 'delta', tail_count: int = 1, flights_per_tail: int = 1, sensor_count: int = 3, timestamp_count: int = 12, step_ms: int = 100, include_intermediate_tables: bool = True) -> dict[str, str]  [lines 24-107, loc=84]
+    - def seed_sample_dataset(spark: 'SparkSession', base_dir: str = 'data', mode: str = 'overwrite', table_format: str = 'delta', tail_count: int = 1, flights_per_tail: int = 1, sensor_count: int = 3, timestamp_count: int = 12, step_ms: int = 100, include_intermediate_tables: bool = True, inject_anomaly: bool = False) -> dict[str, str]  [lines 24-136, loc=113]
 
 libs/tuning/__init__.py  [loc=162]
   doc: Objective modeling and evaluation for run-level tuning workflows.
@@ -7332,7 +7564,7 @@ libs/tuning/benchmark_variants.py  [loc=170]
         - objective_preset: ObjectivePreset | None = None
         - objective_overrides: tuple[tuple[str, Any], ...] = ()
 
-libs/tuning/objectives.py  [loc=985]
+libs/tuning/objectives.py  [loc=1010]
   doc: Objective specifications and evaluation over validation harness reports.
   imports:
     - from __future__ import annotations
@@ -7357,19 +7589,19 @@ libs/tuning/objectives.py  [loc=985]
     - def _windowing_objective_spec() -> ObjectiveSpec  [lines 337-454, loc=118]
     - def _structural_objective_spec() -> ObjectiveSpec  [lines 457-510, loc=54]
     - def _event_objective_spec() -> ObjectiveSpec  [lines 513-598, loc=86]
-    - def _full_objective_spec() -> ObjectiveSpec  [lines 601-677, loc=77]
-    - def build_default_objective_spec(*, harness_report: dict[str, Any]) -> ObjectiveSpec  [lines 680-688, loc=9]
-    - def resolve_default_objective_name(*, mode: str) -> str  [lines 691-695, loc=5]
-    - def objective_spec_from_payload(payload: dict[str, Any]) -> ObjectiveSpec  [lines 698-720, loc=23]
-    - def resolve_objective_spec(*, objective_name: str) -> ObjectiveSpec  [lines 723-735, loc=13]
-    - def load_objective_spec(path: str | Path) -> ObjectiveSpec  [lines 738-749, loc=12]
-    - def resolve_objective_evaluation_tier(*, objective_name: str) -> str  [lines 752-753, loc=2]
-    - def resolve_objective_required_end_stage(*, objective_name: str) -> str  [lines 756-757, loc=2]
-    - def _metric_index(harness_report: dict[str, Any]) -> dict[tuple[str, str, str, str], float | int]  [lines 773-785, loc=13]
-    - def _normalized_score(term: ObjectiveTerm, *, value: float) -> float | None  [lines 788-802, loc=15]
-    - def _evaluate_term(term: ObjectiveTerm, *, metric_index: dict[tuple[str, str, str, str], float | int]) -> ObjectiveTermEvaluation  [lines 805-840, loc=36]
-    - def _evaluate_constraint(constraint: ObjectiveConstraint, *, metric_index: dict[tuple[str, str, str, str], float | int]) -> ObjectiveConstraintEvaluation  [lines 843-883, loc=41]
-    - def evaluate_objective_spec(*, harness_report: dict[str, Any], objective_spec: ObjectiveSpec) -> ObjectiveEvaluation  [lines 886-985, loc=100]
+    - def _full_objective_spec() -> ObjectiveSpec  [lines 601-702, loc=102]
+    - def build_default_objective_spec(*, harness_report: dict[str, Any]) -> ObjectiveSpec  [lines 705-713, loc=9]
+    - def resolve_default_objective_name(*, mode: str) -> str  [lines 716-720, loc=5]
+    - def objective_spec_from_payload(payload: dict[str, Any]) -> ObjectiveSpec  [lines 723-745, loc=23]
+    - def resolve_objective_spec(*, objective_name: str) -> ObjectiveSpec  [lines 748-760, loc=13]
+    - def load_objective_spec(path: str | Path) -> ObjectiveSpec  [lines 763-774, loc=12]
+    - def resolve_objective_evaluation_tier(*, objective_name: str) -> str  [lines 777-778, loc=2]
+    - def resolve_objective_required_end_stage(*, objective_name: str) -> str  [lines 781-782, loc=2]
+    - def _metric_index(harness_report: dict[str, Any]) -> dict[tuple[str, str, str, str], float | int]  [lines 798-810, loc=13]
+    - def _normalized_score(term: ObjectiveTerm, *, value: float) -> float | None  [lines 813-827, loc=15]
+    - def _evaluate_term(term: ObjectiveTerm, *, metric_index: dict[tuple[str, str, str, str], float | int]) -> ObjectiveTermEvaluation  [lines 830-865, loc=36]
+    - def _evaluate_constraint(constraint: ObjectiveConstraint, *, metric_index: dict[tuple[str, str, str, str], float | int]) -> ObjectiveConstraintEvaluation  [lines 868-908, loc=41]
+    - def evaluate_objective_spec(*, harness_report: dict[str, Any], objective_spec: ObjectiveSpec) -> ObjectiveEvaluation  [lines 911-1010, loc=100]
   classes:
     - @dataclass(frozen=True) class ObjectiveMetricRef  [lines 55-73, loc=19]
       attributes:
@@ -7585,7 +7817,7 @@ libs/tuning/reporting.py  [loc=123]
       methods:
         - def to_payload(self) -> dict[str, Any]  [lines 27-35, loc=9]
 
-libs/tuning/validation_panels.py  [loc=188]
+libs/tuning/validation_panels.py  [loc=189]
   doc: Validation metric panel policy for tuning/reporting workflows.
   imports:
     - from __future__ import annotations
@@ -7599,12 +7831,12 @@ libs/tuning/validation_panels.py  [loc=188]
     - VALIDATION_PANEL_SHORTLIST
     - WINDOW_STAGE_VALIDATION_PANEL_PRIORITY
   functions:
-    - def _metric_map(result: Any, field_name: str) -> Mapping[str, float | int]  [lines 56-67, loc=12]
-    - def _ordered_metric_names(results: list[Any], field_name: str) -> list[str]  [lines 70-80, loc=11]
-    - def _looks_like_event_stage_results(results: list[Any]) -> bool  [lines 83-95, loc=13]
-    - def _looks_like_window_stage_results(results: list[Any]) -> bool  [lines 98-106, loc=9]
-    - def _select_prioritized_metric_names(results: list[Any], *, metric_names: tuple[str, ...]) -> list[str]  [lines 109-118, loc=10]
-    - def build_validation_metric_panel(results: list[Any], *, mode: str, limit: int) -> list[dict[str, Any]]  [lines 121-188, loc=68]
+    - def _metric_map(result: Any, field_name: str) -> Mapping[str, float | int]  [lines 57-68, loc=12]
+    - def _ordered_metric_names(results: list[Any], field_name: str) -> list[str]  [lines 71-81, loc=11]
+    - def _looks_like_event_stage_results(results: list[Any]) -> bool  [lines 84-96, loc=13]
+    - def _looks_like_window_stage_results(results: list[Any]) -> bool  [lines 99-107, loc=9]
+    - def _select_prioritized_metric_names(results: list[Any], *, metric_names: tuple[str, ...]) -> list[str]  [lines 110-119, loc=10]
+    - def build_validation_metric_panel(results: list[Any], *, mode: str, limit: int) -> list[dict[str, Any]]  [lines 122-189, loc=68]
 
 libs/windows/__init__.py  [loc=50]
   doc: Adaptive windowing package.
@@ -8280,11 +8512,11 @@ pipelines/50_build_graph.py  [loc=547]
     - @log_wall_time(logger=LOGGER)
     - def run() -> None  [lines 160-537, loc=378]
 
-pipelines/60_fit_hierarchy.py  [loc=163]
-  doc: Fit hierarchy artifacts from fused graph and the persisted graph parameter universe.
+pipelines/60_fit_hierarchy.py  [loc=186]
+  doc: Fit hierarchy mapping and retained-edge evidence from fused graph artifacts.
   imports:
     - import time
-    - from libs.graph import HierarchySensorMapTable
+    - from libs.graph import HierarchyArtifactSet
     - from libs.io.delta import get_spark, read_table, write_table
     - from libs.perf import build_artifact_manifest, build_stage_manifest, get_logger, log_dict_artifact_if_active, log_memory_usage, log_params_if_active, log_stage_manifest_if_active, log_wall_time, track_mlflow_run
     - from pipelines.common import build_stage_runtime
@@ -8295,7 +8527,7 @@ pipelines/60_fit_hierarchy.py  [loc=163]
     - @track_mlflow_run(stage_name='60_fit_hierarchy', logger=LOGGER)
     - @log_memory_usage(logger=LOGGER, label='60_fit_hierarchy')
     - @log_wall_time(logger=LOGGER)
-    - def run() -> None  [lines 30-159, loc=130]
+    - def run() -> None  [lines 30-182, loc=153]
 
 pipelines/70_phase_fit.py  [loc=214]
   doc: Fit phase baselines and assign detected phases to windows.
@@ -8364,7 +8596,7 @@ pipelines/85_window_scores_calibrate.py  [loc=100]
     - @log_wall_time(logger=LOGGER)
     - def run() -> None  [lines 27-96, loc=70]
 
-pipelines/90_anomaly_attribution.py  [loc=214]
+pipelines/90_anomaly_attribution.py  [loc=233]
   doc: Emit anomaly attribution tables for anomalous windows.
   imports:
     - from libs.anomaly import AnomalyAttributionPlan
@@ -8375,10 +8607,11 @@ pipelines/90_anomaly_attribution.py  [loc=214]
   constants:
     - LOGGER
   functions:
+    - def _materialize_output(table, storage_level)  [lines 24-30, loc=7]
     - @track_mlflow_run(stage_name='90_anomaly_attribution', logger=LOGGER)
     - @log_memory_usage(logger=LOGGER, label='90_anomaly_attribution')
     - @log_wall_time(logger=LOGGER)
-    - def run() -> None  [lines 27-210, loc=184]
+    - def run() -> None  [lines 36-229, loc=194]
 
 pipelines/95_emit_explorer_bundle.py  [loc=147]
   doc: Emit a thin explorer-ready bundle for notebook and UI consumers.
@@ -8732,12 +8965,17 @@ scripts/run_partition_manifest_jobs.py  [loc=221]
     - def _run_custom_for_row(row: dict[str, str], args: argparse.Namespace) -> None  [lines 160-179, loc=20]
     - def main() -> None  [lines 182-217, loc=36]
 
+scripts/run_sim_benchmark_tier_gates.py  [loc=7]
+  doc: CLI wrapper for the canonical simulation benchmark tier gate suite.
+  imports:
+    - from libs.simulation.benchmark_tier_gates import main
+
 scripts/run_sim_pipeline.py  [loc=7]
   doc: CLI wrapper for the persisted simulation pipeline.
   imports:
     - from libs.simulation.run_cli import main
 
-scripts/smoke_test_pipeline.py  [loc=342]
+scripts/smoke_test_pipeline.py  [loc=365]
   doc: Run an end-to-end local smoke test for the active V2 pipeline using sample data.
   imports:
     - from __future__ import annotations
@@ -8754,15 +8992,17 @@ scripts/smoke_test_pipeline.py  [loc=342]
     - from libs.phase import validate_detected_phases_from_tables
     - from libs.testing.seed import seed_sample_dataset
     - from pyspark.sql import SparkSession
+  constants:
+    - SMOKE_STAGE_SCRIPTS
   functions:
-    - def parse_args() -> argparse.Namespace  [lines 24-40, loc=17]
-    - def set_env_paths(base_dir: str, table_format: str, write_mode: str, min_warm: int) -> None  [lines 43-76, loc=34]
-    - def run_stages(stage_80_write_mode: str) -> None  [lines 79-101, loc=23]
-    - def print_row_counts(spark: 'SparkSession', table_format: str) -> None  [lines 104-145, loc=42]
-    - def assert_anomaly_payload_quality(spark: 'SparkSession', table_format: str, write_mode: str) -> None  [lines 148-193, loc=46]
-    - def assert_active_v2_table_contracts(spark: 'SparkSession', table_format: str) -> None  [lines 196-230, loc=35]
-    - def write_quality_report(spark: 'SparkSession', base_dir: str, table_format: str) -> None  [lines 233-294, loc=62]
-    - def main() -> None  [lines 297-338, loc=42]
+    - def parse_args() -> argparse.Namespace  [lines 43-59, loc=17]
+    - def set_env_paths(base_dir: str, table_format: str, write_mode: str, min_warm: int) -> None  [lines 62-99, loc=38]
+    - def run_stages(stage_80_write_mode: str) -> None  [lines 102-110, loc=9]
+    - def print_row_counts(spark: 'SparkSession', table_format: str) -> None  [lines 113-156, loc=44]
+    - def assert_anomaly_payload_quality(spark: 'SparkSession', table_format: str, write_mode: str) -> None  [lines 159-210, loc=52]
+    - def assert_active_v2_table_contracts(spark: 'SparkSession', table_format: str) -> None  [lines 213-252, loc=40]
+    - def write_quality_report(spark: 'SparkSession', base_dir: str, table_format: str) -> None  [lines 255-316, loc=62]
+    - def main() -> None  [lines 319-361, loc=43]
 
 scripts/sweep_smoke_graph_hierarchy.py  [loc=229]
   doc: Run a small local sweep of graph/hierarchy configurations against the smoke pipeline.

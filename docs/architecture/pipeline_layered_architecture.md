@@ -22,7 +22,7 @@ flowchart TB
     layer_7 --> layer_8
     layer_9["Layer 9: 50 Build Graph<br/>Purpose: Build graph component artifacts from backbone, events, and windows.<br/>Module: pipelines.50_build_graph<br/>LOC: 547 | Functions: 7 | Classes: 0"]
     layer_8 --> layer_9
-    layer_10["Layer 10: 60 Fit Hierarchy<br/>Purpose: Fit hierarchy artifacts from fused graph and the persisted graph parameter universe.<br/>Module: pipelines.60_fit_hierarchy<br/>LOC: 163 | Functions: 2 | Classes: 0"]
+    layer_10["Layer 10: 60 Fit Hierarchy<br/>Purpose: Fit hierarchy mapping and retained-edge evidence from fused graph artifacts.<br/>Module: pipelines.60_fit_hierarchy<br/>LOC: 186 | Functions: 2 | Classes: 0"]
     layer_9 --> layer_10
     layer_11["Layer 11: 70 Phase Fit<br/>Purpose: Fit phase baselines and assign detected phases to windows.<br/>Module: pipelines.70_phase_fit<br/>LOC: 214 | Functions: 2 | Classes: 0"]
     layer_10 --> layer_11
@@ -32,7 +32,7 @@ flowchart TB
     layer_12 --> layer_13
     layer_14["Layer 14: 85 Window Scores Calibrate<br/>Purpose: Calibrate raw window scores with phase-conditioned conformal calibration.<br/>Module: pipelines.85_window_scores_calibrate<br/>LOC: 100 | Functions: 1 | Classes: 0"]
     layer_13 --> layer_14
-    layer_15["Layer 15: 90 Anomaly Attribution<br/>Purpose: Emit anomaly attribution tables for anomalous windows.<br/>Module: pipelines.90_anomaly_attribution<br/>LOC: 214 | Functions: 1 | Classes: 0"]
+    layer_15["Layer 15: 90 Anomaly Attribution<br/>Purpose: Emit anomaly attribution tables for anomalous windows.<br/>Module: pipelines.90_anomaly_attribution<br/>LOC: 233 | Functions: 2 | Classes: 0"]
     layer_14 --> layer_15
     layer_16["Layer 16: 95 Emit Explorer Bundle<br/>Purpose: Emit a thin explorer-ready bundle for notebook and UI consumers.<br/>Module: pipelines.95_emit_explorer_bundle<br/>LOC: 147 | Functions: 1 | Classes: 0"]
     layer_15 --> layer_16

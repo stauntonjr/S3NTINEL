@@ -3,10 +3,10 @@
     {
       "container_id": "core_libraries",
       "id": "core_libraries.simulation",
-      "loc_span": 11674,
-      "module_count": 62,
+      "loc_span": 14248,
+      "module_count": 63,
       "name": "Simulation",
-      "system_loc_share": 0.211
+      "system_loc_share": 0.2436
     },
     {
       "container_id": "core_libraries",
@@ -14,15 +14,23 @@
       "loc_span": 4332,
       "module_count": 14,
       "name": "Phase",
-      "system_loc_share": 0.0783
+      "system_loc_share": 0.0741
     },
     {
       "container_id": "core_libraries",
       "id": "core_libraries.graph",
-      "loc_span": 3513,
+      "loc_span": 3773,
       "module_count": 13,
       "name": "Graph",
-      "system_loc_share": 0.0635
+      "system_loc_share": 0.0645
+    },
+    {
+      "container_id": "core_libraries",
+      "id": "core_libraries.tuning",
+      "loc_span": 3505,
+      "module_count": 13,
+      "name": "Tuning",
+      "system_loc_share": 0.0599
     },
     {
       "container_id": "core_libraries",
@@ -30,15 +38,7 @@
       "loc_span": 3493,
       "module_count": 9,
       "name": "Events",
-      "system_loc_share": 0.0631
-    },
-    {
-      "container_id": "core_libraries",
-      "id": "core_libraries.tuning",
-      "loc_span": 3479,
-      "module_count": 13,
-      "name": "Tuning",
-      "system_loc_share": 0.0629
+      "system_loc_share": 0.0597
     },
     {
       "container_id": "core_libraries",
@@ -46,7 +46,7 @@
       "loc_span": 3442,
       "module_count": 8,
       "name": "Windows",
-      "system_loc_share": 0.0622
+      "system_loc_share": 0.0588
     },
     {
       "container_id": "architecture_tooling",
@@ -54,15 +54,23 @@
       "loc_span": 2881,
       "module_count": 7,
       "name": "Architecture Workflow",
-      "system_loc_share": 0.0521
+      "system_loc_share": 0.0492
     },
     {
       "container_id": "core_libraries",
       "id": "core_libraries.anomaly",
-      "loc_span": 2642,
+      "loc_span": 2811,
       "module_count": 5,
       "name": "Anomaly",
-      "system_loc_share": 0.0478
+      "system_loc_share": 0.0481
+    },
+    {
+      "container_id": "core_libraries",
+      "id": "core_libraries.io",
+      "loc_span": 2127,
+      "module_count": 16,
+      "name": "Io",
+      "system_loc_share": 0.0364
     },
     {
       "container_id": "core_libraries",
@@ -70,31 +78,23 @@
       "loc_span": 2123,
       "module_count": 4,
       "name": "Scoring",
-      "system_loc_share": 0.0384
-    },
-    {
-      "container_id": "core_libraries",
-      "id": "core_libraries.io",
-      "loc_span": 2073,
-      "module_count": 16,
-      "name": "Io",
-      "system_loc_share": 0.0375
+      "system_loc_share": 0.0363
     },
     {
       "container_id": "pipeline_runtime",
       "id": "pipeline_runtime.fitting_stages",
-      "loc_span": 2066,
+      "loc_span": 2089,
       "module_count": 10,
       "name": "Fitting Stages",
-      "system_loc_share": 0.0373
+      "system_loc_share": 0.0357
     },
     {
       "container_id": "core_libraries",
       "id": "core_libraries.behavior",
-      "loc_span": 1910,
+      "loc_span": 1907,
       "module_count": 12,
       "name": "Behavior",
-      "system_loc_share": 0.0345
+      "system_loc_share": 0.0326
     },
     {
       "container_id": "core_libraries",
@@ -102,7 +102,7 @@
       "loc_span": 1552,
       "module_count": 4,
       "name": "Profiling",
-      "system_loc_share": 0.0281
+      "system_loc_share": 0.0265
     },
     {
       "container_id": "core_libraries",
@@ -110,7 +110,7 @@
       "loc_span": 1088,
       "module_count": 6,
       "name": "Perf",
-      "system_loc_share": 0.0197
+      "system_loc_share": 0.0186
     },
     {
       "container_id": "architecture_tooling",
@@ -118,23 +118,23 @@
       "loc_span": 1029,
       "module_count": 2,
       "name": "Repo Mapping Tools",
-      "system_loc_share": 0.0186
+      "system_loc_share": 0.0176
     },
     {
       "container_id": "pipeline_runtime",
       "id": "pipeline_runtime.inference_stages",
-      "loc_span": 989,
+      "loc_span": 1008,
       "module_count": 6,
       "name": "Inference Stages",
-      "system_loc_share": 0.0179
+      "system_loc_share": 0.0172
     },
     {
       "container_id": "simulation_clis",
       "id": "simulation_clis.performance_and_replay",
-      "loc_span": 885,
+      "loc_span": 908,
       "module_count": 3,
       "name": "Performance And Replay Utilities",
-      "system_loc_share": 0.016
+      "system_loc_share": 0.0155
     },
     {
       "container_id": "core_libraries",
@@ -142,15 +142,15 @@
       "loc_span": 817,
       "module_count": 5,
       "name": "Backbone",
-      "system_loc_share": 0.0148
+      "system_loc_share": 0.014
     },
     {
       "container_id": "core_libraries",
       "id": "core_libraries.config",
-      "loc_span": 642,
+      "loc_span": 647,
       "module_count": 2,
       "name": "Config",
-      "system_loc_share": 0.0116
+      "system_loc_share": 0.0111
     },
     {
       "container_id": "pipeline_runtime",
@@ -158,7 +158,7 @@
       "loc_span": 565,
       "module_count": 4,
       "name": "Grouped Pipeline Runners",
-      "system_loc_share": 0.0102
+      "system_loc_share": 0.0097
     },
     {
       "container_id": "core_libraries",
@@ -166,7 +166,7 @@
       "loc_span": 274,
       "module_count": 2,
       "name": "Spark Sequence",
-      "system_loc_share": 0.005
+      "system_loc_share": 0.0047
     },
     {
       "container_id": "core_libraries",
@@ -174,7 +174,7 @@
       "loc_span": 201,
       "module_count": 4,
       "name": "Pyspark",
-      "system_loc_share": 0.0036
+      "system_loc_share": 0.0034
     },
     {
       "container_id": "core_libraries",
@@ -182,7 +182,7 @@
       "loc_span": 199,
       "module_count": 4,
       "name": "Common",
-      "system_loc_share": 0.0036
+      "system_loc_share": 0.0034
     },
     {
       "container_id": "pipeline_runtime",
@@ -190,7 +190,7 @@
       "loc_span": 123,
       "module_count": 2,
       "name": "Pipeline Shared Runtime",
-      "system_loc_share": 0.0022
+      "system_loc_share": 0.0021
     },
     {
       "container_id": "core_libraries",
@@ -198,7 +198,7 @@
       "loc_span": 64,
       "module_count": 2,
       "name": "Reporting",
-      "system_loc_share": 0.0012
+      "system_loc_share": 0.0011
     },
     {
       "container_id": "simulation_clis",
@@ -212,31 +212,31 @@
   "container_size_table": [
     {
       "id": "core_libraries",
-      "loc_span": 45078,
-      "module_count": 189,
+      "loc_span": 48163,
+      "module_count": 190,
       "name": "Core Libraries",
-      "system_loc_share": 0.8149
+      "system_loc_share": 0.8233
     },
     {
       "id": "architecture_tooling",
       "loc_span": 3912,
       "module_count": 10,
       "name": "Architecture Tooling",
-      "system_loc_share": 0.0707
+      "system_loc_share": 0.0669
     },
     {
       "id": "pipeline_runtime",
-      "loc_span": 3786,
+      "loc_span": 3828,
       "module_count": 23,
       "name": "Pipeline Runtime",
-      "system_loc_share": 0.0684
+      "system_loc_share": 0.0654
     },
     {
       "id": "simulation_clis",
-      "loc_span": 1829,
-      "module_count": 11,
+      "loc_span": 1859,
+      "module_count": 12,
       "name": "Simulation And Utility CLIs",
-      "system_loc_share": 0.0331
+      "system_loc_share": 0.0318
     }
   ],
   "dependency_size_table": [
@@ -245,7 +245,7 @@
       "container_id": "core_libraries",
       "id": "core_libraries.simulation",
       "incoming_relationship_count": 3,
-      "loc_span": 11674,
+      "loc_span": 14248,
       "name": "Simulation",
       "outgoing_relationship_count": 13
     },
@@ -254,7 +254,7 @@
       "container_id": "core_libraries",
       "id": "core_libraries.io",
       "incoming_relationship_count": 13,
-      "loc_span": 2073,
+      "loc_span": 2127,
       "name": "Io",
       "outgoing_relationship_count": 1
     },
@@ -317,7 +317,7 @@
       "container_id": "pipeline_runtime",
       "id": "pipeline_runtime.inference_stages",
       "incoming_relationship_count": 0,
-      "loc_span": 989,
+      "loc_span": 1008,
       "name": "Inference Stages",
       "outgoing_relationship_count": 10
     },
@@ -335,7 +335,7 @@
       "container_id": "core_libraries",
       "id": "core_libraries.graph",
       "incoming_relationship_count": 5,
-      "loc_span": 3513,
+      "loc_span": 3773,
       "name": "Graph",
       "outgoing_relationship_count": 3
     },
@@ -344,7 +344,7 @@
       "container_id": "pipeline_runtime",
       "id": "pipeline_runtime.fitting_stages",
       "incoming_relationship_count": 0,
-      "loc_span": 2066,
+      "loc_span": 2089,
       "name": "Fitting Stages",
       "outgoing_relationship_count": 8
     },
@@ -353,7 +353,7 @@
       "container_id": "core_libraries",
       "id": "core_libraries.anomaly",
       "incoming_relationship_count": 2,
-      "loc_span": 2642,
+      "loc_span": 2811,
       "name": "Anomaly",
       "outgoing_relationship_count": 4
     },
@@ -362,7 +362,7 @@
       "container_id": "simulation_clis",
       "id": "simulation_clis.performance_and_replay",
       "incoming_relationship_count": 0,
-      "loc_span": 885,
+      "loc_span": 908,
       "name": "Performance And Replay Utilities",
       "outgoing_relationship_count": 6
     },
@@ -380,7 +380,7 @@
       "container_id": "core_libraries",
       "id": "core_libraries.tuning",
       "incoming_relationship_count": 2,
-      "loc_span": 3479,
+      "loc_span": 3505,
       "name": "Tuning",
       "outgoing_relationship_count": 2
     },
@@ -416,7 +416,7 @@
       "container_id": "core_libraries",
       "id": "core_libraries.behavior",
       "incoming_relationship_count": 2,
-      "loc_span": 1910,
+      "loc_span": 1907,
       "name": "Behavior",
       "outgoing_relationship_count": 0
     },
@@ -452,7 +452,7 @@
       "container_id": "core_libraries",
       "id": "core_libraries.config",
       "incoming_relationship_count": 1,
-      "loc_span": 642,
+      "loc_span": 647,
       "name": "Config",
       "outgoing_relationship_count": 0
     },
@@ -512,7 +512,7 @@
       "qualified_name": "libs.profiling.profiles.ParameterBehaviorPrimitiveProfile"
     },
     {
-      "loc_span": 547,
+      "loc_span": 560,
       "module": "libs.anomaly.frames",
       "name": "AnomalyParameterLocalizationFrame",
       "path": "libs/anomaly/frames.py",
@@ -526,18 +526,18 @@
       "qualified_name": "libs.events.continuous.ContinuousEventDetector"
     },
     {
+      "loc_span": 484,
+      "module": "libs.graph.hierarchy_artifacts",
+      "name": "GraphHierarchy",
+      "path": "libs/graph/hierarchy_artifacts.py",
+      "qualified_name": "libs.graph.hierarchy_artifacts.GraphHierarchy"
+    },
+    {
       "loc_span": 427,
       "module": "libs.events.profiling",
       "name": "ParameterEventProfile",
       "path": "libs/events/profiling.py",
       "qualified_name": "libs.events.profiling.ParameterEventProfile"
-    },
-    {
-      "loc_span": 373,
-      "module": "libs.graph.hierarchy_artifacts",
-      "name": "GraphHierarchy",
-      "path": "libs/graph/hierarchy_artifacts.py",
-      "qualified_name": "libs.graph.hierarchy_artifacts.GraphHierarchy"
     },
     {
       "loc_span": 357,
@@ -598,34 +598,41 @@
       "qualified_name": "libs.profiling.profiles.ParameterBehaviorPrimitiveProfile._numeric_features_df"
     },
     {
-      "loc_span": 289,
-      "module": "libs.events.continuous",
-      "name": "_feature_frame",
-      "path": "libs/events/continuous.py",
-      "qualified_name": "libs.events.continuous.ContinuousEventDetector._feature_frame"
-    },
-    {
-      "loc_span": 285,
+      "loc_span": 345,
       "module": "libs.graph.hierarchy_artifacts",
       "name": "from_fused_spark",
       "path": "libs/graph/hierarchy_artifacts.py",
       "qualified_name": "libs.graph.hierarchy_artifacts.GraphHierarchy.from_fused_spark"
     },
     {
-      "loc_span": 283,
-      "module": "libs.profiling.validator",
-      "name": "build_profile_validation_summary",
-      "path": "libs/profiling/validator.py",
-      "qualified_name": "libs.profiling.validator.build_profile_validation_summary"
+      "loc_span": 308,
+      "module": "libs.simulation.reporting",
+      "name": "_build_simulation_benchmark_audit_summary",
+      "path": "libs/simulation/reporting.py",
+      "qualified_name": "libs.simulation.reporting._build_simulation_benchmark_audit_summary"
+    },
+    {
+      "loc_span": 289,
+      "module": "libs.events.continuous",
+      "name": "_feature_frame",
+      "path": "libs/events/continuous.py",
+      "qualified_name": "libs.events.continuous.ContinuousEventDetector._feature_frame"
     }
   ],
   "largest_modules": [
     {
       "component_id": "core_libraries.simulation",
       "container_id": "core_libraries",
-      "loc_span": 2257,
+      "loc_span": 2629,
       "module": "libs.simulation.scenarios.power_pressurization",
       "path": "libs/simulation/scenarios/power_pressurization.py"
+    },
+    {
+      "component_id": "core_libraries.simulation",
+      "container_id": "core_libraries",
+      "loc_span": 1907,
+      "module": "libs.simulation.reporting",
+      "path": "libs/simulation/reporting.py"
     },
     {
       "component_id": "core_libraries.simulation",
@@ -635,18 +642,25 @@
       "path": "libs/simulation/aircraft/examples.py"
     },
     {
+      "component_id": "core_libraries.simulation",
+      "container_id": "core_libraries",
+      "loc_span": 1374,
+      "module": "libs.simulation.flight.examples",
+      "path": "libs/simulation/flight/examples.py"
+    },
+    {
+      "component_id": "core_libraries.anomaly",
+      "container_id": "core_libraries",
+      "loc_span": 1327,
+      "module": "libs.anomaly.validator",
+      "path": "libs/anomaly/validator.py"
+    },
+    {
       "component_id": "architecture_tooling.workflow",
       "container_id": "architecture_tooling",
       "loc_span": 1299,
       "module": "libs.architecture.render",
       "path": "libs/architecture/render.py"
-    },
-    {
-      "component_id": "core_libraries.anomaly",
-      "container_id": "core_libraries",
-      "loc_span": 1175,
-      "module": "libs.anomaly.validator",
-      "path": "libs/anomaly/validator.py"
     },
     {
       "component_id": "core_libraries.windows",
@@ -670,29 +684,15 @@
       "path": "libs/scoring/tables.py"
     },
     {
-      "component_id": "core_libraries.simulation",
-      "container_id": "core_libraries",
-      "loc_span": 1066,
-      "module": "libs.simulation.flight.examples",
-      "path": "libs/simulation/flight/examples.py"
-    },
-    {
       "component_id": "core_libraries.tuning",
       "container_id": "core_libraries",
-      "loc_span": 985,
+      "loc_span": 1010,
       "module": "libs.tuning.objectives",
       "path": "libs/tuning/objectives.py"
-    },
-    {
-      "component_id": "core_libraries.anomaly",
-      "container_id": "core_libraries",
-      "loc_span": 982,
-      "module": "libs.anomaly.frames",
-      "path": "libs/anomaly/frames.py"
     }
   ],
-  "system_loc_span": 55315,
-  "top_component_loc_share": 0.211,
-  "top_module_loc_share": 0.0408,
-  "top_three_component_loc_share": 0.3529
+  "system_loc_span": 58501,
+  "top_component_loc_share": 0.2436,
+  "top_module_loc_share": 0.0449,
+  "top_three_component_loc_share": 0.3821
 }

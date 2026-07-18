@@ -452,6 +452,7 @@
     },
     {
       "internal_dependencies": [
+        "libs.graph.hierarchy_artifacts",
         "libs.graph.lag",
         "libs.graph.pipeline",
         "libs.io.schemas.graph",
@@ -958,6 +959,18 @@
     },
     {
       "internal_dependencies": [
+        "libs.perf",
+        "libs.simulation.cli",
+        "libs.simulation.fault.spec",
+        "libs.simulation.run_bundle",
+        "libs.simulation.run_context",
+        "libs.simulation.runner"
+      ],
+      "module": "libs.simulation.benchmark_tier_gates",
+      "path": "libs/simulation/benchmark_tier_gates.py"
+    },
+    {
+      "internal_dependencies": [
         "libs.simulation.flight.examples"
       ],
       "module": "libs.simulation.cli",
@@ -1256,6 +1269,7 @@
         "libs.phase",
         "libs.profiling.validator",
         "libs.scoring.validator",
+        "libs.simulation.fault.spec",
         "libs.simulation.report_tables",
         "libs.simulation.run_context",
         "libs.testing.assertions"
@@ -1316,6 +1330,7 @@
         "libs.simulation.coupling.examples",
         "libs.simulation.coupling.spec",
         "libs.simulation.fault.examples",
+        "libs.simulation.fault.spec",
         "libs.simulation.flight.spec",
         "libs.simulation.module.spec",
         "libs.simulation.parameter.examples",
@@ -1438,6 +1453,7 @@
     {
       "internal_dependencies": [
         "libs.simulation",
+        "libs.simulation.fault.spec",
         "libs.simulation.phase.runtime",
         "libs.simulation.run_bundle",
         "libs.simulation.run_context"
@@ -1947,6 +1963,13 @@
     },
     {
       "internal_dependencies": [
+        "libs.simulation.benchmark_tier_gates"
+      ],
+      "module": "scripts.run_sim_benchmark_tier_gates",
+      "path": "scripts/run_sim_benchmark_tier_gates.py"
+    },
+    {
+      "internal_dependencies": [
         "libs.simulation.run_cli"
       ],
       "module": "scripts.run_sim_pipeline",
@@ -2002,5 +2025,5 @@
       "path": "tools/repo_schematic.py"
     }
   ],
-  "root": "/home/jrs/code/S3NTINEL/sentinel"
+  "root": "/home/jrs/projects/S3NTINEL/S3NTINEL"
 }

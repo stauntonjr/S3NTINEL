@@ -1,7 +1,7 @@
 source_id,destination_id,description,technology,import_edge_count,tags
 core_libraries,pipeline_runtime,Uses,Python imports,2,internal
 pipeline_runtime,core_libraries,Uses,Python imports,67,internal
-simulation_clis,core_libraries,Uses,Python imports,16,internal
+simulation_clis,core_libraries,Uses,Python imports,17,internal
 simulation_clis,pipeline_runtime,Uses,Python imports,1,internal
 architecture_tooling.workflow,architecture_tooling.repo_maps,Uses,Python imports,4,"internal,component"
 core_libraries.anomaly,core_libraries.io,Uses,Python imports,1,"internal,component"
@@ -46,7 +46,7 @@ core_libraries.simulation,core_libraries.behavior,Uses,Python imports,8,"interna
 core_libraries.simulation,core_libraries.events,Uses,Python imports,1,"internal,component"
 core_libraries.simulation,core_libraries.graph,Uses,Python imports,1,"internal,component"
 core_libraries.simulation,core_libraries.io,Uses,Python imports,7,"internal,component"
-core_libraries.simulation,core_libraries.perf,Uses,Python imports,1,"internal,component"
+core_libraries.simulation,core_libraries.perf,Uses,Python imports,2,"internal,component"
 core_libraries.simulation,core_libraries.phase,Uses,Python imports,1,"internal,component"
 core_libraries.simulation,core_libraries.profiling,Uses,Python imports,1,"internal,component"
 core_libraries.simulation,core_libraries.reporting,Uses,Python imports,1,"internal,component"

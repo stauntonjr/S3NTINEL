@@ -230,6 +230,7 @@ libs.graph.hierarchy
 libs.graph.hierarchy_artifacts
   <- libs.graph.evaluation
   <- libs.graph.pipeline
+  <- libs.graph.tables
   <- pipelines.50_build_graph
 
 libs.graph.lag
@@ -356,6 +357,7 @@ libs.io.transforms
   <- pipelines.00_ingest_raw
 
 libs.perf
+  <- libs.simulation.benchmark_tier_gates
   <- libs.simulation.runner
   <- libs.tuning.benchmark_runner
   <- libs.windows.policy_profile
@@ -592,7 +594,11 @@ libs.simulation.aircraft.spec
   <- libs.simulation.scenarios.power_pressurization
   <- libs.simulation.tail.runtime
 
+libs.simulation.benchmark_tier_gates
+  <- scripts.run_sim_benchmark_tier_gates
+
 libs.simulation.cli
+  <- libs.simulation.benchmark_tier_gates
   <- libs.simulation.run_cli
   <- libs.simulation.run_context
   <- libs.simulation.runner
@@ -635,10 +641,14 @@ libs.simulation.fault.runtime
 
 libs.simulation.fault.spec
   <- libs.simulation
+  <- libs.simulation.benchmark_tier_gates
   <- libs.simulation.fault
   <- libs.simulation.fault.examples
   <- libs.simulation.fault.runtime
   <- libs.simulation.flight.spec
+  <- libs.simulation.reporting
+  <- libs.simulation.scenarios.power_pressurization
+  <- libs.simulation.validation_harness
 
 libs.simulation.fleet.examples
   <- libs.simulation.fleet
@@ -766,6 +776,7 @@ libs.simulation.reporting
 
 libs.simulation.run_bundle
   <- libs.plotting.simulation_artifacts
+  <- libs.simulation.benchmark_tier_gates
   <- libs.simulation.full_run_report
   <- libs.simulation.validation_harness
 
@@ -773,6 +784,7 @@ libs.simulation.run_cli
   <- scripts.run_sim_pipeline
 
 libs.simulation.run_context
+  <- libs.simulation.benchmark_tier_gates
   <- libs.simulation.full_run_report
   <- libs.simulation.reporting
   <- libs.simulation.run_cli
@@ -781,6 +793,7 @@ libs.simulation.run_context
   <- libs.simulation.validation_harness
 
 libs.simulation.runner
+  <- libs.simulation.benchmark_tier_gates
   <- libs.simulation.run_cli
 
 libs.simulation.scenarios
