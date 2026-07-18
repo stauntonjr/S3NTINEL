@@ -115,6 +115,148 @@ def _empty_reconstruction_localization_validation() -> dict[str, Any]:
     }
 
 
+def _empty_hierarchy_cluster_alignment_validation() -> dict[str, Any]:
+    return {
+        "status": "ok",
+        "methodology": {
+            "interpretation": (
+                "compares inferred dynamic hierarchy clusters to simulator labels by parameter membership; "
+                "cluster identifiers are not expected to match literal truth identifiers"
+            ),
+            "mapping_rule": "a detected cluster maps only when one truth label has a strict plurality",
+        },
+        "by_level": {
+            "subsystem": {
+                "detected_cluster_count": 0,
+                "mappable_detected_cluster_count": 0,
+                "ambiguous_detected_cluster_count": 0,
+                "pure_detected_cluster_count": 0,
+                "mixed_detected_cluster_count": 0,
+                "parameter_count": 0,
+                "weighted_plurality_purity": None,
+                "mean_cluster_plurality_purity": None,
+                "clusters": [],
+            },
+            "module": {
+                "detected_cluster_count": 0,
+                "mappable_detected_cluster_count": 0,
+                "ambiguous_detected_cluster_count": 0,
+                "pure_detected_cluster_count": 0,
+                "mixed_detected_cluster_count": 0,
+                "parameter_count": 0,
+                "weighted_plurality_purity": None,
+                "mean_cluster_plurality_purity": None,
+                "clusters": [],
+            },
+        },
+    }
+
+
+def _build_detected_cluster_alignment(
+    *,
+    hierarchy_sensor_map_df: pd.DataFrame | None,
+    hierarchy_label_df: pd.DataFrame | None,
+    detected_id_field: str,
+    truth_id_field: str,
+) -> dict[str, Any]:
+    if (
+        hierarchy_sensor_map_df is None
+        or hierarchy_label_df is None
+        or hierarchy_sensor_map_df.empty
+        or hierarchy_label_df.empty
+        or detected_id_field not in hierarchy_sensor_map_df.columns
+        or truth_id_field not in hierarchy_label_df.columns
+    ):
+        return _empty_hierarchy_cluster_alignment_validation()["by_level"][
+            "subsystem" if detected_id_field == "subsystem_id" else "module"
+        ]
+
+    joined = hierarchy_sensor_map_df[["parameter_name", detected_id_field]].merge(
+        hierarchy_label_df[["parameter_name", truth_id_field]].rename(columns={truth_id_field: "_truth_id"}),
+        on="parameter_name",
+        how="inner",
+    ).drop_duplicates()
+    if joined.empty:
+        return _empty_hierarchy_cluster_alignment_validation()["by_level"][
+            "subsystem" if detected_id_field == "subsystem_id" else "module"
+        ]
+
+    clusters: list[dict[str, Any]] = []
+    for detected_id, group in joined.groupby(detected_id_field, dropna=False):
+        truth_counts = (
+            group["_truth_id"]
+            .fillna("")
+            .astype(str)
+            .value_counts()
+            .sort_index()
+            .sort_values(ascending=False, kind="mergesort")
+        )
+        if truth_counts.empty:
+            continue
+        dominant_truth_id = str(truth_counts.index[0])
+        dominant_count = int(truth_counts.iloc[0])
+        second_count = int(truth_counts.iloc[1]) if len(truth_counts) > 1 else -1
+        parameter_count = int(len(group))
+        strict_plurality = bool(dominant_truth_id and dominant_count > second_count)
+        detected_id_text = "" if pd.isna(detected_id) else str(detected_id)
+        clusters.append(
+            {
+                "detected_id": detected_id_text,
+                "dominant_truth_id": dominant_truth_id or None,
+                "parameter_count": parameter_count,
+                "distinct_truth_id_count": int(len(truth_counts)),
+                "dominant_truth_parameter_count": dominant_count,
+                "plurality_purity": float(dominant_count / parameter_count),
+                "mappable_by_strict_plurality": strict_plurality,
+            }
+        )
+
+    clusters.sort(key=lambda row: row["detected_id"])
+    if not clusters:
+        return _empty_hierarchy_cluster_alignment_validation()["by_level"][
+            "subsystem" if detected_id_field == "subsystem_id" else "module"
+        ]
+    parameter_count = sum(int(cluster["parameter_count"]) for cluster in clusters)
+    dominant_parameter_count = sum(int(cluster["dominant_truth_parameter_count"]) for cluster in clusters)
+    pure_count = sum(float(cluster["plurality_purity"]) == 1.0 for cluster in clusters)
+    return {
+        "detected_cluster_count": int(len(clusters)),
+        "mappable_detected_cluster_count": int(sum(cluster["mappable_by_strict_plurality"] for cluster in clusters)),
+        "ambiguous_detected_cluster_count": int(sum(not cluster["mappable_by_strict_plurality"] for cluster in clusters)),
+        "pure_detected_cluster_count": int(pure_count),
+        "mixed_detected_cluster_count": int(len(clusters) - pure_count),
+        "parameter_count": int(parameter_count),
+        "weighted_plurality_purity": float(dominant_parameter_count / parameter_count),
+        "mean_cluster_plurality_purity": float(
+            sum(float(cluster["plurality_purity"]) for cluster in clusters) / len(clusters)
+        ),
+        "clusters": clusters,
+    }
+
+
+def _build_hierarchy_cluster_alignment_validation(
+    *,
+    hierarchy_sensor_map_df: pd.DataFrame | None,
+    hierarchy_label_df: pd.DataFrame | None,
+) -> dict[str, Any]:
+    summary = _empty_hierarchy_cluster_alignment_validation()
+    summary["by_level"] = {
+        "subsystem": _build_detected_cluster_alignment(
+            hierarchy_sensor_map_df=hierarchy_sensor_map_df,
+            hierarchy_label_df=hierarchy_label_df,
+            detected_id_field="subsystem_id",
+            truth_id_field="subsystem_id",
+        ),
+        "module": _build_detected_cluster_alignment(
+            hierarchy_sensor_map_df=hierarchy_sensor_map_df,
+            hierarchy_label_df=hierarchy_label_df,
+            detected_id_field="module_id",
+            truth_id_field="module_id",
+        ),
+    }
+    return summary
+
+
 def _sorted_non_empty_string_values(df: pd.DataFrame, column: str) -> list[str]:
     if df.empty or column not in df.columns:
         return []
@@ -1008,6 +1150,10 @@ def build_fault_attribution_summary_from_misbehavior_summary(summary: dict[str, 
             "parameter_localization_validation",
             _empty_parameter_localization_validation(),
         ),
+        "hierarchy_cluster_alignment_validation": summary.get(
+            "hierarchy_cluster_alignment_validation",
+            _empty_hierarchy_cluster_alignment_validation(),
+        ),
         "fault_windows": [
             {
                 **row,
@@ -1057,6 +1203,7 @@ def validate_attribution_against_misbehavior_truth(
             "channel_localization_validation": _empty_channel_localization_validation(),
             "reconstruction_localization_validation": _empty_reconstruction_localization_validation(),
             "parameter_localization_validation": _empty_parameter_localization_validation(),
+            "hierarchy_cluster_alignment_validation": _empty_hierarchy_cluster_alignment_validation(),
             "misbehavior_windows": [],
         }
 
@@ -1112,6 +1259,10 @@ def validate_attribution_against_misbehavior_truth(
     channel_localization_validation = _build_channel_localization_validation(per_truth_df)
     reconstruction_localization_validation = _build_reconstruction_localization_validation(per_truth_df)
     parameter_localization_validation = _build_parameter_localization_validation(per_truth_df)
+    hierarchy_cluster_alignment_validation = _build_hierarchy_cluster_alignment_validation(
+        hierarchy_sensor_map_df=hierarchy_sensor_map_df,
+        hierarchy_label_df=hierarchy_label_df,
+    )
     exact_parameter_match_count_by_source = dict(
         parameter_localization_validation.get("exact_parameter_match_count_by_source") or {}
     )
@@ -1148,6 +1299,7 @@ def validate_attribution_against_misbehavior_truth(
         "channel_localization_validation": channel_localization_validation,
         "reconstruction_localization_validation": reconstruction_localization_validation,
         "parameter_localization_validation": parameter_localization_validation,
+        "hierarchy_cluster_alignment_validation": hierarchy_cluster_alignment_validation,
         "misbehavior_windows": [match.payload for match in matches],
     }
 

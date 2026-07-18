@@ -730,6 +730,30 @@ def test_anomaly_validator_compares_attribution_to_fault_truth():
     assert summary["event_parameter_match_count"] == 1
     assert summary["telemetry_parameter_match_rate"] == 1.0
     assert summary["event_parameter_match_rate"] == 1.0
+    assert summary["hierarchy_cluster_alignment_validation"]["by_level"]["subsystem"] == {
+        "detected_cluster_count": 1,
+        "mappable_detected_cluster_count": 1,
+        "ambiguous_detected_cluster_count": 0,
+        "pure_detected_cluster_count": 1,
+        "mixed_detected_cluster_count": 0,
+        "parameter_count": 1,
+        "weighted_plurality_purity": 1.0,
+        "mean_cluster_plurality_purity": 1.0,
+        "clusters": [
+            {
+                "detected_id": "SUB_AIR_BLEED",
+                "dominant_truth_id": "SUB_AIR_BLEED",
+                "parameter_count": 1,
+                "distinct_truth_id_count": 1,
+                "dominant_truth_parameter_count": 1,
+                "plurality_purity": 1.0,
+                "mappable_by_strict_plurality": True,
+            }
+        ],
+    }
+    assert misbehavior_summary["hierarchy_cluster_alignment_validation"]["by_level"]["module"][
+        "weighted_plurality_purity"
+    ] == 1.0
     assert summary["parameter_localization_validation"]["exact_parameter_match_count_by_source"] == {
         "telemetry": 1,
         "telemetry_selected": 1,
@@ -879,6 +903,68 @@ def test_anomaly_validator_compares_attribution_to_fault_truth():
     assert misbehavior_summary["dominant_module_match_rate"] == 1.0
     assert misbehavior_summary["top_subsystem_candidate_present_rate"] == 1.0
     assert misbehavior_summary["top_module_candidate_present_rate"] == 1.0
+
+
+def test_anomaly_validator_reports_mixed_hierarchy_cluster_alignment():
+    raw_telemetry_df = pd.DataFrame.from_records(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "timestamp_utc": _ts(10),
+                "parameter_name": "p1",
+                "system_id": "SYS_1",
+                "subsystem_id": "TRUTH_A",
+                "module_id": "TRUTH_MODULE_A",
+                "misbehavior_active": True,
+                "misbehavior_window_id": "MBW1",
+            }
+        ]
+    )
+    windows_df = pd.DataFrame.from_records(
+        [{"tail_id": "T1", "flight_id": "F1", "win_id": 1, "t_start": _ts(10), "t_end": _ts(11)}]
+    )
+    hierarchy_sensor_map_df = pd.DataFrame.from_records(
+        [
+            {"parameter_name": parameter_name, "subsystem_id": "SUB_MIXED", "module_id": "MOD_MIXED"}
+            for parameter_name in ("p1", "p2", "p3", "p4")
+        ]
+    )
+    hierarchy_label_df = pd.DataFrame.from_records(
+        [
+            {"parameter_name": "p1", "subsystem_id": "TRUTH_A", "module_id": "TRUTH_MODULE_A"},
+            {"parameter_name": "p2", "subsystem_id": "TRUTH_A", "module_id": "TRUTH_MODULE_A"},
+            {"parameter_name": "p3", "subsystem_id": "TRUTH_B", "module_id": "TRUTH_MODULE_B"},
+            {"parameter_name": "p4", "subsystem_id": "TRUTH_B", "module_id": "TRUTH_MODULE_B"},
+        ]
+    )
+
+    summary = validate_attribution_against_misbehavior_truth(
+        raw_telemetry_df=raw_telemetry_df,
+        windows_df=windows_df,
+        anomaly_window_attribution_df=pd.DataFrame(),
+        anomaly_telemetry_attribution_df=pd.DataFrame(),
+        anomaly_event_attribution_df=pd.DataFrame(),
+        hierarchy_sensor_map_df=hierarchy_sensor_map_df,
+        hierarchy_label_df=hierarchy_label_df,
+    )
+
+    subsystem = summary["hierarchy_cluster_alignment_validation"]["by_level"]["subsystem"]
+    assert subsystem["mappable_detected_cluster_count"] == 0
+    assert subsystem["ambiguous_detected_cluster_count"] == 1
+    assert subsystem["mixed_detected_cluster_count"] == 1
+    assert subsystem["weighted_plurality_purity"] == 0.5
+    assert subsystem["clusters"] == [
+        {
+            "detected_id": "SUB_MIXED",
+            "dominant_truth_id": "TRUTH_A",
+            "parameter_count": 4,
+            "distinct_truth_id_count": 2,
+            "dominant_truth_parameter_count": 2,
+            "plurality_purity": 0.5,
+            "mappable_by_strict_plurality": False,
+        }
+    ]
 
 
 def test_anomaly_validator_reports_ranked_candidate_presence_when_dominant_winner_is_wrong():
