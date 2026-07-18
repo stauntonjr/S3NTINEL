@@ -61,7 +61,7 @@ class AnomalyWindowAttributionTable(Table):
             dataframe=base.select(
                 F.col("c.tail_id").alias("tail_id"),
                 F.col("c.flight_id").alias("flight_id"),
-                F.col("c.win_id").alias("win_id"),
+                F.col("c.win_id").cast("int").alias("win_id"),
                 F.coalesce(F.col("w.t_end"), F.col("w.t_start"), F.current_timestamp()).alias("timestamp_utc"),
                 F.col("c.phase_state_detected").alias("phase_state_detected"),
                 F.col("c.phase_id_detected").cast("int").alias("phase_id_detected"),
@@ -194,7 +194,7 @@ class AnomalyTelemetryAttributionTable(Table):
             dataframe=base.select(
                 F.col("c.tail_id").alias("tail_id"),
                 F.col("c.flight_id").alias("flight_id"),
-                F.col("c.win_id").alias("win_id"),
+                F.col("c.win_id").cast("int").alias("win_id"),
                 F.col("r.timestamp_utc").alias("timestamp_utc"),
                 F.col("r.parameter_name").alias("parameter_name"),
                 F.col("r.parameter_value").alias("parameter_value"),
@@ -256,7 +256,7 @@ class AnomalyEventAttributionTable(Table):
                 .select(
                     F.col("c.tail_id").alias("tail_id"),
                     F.col("c.flight_id").alias("flight_id"),
-                    F.col("c.win_id").alias("win_id"),
+                    F.col("c.win_id").cast("int").alias("win_id"),
                     F.col("e.timestamp_utc").alias("timestamp_utc"),
                     F.col("e.parameter_name").alias("parameter_name"),
                     F.col("e.event_type_detected").alias("event_type_detected"),

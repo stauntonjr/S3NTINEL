@@ -328,4 +328,5 @@ Optional row controls:
 - Prefer `S3NTINEL_TABLE_FORMAT=parquet` for local smoke unless Delta JVM jars are available.
 - `scripts.run_sim_pipeline` is the canonical simulation entrypoint.
 - `scripts.smoke_test_pipeline` and `scripts.sweep_smoke_graph_hierarchy` are developer utilities, not the primary operational path.
+- Smoke consistency requirements and the boundary between structural smoke checks and simulation-backed positive anomaly validation are documented in [`docs/testing/smoke_simulation_consistency.md`](../docs/testing/smoke_simulation_consistency.md).
 - `scripts.window_diagnostics` is a support utility for windowing diagnostics, not a shared library surface.

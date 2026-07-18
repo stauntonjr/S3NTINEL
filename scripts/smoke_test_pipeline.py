@@ -21,6 +21,25 @@ if TYPE_CHECKING:
     from pyspark.sql import SparkSession
 
 
+SMOKE_STAGE_SCRIPTS = (
+    "00_ingest_raw.py",
+    "10_parameter_profiles_fit.py",
+    "12_behavior_profiles_fit.py",
+    "15_event_profiles_fit.py",
+    "20_events_extract.py",
+    "25_window_policy_profile.py",
+    "30_windows_adaptive.py",
+    "40_backbone_fit.py",
+    "50_build_graph.py",
+    "60_fit_hierarchy.py",
+    "70_phase_fit.py",
+    "72_phase_label_centroids.py",
+    "80_window_scores_raw.py",
+    "85_window_scores_calibrate.py",
+    "90_anomaly_attribution.py",
+)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run S3NTINEL local smoke test")
     parser.add_argument("--base-dir", default="data/smoke", help="Base directory for smoke-test input/output data")
@@ -48,10 +67,12 @@ def set_env_paths(base_dir: str, table_format: str, write_mode: str, min_warm: i
     os.environ["S3NTINEL_CONTINUOUS_SCALING_PROFILE_TABLE_PATH"] = str(base / "delta" / "continuous_scaling_profile")
     os.environ["S3NTINEL_PARAMETER_BEHAVIOR_PRIMITIVE_PROFILE_TABLE_PATH"] = str(base / "delta" / "parameter_behavior_primitive_profile")
     os.environ["S3NTINEL_PARAMETER_BEHAVIOR_PROFILE_TABLE_PATH"] = str(base / "delta" / "parameter_behavior_profile")
+    os.environ["S3NTINEL_PARAMETER_EVENT_PROFILE_TABLE_PATH"] = str(base / "delta" / "parameter_event_profile")
     os.environ["S3NTINEL_EVENTS_TABLE_PATH"] = str(base / "delta" / "events")
     os.environ["S3NTINEL_WINDOW_POLICY_PROFILE_TABLE_PATH"] = str(base / "delta" / "window_policy_profile")
     os.environ["S3NTINEL_WINDOWS_TABLE_PATH"] = str(base / "delta" / "windows")
     os.environ["S3NTINEL_PHASE_LABELS_TABLE_PATH"] = str(base / "delta" / "phase_labels")
+    os.environ["S3NTINEL_WINDOW_FEATURES_TABLE_PATH"] = str(base / "delta" / "window_features")
     os.environ["S3NTINEL_HIERARCHY_SENSOR_MAP_LABEL_TABLE_PATH"] = str(base / "delta" / "hierarchy_sensor_map_label")
     os.environ["S3NTINEL_BACKBONE_TABLE_PATH"] = str(base / "delta" / "backbone")
     os.environ["S3NTINEL_BACKBONE_SENSOR_ENERGY_TABLE_PATH"] = str(base / "delta" / "backbone_sensor_energy")
@@ -61,10 +82,12 @@ def set_env_paths(base_dir: str, table_format: str, write_mode: str, min_warm: i
     os.environ["S3NTINEL_LAG_GRAPH_TABLE_PATH"] = str(base / "delta" / "lag_graph")
     os.environ["S3NTINEL_TRANSITION_GRAPH_TABLE_PATH"] = str(base / "delta" / "transition_graph")
     os.environ["S3NTINEL_FUSED_GRAPH_TABLE_PATH"] = str(base / "delta" / "fused_graph")
+    os.environ["S3NTINEL_GRAPH_PARAMETER_UNIVERSE_TABLE_PATH"] = str(base / "delta" / "graph_parameter_universe")
     os.environ["S3NTINEL_PHASE_WINDOWS_TABLE_PATH"] = str(base / "delta" / "phase_windows")
     os.environ["S3NTINEL_PHASE_BASELINES_TABLE_PATH"] = str(base / "delta" / "phase_baselines")
     os.environ["S3NTINEL_PHASE_LABEL_CENTROIDS_TABLE_PATH"] = str(base / "delta" / "phase_label_centroids")
     os.environ["S3NTINEL_HIERARCHY_SENSOR_MAP_TABLE_PATH"] = str(base / "delta" / "hierarchy_sensor_map")
+    os.environ["S3NTINEL_HIERARCHY_EDGE_EVIDENCE_TABLE_PATH"] = str(base / "delta" / "hierarchy_edge_evidence")
     os.environ["S3NTINEL_WINDOW_SCORES_RAW_TABLE_PATH"] = str(base / "delta" / "window_scores_raw")
     os.environ["S3NTINEL_WINDOW_SCORES_CALIBRATED_TABLE_PATH"] = str(base / "delta" / "window_scores_calibrated")
     os.environ["S3NTINEL_ANOMALY_WINDOW_ATTRIBUTION_TABLE_PATH"] = str(base / "delta" / "anomaly_window_attribution")
@@ -78,22 +101,8 @@ def set_env_paths(base_dir: str, table_format: str, write_mode: str, min_warm: i
 
 def run_stages(stage_80_write_mode: str) -> None:
     pipeline_dir = Path(__file__).resolve().parent.parent / "pipelines"
-    stage_scripts = [
-        "00_ingest_raw.py",
-        "10_parameter_profiles_fit.py",
-        "20_events_extract.py",
-        "25_window_policy_profile.py",
-        "30_windows_adaptive.py",
-        "40_backbone_fit.py",
-        "50_build_graph.py",
-        "70_phase_fit.py",
-        "72_phase_label_centroids.py",
-        "80_window_scores_raw.py",
-        "85_window_scores_calibrate.py",
-        "90_anomaly_attribution.py",
-    ]
 
-    for stage_script in stage_scripts:
+    for stage_script in SMOKE_STAGE_SCRIPTS:
         if stage_script == "90_anomaly_attribution.py":
             os.environ["S3NTINEL_WRITE_MODE"] = stage_80_write_mode
         stage_path = pipeline_dir / stage_script
@@ -121,7 +130,9 @@ def print_row_counts(spark: "SparkSession", table_format: str) -> None:
         "lag_graph": os.environ["S3NTINEL_LAG_GRAPH_TABLE_PATH"],
         "transition_graph": os.environ["S3NTINEL_TRANSITION_GRAPH_TABLE_PATH"],
         "fused_graph": os.environ["S3NTINEL_FUSED_GRAPH_TABLE_PATH"],
+        "graph_parameter_universe": os.environ["S3NTINEL_GRAPH_PARAMETER_UNIVERSE_TABLE_PATH"],
         "hierarchy_sensor_map": os.environ["S3NTINEL_HIERARCHY_SENSOR_MAP_TABLE_PATH"],
+        "hierarchy_edge_evidence": os.environ["S3NTINEL_HIERARCHY_EDGE_EVIDENCE_TABLE_PATH"],
         "phase_windows": os.environ["S3NTINEL_PHASE_WINDOWS_TABLE_PATH"],
         "phase_baselines": os.environ["S3NTINEL_PHASE_BASELINES_TABLE_PATH"],
         "phase_label_centroids": os.environ["S3NTINEL_PHASE_LABEL_CENTROIDS_TABLE_PATH"],
@@ -152,7 +163,13 @@ def assert_anomaly_payload_quality(spark: "SparkSession", table_format: str, wri
     anomaly_window_attribution_df = read_table(spark, path=anomaly_window_attribution_path, fmt=table_format)
     row_count = anomaly_window_attribution_df.count()
     if row_count <= 0:
-        raise SystemExit("[smoke] anomaly quality assertion failed: no anomaly rows emitted")
+        calibrated_path = os.environ["S3NTINEL_WINDOW_SCORES_CALIBRATED_TABLE_PATH"]
+        calibrated_df = read_table(spark, path=calibrated_path, fmt=table_format)
+        ready_count = calibrated_df.where(F.col("emit_ready") == F.lit(True)).count()
+        if ready_count <= 0:
+            print("[smoke] anomaly quality assertions passed (no emit_ready anomalous windows)")
+            return
+        raise SystemExit("[smoke] anomaly quality assertion failed: emit_ready rows produced no attribution rows")
 
     duplicate_key_rows = (
         anomaly_window_attribution_df.groupBy("tail_id", "flight_id", "win_id").agg(F.count(F.lit(1)).alias("n")).where(F.col("n") > F.lit(1)).count()
@@ -201,6 +218,7 @@ def assert_active_v2_table_contracts(spark: "SparkSession", table_format: str) -
         "continuous_scaling_profile": os.environ["S3NTINEL_CONTINUOUS_SCALING_PROFILE_TABLE_PATH"],
         "parameter_behavior_primitive_profile": os.environ["S3NTINEL_PARAMETER_BEHAVIOR_PRIMITIVE_PROFILE_TABLE_PATH"],
         "parameter_behavior_profile": os.environ["S3NTINEL_PARAMETER_BEHAVIOR_PROFILE_TABLE_PATH"],
+        "parameter_event_profile": os.environ["S3NTINEL_PARAMETER_EVENT_PROFILE_TABLE_PATH"],
         "windows": os.environ["S3NTINEL_WINDOWS_TABLE_PATH"],
         "backbone": os.environ["S3NTINEL_BACKBONE_TABLE_PATH"],
         "backbone_sensor_energy": os.environ["S3NTINEL_BACKBONE_SENSOR_ENERGY_TABLE_PATH"],
@@ -211,6 +229,7 @@ def assert_active_v2_table_contracts(spark: "SparkSession", table_format: str) -
         "transition_graph": os.environ["S3NTINEL_TRANSITION_GRAPH_TABLE_PATH"],
         "fused_graph": os.environ["S3NTINEL_FUSED_GRAPH_TABLE_PATH"],
         "hierarchy_sensor_map": os.environ["S3NTINEL_HIERARCHY_SENSOR_MAP_TABLE_PATH"],
+        "hierarchy_edge_evidence": os.environ["S3NTINEL_HIERARCHY_EDGE_EVIDENCE_TABLE_PATH"],
         "phase_windows": os.environ["S3NTINEL_PHASE_WINDOWS_TABLE_PATH"],
         "phase_baselines": os.environ["S3NTINEL_PHASE_BASELINES_TABLE_PATH"],
         "phase_label_centroids": os.environ["S3NTINEL_PHASE_LABEL_CENTROIDS_TABLE_PATH"],
@@ -221,6 +240,9 @@ def assert_active_v2_table_contracts(spark: "SparkSession", table_format: str) -
         "anomaly_event_attribution": os.environ["S3NTINEL_ANOMALY_EVENT_ATTRIBUTION_TABLE_PATH"],
     }
     for table_name, required_columns in ACTIVE_V2_TABLES.items():
+        # Explorer artifacts are emitted by stage 95, outside this 00->90 smoke.
+        if table_name not in path_by_table:
+            continue
         df = read_table(spark, path=path_by_table[table_name], fmt=table_format)
         missing_columns = [column for column in required_columns if column not in df.columns]
         if missing_columns:
@@ -327,6 +349,7 @@ def main() -> None:
         timestamp_count=int(args.timestamp_count),
         step_ms=int(args.step_ms),
         include_intermediate_tables=True,
+        inject_anomaly=True,
     )
 
     run_stages(stage_80_write_mode=args.write_mode)

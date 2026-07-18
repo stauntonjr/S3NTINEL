@@ -32,6 +32,7 @@ def seed_sample_dataset(
     timestamp_count: int = 12,
     step_ms: int = 100,
     include_intermediate_tables: bool = True,
+    inject_anomaly: bool = False,
 ) -> dict[str, str]:
     """Write deterministic sample inputs/intermediate tables for smoke testing."""
     base_path = Path(base_dir)
@@ -83,10 +84,38 @@ def seed_sample_dataset(
             writer = writer.partitionBy(*partition_cols)
         writer.save(path)
 
-    raw_table_df = create_sample_raw_table_df(spark)
+    if (
+        tail_count == 1
+        and flights_per_tail == 1
+        and sensor_count == 3
+        and timestamp_count == 12
+        and step_ms == 100
+    ):
+        raw_table_df = create_sample_raw_table_df(spark)
+    else:
+        from pyspark.sql import functions as F
+
+        raw_table_df = (
+            raw_input_df.withColumnRenamed("timestamp", "timestamp_utc")
+            .withColumn("date_utc", F.to_date("timestamp_utc"))
+            .select("tail_id", "flight_id", "timestamp_utc", "parameter_name", "parameter_value", "date_utc")
+        )
+    profiling_raw_table_df = raw_table_df
+    if inject_anomaly:
+        from pyspark.sql import functions as F
+
+        anomaly_start = F.to_timestamp(F.lit("2026-02-28 00:00:00.800"))
+        raw_table_df = raw_table_df.withColumn(
+            "parameter_value",
+            F.when(
+                (F.col("parameter_name") == F.lit("ENG_TEMP_1"))
+                & (F.col("timestamp_utc") >= anomaly_start),
+                (F.col("parameter_value").cast("double") + F.lit(100.0)).cast("string"),
+            ).otherwise(F.col("parameter_value")),
+        )
     _write_seed_table(raw_table_df, paths["raw_telemetry"])
     if include_intermediate_tables:
-        profiles = TelemetryProfilingPlan.from_raw_input(raw_table_df).build()
+        profiles = TelemetryProfilingPlan.from_raw_input(profiling_raw_table_df).build()
         _write_seed_table(profiles.scaling_profile.to_dataframe(), paths["continuous_scaling_profile"])
         _write_seed_table(profiles.primitive_profile.to_dataframe(), paths["parameter_behavior_primitive_profile"])
         _write_seed_table(profiles.behavior_profile.to_dataframe(), paths["parameter_behavior_profile"])

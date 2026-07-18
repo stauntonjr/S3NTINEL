@@ -21,10 +21,21 @@ from pipelines.common import build_stage_runtime
 LOGGER = get_logger(__name__)
 
 
+def _materialize_output(table, storage_level):
+    dataframe = table.to_dataframe()
+    if hasattr(dataframe, "persist"):
+        dataframe = dataframe.persist(storage_level)
+    if hasattr(table, "with_dataframe"):
+        table = table.with_dataframe(dataframe)
+    return table, int(dataframe.count())
+
+
 @track_mlflow_run(stage_name="90_anomaly_attribution", logger=LOGGER)
 @log_memory_usage(logger=LOGGER, label="90_anomaly_attribution")
 @log_wall_time(logger=LOGGER)
 def run() -> None:
+    from pyspark import StorageLevel
+
     runtime = build_stage_runtime("90_anomaly_attribution")
     context = runtime.context
     window_scores_calibrated_path = runtime.artifacts.window_scores_calibrated
@@ -78,6 +89,18 @@ def run() -> None:
         format=table_format,
         partition_by=tuple(context.config["output"]["partition_by"]),
     )
+    # These frames have wide schemas and share expensive attribution lineages.
+    # Materialize them once so the empty check, write, and manifest count do not
+    # each re-plan and re-execute the complete attribution graph.
+    anomaly_window_attribution, anomaly_window_count = _materialize_output(
+        anomaly_window_attribution, StorageLevel.DISK_ONLY
+    )
+    anomaly_telemetry_attribution, anomaly_telemetry_count = _materialize_output(
+        anomaly_telemetry_attribution, StorageLevel.DISK_ONLY
+    )
+    anomaly_event_attribution, anomaly_event_count = _materialize_output(
+        anomaly_event_attribution, StorageLevel.DISK_ONLY
+    )
     if write_mode.lower() == "merge":
         anomaly_window_attribution.upsert(merge_keys=context.config["output"]["anomalies_merge_key"])
         anomaly_telemetry_attribution.upsert(merge_keys=["tail_id", "flight_id", "win_id", "timestamp_utc", "parameter_name"])
@@ -95,10 +118,6 @@ def run() -> None:
     hierarchy_sensor_map_count = int(hierarchy_sensor_map_df.count())
     parameter_behavior_profile_count = int(parameter_behavior_profile_df.count())
     raw_count = int(raw_df.count())
-    anomaly_window_count = int(anomaly_window_attribution.to_dataframe().count())
-    anomaly_telemetry_count = int(anomaly_telemetry_attribution.to_dataframe().count())
-    anomaly_event_count = int(anomaly_event_attribution.to_dataframe().count())
-
     log_params_if_active(
         {
             "merge_key": context.config["output"]["anomalies_merge_key"],

@@ -45,6 +45,7 @@ def _patch_common(monkeypatch, module, calls: dict[str, int]):
                 windows="delta/windows",
                 events="delta/events",
                 hierarchy_sensor_map="delta/hierarchy_sensor_map",
+                parameter_behavior_profile="delta/parameter_behavior_profile",
                 raw_table="delta/raw_telemetry",
                 anomaly_window_attribution="delta/anomaly_window_attribution",
                 anomaly_telemetry_attribution="delta/anomaly_telemetry_attribution",
@@ -70,6 +71,11 @@ def _patch_common(monkeypatch, module, calls: dict[str, int]):
         return _FakeFrame()
 
     monkeypatch.setattr(module, "read_table", fake_read_table)
+    monkeypatch.setattr(
+        module.ParameterBehaviorProfile,
+        "read",
+        classmethod(lambda cls, *_args, **_kwargs: SimpleNamespace(to_dataframe=lambda: _FakeFrame())),
+    )
     monkeypatch.setattr(
         module.AnomalyAttributionPlan,
         "build",
