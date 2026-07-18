@@ -1,0 +1,4 @@
+interface:
+  display_name: "Plan Artifacts"
+  short_description: "Maintain non-authoritative project plans"
+  default_prompt: "Use $plan-artifacts to create or revise a focused non-authoritative roadmap in docs/plans/."

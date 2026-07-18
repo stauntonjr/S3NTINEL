@@ -1,6 +1,6 @@
 ---
 name: repo-agent-loop
-description: Use when a repository task should be handled end-to-end: inspect the codebase and relevant skills, capture baseline metrics when modeling is involved, edit the canonical code path, update tests/contracts/comments/docs, run staged verification, refresh validation outputs or replays when needed, back out dead ends, and commit/push when the task explicitly calls for delivery.
+description: "Use when a repository task should be handled end-to-end: inspect the codebase and relevant skills, capture baseline metrics when modeling is involved, edit the canonical code path, update tests/contracts/comments/docs, run staged verification, refresh validation outputs or replays when needed, back out dead ends, and commit/push when the task explicitly calls for delivery."
 ---
 
 # Repo Agent Loop
@@ -30,6 +30,13 @@ The loop is:
 6. update docs/contracts
 7. deliver cleanly
 
+For read-heavy work, delegate independent exploration, test triage, log
+analysis, or documentation audits when that materially reduces context noise.
+Keep architectural decisions and all overlapping edits in the main thread. Ask
+delegated agents for concise findings with file references and wait for all
+independent results before deciding. Do not parallelize writes to the same
+files.
+
 ## Required Loop
 
 ### 1. Inspect First
@@ -41,6 +48,8 @@ Before editing:
 - inspect `git status`
 - identify the canonical owner for the behavior you are changing
 - search for duplicate semantics in `libs/`, `pipelines/`, and `tests/`
+- identify whether the task is a fresh-resume, review, implementation, or
+  replay task and load only the skills relevant to that mode
 
 If there is already a duplicate local/test path, consolidate before adding more logic.
 
@@ -93,6 +102,10 @@ When the code changes, update all affected surfaces in the same pass:
 - relevant Codex skills if the repo workflow changed
 
 Do not leave stale documentation or stale guardrails behind.
+
+Keep the final response compact and operational: outcome, changed files,
+verification performed, failures or unverified work, and remaining risks. Do
+not dump full source listings unless the user asks for them.
 
 ### 6. Verify In Stages
 

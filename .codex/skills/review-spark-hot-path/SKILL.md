@@ -27,3 +27,22 @@ Read:
 - treat joins, aggregations, windows, cardinality changes, and null semantics as semantic risks
 - preserve inspectability of the Spark plan
 - do not hide execution semantics behind wrappers
+
+## Review Output
+
+Report findings first, ordered by severity, with file and line references when
+available. For each finding, state the semantic or runtime risk and the
+smallest corrective direction.
+
+Check explicitly for:
+
+- unbounded `collect()` or `toPandas()` on fact tables
+- Python UDFs or row loops where built-in Spark expressions would work
+- join fanout, accidental repartitioning, skew, and unexpected cardinality
+- null, duplicate-key, ordering, and time-window semantics
+- driver-side work hidden behind helpers or typed wrappers
+- missing targeted tests for the changed plan or contract
+
+Treat bounded driver-side reference artifacts as acceptable only when their
+bound is explicit, validated, and documented. Separate confirmed findings from
+residual risks and untested assumptions.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Repository Agent Loop"
+  short_description: "Drive repo work through verified delivery"
+  default_prompt: "Use $repo-agent-loop to inspect, implement, verify, document, and hand off this repository change end to end."

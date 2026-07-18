@@ -1,0 +1,4 @@
+interface:
+  display_name: "Single Model Path"
+  short_description: "Prevent duplicate production model paths"
+  default_prompt: "Use $single-model-path to check that this production modeling concept has one canonical Spark implementation path."

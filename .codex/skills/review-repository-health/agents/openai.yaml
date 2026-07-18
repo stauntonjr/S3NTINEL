@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Repository Health"
+  short_description: "Audit repo setup and workflow health"
+  default_prompt: "Use $review-repository-health to audit repository setup, documentation, configuration, tests, and workflow drift."

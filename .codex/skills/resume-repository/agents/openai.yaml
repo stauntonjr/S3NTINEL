@@ -1,0 +1,4 @@
+interface:
+  display_name: "Resume Repository"
+  short_description: "Re-establish a reliable repo baseline"
+  default_prompt: "Use $resume-repository to re-establish this repository baseline after a pause, environment change, or toolchain update."
