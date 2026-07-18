@@ -3,12 +3,12 @@
 This note defines the current fitting workflow at a conceptual level.
 
 For current ownership and implementation details, see:
-- [pipelines/README.md](/home/jrs/code/S3NTINEL/sentinel/pipelines/README.md)
-- [libs/profiling/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/profiling/README.md)
-- [libs/windows/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/windows/README.md)
-- [libs/backbone/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/backbone/README.md)
-- [libs/graph/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/graph/README.md)
-- [libs/phase/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/phase/README.md)
+- [pipelines/README.md](../../pipelines/README.md)
+- [libs/profiling/README.md](../../libs/profiling/README.md)
+- [libs/windows/README.md](../../libs/windows/README.md)
+- [libs/backbone/README.md](../../libs/backbone/README.md)
+- [libs/graph/README.md](../../libs/graph/README.md)
+- [libs/phase/README.md](../../libs/phase/README.md)
 
 ## 1. Signal Semantics
 
@@ -109,7 +109,7 @@ and should not continuously re-fit those semantics unless a separate adaptation 
 
 ## 5. Notes
 
-- For the mathematical interpretation of robust scaling, backbone fitting, graph weights, and phase fitting, see [theory_foundations.md](/home/jrs/code/S3NTINEL/sentinel/docs/reference/theory_foundations.md).
+- For the mathematical interpretation of robust scaling, backbone fitting, graph weights, and phase fitting, see [theory_foundations.md](../reference/theory_foundations.md).
 - For current stage ownership and artifact flow, prefer the package READMEs over historical stage-level implementation notes.
 
 ## 6. Validation Harness

@@ -6,18 +6,18 @@ This note records a practical research-backed view of two adjacent questions:
 2. how the backbone fit should be validated beyond "the code ran"
 
 For the planned structured deviation ontology that should sit underneath anomaly
-classification, see [misbehavior_taxonomy.md](/home/jrs/code/S3NTINEL/sentinel/docs/reference/misbehavior_taxonomy.md).
+classification, see [misbehavior_taxonomy.md](../reference/misbehavior_taxonomy.md).
 
 The intent is not to catalogue every anomaly type in the literature. The intent is
 to identify the families that are both scientifically defensible and operationally
 compatible with the current code path.
 
 For current implementation ownership, see:
-- [libs/windows/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/windows/README.md)
-- [libs/backbone/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/backbone/README.md)
-- [libs/graph/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/graph/README.md)
-- [libs/phase/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/phase/README.md)
-- [libs/anomaly/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/anomaly/README.md)
+- [libs/windows/README.md](../../libs/windows/README.md)
+- [libs/backbone/README.md](../../libs/backbone/README.md)
+- [libs/graph/README.md](../../libs/graph/README.md)
+- [libs/phase/README.md](../../libs/phase/README.md)
+- [libs/anomaly/README.md](../../libs/anomaly/README.md)
 
 ## 1. Scientific framing
 
@@ -228,7 +228,7 @@ The active backbone is a column-subset reconstruction model:
 - solve `B = (G + λI)^(-1) H`
 
 See:
-- [libs/backbone/fit.py](/home/jrs/code/S3NTINEL/sentinel/libs/backbone/fit.py)
+- [libs/backbone/fit.py](../../libs/backbone/fit.py)
 
 This is not generic PCA, so the validation should not be generic PCA boilerplate.
 

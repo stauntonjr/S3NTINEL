@@ -8,8 +8,8 @@ Use plans for:
 - deferred design notes that are not part of the active contract yet
 
 Do not use plans as the source of truth for current behavior. For that, prefer:
-- [README.md](/home/jrs/code/S3NTINEL/sentinel/README.md)
-- [docs/current/](/home/jrs/code/S3NTINEL/sentinel/docs/current)
+- [README.md](../../README.md)
+- [docs/current/](../current)
 - package READMEs near the code
 - current code, schemas, contracts, and validation outputs
 
@@ -17,21 +17,35 @@ Do not use plans as the source of truth for current behavior. For that, prefer:
 
 - `libs/`
   - library-owned plan docs mirroring the `libs/` repo structure
-  - use [libs/README.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/README.md) as the main index
+  - use [libs/README.md](libs/README.md) as the main index
 - avoid flat topic files at this root level
 - add future repo-mirrored subtrees only when there is a real ownership boundary, for example `pipelines/` or `scripts/`
 
 ## Current Plan Entry Points
 
-- [libs/README.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/README.md)
+The current resume order is:
+
+1. [anomaly.md](libs/anomaly.md): use the authored-fault composite replay to
+   improve subsystem/module localization without changing the canonical Spark
+   modeling path.
+2. [simulation.md](libs/simulation.md): keep smoke structural, use the
+   authored-fault composite for positive validation, and preserve replay and
+   benchmark consistency.
+3. [phase.md](libs/phase.md): defer additional phase-simulation expansion until
+   anomaly and simulation gates are stable.
+4. [windows.md](libs/windows.md): defer rate-aware window-feature work until
+   phase, hierarchy, and anomaly bottlenecks justify changing the feature
+   contract.
+
+- [libs/README.md](libs/README.md)
   - library-by-library plan index that mirrors `libs/`
-- [libs/anomaly.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/anomaly.md)
+- [libs/anomaly.md](libs/anomaly.md)
   - current anomaly, scoring, and hierarchy-decision next steps
-- [libs/simulation.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/simulation.md)
+- [libs/simulation.md](libs/simulation.md)
   - current simulation, realism, and performance next steps
-- [libs/phase.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/phase.md)
+- [libs/phase.md](libs/phase.md)
   - current phase-simulation next step
-- [libs/windows.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/windows.md)
+- [libs/windows.md](libs/windows.md)
   - deferred windows representation note
 
 ## Maintenance Rules

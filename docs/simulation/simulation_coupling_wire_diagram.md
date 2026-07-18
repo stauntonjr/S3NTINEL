@@ -10,7 +10,7 @@ This note isolates the coupling-heavy part of the simulation seam:
 - phase/scoped-mode gating
 
 For the end-to-end execution view, see
-[simulation_codepath_wire_diagram.md](/home/jrs/code/S3NTINEL/sentinel/docs/simulation/simulation_codepath_wire_diagram.md).
+[simulation_codepath_wire_diagram.md](simulation_codepath_wire_diagram.md).
 
 ## Diagram
 

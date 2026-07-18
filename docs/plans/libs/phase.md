@@ -5,9 +5,16 @@ Authority: Non-authoritative roadmap. Use package READMEs and `docs/current/` fo
 
 This plan covers the next phase-focused simulation work in the current object model.
 
+## Resume Position
+
+Phase simulation remains a later milestone. The current composite replay has
+usable phase outputs, but the active acceptance gap is anomaly subsystem/module
+localization. Do not expand phase envelopes or rewrite phase labels until the
+simulation benchmark and anomaly localization gates stabilize.
+
 For current implementation ownership, see:
-- [libs/simulation/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/simulation/README.md)
-- [libs/phase/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/phase/README.md)
+- [libs/simulation/README.md](../../../libs/simulation/README.md)
+- [libs/phase/README.md](../../../libs/phase/README.md)
 
 **Core idea**
 Phases should not be simulated as labels pasted onto telemetry.  

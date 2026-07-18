@@ -10,25 +10,25 @@ Use these docs for:
 
 Do not use them as the source of truth for current behavior. For that, prefer:
 - package READMEs under `libs/*`
-- [docs/current/](/home/jrs/code/S3NTINEL/sentinel/docs/current)
+- [docs/current/](../../current)
 - current code, contracts, schemas, and validation outputs
 
 ## Libraries With Active Plan Docs
 
-- [anomaly.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/anomaly.md)
+- [anomaly.md](anomaly.md)
   - primary next-step plan for `libs/anomaly`, with shared scoring and graph decision gates
-- [phase.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/phase.md)
+- [phase.md](phase.md)
   - next phase-simulation plan aligned to `libs/phase`
-- [simulation.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/simulation.md)
+- [simulation.md](simulation.md)
   - medium-term simulation plan, including behavior-family observability work
-- [windows.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/windows.md)
+- [windows.md](windows.md)
   - deferred windows and continuous-representation notes
 
 ## Library Map
 
 ### `anomaly`
 
-Active plan: [anomaly.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/anomaly.md)
+Active plan: [anomaly.md](anomaly.md)
 
 ### `architecture`
 
@@ -37,12 +37,12 @@ No active dedicated plan artifact.
 ### `backbone`
 
 No active dedicated plan artifact. Backbone-sensitive changes are currently
-tracked through [windows.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/windows.md)
-and [anomaly.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/anomaly.md).
+tracked through [windows.md](windows.md)
+and [anomaly.md](anomaly.md).
 
 ### `behavior`
 
-Covered by [simulation.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/simulation.md)
+Covered by [simulation.md](simulation.md)
 because the current behavior-family observability work is simulator-driven.
 
 ### `common`
@@ -56,7 +56,7 @@ No active dedicated plan artifact.
 ### `conformal`
 
 No active dedicated plan artifact. Calibration-related changes are currently
-tracked under [anomaly.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/anomaly.md).
+tracked under [anomaly.md](anomaly.md).
 
 ### `events`
 
@@ -65,7 +65,7 @@ simulation and anomaly plans.
 
 ### `graph`
 
-Shared plan coverage in [anomaly.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/anomaly.md)
+Shared plan coverage in [anomaly.md](anomaly.md)
 for hierarchy decision gates and anomaly-localization dependencies.
 
 ### `io`
@@ -75,11 +75,11 @@ No active dedicated plan artifact.
 ### `perf`
 
 No active dedicated plan artifact. Current performance work is tracked under
-[simulation.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/simulation.md).
+[simulation.md](simulation.md).
 
 ### `phase`
 
-Active plan: [phase.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/phase.md)
+Active plan: [phase.md](phase.md)
 
 ### `plotting`
 
@@ -88,7 +88,7 @@ No active dedicated plan artifact.
 ### `profiling`
 
 No active dedicated plan artifact. Profiling-sensitive simulation changes are
-currently tracked under [simulation.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/simulation.md).
+currently tracked under [simulation.md](simulation.md).
 
 ### `pyspark`
 
@@ -100,12 +100,12 @@ No active dedicated plan artifact.
 
 ### `scoring`
 
-Shared plan coverage in [anomaly.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/anomaly.md)
+Shared plan coverage in [anomaly.md](anomaly.md)
 for score-channel, calibration, and reconstruction-localization next steps.
 
 ### `simulation`
 
-Active plan: [simulation.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/simulation.md)
+Active plan: [simulation.md](simulation.md)
 
 ### `spark_sequence`
 
@@ -121,4 +121,4 @@ No active dedicated plan artifact.
 
 ### `windows`
 
-Active plan: [windows.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/windows.md)
+Active plan: [windows.md](windows.md)

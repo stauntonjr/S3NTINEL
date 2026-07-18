@@ -7,8 +7,8 @@ This note records a likely next-step architectural refinement for the continuous
 window-feature layer. It is intentionally not part of the active path yet.
 
 For the current implementation shape, see:
-- [libs/windows/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/windows/README.md)
-- [libs/phase/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/phase/README.md)
+- [libs/windows/README.md](../../../libs/windows/README.md)
+- [libs/phase/README.md](../../../libs/phase/README.md)
 
 ## Status
 
@@ -17,6 +17,14 @@ Deferred. Keep in mind for the next modeling-focused iteration, especially once:
 - the active V2 interfaces are fully stable
 - mixed-rate telemetry becomes more realistic in simulation and production
 - phase quality and hierarchy quality are the main bottlenecks
+
+## Resume Position
+
+Keep this work deferred during the current resume cycle. The latest composite
+replay reaches positive scoring and attribution; its immediate weakness is
+candidate subsystem/module mapping, not insufficient continuous window-feature
+expressiveness. Revisit this plan only after the anomaly plan's localization
+gates show that the remaining loss is feature-level rather than mapping-level.
 
 ## Motivation
 

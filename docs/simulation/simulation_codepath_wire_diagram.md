@@ -3,9 +3,9 @@
 This note summarizes the **current** simulation codepath.
 
 For current ownership and module names, prefer:
-- [libs/simulation/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/simulation/README.md)
-- [scripts/README.md](/home/jrs/code/S3NTINEL/sentinel/scripts/README.md)
-- [pipelines/README.md](/home/jrs/code/S3NTINEL/sentinel/pipelines/README.md)
+- [libs/simulation/README.md](../../libs/simulation/README.md)
+- [scripts/README.md](../../scripts/README.md)
+- [pipelines/README.md](../../pipelines/README.md)
 
 This file exists to show the runtime flow, not to duplicate the package README.
 

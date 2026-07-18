@@ -16,9 +16,9 @@ Use the newer area READMEs near the code for:
 
 Recommended orientation order:
 
-1. [README.md](/home/jrs/code/S3NTINEL/sentinel/README.md)
-2. [libs/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/README.md)
-3. [pipelines/README.md](/home/jrs/code/S3NTINEL/sentinel/pipelines/README.md)
+1. [README.md](../README.md)
+2. [libs/README.md](../libs/README.md)
+3. [pipelines/README.md](../pipelines/README.md)
 4. the package-level README for the area you are editing
 5. the deeper conceptual notes in this directory
 
@@ -42,18 +42,18 @@ Directory layout:
   - non-authoritative until regenerated
 
 Useful starting points:
-- [current/v2_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/current/v2_architecture.md)
-- [current/fitting_workflow.md](/home/jrs/code/S3NTINEL/sentinel/docs/current/fitting_workflow.md)
-- [current/phase_validation_semantics.md](/home/jrs/code/S3NTINEL/sentinel/docs/current/phase_validation_semantics.md)
-- [current/computational_complexity_report.md](/home/jrs/code/S3NTINEL/sentinel/docs/current/computational_complexity_report.md)
-- [reference/theory_foundations.md](/home/jrs/code/S3NTINEL/sentinel/docs/reference/theory_foundations.md)
-- [design/artifact_replay_design.md](/home/jrs/code/S3NTINEL/sentinel/docs/design/artifact_replay_design.md)
-- [simulation/simulation_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/simulation/simulation_architecture.md)
-- [plans/README.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/README.md)
-- [plans/libs/README.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/README.md)
-- [plans/libs/anomaly.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/anomaly.md)
-- [plans/libs/simulation.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/simulation.md)
-- [architecture/README.md](/home/jrs/code/S3NTINEL/sentinel/docs/architecture/README.md)
+- [current/v2_architecture.md](current/v2_architecture.md)
+- [current/fitting_workflow.md](current/fitting_workflow.md)
+- [current/phase_validation_semantics.md](current/phase_validation_semantics.md)
+- [current/computational_complexity_report.md](current/computational_complexity_report.md)
+- [reference/theory_foundations.md](reference/theory_foundations.md)
+- [design/artifact_replay_design.md](design/artifact_replay_design.md)
+- [simulation/simulation_architecture.md](simulation/simulation_architecture.md)
+- [plans/README.md](plans/README.md)
+- [plans/libs/README.md](plans/libs/README.md)
+- [plans/libs/anomaly.md](plans/libs/anomaly.md)
+- [plans/libs/simulation.md](plans/libs/simulation.md)
+- [architecture/README.md](architecture/README.md)
 
 Notes:
 - These docs preserve conceptual material even where the code-level READMEs are now the primary implementation guide.

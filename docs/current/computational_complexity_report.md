@@ -8,23 +8,23 @@ Use it for:
 - scale-driver discussion for parameters, rates, windows, phases, graph density, and anomaly fan-out
 - both time-complexity and space-complexity reasoning across the active pipeline
 
-For current stage ownership and entrypoints, see [pipelines/README.md](/home/jrs/code/S3NTINEL/sentinel/pipelines/README.md).
+For current stage ownership and entrypoints, see [pipelines/README.md](../../pipelines/README.md).
 For current implementation surfaces, the main builder modules are:
-- [libs/profiling/profiles.py](/home/jrs/code/S3NTINEL/sentinel/libs/profiling/profiles.py)
-- [libs/events/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/events/pipeline.py)
-- [libs/events/continuous.py](/home/jrs/code/S3NTINEL/sentinel/libs/events/continuous.py)
-- [libs/windows/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/windows/pipeline.py)
-- [libs/windows/features.py](/home/jrs/code/S3NTINEL/sentinel/libs/windows/features.py)
-- [libs/backbone/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/backbone/pipeline.py)
-- [libs/graph/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/graph/pipeline.py)
-- [libs/graph/hierarchy_artifacts.py](/home/jrs/code/S3NTINEL/sentinel/libs/graph/hierarchy_artifacts.py)
-- [libs/phase/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/phase/pipeline.py)
-- [libs/phase/fit.py](/home/jrs/code/S3NTINEL/sentinel/libs/phase/fit.py)
-- [libs/phase/decode.py](/home/jrs/code/S3NTINEL/sentinel/libs/phase/decode.py)
-- [libs/scoring/tables.py](/home/jrs/code/S3NTINEL/sentinel/libs/scoring/tables.py)
-- [libs/anomaly/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/anomaly/pipeline.py)
-- [libs/anomaly/frames.py](/home/jrs/code/S3NTINEL/sentinel/libs/anomaly/frames.py)
-- [libs/anomaly/tables.py](/home/jrs/code/S3NTINEL/sentinel/libs/anomaly/tables.py)
+- [libs/profiling/profiles.py](../../libs/profiling/profiles.py)
+- [libs/events/pipeline.py](../../libs/events/pipeline.py)
+- [libs/events/continuous.py](../../libs/events/continuous.py)
+- [libs/windows/pipeline.py](../../libs/windows/pipeline.py)
+- [libs/windows/features.py](../../libs/windows/features.py)
+- [libs/backbone/pipeline.py](../../libs/backbone/pipeline.py)
+- [libs/graph/pipeline.py](../../libs/graph/pipeline.py)
+- [libs/graph/hierarchy_artifacts.py](../../libs/graph/hierarchy_artifacts.py)
+- [libs/phase/pipeline.py](../../libs/phase/pipeline.py)
+- [libs/phase/fit.py](../../libs/phase/fit.py)
+- [libs/phase/decode.py](../../libs/phase/decode.py)
+- [libs/scoring/tables.py](../../libs/scoring/tables.py)
+- [libs/anomaly/pipeline.py](../../libs/anomaly/pipeline.py)
+- [libs/anomaly/frames.py](../../libs/anomaly/frames.py)
+- [libs/anomaly/tables.py](../../libs/anomaly/tables.py)
 
 ## Scope And Basis
 
@@ -103,7 +103,7 @@ Before looking at any logged run, the implemented codepaths already force a smal
 The active pipeline is built from five recurring primitives:
 
 - partition-local sorts created by `Window.partitionBy(...).orderBy(...)`
-- segmented stateful folds built through [libs/spark_sequence/plan.py](/home/jrs/code/S3NTINEL/sentinel/libs/spark_sequence/plan.py)
+- segmented stateful folds built through [libs/spark_sequence/plan.py](../../libs/spark_sequence/plan.py)
 - interval joins between windows and raw/event rows
 - sparse map explosions and regrouping
 - bounded driver bridges for small matrices or pruned graph rollups
@@ -431,7 +431,7 @@ Unless a section explicitly says otherwise, the artifact counts in this walkthro
 
 Primary code:
 
-- [pipelines/00_ingest_raw.py](/home/jrs/code/S3NTINEL/sentinel/pipelines/00_ingest_raw.py)
+- [pipelines/00_ingest_raw.py](../../pipelines/00_ingest_raw.py)
 
 Cost shape:
 
@@ -447,8 +447,8 @@ This stage is linear and not a current hotspot.
 
 Primary code:
 
-- [pipelines/10_parameter_profiles_fit.py](/home/jrs/code/S3NTINEL/sentinel/pipelines/10_parameter_profiles_fit.py)
-- [libs/profiling/profiles.py](/home/jrs/code/S3NTINEL/sentinel/libs/profiling/profiles.py)
+- [pipelines/10_parameter_profiles_fit.py](../../pipelines/10_parameter_profiles_fit.py)
+- [libs/profiling/profiles.py](../../libs/profiling/profiles.py)
 
 Dominant work:
 
@@ -476,9 +476,9 @@ Key scaling note:
 
 Primary code:
 
-- [pipelines/12_behavior_profiles_fit.py](/home/jrs/code/S3NTINEL/sentinel/pipelines/12_behavior_profiles_fit.py)
-- [libs/profiling/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/profiling/pipeline.py)
-- [libs/profiling/profiles.py](/home/jrs/code/S3NTINEL/sentinel/libs/profiling/profiles.py)
+- [pipelines/12_behavior_profiles_fit.py](../../pipelines/12_behavior_profiles_fit.py)
+- [libs/profiling/pipeline.py](../../libs/profiling/pipeline.py)
+- [libs/profiling/profiles.py](../../libs/profiling/profiles.py)
 
 Dominant work:
 
@@ -507,8 +507,8 @@ Key scaling note:
 
 Primary code:
 
-- [pipelines/15_event_profiles_fit.py](/home/jrs/code/S3NTINEL/sentinel/pipelines/15_event_profiles_fit.py)
-- [libs/events/profiling.py](/home/jrs/code/S3NTINEL/sentinel/libs/events/profiling.py)
+- [pipelines/15_event_profiles_fit.py](../../pipelines/15_event_profiles_fit.py)
+- [libs/events/profiling.py](../../libs/events/profiling.py)
 
 Dominant work:
 
@@ -534,10 +534,10 @@ Key scaling note:
 
 Primary code:
 
-- [pipelines/20_events_extract.py](/home/jrs/code/S3NTINEL/sentinel/pipelines/20_events_extract.py)
-- [libs/events/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/events/pipeline.py)
-- [libs/events/continuous.py](/home/jrs/code/S3NTINEL/sentinel/libs/events/continuous.py)
-- [libs/events/categorical.py](/home/jrs/code/S3NTINEL/sentinel/libs/events/categorical.py)
+- [pipelines/20_events_extract.py](../../pipelines/20_events_extract.py)
+- [libs/events/pipeline.py](../../libs/events/pipeline.py)
+- [libs/events/continuous.py](../../libs/events/continuous.py)
+- [libs/events/categorical.py](../../libs/events/categorical.py)
 
 Dominant work:
 
@@ -565,9 +565,9 @@ Key scaling note:
 
 Primary code:
 
-- [pipelines/25_window_policy_profile.py](/home/jrs/code/S3NTINEL/sentinel/pipelines/25_window_policy_profile.py)
-- [libs/windows/policy_profile.py](/home/jrs/code/S3NTINEL/sentinel/libs/windows/policy_profile.py)
-- [libs/windows/tables.py](/home/jrs/code/S3NTINEL/sentinel/libs/windows/tables.py)
+- [pipelines/25_window_policy_profile.py](../../pipelines/25_window_policy_profile.py)
+- [libs/windows/policy_profile.py](../../libs/windows/policy_profile.py)
+- [libs/windows/tables.py](../../libs/windows/tables.py)
 
 Dominant work:
 
@@ -596,8 +596,8 @@ Key scaling note:
 
 Primary code:
 
-- [pipelines/30_windows_adaptive.py](/home/jrs/code/S3NTINEL/sentinel/pipelines/30_windows_adaptive.py)
-- [libs/windows/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/windows/pipeline.py)
+- [pipelines/30_windows_adaptive.py](../../pipelines/30_windows_adaptive.py)
+- [libs/windows/pipeline.py](../../libs/windows/pipeline.py)
 
 Dominant work:
 
@@ -627,10 +627,10 @@ Key scaling note:
 
 Primary code:
 
-- [pipelines/40_backbone_fit.py](/home/jrs/code/S3NTINEL/sentinel/pipelines/40_backbone_fit.py)
-- [libs/windows/features.py](/home/jrs/code/S3NTINEL/sentinel/libs/windows/features.py)
-- [libs/backbone/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/backbone/pipeline.py)
-- [libs/backbone/fit.py](/home/jrs/code/S3NTINEL/sentinel/libs/backbone/fit.py)
+- [pipelines/40_backbone_fit.py](../../pipelines/40_backbone_fit.py)
+- [libs/windows/features.py](../../libs/windows/features.py)
+- [libs/backbone/pipeline.py](../../libs/backbone/pipeline.py)
+- [libs/backbone/fit.py](../../libs/backbone/fit.py)
 
 Dominant work:
 
@@ -663,9 +663,9 @@ Driver-side bound:
 
 Primary code:
 
-- [pipelines/50_build_graph.py](/home/jrs/code/S3NTINEL/sentinel/pipelines/50_build_graph.py)
-- [libs/graph/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/graph/pipeline.py)
-- [libs/graph/precision.py](/home/jrs/code/S3NTINEL/sentinel/libs/graph/precision.py)
+- [pipelines/50_build_graph.py](../../pipelines/50_build_graph.py)
+- [libs/graph/pipeline.py](../../libs/graph/pipeline.py)
+- [libs/graph/precision.py](../../libs/graph/precision.py)
 
 Dominant work:
 
@@ -701,8 +701,8 @@ Key scaling note:
 
 Primary code:
 
-- [pipelines/60_fit_hierarchy.py](/home/jrs/code/S3NTINEL/sentinel/pipelines/60_fit_hierarchy.py)
-- [libs/graph/hierarchy_artifacts.py](/home/jrs/code/S3NTINEL/sentinel/libs/graph/hierarchy_artifacts.py)
+- [pipelines/60_fit_hierarchy.py](../../pipelines/60_fit_hierarchy.py)
+- [libs/graph/hierarchy_artifacts.py](../../libs/graph/hierarchy_artifacts.py)
 
 Dominant work:
 
@@ -731,11 +731,11 @@ Driver-side bound:
 
 Primary code:
 
-- [pipelines/70_phase_fit.py](/home/jrs/code/S3NTINEL/sentinel/pipelines/70_phase_fit.py)
-- [libs/phase/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/phase/pipeline.py)
-- [libs/phase/frames.py](/home/jrs/code/S3NTINEL/sentinel/libs/phase/frames.py)
-- [libs/phase/fit.py](/home/jrs/code/S3NTINEL/sentinel/libs/phase/fit.py)
-- [libs/phase/decode.py](/home/jrs/code/S3NTINEL/sentinel/libs/phase/decode.py)
+- [pipelines/70_phase_fit.py](../../pipelines/70_phase_fit.py)
+- [libs/phase/pipeline.py](../../libs/phase/pipeline.py)
+- [libs/phase/frames.py](../../libs/phase/frames.py)
+- [libs/phase/fit.py](../../libs/phase/fit.py)
+- [libs/phase/decode.py](../../libs/phase/decode.py)
 
 Dominant work:
 
@@ -770,9 +770,9 @@ Key scaling note:
 
 Primary code:
 
-- [pipelines/72_phase_label_centroids.py](/home/jrs/code/S3NTINEL/sentinel/pipelines/72_phase_label_centroids.py)
-- [libs/phase/tables.py](/home/jrs/code/S3NTINEL/sentinel/libs/phase/tables.py)
-- [libs/phase/validator.py](/home/jrs/code/S3NTINEL/sentinel/libs/phase/validator.py)
+- [pipelines/72_phase_label_centroids.py](../../pipelines/72_phase_label_centroids.py)
+- [libs/phase/tables.py](../../libs/phase/tables.py)
+- [libs/phase/validator.py](../../libs/phase/validator.py)
 
 Dominant work:
 
@@ -799,8 +799,8 @@ Key scaling note:
 
 Primary code:
 
-- [pipelines/80_window_scores_raw.py](/home/jrs/code/S3NTINEL/sentinel/pipelines/80_window_scores_raw.py)
-- [libs/scoring/tables.py](/home/jrs/code/S3NTINEL/sentinel/libs/scoring/tables.py)
+- [pipelines/80_window_scores_raw.py](../../pipelines/80_window_scores_raw.py)
+- [libs/scoring/tables.py](../../libs/scoring/tables.py)
 
 Dominant work:
 
@@ -829,8 +829,8 @@ Driver-side bound:
 
 Primary code:
 
-- [pipelines/85_window_scores_calibrate.py](/home/jrs/code/S3NTINEL/sentinel/pipelines/85_window_scores_calibrate.py)
-- [libs/scoring/tables.py](/home/jrs/code/S3NTINEL/sentinel/libs/scoring/tables.py)
+- [pipelines/85_window_scores_calibrate.py](../../pipelines/85_window_scores_calibrate.py)
+- [libs/scoring/tables.py](../../libs/scoring/tables.py)
 
 Dominant work:
 
@@ -855,10 +855,10 @@ Key scaling note:
 
 Primary code:
 
-- [pipelines/90_anomaly_attribution.py](/home/jrs/code/S3NTINEL/sentinel/pipelines/90_anomaly_attribution.py)
-- [libs/anomaly/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/anomaly/pipeline.py)
-- [libs/anomaly/frames.py](/home/jrs/code/S3NTINEL/sentinel/libs/anomaly/frames.py)
-- [libs/anomaly/tables.py](/home/jrs/code/S3NTINEL/sentinel/libs/anomaly/tables.py)
+- [pipelines/90_anomaly_attribution.py](../../pipelines/90_anomaly_attribution.py)
+- [libs/anomaly/pipeline.py](../../libs/anomaly/pipeline.py)
+- [libs/anomaly/frames.py](../../libs/anomaly/frames.py)
+- [libs/anomaly/tables.py](../../libs/anomaly/tables.py)
 
 Dominant work:
 
@@ -891,7 +891,7 @@ Amplification note:
 
 Primary code:
 
-- [pipelines/95_emit_explorer_bundle.py](/home/jrs/code/S3NTINEL/sentinel/pipelines/95_emit_explorer_bundle.py)
+- [pipelines/95_emit_explorer_bundle.py](../../pipelines/95_emit_explorer_bundle.py)
 
 Dominant work:
 
@@ -1016,7 +1016,7 @@ For the current codebase:
 
 If the workload grows materially, the first places to rework are:
 
-- lag graph candidate generation in [libs/graph/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/graph/pipeline.py)
-- event-to-window and raw-to-window interval joins in [libs/windows/pipeline.py](/home/jrs/code/S3NTINEL/sentinel/libs/windows/pipeline.py), [libs/windows/features.py](/home/jrs/code/S3NTINEL/sentinel/libs/windows/features.py), [libs/anomaly/frames.py](/home/jrs/code/S3NTINEL/sentinel/libs/anomaly/frames.py), and [libs/anomaly/tables.py](/home/jrs/code/S3NTINEL/sentinel/libs/anomaly/tables.py)
+- lag graph candidate generation in [libs/graph/pipeline.py](../../libs/graph/pipeline.py)
+- event-to-window and raw-to-window interval joins in [libs/windows/pipeline.py](../../libs/windows/pipeline.py), [libs/windows/features.py](../../libs/windows/features.py), [libs/anomaly/frames.py](../../libs/anomaly/frames.py), and [libs/anomaly/tables.py](../../libs/anomaly/tables.py)
 - graph evaluation/reporting if end-to-end runtime matters as much as model-stage asymptotics
 - any stage that currently relies on bounded driver-side collection, especially backbone solve, graph parameter universe collection, hierarchy rollup, phase-label centroid comparison, and raw-score bridge tables

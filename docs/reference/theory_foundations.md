@@ -3,11 +3,11 @@
 This document tracks the mathematical meaning of the active S3NTINEL pipeline objects.
 
 For current code ownership, see the area READMEs:
-- [libs/windows/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/windows/README.md)
-- [libs/backbone/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/backbone/README.md)
-- [libs/graph/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/graph/README.md)
-- [libs/phase/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/phase/README.md)
-- [libs/scoring/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/scoring/README.md)
+- [libs/windows/README.md](../../libs/windows/README.md)
+- [libs/backbone/README.md](../../libs/backbone/README.md)
+- [libs/graph/README.md](../../libs/graph/README.md)
+- [libs/phase/README.md](../../libs/phase/README.md)
+- [libs/scoring/README.md](../../libs/scoring/README.md)
 
 ## Scope
 

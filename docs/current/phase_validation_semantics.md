@@ -4,8 +4,8 @@ This note documents the current meaning of steady-phase validation versus
 transition-region validation in the active V2 phase stack.
 
 For current implementation ownership, see:
-- [libs/phase/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/phase/README.md)
-- [docs/current/v2_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/current/v2_architecture.md)
+- [libs/phase/README.md](../../libs/phase/README.md)
+- [docs/current/v2_architecture.md](v2_architecture.md)
 
 ## Primary phase taxonomy
 

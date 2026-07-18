@@ -8,10 +8,10 @@ This document defines the next 2-3 engineering milestones for the simulation and
 direction instead of growing new parallel seams.
 
 For current implementation ownership, prefer:
-- [libs/simulation/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/simulation/README.md)
-- [libs/windows/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/windows/README.md)
-- [libs/phase/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/phase/README.md)
-- [scripts/README.md](/home/jrs/code/S3NTINEL/sentinel/scripts/README.md)
+- [libs/simulation/README.md](../../../libs/simulation/README.md)
+- [libs/windows/README.md](../../../libs/windows/README.md)
+- [libs/phase/README.md](../../../libs/phase/README.md)
+- [scripts/README.md](../../../scripts/README.md)
 
 The standing priorities are:
 
@@ -45,9 +45,29 @@ Related library coverage:
   - current behavior-family observability work is simulator-driven and is tracked here
 - `libs/phase`
   - coordinated phase-simulation semantics are tracked here and in
-    [phase.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/phase.md)
+    [phase.md](phase.md)
 
 ## Current State
+
+### 2026-07 resume checkpoint
+
+The canonical simulation runner was revalidated after the tooling pause:
+
+- `power_chain` is a no-fault operational smoke workload and is not suitable
+  for positive anomaly attribution acceptance.
+- `power_pressurization_hierarchy_composite` is the current authored-fault
+  positive validation workload.
+- Its latest full replay completed all `00` through `95` stages, with `18/18`
+  detected fault windows and `15/18` emit-ready fault windows.
+- The local `00` through `90` smoke remains a structural contract check. It may
+  legitimately emit no `emit_ready` rows because its one-window fixture does
+  not provide a conformal warm history.
+- Smoke and simulation consistency requirements are maintained in
+  `docs/testing/smoke_simulation_consistency.md`.
+
+Do not use `power_chain` as evidence of detector recall or attribution quality.
+Use the authored-fault composite and its persisted validation summaries for
+positive claims.
 
 The plan below is grounded in the current repo shape:
 
@@ -593,7 +613,7 @@ Each golden scenario should eventually include:
 - expected graph/phase/anomaly downstream signals
 
 See also:
-- [phase.md](/home/jrs/code/S3NTINEL/sentinel/docs/plans/libs/phase.md)
+- [phase.md](phase.md)
 
 ## C. Golden Scenarios And Validation Discipline
 

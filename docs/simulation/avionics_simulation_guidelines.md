@@ -4,7 +4,7 @@ This note records practical guidance for choosing simulation inputs for the acti
 S3NTINEL path.
 
 For the proposed next simulator structure that can support a large open-ended hierarchy,
-see [simulation_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/simulation/simulation_architecture.md).
+see [simulation_architecture.md](simulation_architecture.md).
 
 The aim is not to encode one specific aircraft type. The aim is to keep the
 simulator physically coherent enough that:

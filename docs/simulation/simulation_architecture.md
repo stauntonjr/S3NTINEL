@@ -3,9 +3,9 @@
 This document explains the **current** simulation architecture at a conceptual level.
 
 For the package-level ownership and current module layout, start with:
-- [libs/simulation/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/simulation/README.md)
-- [libs/windows/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/windows/README.md)
-- [libs/phase/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/phase/README.md)
+- [libs/simulation/README.md](../../libs/simulation/README.md)
+- [libs/windows/README.md](../../libs/windows/README.md)
+- [libs/phase/README.md](../../libs/phase/README.md)
 
 Use this note for the architectural ideas and relationships, not as the authoritative file inventory.
 
@@ -82,7 +82,7 @@ The important boundary is:
 ## 4. Behavior and Fault Semantics
 
 Behavior-family implementations live in:
-- [libs/behavior/README.md](/home/jrs/code/S3NTINEL/sentinel/libs/behavior/README.md)
+- [libs/behavior/README.md](../../libs/behavior/README.md)
 
 The simulation layer attaches those behaviors to parameters and feeds them:
 - local parameter context
@@ -134,8 +134,8 @@ The canonical operational entrypoint is:
 - `python -m scripts.run_sim_pipeline ...`
 
 See:
-- [scripts/README.md](/home/jrs/code/S3NTINEL/sentinel/scripts/README.md)
-- [pipelines/README.md](/home/jrs/code/S3NTINEL/sentinel/pipelines/README.md)
+- [scripts/README.md](../../scripts/README.md)
+- [pipelines/README.md](../../pipelines/README.md)
 
 ## 7. Notes
 

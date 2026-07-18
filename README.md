@@ -4,18 +4,18 @@ S3NTINEL stands for Structural Streaming Sparse Event Nexus for Telemetry Infere
 
 ## Active architecture
 
-The active path is now the V2 pipeline. Use [v2_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/current/v2_architecture.md) as the source of truth for current fitting/inference semantics.
-Use [theory_foundations.md](/home/jrs/code/S3NTINEL/sentinel/docs/reference/theory_foundations.md) for the mathematical/statistical interpretation of the active representations, graph weights, and scoring quantities.
-Use [glossary.md](/home/jrs/code/S3NTINEL/sentinel/docs/reference/glossary.md) for the active code/data taxonomy and naming rules.
-Use [avionics_simulation_guidelines.md](/home/jrs/code/S3NTINEL/sentinel/docs/simulation/avionics_simulation_guidelines.md) for domain guidance on avionics-system behavior, coupling, and simulation inputs.
-Use [artifact_replay_design.md](/home/jrs/code/S3NTINEL/sentinel/docs/design/artifact_replay_design.md) for artifact persistence, replay, cache, and MLflow lineage design.
-Use [simulation_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/simulation/simulation_architecture.md) for the proposed next simulation architecture and extensibility model.
-Use [behavior_profiling_design.md](/home/jrs/code/S3NTINEL/sentinel/docs/design/behavior_profiling_design.md) for the behavior-profile artifact and the mirrored profiling design for simulation behavior semantics.
-Use [fitting_workflow.md](/home/jrs/code/S3NTINEL/sentinel/docs/current/fitting_workflow.md) for the intended one-off fitting sequence for datatype profiling, robust scaling, behavior profiling, and backbone fitting.
-Use [computational_complexity_report.md](/home/jrs/code/S3NTINEL/sentinel/docs/current/computational_complexity_report.md) for a stage-by-stage workload and scaling analysis grounded in the current code and a checked-in simulation bundle.
-Use [behavior_family_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/design/behavior_family_architecture.md) and [behavior_family_skeletons.md](/home/jrs/code/S3NTINEL/sentinel/docs/design/behavior_family_skeletons.md) for the per-family file/class layout.
-Use [misbehavior_taxonomy.md](/home/jrs/code/S3NTINEL/sentinel/docs/reference/misbehavior_taxonomy.md) for the planned structured deviation/anomaly ontology.
-Use [anomaly_injection_and_backbone_validation.md](/home/jrs/code/S3NTINEL/sentinel/docs/research/anomaly_injection_and_backbone_validation.md) for anomaly-injection design and backbone-fit validation guidance.
+The active path is now the V2 pipeline. Use [v2_architecture.md](../docs/current/v2_architecture.md) as the source of truth for current fitting/inference semantics.
+Use [theory_foundations.md](../docs/reference/theory_foundations.md) for the mathematical/statistical interpretation of the active representations, graph weights, and scoring quantities.
+Use [glossary.md](../docs/reference/glossary.md) for the active code/data taxonomy and naming rules.
+Use [avionics_simulation_guidelines.md](../docs/simulation/avionics_simulation_guidelines.md) for domain guidance on avionics-system behavior, coupling, and simulation inputs.
+Use [artifact_replay_design.md](../docs/design/artifact_replay_design.md) for artifact persistence, replay, cache, and MLflow lineage design.
+Use [simulation_architecture.md](../docs/simulation/simulation_architecture.md) for the proposed next simulation architecture and extensibility model.
+Use [behavior_profiling_design.md](../docs/design/behavior_profiling_design.md) for the behavior-profile artifact and the mirrored profiling design for simulation behavior semantics.
+Use [fitting_workflow.md](../docs/current/fitting_workflow.md) for the intended one-off fitting sequence for datatype profiling, robust scaling, behavior profiling, and backbone fitting.
+Use [computational_complexity_report.md](../docs/current/computational_complexity_report.md) for a stage-by-stage workload and scaling analysis grounded in the current code and a checked-in simulation bundle.
+Use [behavior_family_architecture.md](../docs/design/behavior_family_architecture.md) and [behavior_family_skeletons.md](../docs/design/behavior_family_skeletons.md) for the per-family file/class layout.
+Use [misbehavior_taxonomy.md](../docs/reference/misbehavior_taxonomy.md) for the planned structured deviation/anomaly ontology.
+Use [anomaly_injection_and_backbone_validation.md](../docs/research/anomaly_injection_and_backbone_validation.md) for anomaly-injection design and backbone-fit validation guidance.
 
 ### Active fitting path
 
@@ -46,6 +46,12 @@ Run with:
 
 - `python -m pipelines.98_run_inference_pipeline`
 
+### Simulation validation extension
+
+`pipelines/72_phase_label_centroids.py` is not part of the production inference
+runner. It is a simulation-validation stage that requires truth phase labels and
+builds label-conditioned centroid comparison artifacts after stage 70.
+
 ### V2 artifacts
 
 - `backbone`
@@ -73,7 +79,7 @@ Run with:
 - `pipelines/`: ordered job entrypoints (`00_...` through `99_...`).
 - `libs/`: reusable domain modules (`backbone`, `graph`, `events`, `windows`, `phase`, `scoring`, `conformal`, `io`, `anomaly`).
 - `notebooks/`: exploratory and validation notebooks.
-  Notebook workflow and kernel registration guidance live in [notebooks/README.md](/home/jrs/code/S3NTINEL/sentinel/notebooks/README.md).
+  Notebook workflow and kernel registration guidance live in [notebooks/README.md](../notebooks/README.md).
 - `scripts/`: local-to-AVD handoff helpers (bundle/patch export-import).
 - `docs/current/v2_architecture.md`: architecture and contract source of truth.
 - `docs/architecture/`: generated C4 workspace, repo maps, LOC skew reports, and architecture-tooling annotations.
@@ -101,6 +107,9 @@ Run with:
 13. `pipelines/85_window_scores_calibrate.py`
 14. `pipelines/90_anomaly_attribution.py`
 15. `pipelines/95_emit_explorer_bundle.py`
+
+The simulation `full` runner inserts `pipelines/72_phase_label_centroids.py`
+between stages 70 and 80 when truth phase labels are available.
 
 ## Quick start
 
@@ -149,7 +158,7 @@ Run with:
 	- `S3NTINEL_SPARK_SQL_ADAPTIVE_LOCAL_SHUFFLE_READER_ENABLED=true`
 	- `S3NTINEL_SPARK_SERIALIZER=org.apache.spark.serializer.KryoSerializer`
 - Generate deterministic sample test data: `python -m scripts.generate_sample_data --base-dir data --mode overwrite`
-- Run end-to-end smoke test (00->80, including `10_parameter_profiles_fit`): `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format parquet --min-warm 1`
+- Run end-to-end smoke test (00->90, including behavior and event profiling): `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format parquet --min-warm 1`
 - Smoke test now seeds a deterministic `sensor_subsystem_map` and asserts emitted anomaly quality gates: non-empty output, no duplicate `(tail_id, flight_id, win_id)`, at least one non-null `panel_context`, and at least one populated `subsystems[].top_sensors`.
 - For stage-80 merge idempotence validation in smoke: `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format delta --min-warm 1 --write-mode merge`
 - Merge smoke checks require a Spark runtime with Delta JVM classes available.
@@ -181,8 +190,8 @@ Run with:
 	- family scoring consumes that primitive artifact to emit `parameter_behavior_profile`
 - The active family taxonomy now includes `tracking` in addition to `regulated`, `inertial`, `accumulative`, `discrete_state`, and `mixed_unknown`.
 - Event rows should be derived from telemetry via detector tooling (`pipelines/20_events_extract.py`, or `libs.events` builders).
-- For system-level behavior, coupling, and dynamics priors, use [docs/simulation/avionics_simulation_guidelines.md](/home/jrs/code/S3NTINEL/sentinel/docs/simulation/avionics_simulation_guidelines.md).
-- For the next extensible simulator design, use [docs/simulation/simulation_architecture.md](/home/jrs/code/S3NTINEL/sentinel/docs/simulation/simulation_architecture.md).
+- For system-level behavior, coupling, and dynamics priors, use [docs/simulation/avionics_simulation_guidelines.md](../docs/simulation/avionics_simulation_guidelines.md).
+- For the next extensible simulator design, use [docs/simulation/simulation_architecture.md](../docs/simulation/simulation_architecture.md).
 - Optional causal delay realism is available in `flight_setup.causal_delay` via:
 	- `mode` (`random_pair` default, or `fixed_group` for legacy behavior)
 	- `default_lag_sec` (default baseline lag in seconds; defaults to `0`)
