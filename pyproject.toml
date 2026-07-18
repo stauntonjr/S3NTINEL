@@ -13,7 +13,11 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+  "matplotlib>=3.7",
+  "plotly>=5.0",
+  "seaborn>=0.12",
   "pytest>=8.0",
+  "ruff>=0.12",
 ]
 spark = [
   "pyspark>=3.5,<3.6",
