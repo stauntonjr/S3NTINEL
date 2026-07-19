@@ -7,11 +7,11 @@ from typing import Any
 
 import pandas as pd
 
+from libs.anomaly.frames import ANOMALY_LOCALIZATION_PARAMETER_TOP_K
 from libs.scoring.validator import (
     STRICT_MAX_EARLY_LEAD_SECONDS,
     STRICT_WINDOW_COVERAGE_MIN_RATIO,
     build_truth_window_overlap_table,
-    extract_fault_truth_windows,
     extract_misbehavior_truth_windows,
     strict_overlap_mask,
 )
@@ -112,6 +112,23 @@ def _empty_reconstruction_localization_validation() -> dict[str, Any]:
         "top_ranked_selected_parameter_in_truth_module_count": 0,
         "top_ranked_selected_parameter_in_truth_module_rate": None,
         "reconstruction_localization_cases": [],
+    }
+
+
+def _empty_candidate_cut_validation() -> dict[str, Any]:
+    return {
+        "status": "ok",
+        "structural_candidate_cut_width": ANOMALY_LOCALIZATION_PARAMETER_TOP_K,
+        "truth_window_count": 0,
+        "diagnostic_status_count": {},
+        "ranked_truth_parameter_count": 0,
+        "truth_parameter_selected_for_telemetry_count": 0,
+        "truth_parameter_selected_for_telemetry_rate": None,
+        "truth_parameter_within_structural_candidate_cut_count": 0,
+        "truth_parameter_within_structural_candidate_cut_rate": None,
+        "truth_parameter_below_structural_candidate_cut_count": 0,
+        "truth_parameter_below_structural_candidate_cut_rate": None,
+        "candidate_cut_cases": [],
     }
 
 
@@ -267,6 +284,19 @@ def _sorted_non_empty_string_values(df: pd.DataFrame, column: str) -> list[str]:
             if str(value)
         }
     )
+
+
+def _optional_non_empty_string(value: Any) -> str | None:
+    if value is None or pd.isna(value):
+        return None
+    value_text = str(value)
+    return value_text or None
+
+
+def _optional_bool(value: Any) -> bool | None:
+    if value is None or pd.isna(value):
+        return None
+    return bool(value)
 
 
 def _records_with_none_for_missing(df: pd.DataFrame) -> list[dict[str, Any]]:
@@ -485,6 +515,177 @@ class DetectedLocalizationTruthMap:
 
 
 @dataclass(frozen=True)
+class CandidateCutDiagnostic:
+    """Bounded evidence describing whether truth was lost at the structural candidate cut."""
+
+    structural_candidate_cut_width: int
+    diagnostic_status: str
+    truth_parameter_support_rank: int | None
+    truth_parameter_support: float | None
+    support_margin_at_structural_cut: float | None
+    minimum_candidate_breadth: int | None
+    truth_parameter_selected_for_telemetry: bool | None
+    truth_parameter_within_structural_candidate_cut: bool
+    truth_parameter_detected_subsystem_id: str | None
+    truth_parameter_detected_module_id: str | None
+    truth_parameter_subsystem_cluster_mappable: bool | None
+    truth_parameter_module_cluster_mappable: bool | None
+
+    @classmethod
+    def from_telemetry_hits(
+        cls,
+        *,
+        telemetry_hits: pd.DataFrame,
+        truth_parameter: str,
+        subsystem_truth_map: DetectedLocalizationTruthMap,
+        module_truth_map: DetectedLocalizationTruthMap,
+    ) -> "CandidateCutDiagnostic":
+        cut_width = ANOMALY_LOCALIZATION_PARAMETER_TOP_K
+        if telemetry_hits.empty:
+            return cls._unavailable(
+                structural_candidate_cut_width=cut_width,
+                diagnostic_status="no_qualifying_telemetry_attribution",
+            )
+
+        required_columns = {"win_id", "parameter_name", "parameter_support_rank_in_window"}
+        if not required_columns.issubset(telemetry_hits.columns):
+            return cls._unavailable(
+                structural_candidate_cut_width=cut_width,
+                diagnostic_status="candidate_rank_unavailable",
+            )
+
+        candidates = telemetry_hits.copy()
+        candidates["_rank"] = pd.to_numeric(
+            candidates["parameter_support_rank_in_window"], errors="coerce"
+        )
+        candidates["_support"] = (
+            pd.to_numeric(candidates["parameter_localization_support"], errors="coerce")
+            if "parameter_localization_support" in candidates.columns
+            else pd.Series(pd.NA, index=candidates.index, dtype="Float64")
+        )
+        candidates["_win_id_sort"] = candidates["win_id"].astype(str)
+        candidates = candidates.sort_values(
+            ["_rank", "_support", "parameter_name"],
+            ascending=[True, False, True],
+            kind="mergesort",
+        ).drop_duplicates(["win_id", "parameter_name"])
+        truth_candidates = candidates[
+            candidates["parameter_name"].fillna("").astype(str) == truth_parameter
+        ]
+        if truth_candidates.empty:
+            return cls._unavailable(
+                structural_candidate_cut_width=cut_width,
+                diagnostic_status="truth_parameter_not_in_bounded_parameter_candidates",
+            )
+
+        truth_candidates = truth_candidates.sort_values(
+            ["_rank", "_support", "_win_id_sort"],
+            ascending=[True, False, True],
+            kind="mergesort",
+        )
+        truth_candidate = truth_candidates.iloc[0]
+        rank_value = truth_candidate["_rank"]
+        support_value = truth_candidate["_support"]
+        truth_parameter_selected_for_telemetry = _optional_bool(
+            truth_candidate.get("parameter_localization_selected")
+        )
+        if pd.isna(rank_value):
+            return cls(
+                structural_candidate_cut_width=cut_width,
+                diagnostic_status=(
+                    "truth_parameter_not_ranked_in_bounded_candidates"
+                    if truth_parameter_selected_for_telemetry is False
+                    else "truth_parameter_rank_unavailable"
+                ),
+                truth_parameter_support_rank=None,
+                truth_parameter_support=None if pd.isna(support_value) else float(support_value),
+                support_margin_at_structural_cut=None,
+                minimum_candidate_breadth=None,
+                truth_parameter_selected_for_telemetry=truth_parameter_selected_for_telemetry,
+                truth_parameter_within_structural_candidate_cut=False,
+                truth_parameter_detected_subsystem_id=None,
+                truth_parameter_detected_module_id=None,
+                truth_parameter_subsystem_cluster_mappable=None,
+                truth_parameter_module_cluster_mappable=None,
+            )
+
+        rank = int(rank_value)
+        detected_subsystem_id = _optional_non_empty_string(
+            truth_candidate.get("subsystem_id")
+        )
+        detected_module_id = _optional_non_empty_string(
+            truth_candidate.get("module_id")
+        )
+        _subsystem_truth, subsystem_mappable = subsystem_truth_map.resolve(detected_subsystem_id or "")
+        _module_truth, module_mappable = module_truth_map.resolve(detected_module_id or "")
+        same_window = candidates[candidates["win_id"] == truth_candidate["win_id"]]
+        cut_candidates = same_window[same_window["_rank"] == cut_width]
+        cut_support = None if cut_candidates.empty else cut_candidates.iloc[0]["_support"]
+        support_margin = (
+            None
+            if pd.isna(support_value) or pd.isna(cut_support)
+            else float(float(support_value) - float(cut_support))
+        )
+        within_cut = rank <= cut_width
+        return cls(
+            structural_candidate_cut_width=cut_width,
+            diagnostic_status=(
+                "within_structural_candidate_cut"
+                if within_cut
+                else "below_structural_candidate_cut"
+            ),
+            truth_parameter_support_rank=rank,
+            truth_parameter_support=None if pd.isna(support_value) else float(support_value),
+            support_margin_at_structural_cut=support_margin,
+            minimum_candidate_breadth=rank,
+            truth_parameter_selected_for_telemetry=truth_parameter_selected_for_telemetry,
+            truth_parameter_within_structural_candidate_cut=within_cut,
+            truth_parameter_detected_subsystem_id=detected_subsystem_id,
+            truth_parameter_detected_module_id=detected_module_id,
+            truth_parameter_subsystem_cluster_mappable=(bool(subsystem_mappable) if detected_subsystem_id else None),
+            truth_parameter_module_cluster_mappable=(bool(module_mappable) if detected_module_id else None),
+        )
+
+    @classmethod
+    def _unavailable(
+        cls,
+        *,
+        structural_candidate_cut_width: int,
+        diagnostic_status: str,
+    ) -> "CandidateCutDiagnostic":
+        return cls(
+            structural_candidate_cut_width=structural_candidate_cut_width,
+            diagnostic_status=diagnostic_status,
+            truth_parameter_support_rank=None,
+            truth_parameter_support=None,
+            support_margin_at_structural_cut=None,
+            minimum_candidate_breadth=None,
+            truth_parameter_selected_for_telemetry=None,
+            truth_parameter_within_structural_candidate_cut=False,
+            truth_parameter_detected_subsystem_id=None,
+            truth_parameter_detected_module_id=None,
+            truth_parameter_subsystem_cluster_mappable=None,
+            truth_parameter_module_cluster_mappable=None,
+        )
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "structural_candidate_cut_width": self.structural_candidate_cut_width,
+            "diagnostic_status": self.diagnostic_status,
+            "truth_parameter_support_rank": self.truth_parameter_support_rank,
+            "truth_parameter_support": self.truth_parameter_support,
+            "support_margin_at_structural_cut": self.support_margin_at_structural_cut,
+            "minimum_candidate_breadth": self.minimum_candidate_breadth,
+            "truth_parameter_selected_for_telemetry": self.truth_parameter_selected_for_telemetry,
+            "truth_parameter_within_structural_candidate_cut": self.truth_parameter_within_structural_candidate_cut,
+            "truth_parameter_detected_subsystem_id": self.truth_parameter_detected_subsystem_id,
+            "truth_parameter_detected_module_id": self.truth_parameter_detected_module_id,
+            "truth_parameter_subsystem_cluster_mappable": self.truth_parameter_subsystem_cluster_mappable,
+            "truth_parameter_module_cluster_mappable": self.truth_parameter_module_cluster_mappable,
+        }
+
+
+@dataclass(frozen=True)
 class _TruthWindowAttributionMatch:
     truth_window_id: str
     dominant_subsystem_match: bool
@@ -499,6 +700,7 @@ class _TruthWindowAttributionMatch:
     event_truth_subsystem_present: bool
     telemetry_truth_module_present: bool
     event_truth_module_present: bool
+    candidate_cut_diagnostic: CandidateCutDiagnostic
     payload: dict[str, Any]
 
     @classmethod
@@ -665,6 +867,12 @@ class _TruthWindowAttributionMatch:
             and top_ranked_selected_parameter_truth_module
             and top_ranked_selected_parameter_truth_module == truth_module
         )
+        candidate_cut_diagnostic = CandidateCutDiagnostic.from_telemetry_hits(
+            telemetry_hits=telemetry_hits,
+            truth_parameter=truth_parameter,
+            subsystem_truth_map=subsystem_truth_map,
+            module_truth_map=module_truth_map,
+        )
         reconstruction_failure_bucket = _classify_reconstruction_localization_failure(
             dominant_score_component=dominant_score_component,
             truth_parameter=truth_parameter,
@@ -768,6 +976,7 @@ class _TruthWindowAttributionMatch:
             event_truth_subsystem_present=payload["event_truth_subsystem_present"],
             telemetry_truth_module_present=payload["telemetry_truth_module_present"],
             event_truth_module_present=payload["event_truth_module_present"],
+            candidate_cut_diagnostic=candidate_cut_diagnostic,
             payload=payload,
         )
 
@@ -1110,6 +1319,86 @@ def _build_reconstruction_localization_validation(per_truth_df: pd.DataFrame) ->
     }
 
 
+def _build_candidate_cut_validation(
+    matches: list[_TruthWindowAttributionMatch],
+) -> dict[str, Any]:
+    if not matches:
+        return _empty_candidate_cut_validation()
+
+    diagnostics = [match.candidate_cut_diagnostic for match in matches]
+    status_count: dict[str, int] = {}
+    for diagnostic in diagnostics:
+        status_count[diagnostic.diagnostic_status] = (
+            status_count.get(diagnostic.diagnostic_status, 0) + 1
+        )
+
+    truth_window_count = len(diagnostics)
+    ranked_truth_parameter_count = sum(
+        diagnostic.truth_parameter_support_rank is not None
+        for diagnostic in diagnostics
+    )
+    truth_parameter_selected_count = sum(
+        diagnostic.truth_parameter_selected_for_telemetry is True
+        for diagnostic in diagnostics
+    )
+    within_cut_count = sum(
+        diagnostic.truth_parameter_within_structural_candidate_cut
+        for diagnostic in diagnostics
+    )
+    below_cut_count = sum(
+        diagnostic.diagnostic_status == "below_structural_candidate_cut"
+        for diagnostic in diagnostics
+    )
+    case_identity_fields = (
+        "tail_id",
+        "flight_id",
+        "fault_window_id",
+        "misbehavior_window_id",
+        "subsystem_id",
+        "module_id",
+        "parameter_name",
+        "dominant_score_component",
+        "primary_win_id",
+        "matched_attribution_window_count",
+    )
+    cases = [
+        {
+            **{
+                field: match.payload.get(field)
+                for field in case_identity_fields
+            },
+            **match.candidate_cut_diagnostic.to_payload(),
+        }
+        for match in matches
+    ]
+    cases.sort(
+        key=lambda case: tuple(
+            str(case.get(field) or "")
+            for field in ("fault_window_id", "misbehavior_window_id", "parameter_name")
+        )
+    )
+    return {
+        "status": "ok",
+        "structural_candidate_cut_width": ANOMALY_LOCALIZATION_PARAMETER_TOP_K,
+        "truth_window_count": truth_window_count,
+        "diagnostic_status_count": dict(sorted(status_count.items())),
+        "ranked_truth_parameter_count": ranked_truth_parameter_count,
+        "truth_parameter_selected_for_telemetry_count": truth_parameter_selected_count,
+        "truth_parameter_selected_for_telemetry_rate": float(
+            truth_parameter_selected_count / truth_window_count
+        ),
+        "truth_parameter_within_structural_candidate_cut_count": within_cut_count,
+        "truth_parameter_within_structural_candidate_cut_rate": float(
+            within_cut_count / truth_window_count
+        ),
+        "truth_parameter_below_structural_candidate_cut_count": below_cut_count,
+        "truth_parameter_below_structural_candidate_cut_rate": float(
+            below_cut_count / truth_window_count
+        ),
+        "candidate_cut_cases": cases,
+    }
+
+
 def build_fault_attribution_summary_from_misbehavior_summary(summary: dict[str, Any]) -> dict[str, Any]:
     if summary.get("status") != "ok":
         return summary
@@ -1149,6 +1438,10 @@ def build_fault_attribution_summary_from_misbehavior_summary(summary: dict[str, 
         "parameter_localization_validation": summary.get(
             "parameter_localization_validation",
             _empty_parameter_localization_validation(),
+        ),
+        "candidate_cut_validation": summary.get(
+            "candidate_cut_validation",
+            _empty_candidate_cut_validation(),
         ),
         "hierarchy_cluster_alignment_validation": summary.get(
             "hierarchy_cluster_alignment_validation",
@@ -1203,6 +1496,7 @@ def validate_attribution_against_misbehavior_truth(
             "channel_localization_validation": _empty_channel_localization_validation(),
             "reconstruction_localization_validation": _empty_reconstruction_localization_validation(),
             "parameter_localization_validation": _empty_parameter_localization_validation(),
+            "candidate_cut_validation": _empty_candidate_cut_validation(),
             "hierarchy_cluster_alignment_validation": _empty_hierarchy_cluster_alignment_validation(),
             "misbehavior_windows": [],
         }
@@ -1259,6 +1553,7 @@ def validate_attribution_against_misbehavior_truth(
     channel_localization_validation = _build_channel_localization_validation(per_truth_df)
     reconstruction_localization_validation = _build_reconstruction_localization_validation(per_truth_df)
     parameter_localization_validation = _build_parameter_localization_validation(per_truth_df)
+    candidate_cut_validation = _build_candidate_cut_validation(matches)
     hierarchy_cluster_alignment_validation = _build_hierarchy_cluster_alignment_validation(
         hierarchy_sensor_map_df=hierarchy_sensor_map_df,
         hierarchy_label_df=hierarchy_label_df,
@@ -1299,6 +1594,7 @@ def validate_attribution_against_misbehavior_truth(
         "channel_localization_validation": channel_localization_validation,
         "reconstruction_localization_validation": reconstruction_localization_validation,
         "parameter_localization_validation": parameter_localization_validation,
+        "candidate_cut_validation": candidate_cut_validation,
         "hierarchy_cluster_alignment_validation": hierarchy_cluster_alignment_validation,
         "misbehavior_windows": [match.payload for match in matches],
     }

@@ -887,6 +887,17 @@ Amplification note:
 - event attribution output is about `1.98x` the event input row count in the current-head replay
 - the event side still amplifies because overlapping anomaly windows re-materialize shared event evidence even after emission became selective
 
+Candidate-evidence granularity:
+
+- parameter support is computed at window/parameter grain before the raw
+  attribution joins;
+- `anomaly_telemetry_attribution` is sample-grain: it repeats the retained
+  final localization support, rank, and selection on raw telemetry rows, but
+  does not persist every candidate or the component evidence behind its rank;
+- therefore `A_tel` measures raw-attribution amplification, not candidate
+  universe coverage. A parameter absent from that table cannot distinguish
+  candidate-generation absence from removal by the bounded telemetry cut.
+
 ### 95 Emit Explorer Bundle
 
 Primary code:

@@ -905,6 +905,257 @@ def test_anomaly_validator_compares_attribution_to_fault_truth():
     assert misbehavior_summary["top_module_candidate_present_rate"] == 1.0
 
 
+def test_anomaly_validator_reports_structural_candidate_cut_sensitivity():
+    truth_parameters = (
+        ("P_WITHIN", "SUB_WITHIN", "MOD_WITHIN"),
+        ("P_BELOW", "SUB_BELOW", "MOD_BELOW"),
+        ("P_ABSENT", "SUB_ABSENT", "MOD_ABSENT"),
+        ("P_NO_TELEMETRY", "SUB_NO_TELEMETRY", "MOD_NO_TELEMETRY"),
+    )
+    raw_telemetry_df = pd.DataFrame.from_records(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "timestamp_utc": _ts(win_id),
+                "parameter_name": parameter_name,
+                "system_id": "SYS_1",
+                "subsystem_id": subsystem_id,
+                "module_id": module_id,
+                "misbehavior_active": True,
+                "misbehavior_family_label": "bias",
+                "misbehavior_detail_label": "bias",
+                "misbehavior_window_id": f"MBW_{parameter_name}",
+                "fault_active": True,
+                "fault_family_label": "regulated",
+                "fault_type": "bias",
+                "fault_window_id": f"FW_{parameter_name}",
+            }
+            for win_id, (parameter_name, subsystem_id, module_id) in enumerate(
+                truth_parameters,
+                start=1,
+            )
+        ]
+    )
+    windows_df = pd.DataFrame.from_records(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": win_id,
+                "t_start": _ts(win_id),
+                "t_end": _ts(win_id),
+            }
+            for win_id in range(1, 5)
+        ]
+    )
+    anomaly_telemetry_df = pd.DataFrame.from_records(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 1,
+                "parameter_name": "P_OTHER_1",
+                "subsystem_id": "SUB_OTHER",
+                "module_id": "MOD_OTHER",
+                "parameter_localization_support": 1.0,
+                "parameter_support_rank_in_window": 1,
+                "parameter_localization_selected": True,
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 1,
+                "parameter_name": "P_WITHIN",
+                "subsystem_id": "SUB_WITHIN",
+                "module_id": "MOD_WITHIN",
+                "parameter_localization_support": 0.9,
+                "parameter_support_rank_in_window": 2,
+                "parameter_localization_selected": True,
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 1,
+                "parameter_name": "P_OTHER_2",
+                "subsystem_id": "SUB_OTHER",
+                "module_id": "MOD_OTHER",
+                "parameter_localization_support": 0.8,
+                "parameter_support_rank_in_window": 3,
+                "parameter_localization_selected": True,
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 2,
+                "parameter_name": "P_OTHER_3",
+                "subsystem_id": "SUB_OTHER",
+                "module_id": "MOD_OTHER",
+                "parameter_localization_support": 1.0,
+                "parameter_support_rank_in_window": 1,
+                "parameter_localization_selected": True,
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 2,
+                "parameter_name": "P_OTHER_4",
+                "subsystem_id": "SUB_OTHER",
+                "module_id": "MOD_OTHER",
+                "parameter_localization_support": 0.9,
+                "parameter_support_rank_in_window": 2,
+                "parameter_localization_selected": True,
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 2,
+                "parameter_name": "P_OTHER_5",
+                "subsystem_id": "SUB_OTHER",
+                "module_id": "MOD_OTHER",
+                "parameter_localization_support": 0.8,
+                "parameter_support_rank_in_window": 3,
+                "parameter_localization_selected": True,
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 2,
+                "parameter_name": "P_BELOW",
+                "subsystem_id": "SUB_BELOW",
+                "module_id": "MOD_BELOW",
+                "parameter_localization_support": 0.7,
+                "parameter_support_rank_in_window": 4,
+                "parameter_localization_selected": False,
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 3,
+                "parameter_name": "P_OTHER_6",
+                "subsystem_id": "SUB_OTHER",
+                "module_id": "MOD_OTHER",
+                "parameter_localization_support": 1.0,
+                "parameter_support_rank_in_window": 1,
+                "parameter_localization_selected": True,
+            },
+        ]
+    )
+    hierarchy_label_df = pd.DataFrame.from_records(
+        [
+            {
+                "parameter_name": parameter_name,
+                "system_id": "SYS_1",
+                "subsystem_id": subsystem_id,
+                "module_id": module_id,
+            }
+            for parameter_name, subsystem_id, module_id in truth_parameters
+        ]
+    )
+
+    summary = validate_attribution_against_fault_truth(
+        raw_telemetry_df=raw_telemetry_df,
+        windows_df=windows_df,
+        anomaly_window_attribution_df=pd.DataFrame(),
+        anomaly_telemetry_attribution_df=anomaly_telemetry_df,
+        anomaly_event_attribution_df=pd.DataFrame(),
+        hierarchy_sensor_map_df=hierarchy_label_df,
+        hierarchy_label_df=hierarchy_label_df,
+    )
+
+    candidate_cut = summary["candidate_cut_validation"]
+    assert candidate_cut["structural_candidate_cut_width"] == 3
+    assert candidate_cut["truth_window_count"] == 4
+    assert candidate_cut["ranked_truth_parameter_count"] == 2
+    assert candidate_cut["truth_parameter_selected_for_telemetry_count"] == 1
+    assert candidate_cut["truth_parameter_within_structural_candidate_cut_count"] == 1
+    assert candidate_cut["truth_parameter_below_structural_candidate_cut_count"] == 1
+    assert candidate_cut["diagnostic_status_count"] == {
+        "below_structural_candidate_cut": 1,
+        "no_qualifying_telemetry_attribution": 1,
+        "truth_parameter_not_in_bounded_parameter_candidates": 1,
+        "within_structural_candidate_cut": 1,
+    }
+    cases = {
+        case["parameter_name"]: case
+        for case in candidate_cut["candidate_cut_cases"]
+    }
+    assert cases["P_WITHIN"]["truth_parameter_support_rank"] == 2
+    assert cases["P_WITHIN"]["truth_parameter_selected_for_telemetry"] is True
+    assert cases["P_WITHIN"]["truth_parameter_within_structural_candidate_cut"] is True
+    assert abs(cases["P_WITHIN"]["support_margin_at_structural_cut"] - 0.1) < 1e-9
+    assert cases["P_BELOW"]["diagnostic_status"] == "below_structural_candidate_cut"
+    assert cases["P_BELOW"]["truth_parameter_support_rank"] == 4
+    assert cases["P_BELOW"]["minimum_candidate_breadth"] == 4
+    assert cases["P_BELOW"]["truth_parameter_selected_for_telemetry"] is False
+    assert abs(cases["P_BELOW"]["support_margin_at_structural_cut"] + 0.1) < 1e-9
+    assert cases["P_BELOW"]["truth_parameter_subsystem_cluster_mappable"] is True
+    assert cases["P_ABSENT"]["diagnostic_status"] == "truth_parameter_not_in_bounded_parameter_candidates"
+    assert cases["P_NO_TELEMETRY"]["diagnostic_status"] == "no_qualifying_telemetry_attribution"
+
+
+def test_anomaly_validator_distinguishes_unranked_truth_from_missing_rank_metadata():
+    raw_telemetry_df = pd.DataFrame.from_records(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "timestamp_utc": _ts(1),
+                "parameter_name": "P_UNRANKED",
+                "system_id": "SYS_1",
+                "subsystem_id": "SUB_UNRANKED",
+                "module_id": "MOD_UNRANKED",
+                "misbehavior_active": True,
+                "misbehavior_window_id": "MBW_UNRANKED",
+                "fault_active": True,
+                "fault_window_id": "FW_UNRANKED",
+            }
+        ]
+    )
+    windows_df = pd.DataFrame.from_records(
+        [{"tail_id": "T1", "flight_id": "F1", "win_id": 1, "t_start": _ts(1), "t_end": _ts(1)}]
+    )
+    anomaly_telemetry_df = pd.DataFrame.from_records(
+        [
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 1,
+                "parameter_name": "P_UNRANKED",
+                "subsystem_id": "SUB_UNRANKED",
+                "module_id": "MOD_UNRANKED",
+                "parameter_localization_support": None,
+                "parameter_support_rank_in_window": None,
+                "parameter_localization_selected": False,
+            },
+            {
+                "tail_id": "T1",
+                "flight_id": "F1",
+                "win_id": 1,
+                "parameter_name": "P_OTHER",
+                "subsystem_id": "SUB_OTHER",
+                "module_id": "MOD_OTHER",
+                "parameter_localization_support": 1.0,
+                "parameter_support_rank_in_window": 1,
+                "parameter_localization_selected": True,
+            },
+        ]
+    )
+
+    summary = validate_attribution_against_misbehavior_truth(
+        raw_telemetry_df=raw_telemetry_df,
+        windows_df=windows_df,
+        anomaly_window_attribution_df=pd.DataFrame(),
+        anomaly_telemetry_attribution_df=anomaly_telemetry_df,
+        anomaly_event_attribution_df=pd.DataFrame(),
+    )
+
+    case = summary["candidate_cut_validation"]["candidate_cut_cases"][0]
+    assert case["diagnostic_status"] == "truth_parameter_not_ranked_in_bounded_candidates"
+    assert case["truth_parameter_selected_for_telemetry"] is False
+    assert case["truth_parameter_support_rank"] is None
+
+
 def test_anomaly_validator_reports_mixed_hierarchy_cluster_alignment():
     raw_telemetry_df = pd.DataFrame.from_records(
         [

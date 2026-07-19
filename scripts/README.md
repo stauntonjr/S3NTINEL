@@ -46,10 +46,12 @@ Incremental patches:
   - `python -m scripts.run_sim_benchmark_tier_gates --base-dir data/simulation_gate_runs`
   - default `--suite localization` runs the dedicated `bias` and `drift` smoke benchmark gates as one suite
   - `--suite parameter` runs the dedicated regulated / accumulative / discrete / coupling parameter-tier smoke gates as one suite
+  - add `--composite-run-dir data/simulation_runs/<canonical-composite-run>` to join a completed composite replay to clean gate evidence
   - writes:
     - per-gate child run bundles under `runs/`
     - `reports/benchmark_tier_gate_suite_summary.json`
     - `reports/benchmark_tier_gate_suite_summary.md`
+    - `reports/benchmark_decision_ledger_summary.json` and `.md` when `--composite-run-dir` is supplied
 - Realistic hierarchy presets are available through the same entrypoint:
   - `power_pressurization_hierarchy_smoke`
   - `power_pressurization_hierarchy_medium`

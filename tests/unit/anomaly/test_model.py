@@ -95,6 +95,7 @@ def test_anomaly_models_build_expected_dataframes(spark):
         ),
         panel_context=AnomalyPanelContextFrame.from_raw_and_windows(raw_df=raw_df, windows_df=windows_df),
     ).to_dataframe()
+    assert attribution_context_df.count() > 0
 
     telemetry_df = AnomalyAttributionPlan(top_k_per_subsystem=3).build_telemetry_attribution(
         calibrated_df=calibrated_df,
@@ -643,3 +644,5 @@ def test_parameter_localization_retains_broader_selection_than_structural_target
         "SUBSYS_SOURCE",
         "SUBSYS_CONTEXT",
     ]
+    assert "MOD_SEL" not in [candidate["id"] for candidate in localized_targets["top_module_candidates"]]
+    assert "SUBSYS_SELECTION" not in [candidate["id"] for candidate in localized_targets["top_subsystem_candidates"]]

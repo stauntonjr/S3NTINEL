@@ -26,19 +26,37 @@ Do not use plans as the source of truth for current behavior. For that, prefer:
 
 ## Current Plan Entry Points
 
-The current resume order is:
+The current development-pass sequence is:
 
-1. [anomaly.md](libs/anomaly.md): use the authored-fault composite replay to
-   improve subsystem/module localization without changing the canonical Spark
-   modeling path.
-2. [simulation.md](libs/simulation.md): keep smoke structural, use the
-   authored-fault composite for positive validation, and preserve replay and
-   benchmark consistency.
+1. [simulation.md](libs/simulation.md): run the benchmark-first structural
+   localization pass. Establish whether each declared localization target is
+   observable in the canonical scenario, then compare reference-fit and
+   faulted-inference replays before changing detector logic.
+2. [anomaly.md](libs/anomaly.md): preserve bounded per-window candidate
+   evidence from the canonical scoring path so a persisted top-k cut is not
+   mistaken for candidate-generation absence. Only then make at most one
+   bounded, generic localization change when the evidence identifies a
+   specific downstream loss.
 3. [phase.md](libs/phase.md): defer additional phase-simulation expansion until
-   anomaly and simulation gates are stable.
+   the localization benchmark and anomaly gates are stable.
 4. [windows.md](libs/windows.md): defer rate-aware window-feature work until
-   phase, hierarchy, and anomaly bottlenecks justify changing the feature
-   contract.
+   the validated bottleneck is feature representation rather than simulation
+   observability or attribution mapping.
+
+### Current Pass Scope
+
+In scope:
+
+- simulation observability, benchmark-target, and truth-scope review
+- scenario and validation changes that make a declared localization target
+  defensible without encoding simulator truth into downstream logic
+- one replay-gated anomaly change when the evidence justifies it
+
+Explicitly deferred until source data and an ICD are available:
+
+- A-MATS or AFDX ingestion
+- source adapters, payload decoding, and telemetry-provenance contracts
+- AFDX-specific performance claims or transport-derived model features
 
 - [libs/README.md](libs/README.md)
   - library-by-library plan index that mirrors `libs/`

@@ -81,15 +81,309 @@ The plan below is grounded in the current repo shape:
 - phase and anomaly logic now have cleaner ownership, but further simulation
   realism, scenario curation, and performance work are still needed
 
-The next work should be organized into four workstreams and executed in this
-order:
+The benchmark audit and tier-gate framework in section A are now implemented.
+The next development pass below supersedes the earlier workstream ordering
+where it conflicts with this current evidence.
 
-1. `A. Localization benchmark audit and scenario review`
-2. `B. Realism, phase context, and anomaly/violation integration`
-3. `C. Golden scenarios and validation discipline`
-4. `D. Remaining performance and hot-path profiling`
+## Next Development Pass: Benchmark-First Structural Localization
 
-## A. Localization Benchmark Audit And Scenario Review
+### Objective
+
+Make the next anomaly decision against a scientifically defensible localization
+benchmark rather than optimize the current mixed composite labels by default.
+
+This pass must produce one of three evidence-backed outcomes:
+
+1. retain a declared benchmark target because its source is observably
+   distinguishable and the next issue is downstream modeling;
+2. redesign one simulator fault path because the emitted telemetry does not
+   make its declared source scope identifiable; or
+3. explicitly lower a benchmark claim because the scenario is intended only
+   for a lower recoverability tier.
+
+It must not turn the current detector result into the definition of simulator
+truth. A target can be revised only after reviewing the emitted source,
+propagated observables, and the existing tiered evidence together.
+
+### Scope
+
+In scope:
+
+- use the canonical composite and dedicated tier reports to classify each
+  authored fault window by its appropriate validation role;
+- align benchmark-target metadata, named benchmark packs, report expectations,
+  and tests when the evidence supports a scope decision;
+- make at most one simulator change that improves observable source-versus-
+  consequence separation without injecting labels into telemetry;
+- run one diagnostic-only evidence-preservation and reference-fit/inference
+  comparison before changing anomaly behavior;
+- make at most one generic canonical-path anomaly localization change, and only
+  after the scenario decision and diagnostic comparison prove that a valid
+  observable is being lost downstream;
+- preserve full-run timings and bounded hot-path behavior as an acceptance
+  surface.
+
+Out of scope:
+
+- A-MATS or AFDX ingestion, packet decoding, source adapters, payload mapping,
+  and telemetry-provenance contracts;
+- assumptions about an unavailable ICD or live source capture;
+- broad phase-envelope work, rate-aware window-feature redesign, deep sequence
+  models, a second scoring path, or broad stage-`90` rerankers;
+- a generic top-k expansion that treats bounded-output absence as proof of
+  candidate-generation failure;
+- changing declared targets merely to hide an unresolved model failure.
+
+### Baseline And Decision Inputs
+
+Start from the persisted
+`data/simulation_runs/20260718T024330Z_power_pressurization_hierarchy_composite`
+bundle. Its canonical reports are:
+
+- `simulation_benchmark_audit_summary.json` for declared versus observed
+  recoverability;
+- `benchmark_scope_validation_summary.json` for denominator-aware objectives;
+- `benchmark_tier_validation_summary.json` for the per-window first-failure
+  ledger;
+- `misbehavior_attribution_validation_summary.json` for candidate and
+  reconstruction-localization diagnostics.
+
+The current composite declares `13` module-recoverable and `5`
+subsystem-recoverable windows, while the audit records only one
+module-recoverable and one subsystem-recoverable outcome. Dedicated smoke gates
+already demonstrate a clean module case for `drift` and a clean subsystem case
+for `bias`; they do not establish that those fault families remain equally
+recoverable inside the mixed composite.
+
+### Milestone 1: Establish The Benchmark Decision Ledger
+
+Use existing reports as the canonical data source. Add a reporting field only
+when the current reports cannot answer an actionable decision; do not build a
+parallel notebook-only benchmark.
+
+Status: implemented as the suite-level
+`reports/benchmark_decision_ledger_summary.json` and Markdown companion.
+Run `python -m scripts.run_sim_benchmark_tier_gates --composite-run-dir <run-dir>`
+to join a completed composite run to the named clean gate results. The ledger
+preserves the per-run reports as their canonical owners and adds only the
+cross-run decision view required for this milestone.
+
+For every canonical `fault_window_id`, record:
+
+- declared target and observed recoverability tier;
+- first failed benchmark scope and dominant score component;
+- source parameter/module and the selected telemetry/candidate evidence;
+- whether a clean dedicated pack agrees with the composite result;
+- one decision: retain target, redesign scenario, lower target, or formulate a
+  downstream-model hypothesis.
+
+Decision rules:
+
+- retain the target when a source-local observable and its intended propagation
+  are present, even if the current detector misses it;
+- redesign the scenario when the source cannot be separated from shared or
+  sibling consequences in the emitted telemetry;
+- lower a target only when that lower scope is the intended and defensible
+  scenario contract, not because the current model failed;
+- formulate a downstream-model hypothesis only when raw observability is
+  present and the candidate evidence shows where the canonical path loses it.
+
+The acceptance output is a reviewed per-window decision matrix and a clear
+selection of one next change. The existing reports and
+`libs/simulation/reporting.py` remain the owners of per-run report surfaces;
+`libs/simulation/benchmark_tier_gates.py` owns this cross-run suite artifact.
+
+### Milestone 2: Correct One Observable Fault Path Or Its Scope
+
+Select one result from Milestone 1. The first investigation should explain why
+the dedicated `drift` gate is module-recoverable while mixed-composite drift
+windows are not. Then choose only one scenario family to change, if a change is
+required.
+
+Completed rejected experiment: staggered composite `drift` windows into
+non-overlapping phase-local intervals and scaled their rates to preserve an
+approximately comparable accumulated perturbation. The clean gates remained
+green, but the composite regressed to one undetected drift window and did not
+restore structural recovery. Retain the original scenario timing; overlap alone
+does not explain the downstream structural loss.
+
+### Candidate-Cut Sensitivity Diagnosis (Completed 2026-07-18)
+
+Completed as a diagnostic-only pass in the canonical anomaly validation path.
+The retained composite showed that both drift windows emit results, but neither
+truth subsystem nor truth module appears in the top structural candidates. The
+forward window retained the truth parameter in selected telemetry; the aft
+window did not.
+
+Current owners and cuts:
+
+- `libs/anomaly/frames.py`, `AnomalyParameterLocalizationFrame`, ranks
+  parameter support and retains the fixed top-five telemetry selection before
+  applying the top-three structural input used for subsystem and module
+  candidates;
+- `libs/anomaly/pipeline.py` passes that fixed candidate breadth into the
+  canonical stage-`90` attribution workflow;
+- `libs/anomaly/validator.py` and `libs/simulation/reporting.py` own the
+  bounded validation and benchmark reporting surfaces. They do not currently
+  retain the full candidate universe.
+
+Implemented:
+
+1. Added `candidate_cut_validation` to both attribution-validation summaries.
+   For every truth window it records the parameter support rank, selected
+   telemetry status, top-three membership, support margin at the cut, minimum
+   candidate breadth, and inferred-hierarchy mappability when ranked.
+2. Retained inferred hierarchy identifiers in the bounded telemetry reporting
+   view so candidate-cut evidence can distinguish a valid cut loss from an
+   ambiguous inferred cluster.
+3. Added focused validator, reporting-view, and Spark-frame coverage for
+   inside-cut, below-cut, unranked, no-match, and empty cases.
+4. Ran the clean localization gates at
+   `/tmp/s3ntinel_candidate_cut_gates/20260718T185619Z_localization_benchmark_tier_gates`:
+   both gates were `met_target`.
+5. Ran the fresh full composite at
+   `/tmp/s3ntinel_candidate_cut/20260718T190625Z_power_pressurization_hierarchy_composite`.
+   Its localization and recoverability metrics exactly matched the retained
+   baseline; no scoring, emitted candidate, or benchmark behavior changed.
+
+Diagnosis from the fresh composite:
+
+- among `18` truth windows, `9` truth parameters were within the structural
+  top-three input, `2` were below it, `4` were absent from the persisted
+  top-five telemetry payload, and `3` had no qualifying telemetry attribution;
+- `FW_ACCUM_DRIFT_FORWARD` is a genuine structural-cut loss: its truth
+  parameter is rank `4`, selected for telemetry, only `0.00109335` below the
+  rank-three support boundary, and maps unambiguously to both truth subsystem
+  and module;
+- a full canonical localization rerun with `top_k_per_window=128` places
+  `FW_ACCUM_DRIFT_AFT` at rank `6` or `7` in the late drift windows. It is a
+  top-five telemetry-retention loss, not evidence that candidate generation
+  omitted the parameter.
+
+Decision: do not begin a generic rank-aware expansion in this branch. Both
+drift parameters are outside the structural top three, while the aft parameter
+is only outside the telemetry top five. Widening one cap cannot establish that
+the other is the correct structural decision, and many windows already inside
+the top three still fail structural recovery. The next pass must preserve the
+candidate evidence and test the simulation fitting lifecycle before any model
+or cap change.
+
+Candidate families include:
+
+- `timing_lag`, which currently fails at detection/emission;
+- `bias`, which is cleanly subsystem-recoverable but not module-recoverable in
+  the current smoke variants;
+- `drift`, whose clean and composite behavior disagree;
+- coupling families, if the source-to-consequence trace shows a valid
+  subsystem-level observable;
+- `saturation` only as a lower-tier scenario-design question, never as the
+  current module-localization gate.
+
+Rules for the selected change:
+
+- change source behavior, coupling, phase context, or sampled observability;
+  never copy fault identity into emitted values or labels;
+- keep the canonical `Flight` and behavior-local violation path;
+- add or update focused simulation tests, benchmark metadata, and report
+  expectations in the same change;
+- keep unaffected benchmark packs and the no-fault smoke structurally valid.
+
+Promote a revised scenario only if the named tier gate and the canonical
+composite both explain the expected scope without a regression in unrelated
+tiers. If the evidence is still ambiguous after one focused scenario attempt,
+record that conclusion and stop rather than accumulate simulator variants.
+
+### Milestone 3: Evidence-Preservation And Reference-Inference Diagnosis
+
+Status: next active diagnostic pass. It must not change anomaly behavior.
+
+The current grouped full simulation run fits artifacts and runs inference from
+the same fault-bearing observed telemetry in one run directory. That path does
+not use `parameter_value_clean` for production fitting or inference, but it can
+make a synthetic fault period part of the fitted baseline. The intended fitting
+lifecycle normally fits reusable artifacts once and reuses them during
+inference, as documented in `docs/current/fitting_workflow.md`.
+
+Build a paired simulation benchmark:
+
+1. generate a nominal reference flight and fit reusable artifacts from its
+   observed `parameter_value`;
+2. generate the matching faulted flight and run inference against those fixed
+   reference artifacts, recording the reference run/artifact lineage;
+3. preserve a bounded parameter/window candidate-evidence record from the
+   canonical scoring and anomaly path, including candidate source, channel
+   contribution, phase-conditioned residual evidence, profile/event evidence,
+   support, rank, and both cap statuses;
+4. compare self-fit and reference-fit support ranks, phase baselines, and
+   localization results on the clean gates and the canonical composite.
+
+The evidence record must retain a fixed union of global and per-channel
+candidates. It must not materialize every parameter in every emitted window,
+duplicate candidate evidence across raw sample rows, or alter the current
+model result. The simulation harness must not pass clean values, labels, or
+fault identifiers to production fitting, scoring, or attribution code.
+
+This is a validation-architecture test, not a claim that deployment always
+fits on a fault-bearing flight. If production intentionally refits per flight,
+the later model decision must explicitly address slow-drift adaptation rather
+than assuming reference artifacts are always available.
+
+Acceptance:
+
+- both drift ranks and their cap losses are traceable from score evidence to
+  candidate output;
+- the paired runs have explicit artifact lineage and comparable scenario
+  topology, seed, timing, and observed-input contracts;
+- all existing model outputs remain unchanged in the diagnostic-only pass;
+- the report records the observed stage-`90` row counts and timings before a
+  candidate-evidence artifact is considered for promotion.
+
+### Milestone 4: Conditional Anomaly Experiment
+
+Do not begin this milestone unless Milestones 1 through 3 leave a valid
+declared target with a specific downstream loss.
+
+Choose the implementation seam from the evidence:
+
+- truth is absent from the bounded candidate union after the reference-fit
+  comparison: one generic upstream signal or channel-maturation pass;
+- truth is retained but has weak phase-conditioned or mechanism-specific
+  evidence: one narrow canonical ranking/novelty change;
+- truth is visible only below the telemetry or structural cap: assess that cap
+  separately, with no generic expansion by default;
+- truth-local candidates are strong but the final winner is wrong: reconsider
+  the hierarchy gate only after candidate quality is demonstrated.
+
+The experiment must stay on the canonical Spark path. It must not use scenario
+names, parameter-name rules, injected labels, a new local score builder, or a
+broad stage-`90` retention/reranking expansion.
+
+### Promotion And Stop Rules
+
+For every code-bearing milestone:
+
+1. run affected unit and contract tests;
+2. run the localization tier-gate suite before the mixed composite replay;
+3. run the parameter tier suite when parameter evidence is touched;
+4. compare the reference-fit and self-fit replay reports, artifact lineage,
+   and stage timings against the baseline bundle;
+5. retain the change only when it improves its declared target without a
+   material regression in a lower tier, an unrelated benchmark pack, or hot-
+   path runtime.
+
+Stop the pass when one of these is true:
+
+- a scenario target is now defensible and the selected anomaly experiment has
+  a clear keep/reject outcome;
+- the selected scenario remains intrinsically ambiguous after one focused
+  observability change;
+- no generic candidate signal is supported by the evidence after the
+  reference-fit and candidate-evidence diagnostic.
+
+In the latter two cases, preserve the reports and decision matrix, leave the
+model unchanged, and use them to justify the following development pass.
+
+## A. Completed Foundation: Localization Benchmark Audit And Scenario Review
 
 ### Objective
 
@@ -115,8 +409,9 @@ Possible explanations:
 
 ### Audit rule
 
-Before introducing another broad anomaly-localization change, generate and read
-an explicit simulation benchmark audit from the current validation surfaces.
+Before introducing another broad anomaly-localization change, read the existing
+simulation benchmark audit from the current validation surfaces and refresh it
+only when the scenario or the canonical model path changes.
 
 That audit should classify each truth fault window by observed recoverability:
 
@@ -153,8 +448,8 @@ For each fault family/detail:
 
 ### Implementation direction
 
-Implement the audit as a first-class simulation report, not a notebook-only
-side analysis.
+The audit is implemented as a first-class simulation report, not a
+notebook-only side analysis.
 
 Canonical owners:
 
@@ -205,9 +500,9 @@ This workstream may justify one of two next moves:
 
 ### Immediate benchmark split
 
-Do not keep using only the mixed composite bundle for every benchmark question.
+Do not use only the mixed composite bundle for every benchmark question.
 
-The current scenario family should expose separate named benchmark packs for:
+The current scenario family exposes separate named benchmark packs for:
 
 - module-localization-target windows
 - subsystem-localization-target windows
@@ -495,15 +790,13 @@ The current smoke-family results already imply the next phase assignments:
   - stays in the detection-only phase and should not be used to judge module
     localization
 
-So the next simulation-design work should prioritize:
+So the current development pass should:
 
-1. building the missing dedicated parameter-tier benchmark suite across
-   multiple anomaly classes
-2. then strengthening lower-tier parameter labeling where it is still weak
-3. then building a cleaner `bias` path from parameter visibility to module
-   recoverability, likely by separating `MOD_PWR_LOAD_MON` from sibling
-   `MOD_COMP_DRIVE` evidence rather than staying on shared-source voltage
-4. only after that, expanding harder subsystem- and system-level scenario packs
+1. keep the existing parameter-tier suite as a required regression screen;
+2. use the benchmark decision ledger before adding any new lower-tier pack;
+3. investigate one source-versus-consequence scenario path under the
+   benchmark-first sequence above;
+4. defer harder subsystem- and system-level scenario expansion.
 
 ## B. Realism, Phase Context, And Anomaly/Violation Integration
 
@@ -745,9 +1038,9 @@ For each milestone touching simulation or replay-heavy stages:
 - keep explicit row-limit guards where bridges still exist
 - record wall times on the full-run path
 
-## Milestone Ordering
+## Completed Foundation And Deferred Follow-On
 
-### Milestone 1: localization benchmark audit
+### Completed: localization benchmark audit
 
 Deliverables:
 

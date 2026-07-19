@@ -150,8 +150,81 @@ The anomaly stack is now in this state:
 The system therefore needs:
 
 - better diagnosis of reconstruction misses
-- then targeted candidate-generation changes
+- preservation of the score-owned per-parameter evidence that explains a
+  candidate's rank
+- a reference-fit versus faulted-inference comparison before changing ranking
+  semantics
+- then one targeted localization change, if the evidence supports it
 - and only then a decision about whether to revisit hierarchy quality upstream
+
+### Candidate-Cut Diagnosis (Completed 2026-07-18)
+
+The benchmark-first review implemented candidate-cut sensitivity diagnostics
+without changing anomaly behavior. `candidate_cut_validation` now records the
+truth parameter's support rank, bounded-selection status, structural-cut
+membership, cut margin, required candidate breadth, and inferred hierarchy
+mappability.
+
+The original bounded report needs one correction: "not ranked into bounded
+candidates" means absent from the persisted top-five telemetry payload, not
+absent from the expanded canonical candidate output. A rerun of
+`AnomalyParameterLocalizationFrame` with `top_k_per_window=128` shows:
+
+- `FW_ACCUM_DRIFT_FORWARD` is rank `4`, selected in telemetry, and maps
+  unambiguously to the truth hierarchy. It is a near-tie structural-cut loss.
+- `FW_ACCUM_DRIFT_AFT` is rank `6` or `7` in the late drift windows. It was
+  lost at the top-five telemetry-retention cut, not at candidate generation.
+
+Both drift parameters remain outside the top-three structural input, so
+widening that input alone cannot recover the aft case. Conversely, widening
+the top-five telemetry cut would make the aft parameter visible without
+demonstrating that a wider structural rollup is correct. Do not make a generic
+top-k expansion. See the current simulation plan for the diagnostic replay and
+acceptance path that must precede any selection experiment.
+
+### Next Active Step: Evidence Preservation And Reference-Inference Evaluation
+
+This is a diagnostic data-contract and validation-lifecycle pass. It must not
+change model support, ranks, selected candidates, or hierarchy outputs.
+
+The current score path computes useful per-parameter inputs, including
+behavior-profile and event-profile evidence, then reduces part of that
+information to a window-level score. Stage `90` reconstructs localization
+support from raw residuals and limited profile context. The next pass should
+preserve the canonical score-owned evidence through parameter localization
+instead of rediscovering a smaller proxy after raw-attribution joins.
+
+The planned bounded evidence record is one row per retained
+`(tail_id, flight_id, window, parameter)` candidate. Retain a configured union
+of global and per-channel candidates, not every parameter in every window and
+not repeated raw telemetry rows. It should include:
+
+- candidate source and channel membership;
+- raw and phase-conditioned residual evidence when available;
+- the score-channel contribution terms and weights used for the window;
+- event counts/type evidence and relevant behavior-profile inputs, including
+  `drift_score_profiled`;
+- final support, rank, telemetry-retention status, and structural-cut status.
+
+The canonical owners are `libs/scoring/tables.py` for score-owned inputs,
+`libs/anomaly/frames.py` for candidate assembly and support, and
+`libs/anomaly/pipeline.py` for bounded retention. The telemetry table may join
+the final result to raw samples for exploration, but it must not become the
+candidate-evidence ledger.
+
+In parallel, create a simulation replay that fits reusable artifacts from a
+nominal reference flight and runs inference on a separately generated faulted
+flight. The production path must continue to consume observed
+`parameter_value`; `parameter_value_clean`, fault labels, and simulator truth
+remain validation-only. Compare that reference-fit result with the existing
+same-run fit-and-infer replay before attributing a ranking failure to the
+detector. This tests a synthetic-validation lifecycle risk; it is not a claim
+about a deployed fitting schedule.
+
+Only after these two diagnostic surfaces agree may one model pass test a
+generic phase-conditioned parameter novelty, score-component, temporal-support,
+or behavior-compatibility signal. The pass must choose one mechanism rather
+than bundle them.
 
 ## Generality Constraint
 
@@ -187,6 +260,13 @@ Stop guessing why reconstruction-led localization misses.
 The validator/reporting surface is now implemented and populated from a fresh
 replay on current head.
 
+Interpretation boundary: the current `missing_truth_local_candidate` bucket is
+derived from the persisted top-five telemetry payload. It distinguishes a
+bounded-output absence from a structural-cut loss, but it cannot distinguish
+full candidate-generation absence from a parameter ranked sixth or lower. Do
+not treat that bucket as proof of candidate-generation failure until the next
+active diagnostic pass preserves full bounded candidate evidence.
+
 Observed reconstruction-localization mix on the current replay:
 
 - reconstruction truth windows: `10`
@@ -207,7 +287,8 @@ Observed reconstruction-localization mix on the current replay:
 
 Implication:
 
-- the dominant failure is still candidate generation, not final rollup
+- the dominant observed failure is upstream of final rollup, but may be a
+  telemetry-retention cut rather than candidate-generation failure
 - shared-source ranking is the second-order failure mode inside the generated
   candidate set
 - there was no dominant `truth_subsystem_present_but_lost` bucket on this
@@ -481,47 +562,51 @@ kept, revised, or reverted.
 - if it is neutral but cheap, reject it unless the new diagnostics reveal a
   clearer next targeted change
 
-## Workstream D: Reconstruction-Led Candidate Generation
+## Workstream D: Evidence-Preserving Reconstruction Localization
 
 ### Objective
 
-Improve the selected local candidate set before subsystem/module rollup.
+Make reconstruction-led candidate selection explainable before changing the
+selected local candidate set or subsystem/module rollup.
 
 ### Decision rule
 
-Only start this pass after Workstream A shows which failure mode dominates.
+Only start a model change after the next active evidence/lifecycle diagnostic
+shows whether the fault-bearing replay loses truth in candidate generation,
+bounded telemetry retention, phase-conditioned novelty, or final rollup.
 
 Current decision from the fresh replay:
 
-- `missing_truth_local_candidate` is the dominant bucket
-- `shared_source_won` is the next largest bucket
-- proceed with candidate generation first
-- treat shared-source suppression as a coupled ranking constraint inside that
-  pass, not as a separate first move
+- `missing_truth_local_candidate` is the largest bounded-output bucket, but
+  it is not yet a full candidate-generation diagnosis;
+- `shared_source_won` is the next largest observable ranking issue;
+- preserve score-owned candidate evidence and compare reference-fit inference
+  before selecting a model mechanism;
 - keep the upstream `accumulation_violation` channel; it improved the replay
-  without regressing detection or parameter-localization metrics
+  without regressing detection or parameter-localization metrics.
 
-### Candidate-generation direction
+### Conditional model direction
 
-Prefer targeted, generic signals over another large heuristic pile:
+After the diagnostic precondition, select one targeted, generic mechanism over
+another large heuristic pile:
 
-- reconstruction-local source vs consequence cues that improve candidate recall
-  for the true local subsystem/module
-- local support concentration over broad shared utility parameters such as power
-  or bleed-supply sources
-- channel-aware support that keeps `reconstruction_error` distinct from
-  event-driven evidence
+- phase-conditioned per-parameter residual novelty rather than raw absolute
+  reconstruction residual alone;
+- score-component evidence that retains the mechanism-specific inputs already
+  used upstream instead of rebuilding a reduced local proxy;
+- temporal support persistence across adjacent windows when it separates a
+  local drift from a transient shared consequence;
+- soft behavior-family compatibility only when it is supported by the retained
+  profile evidence rather than a parameter-name rule.
 
 Immediate next implementation target:
 
-- improve reconstruction-led selected telemetry candidate recall so the truth
-  subsystem/module appears in the selected set more often than the current
-  `0.5455` / `0.4545`
-- while doing that, reduce the frequency of shared-source winners so the top
-  ranked selected parameter lands in the truth subsystem more often than the
-  current `0.1818`
-- do both through generic locality/ranking signals rather than simulator- or
-  scenario-specific exception handling
+- retain a bounded, auditable candidate evidence record without changing the
+  final candidate result;
+- use it and the reference-fit comparison to nominate one mechanism from the
+  list above;
+- then improve reconstruction-led local candidate quality through that one
+  generic mechanism rather than simulator- or scenario-specific handling.
 
 Current implementation note:
 
@@ -572,9 +657,9 @@ Rejected near-term direction:
   already collapsing onto the same wrong detected winners
 - do not keep pursuing wider selected sets or heavier reconstruction-cluster
   amplification on the hot path without new evidence
-- do not add phase-feature or parameter-profile reranking to stage `90`
-  unless a future design can show a materially cheaper path or a clearly
-  stronger generic signal
+- do not revive the rejected stage-`90` phase/profile reranker; any future
+  phase-conditioned or profile-backed signal must be owned upstream and carried
+  in the bounded candidate record rather than rediscovered after raw joins
 - do not widen retention again without a new upstream reconstruction signal
 - do not add heavy rerankers to stage `90`
 - do not jump to deep sequence models before the dual-view backbone is
@@ -737,28 +822,31 @@ Current gate result:
 
 ## Next Narrowing Step
 
-The next active anomaly sequence should now be:
+The next active anomaly sequence is gated by the
+[benchmark-first structural localization pass](simulation.md#next-development-pass-benchmark-first-structural-localization).
 
-1. keep the current accumulation-channel baseline
-2. do not advance the rejected broad event-discordance expansion
-3. do not advance the current dual-view reconstruction design
-4. do not prioritize generic new parameter-level optimization yet, but the
-   reason is now composite first-fail structure rather than missing lower-tier
-   simulation coverage
-5. if `event_discordance` is revisited again, constrain it to a much narrower
-   auxiliary localization cue and replay-gate it before carrying more
-   complexity forward
-6. if reconstruction is revisited again, constrain it to a narrower auxiliary
-   signal and replay-gate it as well; benchmark-tier smoke gates are necessary
-   but not sufficient acceptance if the mixed composite replay stays flat
-7. only then any further candidate-generation or hierarchy revisit
-
-That ordering is intentional.
+1. keep the current accumulation-channel baseline and all rejected-path
+   decisions intact;
+2. use the simulation decision ledger to establish whether a declared target
+   has an observable source-versus-consequence signature;
+3. preserve bounded score-owned per-parameter candidate evidence without
+   changing model results;
+4. compare the existing self-fit replay with a nominal-reference-fit,
+   faulted-inference replay;
+5. make no anomaly-model change when scenario scope, fitting lifecycle, or
+   evidence retention is the unresolved problem;
+6. when the diagnostic isolates a loss, test one generic canonical-path
+   novelty, component, temporal, or behavior-compatibility mechanism;
+7. run tier gates before the mixed composite and reject a change that gains a
+   narrow smoke result while leaving the composite flat or regressing runtime.
 
 The current bottleneck still sits in reconstruction-led localization, but the
-next move should not be another broad upstream reconstruction fusion, another
-broad event-discordance morphology expansion, or another stage-`90` selection
-heuristic pile.
+next model move must not be another broad reconstruction fusion, broad
+event-discordance morphology expansion, or stage-`90` selection-heuristic pile.
+
+Upstream A-MATS/AFDX integration, input contracts, source adapters, and
+transport-specific features are out of scope for this plan until source data
+and an ICD are available.
 
 Accepted narrow parameter-level pass:
 
@@ -842,6 +930,12 @@ the stack:
 
 - new reconstruction miss taxonomy appears in attribution validation
 - candidate-quality counters are emitted by report and harness paths
+- bounded candidate evidence distinguishes full-universe absence from a
+  telemetry-retention cut without using simulator truth in the model path
+- the reference-fit replay uses observed values only and records the artifact
+  lineage used by faulted inference
+- current support, rank, selected-candidate, and hierarchy outputs remain
+  unchanged until a separate model experiment is approved
 - no regression in current headline anomaly metrics
 - no new detection rule should depend on simulator-specific identifiers or truth
   labels

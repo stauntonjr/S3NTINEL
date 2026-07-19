@@ -120,6 +120,26 @@ Run verification in this order:
 
 Do not jump straight to the broadest test band if a smaller band can localize failures faster.
 
+### Spark Runner Execution
+
+Spark-backed tests and grouped simulation runners start a local Py4J gateway.
+That gateway binds a loopback socket, which ordinary agent sandbox execution may
+forbid. When the failure includes `Py4JNetworkException`, `JAVA_GATEWAY_EXITED`,
+or `Operation not permitted` while creating a server socket, request elevated
+execution and rerun the same command. Treat it as an execution-permission
+failure, not as a model or pipeline result.
+
+For a full replay, smoke suite, or benchmark suite:
+
+1. Use `conda run -n sentinel-spark35` and a fresh output base directory.
+2. Run the command in one persistent elevated terminal session, then poll the
+   same session until it exits; noninteractive command windows can end before a
+   full Spark workload has written final reports.
+3. Inspect `reports/run_manifest.json` and the required validation reports in
+   every child bundle. An incomplete directory without final reports is not a
+   successful or failed benchmark outcome.
+4. Reuse the active session rather than starting duplicate full replays.
+
 ### 7. For Modeling Work, Inspect Validation Outputs
 
 If the task affects modeling performance or validation semantics:

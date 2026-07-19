@@ -227,6 +227,11 @@ Use the reports this way:
 - `benchmark_scope_validation_summary.json`: optimization denominators
 - `benchmark_tier_validation_summary.json`: composite replay failure analysis
 
+When a completed composite run is supplied to the benchmark-tier gate suite,
+the suite also writes a cross-run decision ledger. It links each composite
+fault window to the named clean gate results for its fault type and recommends
+a review path without changing the authored benchmark target.
+
 The named power/pressurization flights can also expose filtered benchmark packs
 such as:
 - `power_pressurization_hierarchy_composite_module_localization`

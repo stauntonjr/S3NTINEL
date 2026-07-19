@@ -10,6 +10,12 @@ from pathlib import Path
 from typing import Any
 
 from libs.perf import get_logger
+from libs.simulation.benchmark_decision_ledger import (
+    BenchmarkDecisionLedger,
+    BenchmarkDecisionReference,
+    build_benchmark_decision_ledger,
+    render_benchmark_decision_ledger_markdown,
+)
 from libs.simulation.cli import add_backbone_args, add_event_args, add_profile_args, add_source_args, add_window_args
 from libs.simulation.fault.spec import BENCHMARK_RECOVERABILITY_LADDER
 from libs.simulation.run_bundle import load_json_if_exists
@@ -22,6 +28,8 @@ DEFAULT_BENCHMARK_TIER_GATE_SUITE_KEY = "localization"
 BENCHMARK_TIER_GATE_SUITE_NAME = "localization_benchmark_tier_gates"
 BENCHMARK_TIER_GATE_SUMMARY_FILENAME = "benchmark_tier_gate_suite_summary.json"
 BENCHMARK_TIER_GATE_MARKDOWN_FILENAME = "benchmark_tier_gate_suite_summary.md"
+BENCHMARK_DECISION_LEDGER_SUMMARY_FILENAME = "benchmark_decision_ledger_summary.json"
+BENCHMARK_DECISION_LEDGER_MARKDOWN_FILENAME = "benchmark_decision_ledger.md"
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +38,7 @@ class BenchmarkTierGateSpec:
     flight_name: str
     declared_benchmark_tier: str
     description: str
+    fault_types: tuple[str, ...]
 
     def to_payload(self) -> dict[str, Any]:
         return {
@@ -37,6 +46,7 @@ class BenchmarkTierGateSpec:
             "flight_name": self.flight_name,
             "declared_benchmark_tier": self.declared_benchmark_tier,
             "description": self.description,
+            "fault_types": list(self.fault_types),
         }
 
 
@@ -132,12 +142,14 @@ LOCALIZATION_BENCHMARK_TIER_GATE_SPECS = (
         flight_name="power_pressurization_hierarchy_smoke_localization_focus_bias",
         declared_benchmark_tier="subsystem_recoverable",
         description="Clean subsystem-tier acceptance gate for the regulated bias family on the smoke topology.",
+        fault_types=("bias",),
     ),
     BenchmarkTierGateSpec(
         gate_name="module_tier_drift",
         flight_name="power_pressurization_hierarchy_smoke_localization_focus_drift",
         declared_benchmark_tier="module_recoverable",
         description="Clean module-tier acceptance gate for the accumulative drift family on the smoke topology.",
+        fault_types=("drift",),
     ),
 )
 
@@ -147,24 +159,28 @@ PARAMETER_BENCHMARK_TIER_GATE_SPECS = (
         flight_name="power_pressurization_hierarchy_smoke_parameter_focus_regulated",
         declared_benchmark_tier="parameter_visible_only",
         description="Clean parameter-tier gate for the regulated saturation family on the smoke topology.",
+        fault_types=("saturation",),
     ),
     BenchmarkTierGateSpec(
         gate_name="parameter_tier_accumulative_drift",
         flight_name="power_pressurization_hierarchy_smoke_parameter_focus_accumulative",
         declared_benchmark_tier="parameter_visible_only",
         description="Clean parameter-tier gate for the accumulative drift family on the smoke topology.",
+        fault_types=("drift",),
     ),
     BenchmarkTierGateSpec(
         gate_name="parameter_tier_discrete_state_chatter",
         flight_name="power_pressurization_hierarchy_smoke_parameter_focus_discrete",
         declared_benchmark_tier="parameter_visible_only",
         description="Clean parameter-tier gate for the discrete state-chatter family on the smoke topology.",
+        fault_types=("state_chatter",),
     ),
     BenchmarkTierGateSpec(
         gate_name="parameter_tier_coupling_timing_jitter",
         flight_name="power_pressurization_hierarchy_smoke_parameter_focus_coupling",
         declared_benchmark_tier="parameter_visible_only",
         description="Clean parameter-tier gate for the coupling timing-jitter family on the smoke topology.",
+        fault_types=("timing_jitter",),
     ),
 )
 
@@ -215,6 +231,13 @@ def parse_args() -> argparse.Namespace:
     add_window_args(parser)
     add_backbone_args(parser)
     parser.add_argument("--base-dir", default="data/simulation_gate_runs", help="Base directory for gate suite bundles")
+    parser.add_argument(
+        "--composite-run-dir",
+        help=(
+            "Completed canonical composite run bundle to join with clean gate outcomes; "
+            "writes a cross-run benchmark decision ledger in this suite's reports directory"
+        ),
+    )
     parser.add_argument("--mode", default="full", choices=("full",), help="Gate suites always run the full persisted pipeline")
     parser.add_argument("--format", default="parquet", choices=("parquet", "delta"), help="Persisted table format")
     parser.add_argument("--write-mode", default="overwrite", choices=("overwrite", "append", "merge"))
@@ -367,10 +390,72 @@ def write_benchmark_tier_gate_suite_report(
     return payload
 
 
+def build_benchmark_decision_references(summary: BenchmarkTierGateSuiteSummary) -> tuple[BenchmarkDecisionReference, ...]:
+    """Associate clean gate outcomes with the fault types their packs exercise."""
+    result_by_gate_name = {result.gate_name: result for result in summary.gate_results}
+    references: list[BenchmarkDecisionReference] = []
+    for spec in summary.gate_specs:
+        result = result_by_gate_name.get(spec.gate_name)
+        if result is None:
+            continue
+        for fault_type in spec.fault_types:
+            references.append(
+                BenchmarkDecisionReference(
+                    fault_type=fault_type,
+                    gate_name=spec.gate_name,
+                    flight_name=spec.flight_name,
+                    declared_benchmark_tier=spec.declared_benchmark_tier,
+                    run_status=result.run_status,
+                    declared_target_alignment_status=result.declared_target_alignment_status,
+                    observed_recoverability_strength_tier=result.observed_recoverability_strength_tier,
+                    recommended_review_action=result.recommended_review_action,
+                    run_dir=result.run_dir,
+                )
+            )
+    return tuple(sorted(references, key=lambda reference: (reference.fault_type, reference.gate_name)))
+
+
+def write_benchmark_decision_ledger_report(
+    *,
+    suite_dir: Path,
+    summary: BenchmarkTierGateSuiteSummary,
+    composite_run_dir: str | Path,
+) -> dict[str, Any]:
+    """Write the cross-run ledger after all named clean gates have completed."""
+    composite_reports_dir = Path(composite_run_dir) / "reports"
+    audit_payload = load_json_if_exists(composite_reports_dir / "simulation_benchmark_audit_summary.json")
+    tier_payload = load_json_if_exists(composite_reports_dir / "benchmark_tier_validation_summary.json")
+    if audit_payload is None or tier_payload is None:
+        raise FileNotFoundError(
+            "composite run must contain reports/simulation_benchmark_audit_summary.json and "
+            "reports/benchmark_tier_validation_summary.json"
+        )
+    ledger: BenchmarkDecisionLedger = build_benchmark_decision_ledger(
+        composite_run_dir=composite_run_dir,
+        reference_suite_dir=suite_dir,
+        simulation_benchmark_audit_summary=audit_payload,
+        benchmark_tier_validation_summary=tier_payload,
+        references=build_benchmark_decision_references(summary),
+    )
+    reports_dir = suite_dir / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    payload = ledger.to_payload()
+    (reports_dir / BENCHMARK_DECISION_LEDGER_SUMMARY_FILENAME).write_text(
+        json.dumps(payload, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    (reports_dir / BENCHMARK_DECISION_LEDGER_MARKDOWN_FILENAME).write_text(
+        render_benchmark_decision_ledger_markdown(ledger),
+        encoding="utf-8",
+    )
+    return payload
+
+
 def run_benchmark_tier_gate_suite(
     base_config: PipelineRunConfig,
     *,
     suite_key: str | None = None,
+    composite_run_dir: str | Path | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     logger = get_logger(LOGGER_NAME)
     suite_spec = resolve_benchmark_tier_gate_suite_spec(suite_key)
@@ -427,6 +512,14 @@ def run_benchmark_tier_gate_suite(
         gate_specs=ordered_gate_specs,
     )
     payload = write_benchmark_tier_gate_suite_report(suite_dir=suite_dir, summary=summary)
+    if composite_run_dir is not None:
+        ledger_payload = write_benchmark_decision_ledger_report(
+            suite_dir=suite_dir,
+            summary=summary,
+            composite_run_dir=composite_run_dir,
+        )
+        payload["benchmark_decision_ledger_path"] = str(suite_dir / "reports" / BENCHMARK_DECISION_LEDGER_SUMMARY_FILENAME)
+        payload["benchmark_decision_ledger_requires_human_review_count"] = ledger_payload["requires_human_review_count"]
     logger.info(
         "benchmark_tier_gate_suite_complete suite=%s suite_dir=%s all_gates_met_or_exceeded=%s",
         suite_spec.suite_key,
@@ -439,7 +532,11 @@ def run_benchmark_tier_gate_suite(
 def main() -> None:
     args = parse_args()
     config = PipelineRunConfig.from_args(args)
-    suite_dir, payload = run_benchmark_tier_gate_suite(config, suite_key=str(args.suite))
+    suite_dir, payload = run_benchmark_tier_gate_suite(
+        config,
+        suite_key=str(args.suite),
+        composite_run_dir=args.composite_run_dir,
+    )
     print(
         json.dumps(
             {
@@ -448,6 +545,7 @@ def main() -> None:
                 "summary_path": str(Path(suite_dir) / "reports" / BENCHMARK_TIER_GATE_SUMMARY_FILENAME),
                 "all_gates_met_or_exceeded": payload.get("all_gates_met_or_exceeded"),
                 "gate_alignment_status_count": payload.get("gate_alignment_status_count"),
+                "benchmark_decision_ledger_path": payload.get("benchmark_decision_ledger_path"),
             },
             indent=2,
             sort_keys=True,

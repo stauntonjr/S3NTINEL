@@ -6,6 +6,21 @@ import libs.simulation.reporting as reporting
 from libs.simulation.fault.examples import build_misbehavior_program_spec, build_misbehavior_window_spec
 
 
+def test_anomaly_telemetry_validation_view_retains_hierarchy_identifiers():
+    assert reporting.ANOMALY_TELEMETRY_VIEW.columns == (
+        "tail_id",
+        "flight_id",
+        "win_id",
+        "parameter_name",
+        "system_id",
+        "subsystem_id",
+        "module_id",
+        "parameter_localization_support",
+        "parameter_support_rank_in_window",
+        "parameter_localization_selected",
+    )
+
+
 def test_build_misbehavior_attribution_summary_uses_full_hierarchy_views(monkeypatch):
     captured: dict[str, pd.DataFrame] = {}
 
