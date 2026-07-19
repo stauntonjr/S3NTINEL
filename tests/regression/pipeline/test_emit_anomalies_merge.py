@@ -50,6 +50,7 @@ def _patch_common(monkeypatch, module, calls: dict[str, int]):
                 anomaly_window_attribution="delta/anomaly_window_attribution",
                 anomaly_telemetry_attribution="delta/anomaly_telemetry_attribution",
                 anomaly_event_attribution="delta/anomaly_event_attribution",
+                anomaly_parameter_candidate_evidence="delta/anomaly_parameter_candidate_evidence",
             ),
             execution=SimpleNamespace(
                 table_format="delta",
@@ -83,6 +84,7 @@ def _patch_common(monkeypatch, module, calls: dict[str, int]):
             window_attribution=_FakeArtifact(calls),
             telemetry_attribution=_FakeArtifact(calls),
             event_attribution=_FakeArtifact(calls),
+            parameter_candidate_evidence=_FakeArtifact(calls),
         ),
     )
     monkeypatch.setattr(module, "log_params_if_active", lambda *_args, **_kwargs: None)
@@ -99,7 +101,7 @@ def test_emit_anomalies_uses_upsert_when_write_mode_merge(monkeypatch):
 
     module.run()
 
-    assert calls["upsert"] == 3
+    assert calls["upsert"] == 4
     assert calls["write"] == 0
     assert len(artifact_calls) == 1
     payload, artifact_file = artifact_calls[0]
@@ -120,7 +122,7 @@ def test_emit_anomalies_uses_write_when_non_merge_mode(monkeypatch):
     module.run()
 
     assert calls["upsert"] == 0
-    assert calls["write"] == 3
+    assert calls["write"] == 4
     assert len(artifact_calls) == 1
     payload, artifact_file = artifact_calls[0]
     assert artifact_file == "reports/stages/90_anomaly_attribution_summary.json"

@@ -4,12 +4,17 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from typing import TYPE_CHECKING
 
+from libs.io.schemas.scoring import WINDOW_SCORES_CALIBRATED_SCHEMA
 from libs.scoring.channels import (
     RECONSTRUCTION_ERROR_CHANNEL,
     REGIME_DEVIATION_CHANNEL,
     score_component_scores_with_updates,
 )
+
+if TYPE_CHECKING:
+    from pyspark.sql import DataFrame, SparkSession
 
 
 def _base_time() -> datetime:
@@ -267,6 +272,7 @@ def create_sample_scores_df(spark: "SparkSession") -> "DataFrame":
             "p_value": 0.65,
             "severity": "low",
             "dominant_subsystem_id": "",
+            "dominant_module_id": "",
             "dominant_score_component": REGIME_DEVIATION_CHANNEL,
             "subsystem_scores": {"SUBSYS_0001": 0.8, "SUBSYS_0002": 0.2},
             "score_component_scores": score_component_scores_with_updates(
@@ -275,6 +281,23 @@ def create_sample_scores_df(spark: "SparkSession") -> "DataFrame":
                     RECONSTRUCTION_ERROR_CHANNEL: 0.8,
                 }
             ),
+            "parameter_score_evidence": [
+                {
+                    "parameter_name": "ENG_TEMP_1",
+                    "candidate_sources": ["residual", "event"],
+                    "candidate_channels": ["reconstruction_error", "event_discordance"],
+                    "residual_weight": 0.8,
+                    "residual_share": 0.8,
+                    "event_support_count": 2.0,
+                    "drift_score_profiled": 0.3,
+                    "bound_violation_contribution": 0.2,
+                    "accumulation_violation_contribution": 0.1,
+                    "response_violation_contribution": 0.4,
+                    "state_violation_contribution": 0.0,
+                    "global_evidence_rank": 1,
+                    "channel_evidence_rank": 1,
+                }
+            ],
             "date_utc": base.date(),
         },
         {
@@ -291,6 +314,7 @@ def create_sample_scores_df(spark: "SparkSession") -> "DataFrame":
             "p_value": 0.22,
             "severity": "medium",
             "dominant_subsystem_id": "",
+            "dominant_module_id": "",
             "dominant_score_component": RECONSTRUCTION_ERROR_CHANNEL,
             "subsystem_scores": {"SUBSYS_0002": 0.7, "SUBSYS_0001": 0.3},
             "score_component_scores": score_component_scores_with_updates(
@@ -299,6 +323,23 @@ def create_sample_scores_df(spark: "SparkSession") -> "DataFrame":
                     RECONSTRUCTION_ERROR_CHANNEL: 3.0,
                 }
             ),
+            "parameter_score_evidence": [
+                {
+                    "parameter_name": "PUMP_STATE",
+                    "candidate_sources": ["residual", "event"],
+                    "candidate_channels": ["reconstruction_error", "event_discordance"],
+                    "residual_weight": 0.7,
+                    "residual_share": 0.7,
+                    "event_support_count": 2.0,
+                    "drift_score_profiled": 0.5,
+                    "bound_violation_contribution": 0.1,
+                    "accumulation_violation_contribution": 0.0,
+                    "response_violation_contribution": 0.2,
+                    "state_violation_contribution": 0.6,
+                    "global_evidence_rank": 1,
+                    "channel_evidence_rank": 1,
+                }
+            ],
             "date_utc": base.date(),
         },
     ]
@@ -322,6 +363,7 @@ def create_sample_calibrated_df(spark: "SparkSession") -> "DataFrame":
             "p_value": 0.60,
             "severity": "low",
             "dominant_subsystem_id": "",
+            "dominant_module_id": "",
             "dominant_score_component": REGIME_DEVIATION_CHANNEL,
             "subsystem_scores": {"SUBSYS_0001": 0.8, "SUBSYS_0002": 0.2},
             "score_component_scores": score_component_scores_with_updates(
@@ -330,6 +372,23 @@ def create_sample_calibrated_df(spark: "SparkSession") -> "DataFrame":
                     RECONSTRUCTION_ERROR_CHANNEL: 0.8,
                 }
             ),
+            "parameter_score_evidence": [
+                {
+                    "parameter_name": "ENG_TEMP_1",
+                    "candidate_sources": ["residual", "event"],
+                    "candidate_channels": ["reconstruction_error", "event_discordance"],
+                    "residual_weight": 0.8,
+                    "residual_share": 0.8,
+                    "event_support_count": 2.0,
+                    "drift_score_profiled": 0.3,
+                    "bound_violation_contribution": 0.2,
+                    "accumulation_violation_contribution": 0.1,
+                    "response_violation_contribution": 0.4,
+                    "state_violation_contribution": 0.0,
+                    "global_evidence_rank": 1,
+                    "channel_evidence_rank": 1,
+                }
+            ],
             "warm": True,
             "emit_ready": True,
             "min_warm": 1,
@@ -349,6 +408,7 @@ def create_sample_calibrated_df(spark: "SparkSession") -> "DataFrame":
             "p_value": 0.20,
             "severity": "medium",
             "dominant_subsystem_id": "",
+            "dominant_module_id": "",
             "dominant_score_component": RECONSTRUCTION_ERROR_CHANNEL,
             "subsystem_scores": {"SUBSYS_0002": 0.7, "SUBSYS_0001": 0.3},
             "score_component_scores": score_component_scores_with_updates(
@@ -357,16 +417,27 @@ def create_sample_calibrated_df(spark: "SparkSession") -> "DataFrame":
                     RECONSTRUCTION_ERROR_CHANNEL: 3.0,
                 }
             ),
+            "parameter_score_evidence": [
+                {
+                    "parameter_name": "PUMP_STATE",
+                    "candidate_sources": ["residual", "event"],
+                    "candidate_channels": ["reconstruction_error", "event_discordance"],
+                    "residual_weight": 0.7,
+                    "residual_share": 0.7,
+                    "event_support_count": 2.0,
+                    "drift_score_profiled": 0.5,
+                    "bound_violation_contribution": 0.1,
+                    "accumulation_violation_contribution": 0.0,
+                    "response_violation_contribution": 0.2,
+                    "state_violation_contribution": 0.6,
+                    "global_evidence_rank": 1,
+                    "channel_evidence_rank": 1,
+                }
+            ],
             "warm": True,
             "emit_ready": True,
             "min_warm": 1,
             "date_utc": base.date(),
         },
     ]
-    return spark.createDataFrame(rows)
-
-
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from pyspark.sql import SparkSession
+    return spark.createDataFrame(rows, schema=WINDOW_SCORES_CALIBRATED_SCHEMA())

@@ -121,8 +121,17 @@ artifacts.
 - `phase_baselines`
   - per-tail detected phase baselines in `window_s` space
 
+- `phase_reference_model`
+  - reusable stage-70 fit/apply artifact containing phase feature/backbone
+    configuration, robust scaling statistics, ordered centroids, distance
+    scales, and transition-support bands
+  - reference inference maps the fitted model onto target flight keys and does
+    not fit phase structure from target observations
+
 - `window_scores_raw`
   - raw V2 anomaly scoring outputs
+  - bounded per-window `parameter_score_evidence` used to audit candidate
+    sources and channel contributions without changing score semantics
   - current canonical score-channel contract:
     - `regime_deviation`
     - `reconstruction_error`
@@ -178,6 +187,8 @@ artifacts.
 - `S3NTINEL_ANOMALY_WINDOW_ATTRIBUTION_TABLE_PATH=data/delta/anomaly_window_attribution`
 - `S3NTINEL_ANOMALY_TELEMETRY_ATTRIBUTION_TABLE_PATH=data/delta/anomaly_telemetry_attribution`
 - `S3NTINEL_ANOMALY_EVENT_ATTRIBUTION_TABLE_PATH=data/delta/anomaly_event_attribution`
+- `S3NTINEL_ANOMALY_PARAMETER_CANDIDATE_EVIDENCE_TABLE_PATH=data/delta/anomaly_parameter_candidate_evidence`
+- `S3NTINEL_PHASE_REFERENCE_MODEL_TABLE_PATH=data/delta/phase_reference_model`
 
 ## Important semantic rules
 
@@ -198,6 +209,9 @@ artifacts.
   graph construction are all Spark-native.
 - `70_phase_fit.py` consumes persisted `window_features` and emits per-flight phase artifacts
   with segmented Spark assignment; the remaining driver-side work is bounded global configuration.
+- `35_window_features_apply.py` rematerializes target window features using a
+  fixed continuous scaling profile. Together with stage-70
+  `apply_reference` mode, it provides fit-free target phase inference.
 - `80_window_scores_raw.py` keeps the main fact table distributed, but still collects bounded reference artifacts.
 
 Bridge rule:

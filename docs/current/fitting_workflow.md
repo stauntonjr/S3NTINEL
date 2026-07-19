@@ -107,6 +107,15 @@ Inference should normally reuse:
 
 and should not continuously re-fit those semantics unless a separate adaptation path is intentionally added.
 
+Reference inference also reuses `parameter_event_profile`,
+`window_policy_profile`, structural graph/hierarchy artifacts,
+`phase_baselines`, and `phase_reference_model`. The phase reference model is
+the complete fit/apply contract for stage 70: feature selection, backbone
+metadata, scaling statistics, ordered centroids, distance scales, and
+transition-support bands. Target-flight execution rematerializes events,
+windows, and window features from observed `parameter_value`, then applies
+those fixed artifacts without running stages 10, 12, 15, 25, 40, 50, or 60.
+
 ## 5. Notes
 
 - For the mathematical interpretation of robust scaling, backbone fitting, graph weights, and phase fitting, see [theory_foundations.md](../reference/theory_foundations.md).
@@ -120,6 +129,12 @@ Grouped full runs also emit `reports/simulation_benchmark_audit_summary.json`, w
 Grouped full runs also emit `reports/benchmark_scope_validation_summary.json`, which converts those benchmark tiers into optimization scopes. This is the report that answers “what should count in the denominator for detection, parameter, subsystem, and module tuning?” The older raw score and attribution summaries remain all-window references and are not filtered by declared benchmark tier.
 Grouped full runs also emit `reports/benchmark_tier_validation_summary.json`, which keeps the mixed composite replay readable by declared benchmark tier and adds an eligible composite failure ledger. Use that ledger when deciding whether a composite miss is a detection failure, a parameter-visibility failure, or a subsystem/module localization failure on a window that was actually eligible for that level of optimization.
 The attribution reports also include `candidate_cut_validation`, a diagnostic comparison of truth parameter support rank in persisted telemetry candidates against the fixed top-three structural rollup cut. Use it to distinguish a cut-loss from a truth parameter not ranked into bounded candidates, absent telemetry evidence, or an unmappable hierarchy cluster before changing candidate breadth.
+Stage 80 also preserves a bounded `parameter_score_evidence` array in raw and
+calibrated window scores. Stage 90 materializes that payload as
+`anomaly_parameter_candidate_evidence`, adding localization support/rank,
+hierarchy mapping, and the telemetry and structural cut decisions. This ledger
+is production-observation evidence only: it contains no simulator truth and
+does not change the model result.
 Run the clean benchmark-tier gate suite with `--composite-run-dir <run-dir>` to write a separate `benchmark_decision_ledger_summary.json`. That suite-level artifact joins each composite window to the clean gate evidence for its fault type and recommends a review path; it never rewrites the authored benchmark truth.
 
 The harness is intended to be the canonical tuning bundle for iterative model improvement. It joins:

@@ -22,6 +22,8 @@ Canonical grouped entrypoints:
 - `python -m pipelines.99_run_full_pipeline`
 - `python -m pipelines.97_run_fitting_pipeline`
 - `python -m pipelines.98_run_inference_pipeline`
+- `python -m pipelines.96_run_reference_inference_pipeline` after fixed
+  reference artifacts have been positioned in a target run bundle
 
 Grouped runners also accept stage slicing and replay:
 - `python -m pipelines.97_run_fitting_pipeline --start-stage 20_events_extract.py --end-stage 30_windows_adaptive.py --replay-run-dir <existing_run_dir>`
@@ -38,14 +40,15 @@ Canonical stage order:
 5. `20_events_extract.py`
 6. `25_window_policy_profile.py`
 7. `30_windows_adaptive.py`
-8. `40_backbone_fit.py`
-9. `50_build_graph.py`
-10. `60_fit_hierarchy.py`
-11. `70_phase_fit.py`
-12. `80_window_scores_raw.py`
-13. `85_window_scores_calibrate.py`
-14. `90_anomaly_attribution.py`
-15. `95_emit_explorer_bundle.py`
+8. `35_window_features_apply.py` (reference inference only)
+9. `40_backbone_fit.py`
+10. `50_build_graph.py`
+11. `60_fit_hierarchy.py`
+12. `70_phase_fit.py`
+13. `80_window_scores_raw.py`
+14. `85_window_scores_calibrate.py`
+15. `90_anomaly_attribution.py`
+16. `95_emit_explorer_bundle.py`
 
 `72_phase_label_centroids.py` is intentionally excluded from the production
 grouped runners: it requires truth phase labels and is run only by the
@@ -69,21 +72,22 @@ for active contracts.
 | `20_events_extract.py` | `events` |
 | `25_window_policy_profile.py` | `window_policy_profile`, selected-policy evaluation report |
 | `30_windows_adaptive.py` | `windows` |
+| `35_window_features_apply.py` | `window_features` using a fixed scaling profile (reference inference only) |
 | `40_backbone_fit.py` | `window_features`, `backbone`, `backbone_sensor_energy` |
 | `50_build_graph.py` | `precision_graph`, `event_graph`, `lag_profile`, `lag_graph`, `transition_graph`, `fused_graph`, `graph_parameter_universe` |
 | `60_fit_hierarchy.py` | `hierarchy_sensor_map`, `hierarchy_edge_evidence` |
-| `70_phase_fit.py` | `phase_windows`, `phase_baselines` |
+| `70_phase_fit.py` | `phase_windows`, `phase_baselines`, `phase_reference_model`; apply mode writes only `phase_windows` |
 | `72_phase_label_centroids.py` | `phase_label_centroids` (simulation validation only) |
 | `80_window_scores_raw.py` | `window_scores_raw` |
 | `85_window_scores_calibrate.py` | `window_scores_calibrated` |
-| `90_anomaly_attribution.py` | `anomaly_window_attribution`, `anomaly_telemetry_attribution`, `anomaly_event_attribution` |
+| `90_anomaly_attribution.py` | `anomaly_window_attribution`, `anomaly_telemetry_attribution`, `anomaly_event_attribution`, `anomaly_parameter_candidate_evidence` |
 | `95_emit_explorer_bundle.py` | `explorer_bundle` |
 
 ## Contents
 
-- `00`, `10`, `12`, `15`, `20`, `25`, `30`, `40`, `50`, `60`, `70`, `72`, `80`, `85`, `90`, `95`
+- `00`, `10`, `12`, `15`, `20`, `25`, `30`, `35`, `40`, `50`, `60`, `70`, `72`, `80`, `85`, `90`, `95`
   - persisted stage entrypoints
-- `97`, `98`, `99`
+- `96`, `97`, `98`, `99`
   - grouped pipeline entrypoints
 - `common.py`
   - shared pipeline context assembly

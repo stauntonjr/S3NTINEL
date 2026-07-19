@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from libs.phase.tables import PhaseBaselinesTable, PhaseWindowsTable
+from libs.phase.tables import PhaseBaselinesTable, PhaseReferenceModelTable, PhaseWindowsTable
 from libs.phase.utils import default_phase_segment_policy
 from libs.spark_sequence import SequenceSegmentPolicy
 
@@ -42,6 +42,7 @@ class PhaseArtifactSet:
     phase_config: "PhaseFeatureConfig"
     feature_frame: "PhaseFeatureFrame | None" = None
     cluster_model: PhaseClusterModel | None = None
+    reference_model: PhaseReferenceModelTable | None = None
 
 
 @dataclass(frozen=True)

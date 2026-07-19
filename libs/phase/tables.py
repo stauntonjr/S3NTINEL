@@ -5,7 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from libs.io.schemas.phase import PHASE_BASELINES_SCHEMA, PHASE_LABEL_CENTROIDS_SCHEMA, PHASE_WINDOWS_SCHEMA
+from libs.io.schemas.phase import (
+    PHASE_BASELINES_SCHEMA,
+    PHASE_LABEL_CENTROIDS_SCHEMA,
+    PHASE_REFERENCE_MODEL_SCHEMA,
+    PHASE_WINDOWS_SCHEMA,
+)
 from libs.pyspark import Table
 
 
@@ -160,6 +165,108 @@ class PhaseBaselinesTable(Table):
 
 
 @dataclass(frozen=True)
+class PhaseReferenceModelTable(Table):
+    """Reusable fitted phase model for applying phase detection to new windows."""
+
+    partition_by: tuple[str, ...] = ("tail_id",)
+
+    @classmethod
+    def spark_schema(cls):
+        return PHASE_REFERENCE_MODEL_SCHEMA()
+
+    @classmethod
+    def from_detection_run(
+        cls,
+        detection_run: "PhaseDetectionRun",
+    ) -> "PhaseReferenceModelTable":
+        from pyspark.sql import functions as F
+
+        config = detection_run.phase_config
+        model = detection_run.cluster_model
+        pair_type = "array<array<string>>"
+        categorical_pairs = [list(item) for item in config.phase_selected_categorical_state_pairs]
+        cooccurrence_pairs = [list(item) for item in config.phase_selected_window_cooccurrence_pairs]
+        return cls(
+            dataframe=(
+                model.centroids_df.join(
+                    model.feature_stats_df.select(
+                        "tail_id",
+                        "flight_id",
+                        "phase_feature_medians",
+                        "phase_feature_scales",
+                        "drift_threshold",
+                        "flight_window_count",
+                        "stable_window_count_raw",
+                        "stable_window_count_effective",
+                        "effective_phase_count",
+                        "dwell_limit",
+                        "can_refine_centroids",
+                    ),
+                    on=["tail_id", "flight_id"],
+                    how="inner",
+                )
+                .join(
+                    model.distance_scales_df.select(
+                        "tail_id", "flight_id", "phase_id_detected", "distance_scale"
+                    ),
+                    on=["tail_id", "flight_id", "phase_id_detected"],
+                    how="inner",
+                )
+                .join(
+                    model.transition_model.support_df,
+                    on=["tail_id", "flight_id", "phase_id_detected"],
+                    how="inner",
+                )
+                .select(
+                    "tail_id",
+                    "flight_id",
+                    "phase_id_detected",
+                    "phase_feature_medians",
+                    "phase_feature_scales",
+                    "drift_threshold",
+                    "flight_window_count",
+                    "stable_window_count_raw",
+                    "stable_window_count_effective",
+                    "effective_phase_count",
+                    "dwell_limit",
+                    "can_refine_centroids",
+                    "s_w_centroid",
+                    "distance_scale",
+                    "phase_progress_start",
+                    "phase_progress_end",
+                    "phase_progress_center",
+                    "phase_progress_half_width",
+                    F.lit(list(config.phase_selected_sensors)).cast("array<string>").alias(
+                        "phase_selected_sensors"
+                    ),
+                    F.lit(list(config.phase_selected_event_types)).cast("array<string>").alias(
+                        "phase_selected_event_types"
+                    ),
+                    F.lit(categorical_pairs).cast(pair_type).alias("phase_selected_categorical_state_pairs"),
+                    F.lit(cooccurrence_pairs).cast(pair_type).alias(
+                        "phase_selected_window_cooccurrence_pairs"
+                    ),
+                    F.lit(list(config.backbone_model.selected_sensors_c)).cast("array<string>").alias(
+                        "selected_sensors_c"
+                    ),
+                    F.lit(list(config.backbone_model.all_sensors)).cast("array<string>").alias(
+                        "backbone_all_sensors"
+                    ),
+                    F.lit(config.backbone_weights_rows).cast("array<array<double>>").alias(
+                        "backbone_weights_b"
+                    ),
+                    F.lit(float(config.backbone_model.lambda_ridge)).alias("backbone_lambda_ridge"),
+                    F.lit(int(config.backbone_model.training_window_count)).cast("int").alias(
+                        "backbone_training_window_count"
+                    ),
+                    F.lit(int(config.backbone_model.backbone_version)).cast("int").alias("backbone_version"),
+                    F.lit(1).cast("int").alias("version"),
+                )
+            )
+        )
+
+
+@dataclass(frozen=True)
 class PhaseLabelCentroidsTable(Table):
     partition_by: tuple[str, ...] = ("tail_id",)
 
@@ -256,3 +363,4 @@ if TYPE_CHECKING:
 
     from libs.phase.feature_config import PhaseFeatureConfig
     from libs.phase.frames import PhaseFeatureFrame
+    from libs.phase.types import PhaseDetectionRun

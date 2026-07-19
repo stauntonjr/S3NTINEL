@@ -49,6 +49,7 @@ def _score_row(
                 RECONSTRUCTION_ERROR_CHANNEL: 0.0,
             }
         ),
+        "parameter_score_evidence": [],
         "date_utc": date_utc,
     }
 
@@ -134,6 +135,12 @@ def test_window_scores_raw_table_builds_scores_from_phase_dataframes(spark):
     assert scored[3]["global_score"] > scored[1]["global_score"]
     assert scored[3]["severity"] in {"low", "medium", "high"}
     assert set(scored[3]["score_component_scores"].keys()) == set(SCORE_COMPONENT_NAMES)
+    evidence = {item["parameter_name"]: item for item in scored[3]["parameter_score_evidence"]}
+    assert set(evidence) == {"p1", "p2"}
+    assert evidence["p1"]["residual_weight"] == 2.0
+    assert evidence["p1"]["residual_share"] > evidence["p2"]["residual_share"]
+    assert evidence["p1"]["global_evidence_rank"] == 1
+    assert "reconstruction_error" in evidence["p1"]["candidate_channels"]
 
 
 def test_window_scores_raw_table_joins_hierarchy_support_from_phase_dataframes(spark):

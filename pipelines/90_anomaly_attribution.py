@@ -48,6 +48,7 @@ def run() -> None:
     anomaly_window_attribution_path = runtime.artifacts.anomaly_window_attribution
     anomaly_telemetry_attribution_path = runtime.artifacts.anomaly_telemetry_attribution
     anomaly_event_attribution_path = runtime.artifacts.anomaly_event_attribution
+    anomaly_parameter_candidate_evidence_path = runtime.artifacts.anomaly_parameter_candidate_evidence
     table_format = runtime.execution.table_format
     write_mode = runtime.execution.write_mode
     top_k_per_subsystem = runtime.settings.anomaly.subsystem_top_sensors_k
@@ -89,6 +90,11 @@ def run() -> None:
         format=table_format,
         partition_by=tuple(context.config["output"]["partition_by"]),
     )
+    anomaly_parameter_candidate_evidence = artifacts.parameter_candidate_evidence.bind(
+        path=anomaly_parameter_candidate_evidence_path,
+        format=table_format,
+        partition_by=tuple(context.config["output"]["partition_by"]),
+    )
     # These frames have wide schemas and share expensive attribution lineages.
     # Materialize them once so the empty check, write, and manifest count do not
     # each re-plan and re-execute the complete attribution graph.
@@ -101,16 +107,23 @@ def run() -> None:
     anomaly_event_attribution, anomaly_event_count = _materialize_output(
         anomaly_event_attribution, StorageLevel.DISK_ONLY
     )
+    anomaly_parameter_candidate_evidence, anomaly_parameter_candidate_evidence_count = _materialize_output(
+        anomaly_parameter_candidate_evidence, StorageLevel.DISK_ONLY
+    )
     if write_mode.lower() == "merge":
         anomaly_window_attribution.upsert(merge_keys=context.config["output"]["anomalies_merge_key"])
         anomaly_telemetry_attribution.upsert(merge_keys=["tail_id", "flight_id", "win_id", "timestamp_utc", "parameter_name"])
         anomaly_event_attribution.upsert(
             merge_keys=["tail_id", "flight_id", "win_id", "timestamp_utc", "parameter_name", "event_type_detected"]
         )
+        anomaly_parameter_candidate_evidence.upsert(
+            merge_keys=["tail_id", "flight_id", "win_id", "parameter_name"]
+        )
     else:
         anomaly_window_attribution.write(mode=write_mode)
         anomaly_telemetry_attribution.write(mode=write_mode)
         anomaly_event_attribution.write(mode=write_mode)
+        anomaly_parameter_candidate_evidence.write(mode=write_mode)
     calibrated_count = int(calibrated_df.count())
     phase_windows_count = int(phase_windows_df.count())
     windows_count = int(windows_df.count())
@@ -141,6 +154,7 @@ def run() -> None:
             "anomaly_window_attribution_path": anomaly_window_attribution_path,
             "anomaly_telemetry_attribution_path": anomaly_telemetry_attribution_path,
             "anomaly_event_attribution_path": anomaly_event_attribution_path,
+            "anomaly_parameter_candidate_evidence_path": anomaly_parameter_candidate_evidence_path,
             "table_format": table_format,
             "write_mode": write_mode,
             "merge_key": list(context.config["output"]["anomalies_merge_key"]),
@@ -206,6 +220,11 @@ def run() -> None:
                 dataframe=anomaly_event_attribution.to_dataframe(),
                 row_count=anomaly_event_count,
             ),
+            "anomaly_parameter_candidate_evidence": build_artifact_manifest(
+                path=anomaly_parameter_candidate_evidence_path,
+                dataframe=anomaly_parameter_candidate_evidence.to_dataframe(),
+                row_count=anomaly_parameter_candidate_evidence_count,
+            ),
         },
         replayable_from=[
             "window_scores_calibrated",
@@ -219,13 +238,14 @@ def run() -> None:
     )
     log_stage_manifest_if_active(stage_manifest, runtime.report_paths.manifest_artifact_path)
     LOGGER.info(
-        "pipeline=anomaly_attribution merge_key=%s write_mode=%s window_scores_calibrated=%s anomaly_window_attribution=%s anomaly_telemetry_attribution=%s anomaly_event_attribution=%s",
+        "pipeline=anomaly_attribution merge_key=%s write_mode=%s window_scores_calibrated=%s anomaly_window_attribution=%s anomaly_telemetry_attribution=%s anomaly_event_attribution=%s anomaly_parameter_candidate_evidence=%s",
         context.config["output"]["anomalies_merge_key"],
         write_mode,
         window_scores_calibrated_path,
         anomaly_window_attribution_path,
         anomaly_telemetry_attribution_path,
         anomaly_event_attribution_path,
+        anomaly_parameter_candidate_evidence_path,
     )
 
 

@@ -190,6 +190,8 @@ as hierarchy edges.
 evidence. The active components are `regime_deviation`, `reconstruction_error`,
 `event_discordance`, `bound_violation`, `accumulation_violation`,
 `response_violation`, `state_violation`, and `coherence_break`.
+Its bounded `parameter_score_evidence` payload preserves score-owned residual,
+event, profile, and behavior-channel evidence for candidate diagnosis.
 
 `window_scores_calibrated` adds phase-conditioned calibration and the conservative
 `emit_ready` decision. `subsystem_scores` remains a schema compatibility field;
@@ -210,6 +212,22 @@ parameter_name)`.
 
 `anomaly_event_attribution` contains detected-event evidence local to an anomaly
 window. Its grain adds `event_type_detected` to the telemetry attribution key.
+
+### anomaly parameter candidate evidence
+
+`anomaly_parameter_candidate_evidence` is the bounded score-to-localization
+ledger. Its grain is `(tail_id, flight_id, win_id, parameter_name)`. It records
+the score evidence, hierarchy mapping, localization support and rank, and
+whether the candidate survived the telemetry and structural cuts.
+
+### phase reference model
+
+`phase_reference_model` is the reusable stage-70 phase fit artifact. Each
+reference-flight phase row carries the fitted feature/backbone configuration,
+robust feature statistics, centroid and distance scale, and ordered
+transition-support band needed to assign phases on another flight. It contains
+model state, not simulator truth, and reference inference replaces its source
+flight keys with target flight keys before distributed assignment.
 
 ### misbehavior truth and recoverability
 

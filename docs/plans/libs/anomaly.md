@@ -187,6 +187,17 @@ acceptance path that must precede any selection experiment.
 This is a diagnostic data-contract and validation-lifecycle pass. It must not
 change model support, ranks, selected candidates, or hierarchy outputs.
 
+Progress as of 2026-07-19:
+
+- the bounded score-owned evidence contract is implemented in stage 80 and
+  passed through calibration;
+- stage 90 materializes `anomaly_parameter_candidate_evidence` with support,
+  rank, hierarchy, telemetry-retention, and structural-cut fields;
+- the implementation is diagnostic-only and leaves the existing score and
+  localization calculations unchanged;
+- the nominal-reference-fit/faulted-inference comparison remains the next
+  uncompleted diagnostic.
+
 The current score path computes useful per-parameter inputs, including
 behavior-profile and event-profile evidence, then reduces part of that
 information to a window-level score. Stage `90` reconstructs localization
@@ -829,8 +840,8 @@ The next active anomaly sequence is gated by the
    decisions intact;
 2. use the simulation decision ledger to establish whether a declared target
    has an observable source-versus-consequence signature;
-3. preserve bounded score-owned per-parameter candidate evidence without
-   changing model results;
+3. use the implemented bounded score-owned per-parameter candidate evidence
+   without changing model results;
 4. compare the existing self-fit replay with a nominal-reference-fit,
    faulted-inference replay;
 5. make no anomaly-model change when scenario scope, fitting lifecycle, or
@@ -939,6 +950,12 @@ the stack:
 - no regression in current headline anomaly metrics
 - no new detection rule should depend on simulator-specific identifiers or truth
   labels
+
+Implementation status: the bounded evidence ledger and paired runner are in
+place, with fixed artifact lineage and an observed-`parameter_value` contract.
+Focused fit/apply tests and the structural smoke pass. Do not treat the paired
+comparison as accepted evidence until the post-session-reset diagnostic replay
+completes successfully.
 
 ### Modeling pass after the diagnostics
 

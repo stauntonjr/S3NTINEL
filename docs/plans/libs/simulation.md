@@ -295,7 +295,13 @@ record that conclusion and stop rather than accumulate simulator variants.
 
 ### Milestone 3: Evidence-Preservation And Reference-Inference Diagnosis
 
-Status: next active diagnostic pass. It must not change anomaly behavior.
+Status: in progress. Candidate-evidence preservation and the paired
+reference-fit/faulted-inference orchestration are implemented without changing
+anomaly behavior. Focused phase fit/apply tests and the canonical structural
+smoke pass. A first 600-step paired attempt exposed cross-child Spark checkpoint
+retention and was discarded; explicit Spark session resets are now applied at
+child-run boundaries. The post-reset paired replay remains required before this
+milestone can be completed.
 
 The current grouped full simulation run fits artifacts and runs inference from
 the same fault-bearing observed telemetry in one run directory. That path does
@@ -310,7 +316,7 @@ Build a paired simulation benchmark:
    observed `parameter_value`;
 2. generate the matching faulted flight and run inference against those fixed
    reference artifacts, recording the reference run/artifact lineage;
-3. preserve a bounded parameter/window candidate-evidence record from the
+3. consume the bounded parameter/window candidate-evidence record from the
    canonical scoring and anomaly path, including candidate source, channel
    contribution, phase-conditioned residual evidence, profile/event evidence,
    support, rank, and both cap statuses;

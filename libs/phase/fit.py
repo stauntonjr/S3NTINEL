@@ -113,12 +113,18 @@ def build_scaled_phase_observations(
     feature_count: int,
     config: PhasePlanConfig,
 ) -> tuple[PhaseObservationFrame, "DataFrame", "DataFrame"]:
-    from pyspark.sql import functions as F
-
     observation_frame = PhaseObservationFrame.from_feature_frame(feature_frame)
     stats_df = build_flight_stats(observation_frame, feature_count=feature_count, config=config)
-    scaled_df = (
-        observation_frame.dataframe.join(
+    scaled_df = scale_phase_observations(observation_frame.dataframe, stats_df)
+    return observation_frame, stats_df, scaled_df
+
+
+def scale_phase_observations(observation_df: "DataFrame", stats_df: "DataFrame") -> "DataFrame":
+    """Apply persisted phase feature scaling statistics to observation rows."""
+    from pyspark.sql import functions as F
+
+    return (
+        observation_df.join(
             stats_df.select(
                 "tail_id",
                 "flight_id",
@@ -150,7 +156,6 @@ def build_scaled_phase_observations(
         )
         .drop("phase_feature_medians", "phase_feature_scales")
     )
-    return observation_frame, stats_df, scaled_df
 
 
 def build_fit_source(scaled_df: "DataFrame") -> "DataFrame":

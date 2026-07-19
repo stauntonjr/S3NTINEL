@@ -12,9 +12,9 @@ from libs.phase.config_fit import (
 )
 from libs.phase.decode import build_assignment_input, enforce_min_dwell, assign_phases_segmented
 from libs.phase.feature_config import PhaseFeatureConfig
-from libs.phase.fit import fit_cluster_model
+from libs.phase.fit import fit_cluster_model, scale_phase_observations
 from libs.phase.frames import PhaseFeatureFrame, PhaseObservationFrame
-from libs.phase.tables import PhaseBaselinesTable, PhaseWindowsTable
+from libs.phase.tables import PhaseBaselinesTable, PhaseReferenceModelTable, PhaseWindowsTable
 from libs.phase.types import (
     PhaseArtifactSet,
     PhaseClusterModel,
@@ -22,6 +22,7 @@ from libs.phase.types import (
     PhaseFeatureSelectionDiagnostics,
     PhaseFeatureSelectionPolicy,
     PhasePlanConfig,
+    PhaseTransitionModel,
 )
 
 
@@ -202,6 +203,88 @@ class PhaseDetectionPlan(PhasePlanConfig):
     def _fit_cluster_model(self, feature_frame: PhaseFeatureFrame) -> tuple["DataFrame", PhaseClusterModel]:
         return fit_cluster_model(feature_frame, config=self)
 
+    @staticmethod
+    def _reference_phase_config(reference_model_df: "DataFrame") -> PhaseFeatureConfig:
+        rows = reference_model_df.limit(1).collect()
+        if not rows:
+            raise ValueError("phase reference inference requires a non-empty phase_reference_model")
+        row = rows[0].asDict(recursive=True)
+        return PhaseFeatureConfig.from_dict(
+            {
+                "selected_sensors_c": row.get("selected_sensors_c") or [],
+                "all_sensors": row.get("backbone_all_sensors") or [],
+                "weights_b": row.get("backbone_weights_b") or [],
+                "lambda_ridge": row.get("backbone_lambda_ridge"),
+                "training_window_count": row.get("backbone_training_window_count"),
+                "backbone_version": row.get("backbone_version"),
+                "phase_selected_sensors": row.get("phase_selected_sensors") or [],
+                "phase_selected_event_types": row.get("phase_selected_event_types") or [],
+                "phase_selected_categorical_state_pairs": row.get(
+                    "phase_selected_categorical_state_pairs"
+                )
+                or [],
+                "phase_selected_window_cooccurrence_pairs": row.get(
+                    "phase_selected_window_cooccurrence_pairs"
+                )
+                or [],
+            }
+        )
+
+    @staticmethod
+    def _reference_cluster_model(
+        *,
+        reference_model_df: "DataFrame",
+        target_keys_df: "DataFrame",
+    ) -> PhaseClusterModel:
+        from pyspark.sql import functions as F
+
+        reference_flights = reference_model_df.select("tail_id", "flight_id").distinct().limit(2).collect()
+        if len(reference_flights) != 1:
+            raise ValueError("phase reference inference requires exactly one reference flight model")
+        model_columns_df = reference_model_df.drop("tail_id", "flight_id")
+        mapped_df = target_keys_df.crossJoin(F.broadcast(model_columns_df))
+        stats_columns = [
+            "tail_id",
+            "flight_id",
+            "flight_window_count",
+            "stable_window_count_raw",
+            "stable_window_count_effective",
+            "effective_phase_count",
+            "dwell_limit",
+            "can_refine_centroids",
+            "drift_threshold",
+            "phase_feature_medians",
+            "phase_feature_scales",
+        ]
+        feature_stats_df = mapped_df.select(*stats_columns).dropDuplicates(["tail_id", "flight_id"])
+        centroids_df = mapped_df.select(
+            "tail_id",
+            "flight_id",
+            "phase_id_detected",
+            "s_w_centroid",
+        )
+        distance_scales_df = mapped_df.select(
+            "tail_id",
+            "flight_id",
+            "phase_id_detected",
+            "distance_scale",
+        )
+        support_df = mapped_df.select(
+            "tail_id",
+            "flight_id",
+            "phase_id_detected",
+            "phase_progress_start",
+            "phase_progress_end",
+            "phase_progress_center",
+            "phase_progress_half_width",
+        )
+        return PhaseClusterModel(
+            feature_stats_df=feature_stats_df,
+            centroids_df=centroids_df,
+            distance_scales_df=distance_scales_df,
+            transition_model=PhaseTransitionModel(support_df=support_df),
+        )
+
     @hot_path
     def run_detection(
         self,
@@ -212,6 +295,52 @@ class PhaseDetectionPlan(PhasePlanConfig):
         return self._run_detection(
             window_features_df,
             phase_config=self._phase_config(phase_config),
+        )
+
+    @hot_path
+    def run_reference_inference(
+        self,
+        window_features_df: "DataFrame",
+        *,
+        reference_model: "PhaseReferenceModelTable | DataFrame",
+    ) -> PhaseDetectionRun:
+        reference_model_df = (
+            reference_model.to_dataframe()
+            if isinstance(reference_model, PhaseReferenceModelTable)
+            else reference_model
+        )
+        phase_config = self._reference_phase_config(reference_model_df)
+        feature_frame = self.build_feature_frame(window_features_df, phase_config=phase_config)
+        observation_frame = self.build_observation_frame(feature_frame)
+        target_keys_df = observation_frame.to_dataframe().select("tail_id", "flight_id").distinct()
+        cluster_model = self._reference_cluster_model(
+            reference_model_df=reference_model_df,
+            target_keys_df=target_keys_df,
+        )
+        scaled_df = self._checkpoint(
+            scale_phase_observations(observation_frame.to_dataframe(), cluster_model.feature_stats_df)
+        )
+        assignment_input_df = self._checkpoint(build_assignment_input(scaled_df, cluster_model=cluster_model))
+        assigned_df = self._checkpoint(assign_phases_segmented(assignment_input_df, cluster_model=cluster_model, config=self))
+        merged_df = self._checkpoint(enforce_min_dwell(assigned_df, config=self))
+        diagnostics = _collect_phase_fit_diagnostics(
+            cluster_model=cluster_model,
+            assignment_input_df=assignment_input_df,
+            assigned_df=assigned_df,
+            merged_df=merged_df,
+        )
+        diagnostics["phase_reference_inference"] = True
+        phase_windows = PhaseWindowsTable.from_assignments(
+            merged_df,
+            feature_frame=feature_frame,
+            phase_config=phase_config,
+        )
+        return PhaseDetectionRun(
+            phase_config=phase_config,
+            feature_frame=feature_frame,
+            cluster_model=cluster_model,
+            phase_windows=PhaseWindowsTable(dataframe=self._checkpoint(phase_windows.to_dataframe())),
+            diagnostics=diagnostics,
         )
 
     @hot_path
@@ -281,12 +410,14 @@ class PhaseDetectionPlan(PhasePlanConfig):
             phase_config=phase_config,
         )
         phase_baselines = self.build_phase_baselines(detection_run.phase_windows, phase_config=phase_config)
+        reference_model = PhaseReferenceModelTable.from_detection_run(detection_run)
         return PhaseArtifactSet(
             phase_windows=detection_run.phase_windows,
             phase_baselines=phase_baselines,
             phase_config=phase_config,
             feature_frame=detection_run.feature_frame,
             cluster_model=detection_run.cluster_model,
+            reference_model=reference_model,
         )
 
 

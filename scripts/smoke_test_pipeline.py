@@ -85,6 +85,7 @@ def set_env_paths(base_dir: str, table_format: str, write_mode: str, min_warm: i
     os.environ["S3NTINEL_GRAPH_PARAMETER_UNIVERSE_TABLE_PATH"] = str(base / "delta" / "graph_parameter_universe")
     os.environ["S3NTINEL_PHASE_WINDOWS_TABLE_PATH"] = str(base / "delta" / "phase_windows")
     os.environ["S3NTINEL_PHASE_BASELINES_TABLE_PATH"] = str(base / "delta" / "phase_baselines")
+    os.environ["S3NTINEL_PHASE_REFERENCE_MODEL_TABLE_PATH"] = str(base / "delta" / "phase_reference_model")
     os.environ["S3NTINEL_PHASE_LABEL_CENTROIDS_TABLE_PATH"] = str(base / "delta" / "phase_label_centroids")
     os.environ["S3NTINEL_HIERARCHY_SENSOR_MAP_TABLE_PATH"] = str(base / "delta" / "hierarchy_sensor_map")
     os.environ["S3NTINEL_HIERARCHY_EDGE_EVIDENCE_TABLE_PATH"] = str(base / "delta" / "hierarchy_edge_evidence")
@@ -93,6 +94,9 @@ def set_env_paths(base_dir: str, table_format: str, write_mode: str, min_warm: i
     os.environ["S3NTINEL_ANOMALY_WINDOW_ATTRIBUTION_TABLE_PATH"] = str(base / "delta" / "anomaly_window_attribution")
     os.environ["S3NTINEL_ANOMALY_TELEMETRY_ATTRIBUTION_TABLE_PATH"] = str(base / "delta" / "anomaly_telemetry_attribution")
     os.environ["S3NTINEL_ANOMALY_EVENT_ATTRIBUTION_TABLE_PATH"] = str(base / "delta" / "anomaly_event_attribution")
+    os.environ["S3NTINEL_ANOMALY_PARAMETER_CANDIDATE_EVIDENCE_TABLE_PATH"] = str(
+        base / "delta" / "anomaly_parameter_candidate_evidence"
+    )
     os.environ["S3NTINEL_TABLE_FORMAT"] = table_format
     os.environ["S3NTINEL_RAW_OUTPUT_FORMAT"] = table_format
     os.environ["S3NTINEL_WRITE_MODE"] = "overwrite" if write_mode == "merge" else write_mode
@@ -135,12 +139,16 @@ def print_row_counts(spark: "SparkSession", table_format: str) -> None:
         "hierarchy_edge_evidence": os.environ["S3NTINEL_HIERARCHY_EDGE_EVIDENCE_TABLE_PATH"],
         "phase_windows": os.environ["S3NTINEL_PHASE_WINDOWS_TABLE_PATH"],
         "phase_baselines": os.environ["S3NTINEL_PHASE_BASELINES_TABLE_PATH"],
+        "phase_reference_model": os.environ["S3NTINEL_PHASE_REFERENCE_MODEL_TABLE_PATH"],
         "phase_label_centroids": os.environ["S3NTINEL_PHASE_LABEL_CENTROIDS_TABLE_PATH"],
         "window_scores_raw": os.environ["S3NTINEL_WINDOW_SCORES_RAW_TABLE_PATH"],
         "window_scores_calibrated": os.environ["S3NTINEL_WINDOW_SCORES_CALIBRATED_TABLE_PATH"],
         "anomaly_window_attribution": os.environ["S3NTINEL_ANOMALY_WINDOW_ATTRIBUTION_TABLE_PATH"],
         "anomaly_telemetry_attribution": os.environ["S3NTINEL_ANOMALY_TELEMETRY_ATTRIBUTION_TABLE_PATH"],
         "anomaly_event_attribution": os.environ["S3NTINEL_ANOMALY_EVENT_ATTRIBUTION_TABLE_PATH"],
+        "anomaly_parameter_candidate_evidence": os.environ[
+            "S3NTINEL_ANOMALY_PARAMETER_CANDIDATE_EVIDENCE_TABLE_PATH"
+        ],
     }
 
     print("\n[smoke] row counts")
@@ -185,6 +193,15 @@ def assert_anomaly_payload_quality(spark: "SparkSession", table_format: str, wri
     if top_sensor_rows <= 0:
         raise SystemExit("[smoke] anomaly quality assertion failed: no subsystem top_sensors populated")
 
+    parameter_evidence_df = read_table(
+        spark,
+        path=os.environ["S3NTINEL_ANOMALY_PARAMETER_CANDIDATE_EVIDENCE_TABLE_PATH"],
+        fmt=table_format,
+    )
+    parameter_evidence_rows = parameter_evidence_df.count()
+    if parameter_evidence_rows <= 0:
+        raise SystemExit("[smoke] anomaly quality assertion failed: no parameter candidate evidence rows")
+
     if str(write_mode).lower() == "merge":
         stage_80_path = Path(__file__).resolve().parent.parent / "pipelines" / "90_anomaly_attribution.py"
         os.environ["S3NTINEL_WRITE_MODE"] = "merge"
@@ -206,7 +223,8 @@ def assert_anomaly_payload_quality(spark: "SparkSession", table_format: str, wri
 
     print(
         "[smoke] anomaly quality assertions passed "
-        f"(rows={row_count}, panel_rows={panel_rows}, top_sensor_rows={top_sensor_rows}, write_mode={write_mode})"
+        f"(rows={row_count}, panel_rows={panel_rows}, top_sensor_rows={top_sensor_rows}, "
+        f"parameter_evidence_rows={parameter_evidence_rows}, write_mode={write_mode})"
     )
 
 
@@ -232,12 +250,16 @@ def assert_active_v2_table_contracts(spark: "SparkSession", table_format: str) -
         "hierarchy_edge_evidence": os.environ["S3NTINEL_HIERARCHY_EDGE_EVIDENCE_TABLE_PATH"],
         "phase_windows": os.environ["S3NTINEL_PHASE_WINDOWS_TABLE_PATH"],
         "phase_baselines": os.environ["S3NTINEL_PHASE_BASELINES_TABLE_PATH"],
+        "phase_reference_model": os.environ["S3NTINEL_PHASE_REFERENCE_MODEL_TABLE_PATH"],
         "phase_label_centroids": os.environ["S3NTINEL_PHASE_LABEL_CENTROIDS_TABLE_PATH"],
         "window_scores_raw": os.environ["S3NTINEL_WINDOW_SCORES_RAW_TABLE_PATH"],
         "window_scores_calibrated": os.environ["S3NTINEL_WINDOW_SCORES_CALIBRATED_TABLE_PATH"],
         "anomaly_window_attribution": os.environ["S3NTINEL_ANOMALY_WINDOW_ATTRIBUTION_TABLE_PATH"],
         "anomaly_telemetry_attribution": os.environ["S3NTINEL_ANOMALY_TELEMETRY_ATTRIBUTION_TABLE_PATH"],
         "anomaly_event_attribution": os.environ["S3NTINEL_ANOMALY_EVENT_ATTRIBUTION_TABLE_PATH"],
+        "anomaly_parameter_candidate_evidence": os.environ[
+            "S3NTINEL_ANOMALY_PARAMETER_CANDIDATE_EVIDENCE_TABLE_PATH"
+        ],
     }
     for table_name, required_columns in ACTIVE_V2_TABLES.items():
         # Explorer artifacts are emitted by stage 95, outside this 00->90 smoke.

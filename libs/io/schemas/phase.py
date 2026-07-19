@@ -51,6 +51,38 @@ PHASE_LABEL_CENTROIDS_COLUMNS = [
     "version",
 ]
 
+PHASE_REFERENCE_MODEL_COLUMNS = [
+    "tail_id",
+    "flight_id",
+    "phase_id_detected",
+    "phase_feature_medians",
+    "phase_feature_scales",
+    "drift_threshold",
+    "flight_window_count",
+    "stable_window_count_raw",
+    "stable_window_count_effective",
+    "effective_phase_count",
+    "dwell_limit",
+    "can_refine_centroids",
+    "s_w_centroid",
+    "distance_scale",
+    "phase_progress_start",
+    "phase_progress_end",
+    "phase_progress_center",
+    "phase_progress_half_width",
+    "phase_selected_sensors",
+    "phase_selected_event_types",
+    "phase_selected_categorical_state_pairs",
+    "phase_selected_window_cooccurrence_pairs",
+    "selected_sensors_c",
+    "backbone_all_sensors",
+    "backbone_weights_b",
+    "backbone_lambda_ridge",
+    "backbone_training_window_count",
+    "backbone_version",
+    "version",
+]
+
 def PHASE_WINDOWS_SCHEMA():
     from pyspark.sql import types as T
 
@@ -130,6 +162,45 @@ def PHASE_LABEL_CENTROIDS_SCHEMA():
             T.StructField("selected_categorical_state_pairs", T.ArrayType(T.StringType(), True), False),
             T.StructField("selected_window_cooccurrence_pairs", T.ArrayType(T.StringType(), True), False),
             T.StructField("backbone_all_sensors", T.ArrayType(T.StringType(), False), False),
+            T.StructField("version", T.IntegerType(), False),
+        ]
+    )
+
+
+def PHASE_REFERENCE_MODEL_SCHEMA():
+    from pyspark.sql import types as T
+
+    string_pairs = T.ArrayType(T.ArrayType(T.StringType(), False), False)
+    return T.StructType(
+        [
+            T.StructField("tail_id", T.StringType(), False),
+            T.StructField("flight_id", T.StringType(), False),
+            T.StructField("phase_id_detected", T.IntegerType(), False),
+            T.StructField("phase_feature_medians", T.ArrayType(T.DoubleType(), False), False),
+            T.StructField("phase_feature_scales", T.ArrayType(T.DoubleType(), False), False),
+            T.StructField("drift_threshold", T.DoubleType(), False),
+            T.StructField("flight_window_count", T.IntegerType(), False),
+            T.StructField("stable_window_count_raw", T.IntegerType(), False),
+            T.StructField("stable_window_count_effective", T.IntegerType(), False),
+            T.StructField("effective_phase_count", T.IntegerType(), False),
+            T.StructField("dwell_limit", T.IntegerType(), False),
+            T.StructField("can_refine_centroids", T.BooleanType(), False),
+            T.StructField("s_w_centroid", T.ArrayType(T.DoubleType(), False), False),
+            T.StructField("distance_scale", T.DoubleType(), False),
+            T.StructField("phase_progress_start", T.DoubleType(), False),
+            T.StructField("phase_progress_end", T.DoubleType(), False),
+            T.StructField("phase_progress_center", T.DoubleType(), False),
+            T.StructField("phase_progress_half_width", T.DoubleType(), False),
+            T.StructField("phase_selected_sensors", T.ArrayType(T.StringType(), False), False),
+            T.StructField("phase_selected_event_types", T.ArrayType(T.StringType(), False), False),
+            T.StructField("phase_selected_categorical_state_pairs", string_pairs, False),
+            T.StructField("phase_selected_window_cooccurrence_pairs", string_pairs, False),
+            T.StructField("selected_sensors_c", T.ArrayType(T.StringType(), False), False),
+            T.StructField("backbone_all_sensors", T.ArrayType(T.StringType(), False), False),
+            T.StructField("backbone_weights_b", T.ArrayType(T.ArrayType(T.DoubleType(), False), False), False),
+            T.StructField("backbone_lambda_ridge", T.DoubleType(), False),
+            T.StructField("backbone_training_window_count", T.IntegerType(), False),
+            T.StructField("backbone_version", T.IntegerType(), False),
             T.StructField("version", T.IntegerType(), False),
         ]
     )

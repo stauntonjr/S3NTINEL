@@ -36,6 +36,13 @@ Persisted score artifacts are defined in `libs/io/schemas/scoring.py`:
 - raw scores
 - calibrated scores
 
+Both score tables carry a bounded `parameter_score_evidence` payload. It is the
+union of the top 16 global residual candidates and top 16 behavior-channel
+candidates per window, with event support and the score-owned behavior
+contribution terms preserved. Calibration passes the payload through unchanged.
+It is diagnostic evidence and does not alter score, severity, or emission
+semantics.
+
 ## Math / Methods
 
 Scores summarize regime, reconstruction, event, behavior-mechanism, and coherence

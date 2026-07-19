@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 import pytest
 
-from libs.anomaly import AnomalyAttributionPlan
+from libs.anomaly import AnomalyAttributionPlan, AnomalyParameterCandidateEvidenceTable
 from libs.scoring import SCORE_COMPONENT_NAMES
 from libs.testing.data import (
     create_sample_calibrated_df,
@@ -118,3 +118,45 @@ def test_anomaly_window_attribution_sets_v2_version_fields(spark):
     assert row["artifact_versions"]["graph"] == 1
     assert row["artifact_versions"]["phase"] == 1
     assert row["panel_context"] is not None
+
+
+def test_parameter_candidate_evidence_preserves_score_inputs_and_localization_cuts(spark):
+    calibrated_df = create_sample_calibrated_df(spark)
+    localization_df = spark.createDataFrame(
+        [
+            {
+                "tail_id": "T001",
+                "flight_id": "F001",
+                "win_id": 1,
+                "date_utc": date(2026, 2, 28),
+                "parameter_name": "ENG_TEMP_1",
+                "parameter_localization_support": 0.75,
+                "parameter_support_rank_in_window": 2,
+            }
+        ]
+    )
+    hierarchy_df = spark.createDataFrame(
+        [
+            {
+                "parameter_name": "ENG_TEMP_1",
+                "system_id": "SYS_0001",
+                "subsystem_id": "SUBSYS_0001",
+                "module_id": "MOD_0001",
+            }
+        ]
+    )
+
+    evidence_df = AnomalyParameterCandidateEvidenceTable.from_calibrated_scores_and_localization(
+        calibrated_df=calibrated_df,
+        parameter_localization_df=localization_df,
+        hierarchy_sensor_map_df=hierarchy_df,
+    ).to_dataframe()
+    row = evidence_df.where("win_id = 1").collect()[0]
+
+    assert row["parameter_name"] == "ENG_TEMP_1"
+    assert set(row["candidate_sources"]) == {"residual", "event"}
+    assert set(row["candidate_channels"]) == {"reconstruction_error", "event_discordance"}
+    assert row["residual_share"] == pytest.approx(0.8)
+    assert row["parameter_localization_support"] == pytest.approx(0.75)
+    assert row["telemetry_retained"] is True
+    assert row["structural_cut_retained"] is True

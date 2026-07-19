@@ -1,9 +1,15 @@
 # File: pipelines/70_phase_fit.py
 """Fit phase baselines and assign detected phases to windows."""
 
+from __future__ import annotations
+
+import os
+from typing import TYPE_CHECKING
+
 from libs.io.delta import get_spark, read_table
 from libs.phase import (
     PhaseDetectionPlan,
+    PhaseReferenceModelTable,
     fit_phase_feature_config_from_spark,
 )
 from libs.perf import (
@@ -21,12 +27,25 @@ from pipelines.common import build_stage_runtime, require_artifact_path
 
 
 LOGGER = get_logger(__name__)
+
+
 def _select_phase_fit_input_columns(
     raw_df: "DataFrame",
     events_df: "DataFrame",
     windows_df: "DataFrame",
 ) -> tuple["DataFrame", "DataFrame", "DataFrame"]:
-    raw_cols = [col for col in ["tail_id", "flight_id", "timestamp_utc", "parameter_name", "parameter_value_clean", "parameter_value", "timestamp"] if col in raw_df.columns]
+    raw_cols = [
+        col
+        for col in [
+            "tail_id",
+            "flight_id",
+            "timestamp_utc",
+            "parameter_name",
+            "parameter_value",
+            "timestamp",
+        ]
+        if col in raw_df.columns
+    ]
     event_cols = [
         col
         for col in [
@@ -59,9 +78,16 @@ def run() -> None:
     window_features_path = runtime.artifacts.window_features
     backbone_path = runtime.artifacts.backbone
     phase_baselines_path = runtime.artifacts.phase_baselines
+    phase_reference_model_path = runtime.artifacts.phase_reference_model
     phase_windows_path = runtime.artifacts.phase_windows
     table_format = runtime.execution.table_format
     write_mode = runtime.execution.write_mode
+    execution_mode = str(os.getenv("S3NTINEL_PHASE_EXECUTION_MODE", "fit")).strip().lower()
+    if execution_mode not in {"fit", "apply_reference"}:
+        raise ValueError(
+            "unsupported S3NTINEL_PHASE_EXECUTION_MODE="
+            f"{execution_mode!r}; expected 'fit' or 'apply_reference'"
+        )
 
     spark = get_spark("s3ntinel.phase_fit")
     raw_df = read_table(spark, raw_path, fmt=table_format)
@@ -85,58 +111,81 @@ def run() -> None:
     phase_transition_penalty = runtime.settings.phase.transition_penalty
     phase_min_dwell_windows = runtime.settings.phase.min_dwell_windows
 
+    phase_plan = PhaseDetectionPlan(
+        phase_count=phase_count,
+        phase_stable_drift_quantile=phase_stable_drift_quantile,
+        phase_transition_penalty=phase_transition_penalty,
+        phase_min_dwell_windows=phase_min_dwell_windows,
+    )
+    phase_baselines = None
+    phase_reference_model = None
     try:
-        phase_config = fit_phase_feature_config_from_spark(
-            window_features_df,
-            backbone_df=backbone_df,
-            phase_detect_sensor_count=phase_detect_sensor_count,
-            phase_detect_event_type_count=phase_detect_event_type_count,
-            phase_detect_categorical_state_count=phase_detect_categorical_state_count,
-        )
-        phase_plan = PhaseDetectionPlan(
-            phase_count=phase_count,
-            phase_stable_drift_quantile=phase_stable_drift_quantile,
-            phase_transition_penalty=phase_transition_penalty,
-            phase_min_dwell_windows=phase_min_dwell_windows,
-        )
-        detection_run = phase_plan.run_detection(
-            window_features_df,
-            phase_config=phase_config,
-        )
+        if execution_mode == "apply_reference":
+            phase_reference_model = PhaseReferenceModelTable.read(
+                spark,
+                phase_reference_model_path,
+                format=table_format,
+            )
+            phase_baselines_df = read_table(spark, phase_baselines_path, fmt=table_format)
+            detection_run = phase_plan.run_reference_inference(
+                window_features_df,
+                reference_model=phase_reference_model,
+            )
+        else:
+            phase_config = fit_phase_feature_config_from_spark(
+                window_features_df,
+                backbone_df=backbone_df,
+                phase_detect_sensor_count=phase_detect_sensor_count,
+                phase_detect_event_type_count=phase_detect_event_type_count,
+                phase_detect_categorical_state_count=phase_detect_categorical_state_count,
+            )
+            detection_run = phase_plan.run_detection(window_features_df, phase_config=phase_config)
+            phase_baselines = phase_plan.build_phase_baselines(
+                detection_run.phase_windows,
+                phase_config=detection_run.phase_config,
+            )
+            phase_reference_model = PhaseReferenceModelTable.from_detection_run(detection_run)
+            phase_baselines_df = phase_baselines.to_dataframe().persist(StorageLevel.MEMORY_AND_DISK)
+            phase_reference_model_df = phase_reference_model.to_dataframe().persist(StorageLevel.MEMORY_AND_DISK)
         phase_fit_diagnostics = detection_run.diagnostics or {}
-        phase_windows = detection_run.phase_windows
-        phase_windows = phase_windows.with_dataframe(phase_windows.to_dataframe().persist(StorageLevel.MEMORY_AND_DISK)).bind(
+        phase_config = detection_run.phase_config.to_dict()
+        phase_windows = detection_run.phase_windows.with_dataframe(
+            detection_run.phase_windows.to_dataframe().persist(StorageLevel.MEMORY_AND_DISK)
+        ).bind(
             path=phase_windows_path,
             format=table_format,
             partition_by=tuple(context.config["output"]["partition_by"]),
         )
         try:
-            phase_baselines = phase_plan.build_phase_baselines(
-                phase_windows,
-                phase_config=phase_config,
-            )
-            phase_baselines = phase_baselines.with_dataframe(
-                phase_baselines.to_dataframe().persist(StorageLevel.MEMORY_AND_DISK)
-            ).bind(
-                path=phase_baselines_path,
-                format=table_format,
-                partition_by=("tail_id",),
-            )
-            try:
-                phase_windows.write(mode=write_mode)
+            phase_windows.write(mode=write_mode)
+            phase_windows_count = int(phase_windows.to_dataframe().count())
+            if execution_mode == "fit":
+                phase_baselines = phase_baselines.with_dataframe(phase_baselines_df).bind(
+                    path=phase_baselines_path,
+                    format=table_format,
+                    partition_by=("tail_id",),
+                )
+                phase_reference_model = phase_reference_model.with_dataframe(phase_reference_model_df).bind(
+                    path=phase_reference_model_path,
+                    format=table_format,
+                    partition_by=("tail_id",),
+                )
                 phase_baselines.write(mode=write_mode)
-                phase_windows_count = int(phase_windows.to_dataframe().count())
-                phase_baselines_count = int(phase_baselines.to_dataframe().count())
-            finally:
-                phase_baselines.to_dataframe().unpersist()
+                phase_reference_model.write(mode=write_mode)
+            phase_baselines_count = int(phase_baselines_df.count())
+            phase_reference_model_count = int(phase_reference_model.to_dataframe().count())
         finally:
             phase_windows.to_dataframe().unpersist()
+            if execution_mode == "fit":
+                phase_baselines_df.unpersist()
+                phase_reference_model_df.unpersist()
     finally:
         window_features_df.unpersist()
 
     log_params_if_active(
         {
             "phase_count": phase_count,
+            "phase_execution_mode": execution_mode,
         }
     )
     log_dict_artifact_if_active(
@@ -149,6 +198,8 @@ def run() -> None:
             "backbone_path": backbone_path,
             "phase_windows_path": phase_windows_path,
             "phase_baselines_path": phase_baselines_path,
+            "phase_reference_model_path": phase_reference_model_path,
+            "phase_execution_mode": execution_mode,
             "table_format": table_format,
             "write_mode": write_mode,
             "phase_partition_by": ["tail_id"],
@@ -157,6 +208,45 @@ def run() -> None:
         },
         runtime.report_paths.summary_artifact_path,
     )
+    input_artifacts = {
+        "raw_telemetry": build_artifact_manifest(path=raw_path, dataframe=raw_df),
+        "events": build_artifact_manifest(path=events_path, dataframe=events_df),
+        "windows": build_artifact_manifest(path=windows_path, dataframe=windows_df),
+        "backbone": build_artifact_manifest(path=backbone_path, dataframe=backbone_df),
+        "window_features": build_artifact_manifest(
+            path=(window_features_path or "window_features::ephemeral"),
+            dataframe=window_features_df,
+        ),
+    }
+    output_artifacts = {
+        "phase_windows": build_artifact_manifest(
+            path=phase_windows_path,
+            dataframe=phase_windows.to_dataframe(),
+            row_count=phase_windows_count,
+        ),
+    }
+    if execution_mode == "apply_reference":
+        input_artifacts["phase_baselines"] = build_artifact_manifest(
+            path=phase_baselines_path,
+            dataframe=phase_baselines_df,
+            row_count=phase_baselines_count,
+        )
+        input_artifacts["phase_reference_model"] = build_artifact_manifest(
+            path=phase_reference_model_path,
+            dataframe=phase_reference_model.to_dataframe(),
+            row_count=phase_reference_model_count,
+        )
+    else:
+        output_artifacts["phase_baselines"] = build_artifact_manifest(
+            path=phase_baselines_path,
+            dataframe=phase_baselines.to_dataframe(),
+            row_count=phase_baselines_count,
+        )
+        output_artifacts["phase_reference_model"] = build_artifact_manifest(
+            path=phase_reference_model_path,
+            dataframe=phase_reference_model.to_dataframe(),
+            row_count=phase_reference_model_count,
+        )
     stage_manifest = build_stage_manifest(
         stage_name="70_phase_fit",
         config={
@@ -169,30 +259,15 @@ def run() -> None:
             "phase_stable_drift_quantile": phase_stable_drift_quantile,
             "phase_transition_penalty": phase_transition_penalty,
             "phase_min_dwell_windows": phase_min_dwell_windows,
+            "phase_execution_mode": execution_mode,
         },
-        input_artifacts={
-            "raw_telemetry": build_artifact_manifest(path=raw_path, dataframe=raw_df),
-            "events": build_artifact_manifest(path=events_path, dataframe=events_df),
-            "windows": build_artifact_manifest(path=windows_path, dataframe=windows_df),
-            "backbone": build_artifact_manifest(path=backbone_path, dataframe=backbone_df),
-            "window_features": build_artifact_manifest(
-                path=(window_features_path or "window_features::ephemeral"),
-                dataframe=window_features_df,
-            ),
-        },
-        output_artifacts={
-            "phase_windows": build_artifact_manifest(
-                path=phase_windows_path,
-                dataframe=phase_windows.to_dataframe(),
-                row_count=phase_windows_count,
-            ),
-            "phase_baselines": build_artifact_manifest(
-                path=phase_baselines_path,
-                dataframe=phase_baselines.to_dataframe(),
-                row_count=phase_baselines_count,
-            ),
-        },
-        replayable_from=["window_features", "backbone"],
+        input_artifacts=input_artifacts,
+        output_artifacts=output_artifacts,
+        replayable_from=(
+            ["window_features", "phase_baselines", "phase_reference_model"]
+            if execution_mode == "apply_reference"
+            else ["window_features", "backbone"]
+        ),
         cache_artifacts={
             "phase_fit_cache": {
                 "config_keys": sorted(list(phase_config.keys())),
@@ -202,13 +277,19 @@ def run() -> None:
     )
     log_stage_manifest_if_active(stage_manifest, runtime.report_paths.manifest_artifact_path)
     LOGGER.info(
-        "pipeline=phase_fit format=%s write_mode=%s phase_windows=%s phase_baselines=%s",
+        "pipeline=phase_fit mode=%s format=%s write_mode=%s phase_windows=%s phase_baselines=%s phase_reference_model=%s",
+        execution_mode,
         table_format,
         write_mode,
         phase_windows_path,
         phase_baselines_path,
+        phase_reference_model_path,
     )
 
 
 if __name__ == "__main__":
     run()
+
+
+if TYPE_CHECKING:
+    from pyspark.sql import DataFrame

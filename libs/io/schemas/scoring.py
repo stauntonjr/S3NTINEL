@@ -16,6 +16,7 @@ WINDOW_SCORES_RAW_COLUMNS = [
     "dominant_score_component",
     "subsystem_scores",
     "score_component_scores",
+    "parameter_score_evidence",
     "date_utc",
 ]
 
@@ -29,6 +30,23 @@ WINDOW_SCORES_CALIBRATED_COLUMNS = WINDOW_SCORES_RAW_COLUMNS + [
 def WINDOW_SCORES_RAW_SCHEMA():
     from pyspark.sql import types as T
 
+    parameter_score_evidence = T.StructType(
+        [
+            T.StructField("parameter_name", T.StringType(), False),
+            T.StructField("candidate_sources", T.ArrayType(T.StringType(), False), False),
+            T.StructField("candidate_channels", T.ArrayType(T.StringType(), False), False),
+            T.StructField("residual_weight", T.DoubleType(), False),
+            T.StructField("residual_share", T.DoubleType(), False),
+            T.StructField("event_support_count", T.DoubleType(), False),
+            T.StructField("drift_score_profiled", T.DoubleType(), True),
+            T.StructField("bound_violation_contribution", T.DoubleType(), False),
+            T.StructField("accumulation_violation_contribution", T.DoubleType(), False),
+            T.StructField("response_violation_contribution", T.DoubleType(), False),
+            T.StructField("state_violation_contribution", T.DoubleType(), False),
+            T.StructField("global_evidence_rank", T.IntegerType(), False),
+            T.StructField("channel_evidence_rank", T.IntegerType(), False),
+        ]
+    )
     return T.StructType(
         [
             T.StructField("tail_id", T.StringType(), False),
@@ -48,6 +66,7 @@ def WINDOW_SCORES_RAW_SCHEMA():
             T.StructField("dominant_score_component", T.StringType(), False),
             T.StructField("subsystem_scores", T.MapType(T.StringType(), T.DoubleType(), False), False),
             T.StructField("score_component_scores", T.MapType(T.StringType(), T.DoubleType(), False), False),
+            T.StructField("parameter_score_evidence", T.ArrayType(parameter_score_evidence, False), False),
             T.StructField("date_utc", T.DateType(), True),
         ]
     )

@@ -44,6 +44,7 @@ ARTIFACT_ENV_BY_NAME = {
     "hierarchy_edge_evidence": "S3NTINEL_HIERARCHY_EDGE_EVIDENCE_TABLE_PATH",
     "phase_windows": "S3NTINEL_PHASE_WINDOWS_TABLE_PATH",
     "phase_baselines": "S3NTINEL_PHASE_BASELINES_TABLE_PATH",
+    "phase_reference_model": "S3NTINEL_PHASE_REFERENCE_MODEL_TABLE_PATH",
     "phase_label_centroids": "S3NTINEL_PHASE_LABEL_CENTROIDS_TABLE_PATH",
     "window_features": "S3NTINEL_WINDOW_FEATURES_TABLE_PATH",
     "hierarchy_sensor_map": "S3NTINEL_HIERARCHY_SENSOR_MAP_TABLE_PATH",
@@ -52,6 +53,7 @@ ARTIFACT_ENV_BY_NAME = {
     "anomaly_window_attribution": "S3NTINEL_ANOMALY_WINDOW_ATTRIBUTION_TABLE_PATH",
     "anomaly_telemetry_attribution": "S3NTINEL_ANOMALY_TELEMETRY_ATTRIBUTION_TABLE_PATH",
     "anomaly_event_attribution": "S3NTINEL_ANOMALY_EVENT_ATTRIBUTION_TABLE_PATH",
+    "anomaly_parameter_candidate_evidence": "S3NTINEL_ANOMALY_PARAMETER_CANDIDATE_EVIDENCE_TABLE_PATH",
     "explorer_bundle": "S3NTINEL_EXPLORER_BUNDLE_PATH",
 }
 
@@ -81,6 +83,7 @@ ARTIFACT_RELATIVE_PATHS = {
     "hierarchy_edge_evidence": Path("delta") / "hierarchy_edge_evidence",
     "phase_windows": Path("delta") / "phase_windows",
     "phase_baselines": Path("delta") / "phase_baselines",
+    "phase_reference_model": Path("delta") / "phase_reference_model",
     "phase_label_centroids": Path("delta") / "phase_label_centroids",
     "window_features": Path("delta") / "window_features",
     "hierarchy_sensor_map": Path("delta") / "hierarchy_sensor_map",
@@ -89,6 +92,7 @@ ARTIFACT_RELATIVE_PATHS = {
     "anomaly_window_attribution": Path("delta") / "anomaly_window_attribution",
     "anomaly_telemetry_attribution": Path("delta") / "anomaly_telemetry_attribution",
     "anomaly_event_attribution": Path("delta") / "anomaly_event_attribution",
+    "anomaly_parameter_candidate_evidence": Path("delta") / "anomaly_parameter_candidate_evidence",
     "explorer_bundle": Path("delta") / "explorer_bundle",
 }
 
@@ -98,6 +102,7 @@ RUN_SETTING_ENVS = (
     "S3NTINEL_RAW_OUTPUT_FORMAT",
     "S3NTINEL_WRITE_MODE",
     "S3NTINEL_MIN_WARM",
+    "S3NTINEL_PHASE_EXECUTION_MODE",
     "S3NTINEL_PROFILE_NUMERIC_RATIO_THRESHOLD",
     "S3NTINEL_PROFILE_CATEGORICAL_CARDINALITY_MAX",
     "S3NTINEL_PROFILE_BEHAVIOR_SIGNIFICANT_DIFF_THRESHOLD",
@@ -126,6 +131,22 @@ RUN_SETTING_ENVS = (
 )
 
 MODE_PLAN_BY_NAME = {
+    "reference_inference": StageRunPlan(
+        run_name="s3ntinel.sim_reference_inference",
+        pipeline_mode="sim_reference_inference:v2",
+        stage_scripts=(
+            "20_events_extract.py",
+            "30_windows_adaptive.py",
+            "35_window_features_apply.py",
+            "70_phase_fit.py",
+            "72_phase_label_centroids.py",
+            "80_window_scores_raw.py",
+            "85_window_scores_calibrate.py",
+            "90_anomaly_attribution.py",
+            "95_emit_explorer_bundle.py",
+        ),
+        summary_artifact_path="reports/reference_inference_pipeline_run_summary.json",
+    ),
     "profile": StageRunPlan(
         run_name="s3ntinel.sim_profile",
         pipeline_mode="sim_profile:v2",

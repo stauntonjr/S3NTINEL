@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from libs.common.event_types import CATEGORICAL_EVENT_TYPES, CONTINUOUS_EVENT_TYPES, EventType
+from libs.common.event_types import EventType
 from libs.io.schemas.scoring import WINDOW_SCORES_CALIBRATED_SCHEMA, WINDOW_SCORES_RAW_SCHEMA
 from libs.pyspark import Table
 from libs.scoring.channels import (
@@ -27,6 +27,7 @@ HIGH_SEVERITY_LABEL = "high"
 LOW_SEVERITY_LABEL = "low"
 MEDIUM_SEVERITY_LABEL = "medium"
 NORMAL_SEVERITY_LABEL = "normal"
+WINDOW_SCORE_PARAMETER_EVIDENCE_TOP_K = 16
 
 _EVENT_WINDOW_KEYS = ["tail_id", "flight_id", "win_id", "date_utc"]
 _PHASE_GROUP_KEYS = ["tail_id", "phase_id_detected"]
@@ -107,6 +108,164 @@ def _normalized_clamped_avg(*columns: "Column") -> "Column":
     for column in columns:
         total = total + F.least(F.lit(1.0), F.greatest(F.lit(0.0), F.coalesce(column, F.lit(0.0)).cast("double")))
     return (total / F.lit(float(len(columns)))).cast("double")
+
+
+def _bounded_parameter_score_evidence(
+    residual_rows_df: "DataFrame",
+    residual_totals_df: "DataFrame",
+    *,
+    parameter_event_counts_df: "DataFrame | None",
+    parameter_behavior_activation_df: "DataFrame | None",
+    top_k_per_window: int = WINDOW_SCORE_PARAMETER_EVIDENCE_TOP_K,
+) -> "DataFrame":
+    """Preserve the bounded parameter evidence already used by the canonical scorer."""
+    from pyspark.sql import functions as F
+    from pyspark.sql.window import Window
+
+    candidate_parameter_df = residual_rows_df.select(*_EVENT_WINDOW_KEYS, "parameter_name")
+    if parameter_event_counts_df is not None:
+        candidate_parameter_df = candidate_parameter_df.unionByName(
+            parameter_event_counts_df.select(*_EVENT_WINDOW_KEYS, "parameter_name")
+        )
+    if parameter_behavior_activation_df is not None:
+        candidate_parameter_df = candidate_parameter_df.unionByName(
+            parameter_behavior_activation_df.select(*_EVENT_WINDOW_KEYS, "parameter_name")
+        )
+    evidence_df = (
+        candidate_parameter_df.dropDuplicates([*_EVENT_WINDOW_KEYS, "parameter_name"])
+        .join(
+            residual_rows_df.select(*_EVENT_WINDOW_KEYS, "parameter_name", "residual_weight"),
+            on=[*_EVENT_WINDOW_KEYS, "parameter_name"],
+            how="left",
+        )
+        .join(residual_totals_df, on=_EVENT_WINDOW_KEYS, how="left")
+        .withColumn(
+            "residual_share",
+            F.coalesce(F.col("residual_weight"), F.lit(0.0))
+            / F.greatest(F.coalesce(F.col("residual_total_weight"), F.lit(0.0)), F.lit(1e-12)),
+        )
+    )
+    if parameter_event_counts_df is not None:
+        evidence_df = evidence_df.join(
+            parameter_event_counts_df.select(*_EVENT_WINDOW_KEYS, "parameter_name", "event_support_count"),
+            on=[*_EVENT_WINDOW_KEYS, "parameter_name"],
+            how="left",
+        )
+    else:
+        evidence_df = evidence_df.withColumn("event_support_count", F.lit(0.0).cast("double"))
+    if parameter_behavior_activation_df is not None:
+        evidence_df = evidence_df.join(
+            parameter_behavior_activation_df.select(
+                *_EVENT_WINDOW_KEYS,
+                "parameter_name",
+                "drift_score_profiled",
+                "bound_violation_raw",
+                "accumulation_violation_raw",
+                "response_violation_raw",
+                "state_violation_raw",
+            ),
+            on=[*_EVENT_WINDOW_KEYS, "parameter_name"],
+            how="left",
+        )
+    else:
+        evidence_df = evidence_df.withColumn("drift_score_profiled", F.lit(None).cast("double"))
+        for column_name in (
+            "bound_violation_raw",
+            "accumulation_violation_raw",
+            "response_violation_raw",
+            "state_violation_raw",
+        ):
+            evidence_df = evidence_df.withColumn(column_name, F.lit(0.0).cast("double"))
+
+    evidence_df = evidence_df.fillna(
+        0.0,
+        subset=[
+            "event_support_count",
+            "bound_violation_raw",
+            "accumulation_violation_raw",
+            "response_violation_raw",
+            "state_violation_raw",
+        ],
+    )
+    global_rank_window = Window.partitionBy(*_EVENT_WINDOW_KEYS).orderBy(
+        F.col("residual_share").desc(),
+        F.col("parameter_name").asc(),
+    )
+    channel_evidence = F.greatest(
+        F.col("bound_violation_raw"),
+        F.col("accumulation_violation_raw"),
+        F.col("response_violation_raw"),
+        F.col("state_violation_raw"),
+    )
+    channel_rank_window = Window.partitionBy(*_EVENT_WINDOW_KEYS).orderBy(
+        channel_evidence.desc(),
+        F.col("residual_share").desc(),
+        F.col("parameter_name").asc(),
+    )
+    bounded_df = (
+        evidence_df.withColumn("global_evidence_rank", F.row_number().over(global_rank_window))
+        .withColumn("channel_evidence_rank", F.row_number().over(channel_rank_window))
+        .where(
+            (F.col("global_evidence_rank") <= F.lit(max(int(top_k_per_window), 1)))
+            | (F.col("channel_evidence_rank") <= F.lit(max(int(top_k_per_window), 1)))
+        )
+    )
+    ordered_evidence = F.sort_array(
+        F.collect_list(
+            F.struct(
+                F.col("global_evidence_rank").alias("sort_rank"),
+                F.struct(
+                    F.col("parameter_name").cast("string").alias("parameter_name"),
+                    F.array_compact(
+                        F.array(
+                            F.when(F.col("residual_weight") > F.lit(0.0), F.lit("residual")),
+                            F.when(F.col("event_support_count") > F.lit(0.0), F.lit("event")),
+                            F.when(channel_evidence > F.lit(0.0), F.lit("behavior")),
+                        )
+                    ).alias("candidate_sources"),
+                    F.array_compact(
+                        F.array(
+                            F.when(
+                                F.col("residual_weight") > F.lit(0.0),
+                                F.lit(RECONSTRUCTION_ERROR_CHANNEL),
+                            ),
+                            F.when(
+                                F.col("event_support_count") > F.lit(0.0),
+                                F.lit(EVENT_DISCORDANCE_CHANNEL),
+                            ),
+                            F.when(F.col("bound_violation_raw") > F.lit(0.0), F.lit(BOUND_VIOLATION_CHANNEL)),
+                            F.when(
+                                F.col("accumulation_violation_raw") > F.lit(0.0),
+                                F.lit(ACCUMULATION_VIOLATION_CHANNEL),
+                            ),
+                            F.when(
+                                F.col("response_violation_raw") > F.lit(0.0),
+                                F.lit(RESPONSE_VIOLATION_CHANNEL),
+                            ),
+                            F.when(F.col("state_violation_raw") > F.lit(0.0), F.lit(STATE_VIOLATION_CHANNEL)),
+                        )
+                    ).alias("candidate_channels"),
+                    F.coalesce(F.col("residual_weight"), F.lit(0.0)).cast("double").alias("residual_weight"),
+                    F.coalesce(F.col("residual_share"), F.lit(0.0)).cast("double").alias("residual_share"),
+                    F.coalesce(F.col("event_support_count"), F.lit(0.0))
+                    .cast("double")
+                    .alias("event_support_count"),
+                    F.col("drift_score_profiled").cast("double").alias("drift_score_profiled"),
+                    F.col("bound_violation_raw").cast("double").alias("bound_violation_contribution"),
+                    F.col("accumulation_violation_raw")
+                    .cast("double")
+                    .alias("accumulation_violation_contribution"),
+                    F.col("response_violation_raw").cast("double").alias("response_violation_contribution"),
+                    F.col("state_violation_raw").cast("double").alias("state_violation_contribution"),
+                    F.col("global_evidence_rank").cast("int").alias("global_evidence_rank"),
+                    F.col("channel_evidence_rank").cast("int").alias("channel_evidence_rank"),
+                ).alias("evidence"),
+            )
+        )
+    )
+    return bounded_df.groupBy(*_EVENT_WINDOW_KEYS).agg(
+        F.transform(ordered_evidence, lambda item: item.getField("evidence")).alias("parameter_score_evidence")
+    )
 
 
 def _window_aligned_event_rows(events_df: "DataFrame", *, windows_df: "DataFrame | None") -> "DataFrame":
@@ -683,6 +842,7 @@ class WindowScoresRawTable(Table):
         )
 
         behavior_score_df = None
+        parameter_behavior_activation_df = None
         if (
             parameter_behavior_profile_df is not None
             and parameter_event_profile_df is not None
@@ -783,10 +943,11 @@ class WindowScoresRawTable(Table):
                 F.col("state_chatter_rate_profiled"),
                 F.lit(1.0) - F.coalesce(F.col("dominant_state_ratio_profiled"), F.lit(0.0)),
             )
-            behavior_activation_df = (
-                enriched_parameter_evidence_df.select(
+            parameter_behavior_activation_df = enriched_parameter_evidence_df.select(
                     *_EVENT_WINDOW_KEYS,
                     "phase_id_detected",
+                    "parameter_name",
+                    F.col("drift_score_profiled").cast("double").alias("drift_score_profiled"),
                     (
                         F.col("residual_share")
                         * F.log1p(
@@ -827,6 +988,8 @@ class WindowScoresRawTable(Table):
                         * (F.lit(0.5) + (F.lit(0.5) * state_profile_relevance))
                     ).alias("state_violation_raw"),
                 )
+            behavior_activation_df = (
+                parameter_behavior_activation_df
                 .groupBy(*_EVENT_WINDOW_KEYS, "phase_id_detected")
                 .agg(
                     F.sum("bound_violation_raw").cast("double").alias("bound_violation_raw"),
@@ -852,6 +1015,13 @@ class WindowScoresRawTable(Table):
                     _normalized_positive_deviation("state_violation_raw").alias(STATE_VIOLATION_CHANNEL),
                 )
             )
+
+        parameter_score_evidence_df = _bounded_parameter_score_evidence(
+            residual_rows,
+            residual_totals_df,
+            parameter_event_counts_df=parameter_event_counts_df,
+            parameter_behavior_activation_df=parameter_behavior_activation_df,
+        )
 
         coherence_break_df = None
         if event_subsystem_scores_df is not None:
@@ -944,7 +1114,15 @@ class WindowScoresRawTable(Table):
         result = (
             result.join(localization_support.dominant_subsystems_df, on=_EVENT_WINDOW_KEYS, how="left")
             .join(localization_support.dominant_modules_df, on=_EVENT_WINDOW_KEYS, how="left")
+            .join(parameter_score_evidence_df, on=_EVENT_WINDOW_KEYS, how="left")
             .withColumn("subsystem_scores", empty_double_map)
+            .withColumn(
+                "parameter_score_evidence",
+                F.coalesce(
+                    F.col("parameter_score_evidence"),
+                    F.array().cast(cls.spark_schema()["parameter_score_evidence"].dataType),
+                ),
+            )
         )
         for score_name in (
             EVENT_DISCORDANCE_CHANNEL,
@@ -1053,10 +1231,11 @@ class WindowScoresCalibratedTable(Table):
                 "dominant_score_component",
                 "subsystem_scores",
                 "score_component_scores",
+                "parameter_score_evidence",
+                "date_utc",
                 "warm",
                 "emit_ready",
                 F.lit(int(min_warm)).alias("min_warm"),
-                "date_utc",
             )
         )
 

@@ -42,6 +42,7 @@ The phase model is intentionally split:
 Persisted artifacts are defined in `libs/io/schemas/phase.py`:
 - phase windows
 - phase baselines
+- phase reference model
 - phase label centroids
 
 Inputs come from the `window_features` artifact in `libs/windows` plus the persisted backbone artifact from stage 10.
@@ -56,6 +57,13 @@ Phase detection combines:
 - monotone transition-aware decode over the ordered phases
 - minimum-dwell enforcement
 - baseline emission over assigned phases
+
+`phase_reference_model` is the reusable fit/apply boundary. It persists the
+feature and backbone configuration, robust feature statistics, ordered
+centroids, distance scales, and transition-support bands produced by a fitted
+reference flight. `PhaseDetectionPlan.run_reference_inference(...)` applies
+that fixed model to a target flight without selecting features or fitting
+centroids from the target observations.
 
 ## Subject Matter View
 
@@ -83,4 +91,6 @@ for the current steady-phase versus transition-region validation contract.
 - `PhaseFeatureConfig` is the active feature-selection object.
 - Plain `dict` phase configs are a persisted/package-boundary form; `libs/phase` normalizes them back into `PhaseFeatureConfig` for in-memory work.
 - `pipeline.py` is the production phase stage and does not refit backbone state internally.
-- Cross-flight phase history is intentionally out of scope in the current production stage.
+- Normal stage-70 execution fits `phase_baselines` and `phase_reference_model`.
+  Reference-inference execution reads both artifacts and writes only target
+  `phase_windows`.

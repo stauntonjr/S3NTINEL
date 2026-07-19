@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from datetime import datetime, timezone
 import json
+import os
 
 from libs.io.delta import get_spark, write_table
 from libs.perf import get_logger
@@ -24,11 +25,7 @@ from libs.simulation.run_context import (
 )
 from libs.simulation.validation_harness import write_validation_harness_report as _write_validation_harness_report
 from libs.simulation.seed_bundle import write_seed_tables as _write_seed_tables_impl
-from libs.simulation.reporting import (
-    build_fault_attribution_summary_from_misbehavior as _build_fault_attribution_summary_from_misbehavior,
-    build_fault_score_summary_from_misbehavior as _build_fault_score_summary_from_misbehavior,
-    write_validation_reports as _write_validation_reports,
-)
+from libs.simulation.reporting import write_validation_reports as _write_validation_reports
 from libs.tuning import write_objective_evaluation_report as _write_objective_evaluation_report
 
 LOGGER_NAME = "s3ntinel.run_sim_pipeline"
@@ -51,8 +48,8 @@ def _load_existing_seed_counts(paths: RunPaths) -> dict[str, int]:
     }
 
 
-def run_pipeline(config: PipelineRunConfig) -> PipelineRunResult:
-    flight = (
+def run_pipeline(config: PipelineRunConfig, *, flight_spec=None) -> PipelineRunResult:
+    flight = flight_spec or (
         resolve_flight(config.flight_name, sim_seed=config.sim_seed)
         if config.sim_seed is not None
         else resolve_flight(config.flight_name)
@@ -76,6 +73,8 @@ def run_pipeline(config: PipelineRunConfig) -> PipelineRunResult:
             logger = get_logger(LOGGER_NAME)
             spark = get_spark(LOGGER_NAME)
             run_name, pipeline_mode, stage_scripts, summary_artifact_path = _run_mode(config)
+            if config.mode == "reference_inference":
+                os.environ["S3NTINEL_PHASE_EXECUTION_MODE"] = "apply_reference"
             should_write_seed_tables = bool(stage_scripts) and (
                 config.replay_run_dir is None or stage_scripts[0] == "00_ingest_raw.py"
             )

@@ -90,9 +90,24 @@ Incremental patches:
     - `power_pressurization_hierarchy_composite_module_localization`
     - `power_pressurization_hierarchy_composite_subsystem_localization`
   - the realistic preset family uses a `28` minute authored mission on a `0.5` second internal tick, sparse multi-rate emission, parameter and coupling misbehavior truth, and writes `reports/coupling_validation_summary.json` alongside the existing validation reports
-- For larger local full runs on a laptop, set `S3NTINEL_SPARK_PROFILE=laptop_large_sim` before invoking the runner.
+- Before selecting any Spark profile for a simulation, smoke, replay, or
+  benchmark, inspect the current machine with `nproc`, `free -h`, and `df -h`
+  for the intended spill and output filesystems. Record the observed CPU count,
+  total/available memory, swap, free disk, and selected profile/overrides with
+  the validation result. Profile names describe configurations, not hardware
+  detection; do not select `laptop_large_sim` from its name alone.
+- For larger local full runs on hardware confirmed to support it, set `S3NTINEL_SPARK_PROFILE=laptop_large_sim` before invoking the runner.
   - the profile currently applies `local[4]`, `spark.driver.memory=8g`, `spark.driver.maxResultSize=2g`, `spark.sql.shuffle.partitions=16`, `spark.default.parallelism=8`, adaptive execution, Kryo serialization, and a dedicated `/tmp` spill directory
   - explicit `S3NTINEL_SPARK_*` env vars still override the profile when you need to tune around a specific machine or workload
+
+- Run the diagnostic nominal-reference-fit/faulted-inference lifecycle with:
+  - `python -m scripts.run_sim_reference_inference --flight-name <named-flight> --base-dir data/reference_inference --format parquet --write-mode overwrite`
+  - the runner writes separate nominal-reference, faulted-self-fit, and
+    fixed-reference-inference bundles plus
+    `reports/reference_inference_comparison_report.json`
+  - choose `--n-steps` so the complete authored misbehavior interval is
+    included; record the hardware check and selected Spark profile with the
+    result
   - if you also want the benchmark-winning larger sequence segments, use:
     - `S3NTINEL_SPARK_PROFILE=laptop_large_sim_large_segments`
     - this keeps the same Spark runtime settings as `laptop_large_sim` and additionally applies:

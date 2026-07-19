@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from libs.anomaly.frames import mapped_events_in_supported_windows
 from libs.io.schemas.anomaly import (
     ANOMALY_EVENT_ATTRIBUTION_SCHEMA,
+    ANOMALY_PARAMETER_CANDIDATE_EVIDENCE_SCHEMA,
     ANOMALY_TELEMETRY_ATTRIBUTION_SCHEMA,
     ANOMALY_WINDOW_ATTRIBUTION_SCHEMA,
 )
@@ -273,5 +274,67 @@ class AnomalyEventAttributionTable(Table):
         )
 
 
+@dataclass(frozen=True)
+class AnomalyParameterCandidateEvidenceTable(Table):
+    """Bounded score-to-localization evidence for emitted parameter candidates."""
+
+    partition_by: tuple[str, ...] = ("tail_id",)
+
+    @classmethod
+    def spark_schema(cls):
+        return ANOMALY_PARAMETER_CANDIDATE_EVIDENCE_SCHEMA()
+
+    @classmethod
+    def from_calibrated_scores_and_localization(
+        cls,
+        *,
+        calibrated_df: "DataFrame",
+        parameter_localization_df: "DataFrame",
+        hierarchy_sensor_map_df: "DataFrame",
+    ) -> "AnomalyParameterCandidateEvidenceTable":
+        from pyspark.sql import functions as F
+
+        window_keys = ["tail_id", "flight_id", "win_id", "date_utc"]
+        score_evidence_df = (
+            calibrated_df.where(F.col("emit_ready") == F.lit(True))
+            .select(
+                *window_keys,
+                "phase_id_detected",
+                "dominant_score_component",
+                F.explode("parameter_score_evidence").alias("score_evidence"),
+            )
+            .select(
+                *window_keys,
+                "phase_id_detected",
+                "dominant_score_component",
+                "score_evidence.*",
+            )
+        )
+        localization_df = parameter_localization_df.select(
+            *window_keys,
+            "parameter_name",
+            "parameter_localization_support",
+            "parameter_support_rank_in_window",
+        )
+        hierarchy_df = hierarchy_sensor_map_df.select(
+            "parameter_name",
+            "system_id",
+            "subsystem_id",
+            "module_id",
+        ).dropDuplicates(["parameter_name"])
+        return cls(
+            dataframe=(
+                score_evidence_df.join(
+                    localization_df,
+                    on=[*window_keys, "parameter_name"],
+                    how="left",
+                )
+                .join(F.broadcast(hierarchy_df), on="parameter_name", how="left")
+                .withColumn("telemetry_retained", F.col("parameter_support_rank_in_window") <= F.lit(5))
+                .withColumn("structural_cut_retained", F.col("parameter_support_rank_in_window") <= F.lit(3))
+                .fillna(False, subset=["telemetry_retained", "structural_cut_retained"])
+                .select(*[field.name for field in cls.spark_schema().fields])
+            )
+        )
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame

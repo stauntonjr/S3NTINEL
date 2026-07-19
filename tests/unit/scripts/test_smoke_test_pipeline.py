@@ -32,5 +32,7 @@ def test_smoke_artifact_paths_are_scoped_to_base_dir(tmp_path: Path):
         "S3NTINEL_PARAMETER_EVENT_PROFILE_TABLE_PATH",
         "S3NTINEL_WINDOW_FEATURES_TABLE_PATH",
         "S3NTINEL_GRAPH_PARAMETER_UNIVERSE_TABLE_PATH",
+        "S3NTINEL_PHASE_REFERENCE_MODEL_TABLE_PATH",
+        "S3NTINEL_ANOMALY_PARAMETER_CANDIDATE_EVIDENCE_TABLE_PATH",
     ):
         assert str(tmp_path / "run" / "delta") in os.environ[env_name]

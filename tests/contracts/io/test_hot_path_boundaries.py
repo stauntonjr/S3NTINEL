@@ -197,6 +197,22 @@ def test_docs_readme_lists_doc_subdirectories() -> None:
         assert directory_name in content, f"docs/README.md is missing docs subdirectory section: {directory_name}"
 
 
+def test_simulation_guidance_requires_hardware_preflight_before_spark_profile_selection() -> None:
+    required_hardware_checks = ["nproc", "free -h", "df -h"]
+    for relative_path in [
+        ".codex/skills/resume-repository/SKILL.md",
+        ".codex/skills/repo-agent-loop/SKILL.md",
+        "scripts/README.md",
+    ]:
+        content = _read_repo_file(relative_path)
+        for expected_check in required_hardware_checks:
+            assert expected_check in content, f"{relative_path} is missing hardware preflight check: {expected_check}"
+
+    agent_guidance = _read_repo_file("AGENTS.md")
+    for expected_resource in ["CPU count", "total/available memory", "swap", "free space"]:
+        assert expected_resource in agent_guidance, f"AGENTS.md is missing hardware guidance: {expected_resource}"
+
+
 def test_plan_docs_have_index_and_status_headers() -> None:
     plans_index = _read_repo_file("docs/plans/README.md")
     assert "libs/README.md" in plans_index

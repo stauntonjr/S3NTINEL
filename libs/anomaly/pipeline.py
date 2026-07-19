@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from libs.anomaly.frames import (
     AnomalyAttributionContextFrame,
@@ -13,6 +14,7 @@ from libs.anomaly.frames import (
 )
 from libs.anomaly.tables import (
     AnomalyEventAttributionTable,
+    AnomalyParameterCandidateEvidenceTable,
     AnomalyTelemetryAttributionTable,
     AnomalyWindowAttributionTable,
 )
@@ -24,6 +26,7 @@ class AnomalyArtifactSet:
     window_attribution: AnomalyWindowAttributionTable
     telemetry_attribution: AnomalyTelemetryAttributionTable
     event_attribution: AnomalyEventAttributionTable
+    parameter_candidate_evidence: AnomalyParameterCandidateEvidenceTable
 
 
 @dataclass(frozen=True)
@@ -170,10 +173,12 @@ class AnomalyAttributionPlan:
                 events_df=events_df,
                 hierarchy_sensor_map_df=hierarchy_sensor_map_df,
             ),
+            parameter_candidate_evidence=AnomalyParameterCandidateEvidenceTable.from_calibrated_scores_and_localization(
+                calibrated_df=calibrated_df,
+                parameter_localization_df=parameter_localization.to_dataframe(),
+                hierarchy_sensor_map_df=hierarchy_sensor_map_df,
+            ),
         )
-
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame

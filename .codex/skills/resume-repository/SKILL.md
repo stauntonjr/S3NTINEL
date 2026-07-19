@@ -30,18 +30,33 @@ code, generated reports, or Git history.
    conda run -n sentinel-spark35 pytest tests/unit tests/contracts
    ```
 
-5. Run the smallest representative parquet smoke path:
+5. Before selecting a Spark profile or explicit Spark resource overrides for a
+   smoke, simulation, replay, or benchmark run, inspect the local hardware:
+
+   ```bash
+   nproc
+   free -h
+   df -h /tmp data
+   ```
+
+   Record the CPU count, total/available memory, swap, and free space on the
+   intended spill/output filesystems. Choose the profile and any memory or
+   parallelism overrides from those observations. Do not assume that a profile
+   is appropriate from its name alone.
+6. Run the smallest representative parquet smoke path with the justified Spark
+   profile or overrides:
 
    ```bash
    conda run -n sentinel-spark35 python -m scripts.smoke_test_pipeline \
      --base-dir data/resume_smoke --format parquet
    ```
 
-6. For modeling work, run the narrowest relevant benchmark gate and preserve
+7. For modeling work, run the narrowest relevant benchmark gate and preserve
    its report paths. Do not start with a full composite replay unless the
    smoke and targeted gates are healthy.
-7. Summarize the baseline with:
+8. Summarize the baseline with:
    - environment status
+   - observed local hardware and selected Spark profile/overrides
    - Git/worktree state
    - tests and smoke results
    - current reports and metrics

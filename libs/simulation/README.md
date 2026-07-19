@@ -16,6 +16,18 @@ The intended flow is:
 4. Run the flight to produce canonical telemetry-shaped rows plus simulation metadata
 5. Feed those rows into the same persisted fitting and inference pipelines used for real telemetry
 
+For validation of fitting lifecycle effects, use
+`python -m scripts.run_sim_reference_inference`. The paired runner creates a
+nominal reference flight, a matching faulted self-fit run, and a faulted run
+that reuses the nominal fitted artifacts. It records artifact-level lineage and
+compares phase assignments, score/emission counts, and bounded candidate-cut
+decisions in `reports/reference_inference_comparison_report.json`.
+
+The reference-inference production path reads only observed
+`parameter_value`; simulator clean values and truth labels remain validation
+inputs. The runner stops and recreates Spark between child runs so persisted
+RDD/checkpoint state from one child cannot contaminate or exhaust the next.
+
 ## Core model
 
 The runtime model is:

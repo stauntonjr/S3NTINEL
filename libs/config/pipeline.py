@@ -113,12 +113,14 @@ class PipelineArtifactPaths:
     hierarchy_sensor_map: str
     phase_windows: str
     phase_baselines: str
+    phase_reference_model: str
     phase_label_centroids: str
     window_scores_raw: str
     window_scores_calibrated: str
     anomaly_window_attribution: str
     anomaly_telemetry_attribution: str
     anomaly_event_attribution: str
+    anomaly_parameter_candidate_evidence: str
     explorer_bundle: str
 
 
@@ -329,6 +331,10 @@ def load_pipeline_artifact_paths() -> PipelineArtifactPaths:
         ),
         phase_windows=_env_str("S3NTINEL_PHASE_WINDOWS_TABLE_PATH", "data/delta/phase_windows"),
         phase_baselines=_env_str("S3NTINEL_PHASE_BASELINES_TABLE_PATH", "data/delta/phase_baselines"),
+        phase_reference_model=_env_str(
+            "S3NTINEL_PHASE_REFERENCE_MODEL_TABLE_PATH",
+            "data/delta/phase_reference_model",
+        ),
         phase_label_centroids=_env_str(
             "S3NTINEL_PHASE_LABEL_CENTROIDS_TABLE_PATH",
             "data/delta/phase_label_centroids",
@@ -349,6 +355,10 @@ def load_pipeline_artifact_paths() -> PipelineArtifactPaths:
         anomaly_event_attribution=_env_str(
             "S3NTINEL_ANOMALY_EVENT_ATTRIBUTION_TABLE_PATH",
             "data/delta/anomaly_event_attribution",
+        ),
+        anomaly_parameter_candidate_evidence=_env_str(
+            "S3NTINEL_ANOMALY_PARAMETER_CANDIDATE_EVIDENCE_TABLE_PATH",
+            "data/delta/anomaly_parameter_candidate_evidence",
         ),
         explorer_bundle=_env_str(
             "S3NTINEL_EXPLORER_BUNDLE_PATH",

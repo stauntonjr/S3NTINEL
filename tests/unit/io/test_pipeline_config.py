@@ -7,12 +7,19 @@ def test_load_pipeline_artifact_paths_include_graph_diagnostics(monkeypatch):
     monkeypatch.setenv("S3NTINEL_LAG_PROFILE_TABLE_PATH", "/tmp/test-lag-profile")
     monkeypatch.setenv("S3NTINEL_HIERARCHY_EDGE_EVIDENCE_TABLE_PATH", "/tmp/test-hierarchy-edge-evidence")
     monkeypatch.setenv("S3NTINEL_WINDOW_POLICY_PROFILE_TABLE_PATH", "/tmp/test-window-policy-profile")
+    monkeypatch.setenv(
+        "S3NTINEL_ANOMALY_PARAMETER_CANDIDATE_EVIDENCE_TABLE_PATH",
+        "/tmp/test-anomaly-parameter-candidate-evidence",
+    )
+    monkeypatch.setenv("S3NTINEL_PHASE_REFERENCE_MODEL_TABLE_PATH", "/tmp/test-phase-reference-model")
 
     paths = load_pipeline_artifact_paths()
 
     assert paths.lag_profile == "/tmp/test-lag-profile"
     assert paths.hierarchy_edge_evidence == "/tmp/test-hierarchy-edge-evidence"
     assert paths.window_policy_profile == "/tmp/test-window-policy-profile"
+    assert paths.anomaly_parameter_candidate_evidence == "/tmp/test-anomaly-parameter-candidate-evidence"
+    assert paths.phase_reference_model == "/tmp/test-phase-reference-model"
 
 
 def test_load_pipeline_context_settings_parses_lag_bands(monkeypatch):

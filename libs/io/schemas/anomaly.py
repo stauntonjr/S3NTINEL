@@ -60,6 +60,35 @@ ANOMALY_EVENT_ATTRIBUTION_COLUMNS = [
     "date_utc",
 ]
 
+ANOMALY_PARAMETER_CANDIDATE_EVIDENCE_COLUMNS = [
+    "tail_id",
+    "flight_id",
+    "win_id",
+    "phase_id_detected",
+    "dominant_score_component",
+    "parameter_name",
+    "candidate_sources",
+    "candidate_channels",
+    "system_id",
+    "subsystem_id",
+    "module_id",
+    "residual_weight",
+    "residual_share",
+    "event_support_count",
+    "drift_score_profiled",
+    "bound_violation_contribution",
+    "accumulation_violation_contribution",
+    "response_violation_contribution",
+    "state_violation_contribution",
+    "global_evidence_rank",
+    "channel_evidence_rank",
+    "parameter_localization_support",
+    "parameter_support_rank_in_window",
+    "telemetry_retained",
+    "structural_cut_retained",
+    "date_utc",
+]
+
 def ANOMALY_WINDOW_ATTRIBUTION_SCHEMA():
     from pyspark.sql import types as T
 
@@ -190,6 +219,41 @@ def ANOMALY_EVENT_ATTRIBUTION_SCHEMA():
             T.StructField("module_id", T.StringType(), True),
             T.StructField("window_global_score", T.DoubleType(), True),
             T.StructField("severity", T.StringType(), True),
+            T.StructField("date_utc", T.DateType(), True),
+        ]
+    )
+
+
+def ANOMALY_PARAMETER_CANDIDATE_EVIDENCE_SCHEMA():
+    from pyspark.sql import types as T
+
+    return T.StructType(
+        [
+            T.StructField("tail_id", T.StringType(), False),
+            T.StructField("flight_id", T.StringType(), False),
+            T.StructField("win_id", T.IntegerType(), False),
+            T.StructField("phase_id_detected", T.IntegerType(), False),
+            T.StructField("dominant_score_component", T.StringType(), False),
+            T.StructField("parameter_name", T.StringType(), False),
+            T.StructField("candidate_sources", T.ArrayType(T.StringType(), False), False),
+            T.StructField("candidate_channels", T.ArrayType(T.StringType(), False), False),
+            T.StructField("system_id", T.StringType(), True),
+            T.StructField("subsystem_id", T.StringType(), True),
+            T.StructField("module_id", T.StringType(), True),
+            T.StructField("residual_weight", T.DoubleType(), False),
+            T.StructField("residual_share", T.DoubleType(), False),
+            T.StructField("event_support_count", T.DoubleType(), False),
+            T.StructField("drift_score_profiled", T.DoubleType(), True),
+            T.StructField("bound_violation_contribution", T.DoubleType(), False),
+            T.StructField("accumulation_violation_contribution", T.DoubleType(), False),
+            T.StructField("response_violation_contribution", T.DoubleType(), False),
+            T.StructField("state_violation_contribution", T.DoubleType(), False),
+            T.StructField("global_evidence_rank", T.IntegerType(), False),
+            T.StructField("channel_evidence_rank", T.IntegerType(), False),
+            T.StructField("parameter_localization_support", T.DoubleType(), True),
+            T.StructField("parameter_support_rank_in_window", T.IntegerType(), True),
+            T.StructField("telemetry_retained", T.BooleanType(), False),
+            T.StructField("structural_cut_retained", T.BooleanType(), False),
             T.StructField("date_utc", T.DateType(), True),
         ]
     )

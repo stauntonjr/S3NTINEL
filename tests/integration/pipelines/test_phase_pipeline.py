@@ -8,6 +8,7 @@ from libs.phase import (
     PhaseDetectionPlan,
     PhaseFeatureConfig,
     PhaseLabelCentroidsTable,
+    PhaseReferenceModelTable,
     PhaseWindowsTable,
     build_phase_centroid_comparison_summary_from_tables,
     fit_phase_feature_config_from_spark,
@@ -15,7 +16,7 @@ from libs.phase import (
 )
 from libs.phase.artifacts import phase_output_literals, select_phase_windows
 from libs.phase.decode import build_assignment_input, enforce_min_dwell
-from libs.phase.fit import build_fit_source, build_seed_centroids
+from libs.phase.fit import build_fit_source
 from libs.phase.selectors import (
     select_categorical_state_pairs_from_window_features_spark,
     select_event_types_from_window_features_spark,
@@ -1566,6 +1567,35 @@ def test_phase_detection_plan_build_keeps_phase_config_as_domain_object(spark):
     assert artifacts.phase_config.phase_selected_sensors
     assert artifacts.phase_windows.to_dataframe().count() == window_features_sdf.count()
     assert artifacts.phase_baselines.to_dataframe().count() >= 1
+    assert artifacts.reference_model is not None
+    assert artifacts.reference_model.to_dataframe().count() >= 1
+
+
+def test_phase_reference_model_applies_fitted_model_to_target_flight(spark):
+    raw_df = create_sample_raw_table_df(spark)
+    events_df = create_sample_events_df(spark)
+    windows_df = create_sample_windows_df(spark)
+    window_features_df = WindowFeaturesTable.from_raw_events_and_windows(raw_df, events_df, windows_df).to_dataframe()
+    local_window_features_df = _build_window_features_pdf(raw_df, events_df, windows_df)
+    backbone_df = _build_backbone_sdf(spark, local_window_features_df, sensor_count=2, ridge_lambda=1.0)
+    plan = PhaseDetectionPlan(phase_count=2, phase_min_dwell_windows=2)
+    config = plan.fit_phase_feature_config(window_features_df, backbone_df=backbone_df)
+    fitted_run = plan.run_detection(window_features_df, phase_config=config)
+    reference_model = PhaseReferenceModelTable.from_detection_run(fitted_run)
+    reference_model.validate_schema()
+    target_window_features_df = window_features_df.withColumn("flight_id", F.lit("F_TARGET"))
+
+    inferred_run = plan.run_reference_inference(
+        target_window_features_df,
+        reference_model=reference_model,
+    )
+    inferred_rows = inferred_run.phase_windows.to_dataframe().orderBy("win_id").collect()
+    fitted_phase_ids = [row["phase_id_detected"] for row in fitted_run.phase_windows.to_dataframe().orderBy("win_id").collect()]
+
+    assert inferred_rows
+    assert {row["flight_id"] for row in inferred_rows} == {"F_TARGET"}
+    assert [row["phase_id_detected"] for row in inferred_rows] == fitted_phase_ids
+    assert (inferred_run.diagnostics or {})["phase_reference_inference"] is True
 
 
 def test_phase_cooccurrence_metadata_does_not_affect_structure_vectors_or_assignments(spark):

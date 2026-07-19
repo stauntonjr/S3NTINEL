@@ -131,14 +131,19 @@ failure, not as a model or pipeline result.
 
 For a full replay, smoke suite, or benchmark suite:
 
-1. Use `conda run -n sentinel-spark35` and a fresh output base directory.
-2. Run the command in one persistent elevated terminal session, then poll the
+1. Inspect `nproc`, `free -h`, and `df -h` for the intended Spark spill and
+   output filesystems before choosing a Spark profile or explicit memory and
+   parallelism overrides. Record the observed hardware and selected settings
+   with the validation result. A profile name is not evidence that it fits the
+   current machine.
+2. Use `conda run -n sentinel-spark35` and a fresh output base directory.
+3. Run the command in one persistent elevated terminal session, then poll the
    same session until it exits; noninteractive command windows can end before a
    full Spark workload has written final reports.
-3. Inspect `reports/run_manifest.json` and the required validation reports in
+4. Inspect `reports/run_manifest.json` and the required validation reports in
    every child bundle. An incomplete directory without final reports is not a
    successful or failed benchmark outcome.
-4. Reuse the active session rather than starting duplicate full replays.
+5. Reuse the active session rather than starting duplicate full replays.
 
 ### 7. For Modeling Work, Inspect Validation Outputs
 
