@@ -544,6 +544,8 @@ class WindowScoresRawTable(Table):
         parameter_event_profile_df: "DataFrame | None" = None,
     ) -> "WindowScoresRawTable":
         from libs.io.schemas import WINDOW_SCORES_RAW_COLUMNS
+
+        from pyspark import StorageLevel
         from pyspark.sql import functions as F
 
         baselines = phase_baselines_df.select(
@@ -638,11 +640,21 @@ class WindowScoresRawTable(Table):
                 .withColumn("window_close_reason", F.lit(""))
             )
 
+        # This frame feeds the event, residual, localization, behavior, and
+        # final-score branches below.  Keep one bounded Spark relation instead
+        # of allowing Catalyst to duplicate the full phase-window join plan
+        # into every downstream branch (which previously caused stage-80 JVM
+        # heap failures during the final write).
+        joined = joined.persist(StorageLevel.MEMORY_AND_DISK)
+        joined.count()
+
         parameter_event_counts_df = None
         event_active_parameter_counts_df = None
         event_subsystem_scores_df = None
         if events_df is not None:
             event_rows = _window_aligned_event_rows(events_df, windows_df=windows_df)
+            event_rows = event_rows.persist(StorageLevel.MEMORY_AND_DISK)
+            event_rows.count()
             parameter_event_counts_df = event_rows.groupBy(*_EVENT_WINDOW_KEYS, "parameter_name").agg(
                 F.count(F.lit(1)).cast("double").alias("event_support_count"),
                 F.sum(F.when(F.col("event_type_detected") == F.lit(EventType.THRESHOLD), F.lit(1.0)).otherwise(F.lit(0.0)))
@@ -830,6 +842,8 @@ class WindowScoresRawTable(Table):
             )
             .where(F.col("parameter_name").isNotNull())
         )
+        residual_rows = residual_rows.persist(StorageLevel.MEMORY_AND_DISK)
+        residual_rows.count()
         residual_totals_df = residual_rows.groupBy(*_EVENT_WINDOW_KEYS).agg(
             F.sum("residual_weight").cast("double").alias("residual_total_weight")
         )
