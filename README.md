@@ -1,5 +1,8 @@
 # S3NTINEL
 
+**S3NTINEL** stands for **Structural Streaming Sparse Event Nexus for Telemetry
+Inference with Network Envelope Learning**.
+
 S3NTINEL is a Spark-oriented telemetry anomaly-detection and attribution system
 with a simulation validation harness. Its operating motivation is fleet-scale
 analysis of A-MATS-captured signal feeds from ARINC 664 Part 7 (AFDX) avionics
