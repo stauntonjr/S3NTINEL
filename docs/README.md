@@ -10,6 +10,7 @@ for authority and maintenance rules.
 - **Run or modify a stage:** [pipelines/README.md](../pipelines/README.md), then the owning package README.
 - **Understand the operational motivation:** [A-MATS, AFDX, and CBM+ operational context](design/operational_context.md).
 - **Understand the active system contract:** [V2 architecture](current/v2_architecture.md).
+- **Scan the active system on one pane:** [current V2 architecture SVG](current/s3ntinel_current_architecture.svg).
 - **Understand durable names and schemas:** [glossary](reference/glossary.md) and [IO schemas](../libs/io/schemas/README.md).
 - **Understand a design decision:** [graph and hierarchy design](design/graph_hierarchy_design.md), [anomaly attribution design](design/anomaly_attribution_design.md), or [artifact replay design](design/artifact_replay_design.md).
 - **Work on simulation:** [simulation architecture](simulation/simulation_architecture.md) and [avionics guidance](simulation/avionics_simulation_guidelines.md).
