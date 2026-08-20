@@ -241,7 +241,10 @@ def test_plan_docs_have_index_and_status_headers() -> None:
         if path.name == "README.md":
             continue
         content = path.read_text()
-        assert "Status: Plan" in content, f"{path.relative_to(REPO_ROOT)} is missing plan status header"
+        assert any(
+            line in {"Status: Plan", "Status: Completed"}
+            for line in content.splitlines()[:5]
+        ), f"{path.relative_to(REPO_ROOT)} is missing plan status header"
         assert "Authority: Non-authoritative roadmap." in content, (
             f"{path.relative_to(REPO_ROOT)} is missing plan authority header"
         )

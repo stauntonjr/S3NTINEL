@@ -20,7 +20,7 @@ from libs.graph import (
     TransitionGraphTable,
 )
 from libs.graph.evaluation import build_graph_stage_evaluation_report_spark
-from libs.graph.hierarchy_artifacts import HierarchySpec
+from libs.graph.hierarchy_artifacts import GraphHierarchy, HierarchySpec
 from libs.testing.data import create_sample_events_df, create_sample_raw_table_df, create_sample_windows_df
 from libs.windows import WindowFeaturesTable
 
@@ -54,6 +54,31 @@ edge_family string
     if precision_df.empty:
         return spark.createDataFrame([], schema=schema)
     return spark.createDataFrame(pandas_records_for_spark(precision_df), schema=schema)
+
+
+def _assign_test_hierarchy(
+    fused_df,
+    parameter_names,
+    *,
+    min_edge_weight,
+    top_k_per_parameter_name,
+    subsystem_min_edge_weight=None,
+    system_min_edge_weight=None,
+    datatype_profile_df=None,
+    behavior_profile_df=None,
+):
+    return GraphHierarchy.from_fused(
+        fused_df,
+        parameter_names,
+        spec=HierarchySpec(
+            min_edge_weight=min_edge_weight,
+            top_k_per_parameter_name=top_k_per_parameter_name,
+            subsystem_min_edge_weight=subsystem_min_edge_weight,
+            system_min_edge_weight=system_min_edge_weight,
+        ),
+        datatype_profile_df=datatype_profile_df,
+        behavior_profile_df=behavior_profile_df,
+    ).rows
 
 
 def test_spark_graph_tables_produce_graph_families_and_hierarchy(spark):
@@ -706,8 +731,6 @@ date_utc date
 
 
 def test_hierarchy_assignment_requires_mutual_local_support():
-    from libs.graph.pipeline import _assign_hierarchy
-
     fused_df = __import__("pandas").DataFrame(
         [
             {"parameter_name_u": "A", "parameter_name_v": "B", "fused_weight": 0.9},
@@ -716,7 +739,7 @@ def test_hierarchy_assignment_requires_mutual_local_support():
             {"parameter_name_u": "D", "parameter_name_v": "E", "fused_weight": 0.85},
         ]
     )
-    hierarchy_df = _assign_hierarchy(
+    hierarchy_df = _assign_test_hierarchy(
         fused_df,
         ["A", "B", "C", "D", "E"],
         min_edge_weight=0.2,
@@ -731,8 +754,6 @@ def test_hierarchy_assignment_requires_mutual_local_support():
 
 
 def test_hierarchy_assignment_respects_explicit_weight_thresholds():
-    from libs.graph.pipeline import _assign_hierarchy
-
     fused_df = __import__("pandas").DataFrame(
         [
             {"parameter_name_u": "A", "parameter_name_v": "B", "fused_weight": 0.95},
@@ -741,7 +762,7 @@ def test_hierarchy_assignment_respects_explicit_weight_thresholds():
         ]
     )
 
-    permissive_df = _assign_hierarchy(
+    permissive_df = _assign_test_hierarchy(
         fused_df,
         ["A", "B", "C", "D"],
         min_edge_weight=0.7,
@@ -749,7 +770,7 @@ def test_hierarchy_assignment_respects_explicit_weight_thresholds():
         subsystem_min_edge_weight=0.7,
         system_min_edge_weight=0.3,
     )
-    strict_df = _assign_hierarchy(
+    strict_df = _assign_test_hierarchy(
         fused_df,
         ["A", "B", "C", "D"],
         min_edge_weight=0.7,
@@ -766,8 +787,6 @@ def test_hierarchy_assignment_respects_explicit_weight_thresholds():
 
 
 def test_hierarchy_assignment_splits_modules_on_profile_incompatibility():
-    from libs.graph.pipeline import _assign_hierarchy
-
     fused_df = pd.DataFrame(
         [
             {"parameter_name_u": "A", "parameter_name_v": "B", "fused_weight": 0.95},
@@ -790,7 +809,7 @@ def test_hierarchy_assignment_splits_modules_on_profile_incompatibility():
         ]
     )
 
-    hierarchy_df = _assign_hierarchy(
+    hierarchy_df = _assign_test_hierarchy(
         fused_df,
         ["A", "B", "C"],
         min_edge_weight=0.8,
@@ -807,8 +826,6 @@ def test_hierarchy_assignment_splits_modules_on_profile_incompatibility():
 
 
 def test_hierarchy_assignment_discounts_broad_event_only_edges_for_modules():
-    from libs.graph.pipeline import _assign_hierarchy
-
     fused_df = pd.DataFrame(
         [
             {
@@ -838,7 +855,7 @@ def test_hierarchy_assignment_discounts_broad_event_only_edges_for_modules():
         ]
     )
 
-    hierarchy_df = _assign_hierarchy(
+    hierarchy_df = _assign_test_hierarchy(
         fused_df,
         ["A", "B", "C"],
         min_edge_weight=0.05,
