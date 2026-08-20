@@ -18,6 +18,7 @@ venv/
 .mypy_cache/
 .ruff_cache/
 .ipynb_checkpoints/
+.specstory/
 
 # Compiled Java class files
 *.class
