@@ -55,6 +55,9 @@ mlruns/
 *.egg-info/
 repo_maps/
 docs/archive/
+
+# Local agent/session traces. Keep reusable development skills, not transcripts.
+.specstory/
 .codex/*
 !.codex/skills/
 !.codex/skills/**
