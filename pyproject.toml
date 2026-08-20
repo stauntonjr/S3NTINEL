@@ -27,3 +27,21 @@ spark = [
 
 [tool.setuptools.packages.find]
 include = ["libs*", "pipelines*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+extend-exclude = [
+  ".specstory",
+  "docs/archive",
+]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

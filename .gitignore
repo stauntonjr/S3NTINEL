@@ -56,6 +56,7 @@ mlruns/
 *.egg-info/
 repo_maps/
 docs/archive/
+.specstory/
 .codex/*
 !.codex/skills/
 !.codex/skills/**
