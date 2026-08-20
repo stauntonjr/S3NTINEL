@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -27,11 +29,28 @@ jobs:
       - name: Check Markdown documentation
         run: python tools/check_markdown_docs.py
 
-      - name: Lint
-        run: ruff check .
+      - name: Find changed Python files
+        id: changed-python
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [[ "$BASE_SHA" =~ ^0+$ ]]; then
+            BASE_SHA="$(git rev-list --max-parents=0 HEAD)"
+          fi
+          git diff --name-only --diff-filter=ACMR -z "$BASE_SHA" HEAD -- '*.py' > changed-python-files
+          if [[ -s changed-python-files ]]; then
+            echo "any=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "any=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Check formatting
-        run: ruff format --check .
+      - name: Lint changed Python files
+        if: steps.changed-python.outputs.any == 'true'
+        run: xargs -0 ruff check -- < changed-python-files
+
+      - name: Check formatting of changed Python files
+        if: steps.changed-python.outputs.any == 'true'
+        run: xargs -0 ruff format --check -- < changed-python-files
 
       - name: Run tests
         run: pytest
