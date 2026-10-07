@@ -13,6 +13,16 @@ yet claim a live A-MATS, AFDX, or BLADE integration.
 
 ## At A Glance
 
+![S3NTINEL aviation architecture: aircraft simulation supplies observed telemetry to fitting and inference; simulated truth and persisted results feed a separate validation harness.](docs/current/aviation_workflow.svg)
+
+The aviation simulator exercises aircraft systems, flight phases, and injected
+faults through the same persisted Spark pipeline used for normalized telemetry.
+Fitting learns parameter semantics and structural relationships; inference adds
+phase context, calibrated anomaly scores, and evidence for maintenance review.
+Validation compares the learned structure and detected results against simulated
+truth. Clean values and truth labels are evaluation inputs; modeling uses the
+observed `parameter_value`.
+
 **What:** a persisted fitting and inference pipeline that turns raw telemetry into
 structural models, calibrated anomaly scores, and attribution artifacts.
 
@@ -59,6 +69,18 @@ between stages `70` and `80` when truth phase labels are available.
 For the complete stage-to-artifact mapping, replay behavior, and individual
 entrypoints, use [pipelines/README.md](pipelines/README.md). The authoritative
 artifact and field vocabulary is the [glossary](docs/reference/glossary.md).
+
+To exercise all four parts of the aviation workflow in one persisted run bundle:
+
+```bash
+python -m scripts.run_sim_pipeline --flight-name power_chain --base-dir data/simulation_runs --mode full --format parquet
+```
+
+The bundle contains simulated inputs and truth, fitted artifacts, inference
+outputs, and validation reports with run and stage manifests. See the
+[simulation entrypoints](scripts/README.md#canonical-simulation) for flight
+presets and runtime guidance, and the [simulation model](libs/simulation/README.md)
+for aircraft, coupling, phase, and fault semantics.
 
 ## Architecture And Design
 
