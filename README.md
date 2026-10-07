@@ -70,10 +70,20 @@ For the complete stage-to-artifact mapping, replay behavior, and individual
 entrypoints, use [pipelines/README.md](pipelines/README.md). The authoritative
 artifact and field vocabulary is the [glossary](docs/reference/glossary.md).
 
-To exercise all four parts of the aviation workflow in one persisted run bundle:
+Before a full simulation, inspect the local CPU count, total and available
+memory, swap, and free space on both the Spark spill and output filesystems.
+Choose a profile or explicit memory/parallelism overrides from that evidence
+using the [runtime guidance](scripts/README.md#canonical-simulation), and record
+the hardware and selected settings with the validation result. The example
+below explicitly selects `laptop_large_sim`: `local[4]`, an 8 GB driver heap,
+and spill space under `/tmp/s3ntinel-spark-local`. Use it only if the measured
+capacity supports those settings; the profile name is not a hardware check.
+
+To exercise all four parts of the aviation workflow in one persisted run bundle
+on hardware confirmed to support that profile:
 
 ```bash
-python -m scripts.run_sim_pipeline --flight-name power_chain --base-dir data/simulation_runs --mode full --format parquet
+S3NTINEL_SPARK_PROFILE=laptop_large_sim python -m scripts.run_sim_pipeline --flight-name power_chain --base-dir data/simulation_runs --mode full --format parquet
 ```
 
 The bundle contains simulated inputs and truth, fitted artifacts, inference
