@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  quality:
+  test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -55,7 +55,7 @@ jobs:
         if: steps.changed-python.outputs.any == 'true'
         run: xargs -0 ruff format --check -- < changed-python-files
 
-  tests:
+  test-matrix:
     name: tests (${{ matrix.name }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
