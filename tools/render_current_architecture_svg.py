@@ -4,7 +4,6 @@ import textwrap
 from html import escape
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "docs/current/s3ntinel_current_architecture.svg"
 W, H = 3840, 2160
