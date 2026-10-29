@@ -98,5 +98,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .[dev,spark]
 
+      # Full persisted simulation runs are a separate resource-sized validation gate.
+      # Keep all other unit, contract, integration, and regression tests on PRs.
       - name: Run ${{ matrix.name }} tests
-        run: pytest -q ${{ matrix.paths }}
+        run: |
+          pytest -q ${{ matrix.paths }} \\
+            --deselect=tests/contracts/public_api/test_simulation_public_api.py::test_simulation_public_api_runs_end_to_end \\
+            --deselect=tests/integration/runner/test_sim_runner.py::test_sim_runner_full_smoke_emits_bundle
