@@ -857,7 +857,7 @@ def test_phase_label_centroids_use_majority_overlap_truth_labels(spark):
                 "backbone_reconstruction_error": 0.1,
                 "backbone_residual_by_parameter": {},
                 "x_c": [0.0, 0.0],
-                "s_w": [1.0, 3.0, 0.2, 1.0, 0.1, 0.5],
+                "s_w": [1.0, 3.0],
                 "date_utc": date(2025, 1, 1),
                 "feature_names": ["f0", "f1"],
                 "selected_sensors_c": ["s0", "s1"],

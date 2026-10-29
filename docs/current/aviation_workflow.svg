@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800" role="img" aria-labelledby="title desc">
+  <title id="title">S3NTINEL aviation workflow: simulation, fitting, inference, and validation</title>
+  <desc id="desc">AircraftSpec and FlightSpec define systems, couplings, flight phases, and injected faults. Simulation supplies observed parameter_value telemetry to fitting stages 00 through 60, which persist profiles, windows, a backbone, relationship graphs, and a learned hierarchy. Inference stages 70 through 95 produce phase context, calibrated scores, anomaly attribution, and an explorer bundle. A separate validation harness compares fitted artifacts and detected results against simulated clean values and truth labels. Stage 72 is a simulation-only phase validation extension. The operational context is aviation telemetry for A-MATS and CBM+; live A-MATS and AFDX integration is not claimed.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1 L 8 5 L 0 9 Z" fill="#475569"/>
+    </marker>
+    <marker id="truth-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M 0 1 L 8 5 L 0 9 Z" fill="#b45309"/>
+    </marker>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; }
+      .heading { font-size: 26px; font-weight: 700; fill: #0f172a; }
+      .body { font-size: 18px; fill: #334155; }
+      .detail { font-size: 16px; fill: #475569; }
+      .label { font-size: 15px; font-weight: 700; letter-spacing: 1px; }
+      .step { font-size: 17px; font-weight: 700; fill: #ffffff; text-anchor: middle; }
+      .line { fill: none; stroke: #475569; stroke-width: 2.5; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="1200" height="800" rx="20" fill="#f8fafc"/>
+  <text x="40" y="48" class="label" fill="#475569">S3NTINEL / AVIATION ARCHITECTURE</text>
+  <text x="40" y="91" font-size="32" font-weight="700" fill="#0f172a">From aircraft signals to maintenance evidence</text>
+  <text x="40" y="122" class="body">One persisted Spark pipeline. A separate truth-based validation harness.</text>
+
+  <!-- Main flow: observed telemetry, fitted artifacts, and detected evidence. -->
+  <rect x="40" y="158" width="340" height="342" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
+  <path d="M 54 158 H 366 Q 380 158 380 172 V 178 H 40 V 172 Q 40 158 54 158" fill="#0f766e"/>
+  <circle cx="76" cy="210" r="18" fill="#0f766e"/>
+  <text x="76" y="216" class="step">01</text>
+  <text x="106" y="219" class="heading">Simulation</text>
+  <text x="64" y="255" class="label" fill="#0f766e">AIRCRAFT + FLIGHT</text>
+  <text x="64" y="292" class="body">AircraftSpec + FlightSpec</text>
+  <text x="64" y="324" class="body">Systems, modules, couplings</text>
+  <text x="64" y="356" class="body">Flight phases + injected faults</text>
+  <text x="64" y="388" class="body">Sparse, multi-rate signals</text>
+  <line x1="64" y1="414" x2="356" y2="414" stroke="#e2e8f0"/>
+  <text x="64" y="444" font-size="18" font-weight="700" fill="#0f766e">Observed telemetry</text>
+  <text x="64" y="473" class="detail">parameter_value + tail / flight keys</text>
+
+  <path d="M 384 329 H 426" class="line"/>
+
+  <rect x="430" y="158" width="340" height="342" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
+  <path d="M 444 158 H 756 Q 770 158 770 172 V 178 H 430 V 172 Q 430 158 444 158" fill="#1d4ed8"/>
+  <circle cx="466" cy="210" r="18" fill="#1d4ed8"/>
+  <text x="466" y="216" class="step">02</text>
+  <text x="496" y="219" class="heading">Fitting</text>
+  <text x="454" y="255" class="label" fill="#1d4ed8">STAGES 00–60</text>
+  <text x="454" y="292" class="body">Ingest, profiles + events</text>
+  <text x="454" y="324" class="body">Policy + adaptive windows</text>
+  <text x="454" y="356" class="body">Backbone + relationship graphs</text>
+  <text x="454" y="388" class="body">Learned system hierarchy</text>
+  <line x1="454" y1="414" x2="746" y2="414" stroke="#e2e8f0"/>
+  <text x="454" y="444" font-size="18" font-weight="700" fill="#1d4ed8">Persisted structural artifacts</text>
+  <text x="454" y="473" class="detail">Profiles, features, graphs, hierarchy</text>
+
+  <path d="M 774 329 H 816" class="line"/>
+
+  <rect x="820" y="158" width="340" height="342" rx="14" fill="#ffffff" stroke="#cbd5e1"/>
+  <path d="M 834 158 H 1146 Q 1160 158 1160 172 V 178 H 820 V 172 Q 820 158 834 158" fill="#6d28d9"/>
+  <circle cx="856" cy="210" r="18" fill="#6d28d9"/>
+  <text x="856" y="216" class="step">03</text>
+  <text x="886" y="219" class="heading">Inference</text>
+  <text x="844" y="255" class="label" fill="#6d28d9">STAGES 70–95</text>
+  <text x="844" y="292" class="body">Phase fit / reference apply</text>
+  <text x="844" y="324" class="body">Raw scores + calibration</text>
+  <text x="844" y="356" class="body">Anomaly attribution</text>
+  <text x="844" y="388" class="body">Evidence explorer bundle</text>
+  <line x1="844" y1="414" x2="1136" y2="414" stroke="#e2e8f0"/>
+  <text x="844" y="444" font-size="18" font-weight="700" fill="#6d28d9">Evidence for maintenance review</text>
+  <text x="844" y="473" class="detail">Window, parameter + event attribution</text>
+
+  <!-- Truth is reserved for evaluation, never a model input. -->
+  <path d="M 210 500 V 581" fill="none" stroke="#b45309" stroke-width="2.5" stroke-dasharray="7 6" marker-end="url(#truth-arrow)"/>
+  <rect x="80" y="521" width="260" height="30" rx="6" fill="#f8fafc"/>
+  <text x="210" y="542" text-anchor="middle" font-size="16" font-weight="600" fill="#92400e">Clean values + truth labels</text>
+  <path d="M 600 500 V 581" class="line"/>
+  <rect x="522" y="521" width="156" height="30" rx="6" fill="#f8fafc"/>
+  <text x="600" y="542" text-anchor="middle" class="detail">Fitted artifacts</text>
+  <path d="M 990 500 V 581" class="line"/>
+  <rect x="894" y="521" width="192" height="30" rx="6" fill="#f8fafc"/>
+  <text x="990" y="542" text-anchor="middle" class="detail">Detected results</text>
+
+  <rect x="40" y="584" width="1120" height="156" rx="14" fill="#fffbeb" stroke="#fcd34d"/>
+  <circle cx="76" cy="620" r="18" fill="#b45309"/>
+  <text x="76" y="626" class="step">04</text>
+  <text x="106" y="629" class="heading">Validation</text>
+  <text x="64" y="666" class="body">Compare artifacts and detections</text>
+  <text x="64" y="694" class="body">against authored aircraft truth.</text>
+  <line x1="407" y1="608" x2="407" y2="717" stroke="#fde68a"/>
+  <text x="431" y="627" class="label" fill="#92400e">MODEL RECOVERY</text>
+  <text x="431" y="665" class="body">Profiles, events, phases, structure</text>
+  <text x="431" y="694" class="body">Fault detection + localization</text>
+  <line x1="794" y1="608" x2="794" y2="717" stroke="#fde68a"/>
+  <text x="818" y="627" class="label" fill="#92400e">AUDITABLE RUN BUNDLE</text>
+  <text x="818" y="665" class="body">Validation + harness reports</text>
+  <text x="818" y="694" class="body">Run / stage manifests + lineage</text>
+
+  <text x="40" y="776" class="detail">Aviation context: A-MATS / CBM+ · Input: normalized telemetry · Stage 72: simulation-only phase validation</text>
+</svg>
