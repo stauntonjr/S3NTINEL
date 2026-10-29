@@ -8,7 +8,12 @@ import pytest
 
 import libs.simulation.runner as runner
 from libs.io.delta import get_spark
+from libs.io.schemas import ANOMALY_WINDOW_ATTRIBUTION_COLUMNS
 from libs.simulation.flight.examples import build_named_flight_spec
+from libs.simulation.reporting import (
+    build_fault_attribution_summary_from_misbehavior,
+    build_fault_score_summary_from_misbehavior,
+)
 
 
 def _runner_config(tmp_path):
@@ -327,7 +332,8 @@ def test_sim_runner_full_smoke_emits_bundle(monkeypatch, tmp_path):
     assert len(pd.read_parquet(run_dir / "delta" / "phase_windows")) > 0
     assert len(pd.read_parquet(run_dir / "delta" / "phase_label_centroids")) > 0
     assert len(pd.read_parquet(run_dir / "delta" / "window_scores_calibrated")) > 0
-    assert len(pd.read_parquet(run_dir / "delta" / "anomaly_window_attribution")) > 0
+    anomaly_window_attribution_df = pd.read_parquet(run_dir / "delta" / "anomaly_window_attribution")
+    assert anomaly_window_attribution_df.columns.tolist() == ANOMALY_WINDOW_ATTRIBUTION_COLUMNS
     assert (run_dir / "delta" / "explorer_bundle" / "bundle_manifest.json").exists()
     assert len(pd.read_parquet(run_dir / "delta" / "explorer_bundle" / "parameter_catalog")) > 0
 
@@ -955,8 +961,8 @@ def test_runner_fault_wrappers_preserve_extended_validation_metrics():
         "misbehavior_windows": [],
     }
 
-    fault_score_summary = runner._build_fault_score_summary_from_misbehavior(misbehavior_score_summary)
-    fault_attribution_summary = runner._build_fault_attribution_summary_from_misbehavior(misbehavior_attribution_summary)
+    fault_score_summary = build_fault_score_summary_from_misbehavior(misbehavior_score_summary)
+    fault_attribution_summary = build_fault_attribution_summary_from_misbehavior(misbehavior_attribution_summary)
 
     assert fault_score_summary["detected_fault_window_rate"] == 0.5
     assert fault_score_summary["emit_ready_fault_window_rate"] == 0.5

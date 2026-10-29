@@ -13,6 +13,16 @@ yet claim a live A-MATS, AFDX, or BLADE integration.
 
 ## At A Glance
 
+![S3NTINEL aviation architecture: aircraft simulation supplies observed telemetry to fitting and inference; simulated truth and persisted results feed a separate validation harness.](docs/current/aviation_workflow.svg)
+
+The aviation simulator exercises aircraft systems, flight phases, and injected
+faults through the same persisted Spark pipeline used for normalized telemetry.
+Fitting learns parameter semantics and structural relationships; inference adds
+phase context, calibrated anomaly scores, and evidence for maintenance review.
+Validation compares the learned structure and detected results against simulated
+truth. Clean values and truth labels are evaluation inputs; modeling uses the
+observed `parameter_value`.
+
 **What:** a persisted fitting and inference pipeline that turns raw telemetry into
 structural models, calibrated anomaly scores, and attribution artifacts.
 
@@ -34,12 +44,13 @@ boundaries, see [operational context](docs/design/operational_context.md).
 
 ## Start Here
 
-1. Create the supported local environment: `conda env create -f environment.spark35.yml`.
-2. Run the canonical structural smoke: `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format parquet`.
-3. Read the active [architecture contract](docs/current/v2_architecture.md) and
+1. For a fast engineering overview, read the [10-minute system tour](docs/current/system_tour.md).
+2. Create the supported local environment: `conda env create -f environment.spark35.yml`.
+3. Run the canonical structural smoke: `python -m scripts.smoke_test_pipeline --base-dir data/smoke --format parquet`.
+4. Read the active [architecture contract](docs/current/v2_architecture.md) and
    [pipeline stage index](pipelines/README.md).
-4. Use [docs/README.md](docs/README.md) to choose a current contract, reference,
-   design rationale, simulator guide, or plan.
+5. Use [docs/README.md](docs/README.md) to choose a current contract, reference,
+   design rationale, architecture decision, simulator guide, or plan.
 
 The active local baseline is the `sentinel-spark35` conda environment on Python
 3.11, Spark 3.5.1, and Delta 3.0.0. For normal local smoke work, use parquet
@@ -60,9 +71,33 @@ For the complete stage-to-artifact mapping, replay behavior, and individual
 entrypoints, use [pipelines/README.md](pipelines/README.md). The authoritative
 artifact and field vocabulary is the [glossary](docs/reference/glossary.md).
 
+Before a full simulation, inspect the local CPU count, total and available
+memory, swap, and free space on both the Spark spill and output filesystems.
+Choose a profile or explicit memory/parallelism overrides from that evidence
+using the [runtime guidance](scripts/README.md#canonical-simulation), and record
+the hardware and selected settings with the validation result. The example
+below explicitly selects `laptop_large_sim`: `local[4]`, an 8 GB driver heap,
+and spill space under `/tmp/s3ntinel-spark-local`. Use it only if the measured
+capacity supports those settings; the profile name is not a hardware check.
+
+To exercise all four parts of the aviation workflow in one persisted run bundle
+on hardware confirmed to support that profile:
+
+```bash
+S3NTINEL_SPARK_PROFILE=laptop_large_sim python -m scripts.run_sim_pipeline --flight-name power_chain --base-dir data/simulation_runs --mode full --format parquet
+```
+
+The bundle contains simulated inputs and truth, fitted artifacts, inference
+outputs, and validation reports with run and stage manifests. See the
+[simulation entrypoints](scripts/README.md#canonical-simulation) for flight
+presets and runtime guidance, and the [simulation model](libs/simulation/README.md)
+for aircraft, coupling, phase, and fault semantics.
+
 ## Architecture And Design
 
+- [10-minute system tour](docs/current/system_tour.md): fast path through architecture, distributed implementation, evidence, and validation.
 - [V2 architecture](docs/current/v2_architecture.md): active contracts and artifacts.
+- [Architecture Decision Records](docs/decisions/README.md): durable architectural constraints and alternatives considered.
 - [Fitting workflow](docs/current/fitting_workflow.md): reusable metadata and structural fitting sequence.
 - [Graph and hierarchy design](docs/design/graph_hierarchy_design.md): graph fusion, hierarchy construction, and retained evidence.
 - [Anomaly attribution design](docs/design/anomaly_attribution_design.md): score channels, localization, artifacts, and validation.
@@ -76,7 +111,7 @@ artifact and field vocabulary is the [glossary](docs/reference/glossary.md).
 - `libs/`: reusable Spark-domain libraries and persisted artifact owners.
 - `scripts/`: smoke, simulation, validation, and handoff utilities.
 - `notebooks/`: exploratory and validation notebooks; see [notebooks/README.md](notebooks/README.md).
-- `docs/`: current contracts, reference vocabulary, design rationale, simulation notes, research notes, and non-authoritative plans.
+- `docs/`: current contracts, reference vocabulary, design rationale, architecture decisions, simulation notes, research notes, and non-authoritative plans.
 - `docs/architecture/`: generated C4 and repository-map snapshot; regenerate rather than editing by hand.
 
 ## Development Checks
@@ -84,6 +119,7 @@ artifact and field vocabulary is the [glossary](docs/reference/glossary.md).
 - Markdown contract: `python tools/check_markdown_docs.py`
 - Unit and integration tests: `pytest`
 - Lint: `ruff check .`
+- Format: `ruff format --check .`
 
 The documented package ownership and current entrypoints live next to the code.
 Treat `docs/current/`, package READMEs, schemas, and tests as the source of truth
