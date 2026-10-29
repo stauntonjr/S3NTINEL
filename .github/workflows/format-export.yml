@@ -1,0 +1,19 @@
+name: Temporary format export
+on:
+  pull_request:
+    paths:
+      - "tools/render_current_architecture_svg.py"
+      - ".github/workflows/format-export.yml"
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install "ruff==0.17.3"
+      - name: Format and export generator
+        run: |
+          ruff format tools/render_current_architecture_svg.py
+          echo FORMAT_BEGIN
+          base64 -w0 tools/render_current_architecture_svg.py
+          echo
+          echo FORMAT_END
