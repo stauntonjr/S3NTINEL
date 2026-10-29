@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import textwrap
 from html import escape
 from pathlib import Path
-import textwrap
 
 
 ROOT = Path(__file__).resolve().parents[1]
