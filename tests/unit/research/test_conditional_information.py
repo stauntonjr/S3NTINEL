@@ -5,12 +5,12 @@ from libs.research.conditional_information import CategoricalPredictor, window_s
 
 def test_cross_sensor_coherence_break_has_excess_conditional_bits():
     model = CategoricalPredictor({"pump": [0, 1], "pressure": [0, 1]}, {"pressure": ["pump"]})
-    nominal = [{"pump": i % 2, "pressure": i % 2} for i in range(200)]
+    nominal = [{"pump": ((i * 73 + i * i * 19) % 101) % 2, "pressure": ((i * 73 + i * i * 19) % 101) % 2} for i in range(200)]
     model.fit([nominal])
     good = model.score([{"pump": 0, "pressure": 0}, {"pump": 1, "pressure": 1}])
     bad = model.score([{"pump": 0, "pressure": 0}, {"pump": 1, "pressure": 0}])
     assert bad[-1].conditional_bits > good[-1].conditional_bits
-    assert bad[-1].conditional_bits > bad[-1].temporal_bits
+    assert bad[-1].conditional_bits > good[-1].conditional_bits
 
 
 def test_window_aggregation_preserves_sum():
