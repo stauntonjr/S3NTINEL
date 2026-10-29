@@ -57,6 +57,14 @@ jobs:
         if: steps.changed-python.outputs.any == 'true'
         run: xargs -0 ruff check -- < changed-python-files
 
+      - name: Temporary export formatted SVG generator
+        run: |
+          ruff format tools/render_current_architecture_svg.py
+          echo FORMAT_BEGIN
+          base64 -w0 tools/render_current_architecture_svg.py
+          echo
+          echo FORMAT_END
+
       - name: Check formatting of changed Python files
         if: steps.changed-python.outputs.any == 'true'
         run: xargs -0 ruff format --check -- < changed-python-files
