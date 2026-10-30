@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# Ruff-formatted generator; CI verification refresh.
+
 import textwrap
 from html import escape
 from pathlib import Path
