@@ -250,7 +250,9 @@ def _hierarchy_sensitivity_report(
                 "band_weights": {band.name: float(band.combine_weight) for band in scenario_bands},
                 "lag_edge_count": int(alt_lag_sdf.count()),
                 "fused_edge_count": int(len(alt_fused_pdf)),
-                "fused_edge_jaccard_vs_configured": _jaccard(baseline_fused_keys, _edge_keys(alt_fused_pdf, directed=False)),
+                "fused_edge_jaccard_vs_configured": _jaccard(
+                    baseline_fused_keys, _edge_keys(alt_fused_pdf, directed=False)
+                ),
                 "hierarchy_partition_agreement_vs_configured": _compare_detected_hierarchies(
                     baseline_hierarchy,
                     alt_hierarchy,
@@ -298,9 +300,19 @@ def _stability_subset_report(
     try:
         total_flight_count = int(flight_keys.count())
         if total_flight_count < 2:
-            return {"status": "skipped", "reason": "need at least two flights for subset stability", "flight_count": total_flight_count}
+            return {
+                "status": "skipped",
+                "reason": "need at least two flights for subset stability",
+                "flight_count": total_flight_count,
+            }
 
-        threshold = max(1, min(int(round(spec.stability_hash_modulus * spec.stability_sample_fraction)), spec.stability_hash_modulus - 1))
+        threshold = max(
+            1,
+            min(
+                int(round(spec.stability_hash_modulus * spec.stability_sample_fraction)),
+                spec.stability_hash_modulus - 1,
+            ),
+        )
         full_event_keys = _edge_keys(full_event_sdf.toPandas(), directed=False)
         full_lag_keys = _edge_keys(full_lag_sdf.toPandas(), directed=True)
         full_transition_keys = _edge_keys(full_transition_sdf.toPandas(), directed=True)
@@ -309,7 +321,10 @@ def _stability_subset_report(
         sample_rows: list[dict[str, Any]] = []
         for sample_index in range(max(int(spec.stability_sample_count), 0)):
             sample_key_df = flight_keys.where(
-                F.pmod(F.xxhash64("tail_id", "flight_id", F.lit(f"graph_eval_{sample_index}")), F.lit(spec.stability_hash_modulus))
+                F.pmod(
+                    F.xxhash64("tail_id", "flight_id", F.lit(f"graph_eval_{sample_index}")),
+                    F.lit(spec.stability_hash_modulus),
+                )
                 < F.lit(threshold)
             )
             sample_flight_count = int(sample_key_df.count())
@@ -318,28 +333,34 @@ def _stability_subset_report(
             sample_events_df = events_df.join(sample_key_df, on=["tail_id", "flight_id"], how="inner")
             sample_windows_df = windows_df.join(sample_key_df, on=["tail_id", "flight_id"], how="inner")
             sample_window_features_df = window_features_df.join(sample_key_df, on=["tail_id", "flight_id"], how="inner")
-            if sample_events_df.limit(1).count() == 0 or sample_windows_df.limit(1).count() == 0 or sample_window_features_df.limit(1).count() == 0:
+            if (
+                sample_events_df.limit(1).count() == 0
+                or sample_windows_df.limit(1).count() == 0
+                or sample_window_features_df.limit(1).count() == 0
+            ):
                 continue
-            _, event_sdf, lag_sdf, transition_sdf, fused_sdf, _, _ = build_graph_components_with_diagnostics_spark_table(
-                sample_window_features_df,
-                sample_events_df,
-                sample_windows_df,
-                backbone_df,
-                precision_ridge_lambda=precision_ridge_lambda,
-                min_abs_partial_corr=min_abs_partial_corr,
-                min_event_count=min_event_count,
-                min_event_npmi=min_event_npmi,
-                event_top_k_per_parameter_name=event_top_k_per_parameter_name,
-                lag_tau_max_seconds=lag_tau_max_seconds,
-                min_lag_count=min_lag_count,
-                max_mean_lag_seconds=max_mean_lag_seconds,
-                lag_top_k_outgoing=lag_top_k_outgoing,
-                lag_bands=lag_bands,
-                min_transition_count=min_transition_count,
-                alpha=alpha,
-                beta=beta,
-                gamma=gamma,
-                max_graph_sensor_universe=max_graph_sensor_universe,
+            _, event_sdf, lag_sdf, transition_sdf, fused_sdf, _, _ = (
+                build_graph_components_with_diagnostics_spark_table(
+                    sample_window_features_df,
+                    sample_events_df,
+                    sample_windows_df,
+                    backbone_df,
+                    precision_ridge_lambda=precision_ridge_lambda,
+                    min_abs_partial_corr=min_abs_partial_corr,
+                    min_event_count=min_event_count,
+                    min_event_npmi=min_event_npmi,
+                    event_top_k_per_parameter_name=event_top_k_per_parameter_name,
+                    lag_tau_max_seconds=lag_tau_max_seconds,
+                    min_lag_count=min_lag_count,
+                    max_mean_lag_seconds=max_mean_lag_seconds,
+                    lag_top_k_outgoing=lag_top_k_outgoing,
+                    lag_bands=lag_bands,
+                    min_transition_count=min_transition_count,
+                    alpha=alpha,
+                    beta=beta,
+                    gamma=gamma,
+                    max_graph_sensor_universe=max_graph_sensor_universe,
+                )
             )
             sample_rows.append(
                 {
@@ -349,10 +370,16 @@ def _stability_subset_report(
                     "lag_edge_count": int(lag_sdf.count()),
                     "transition_edge_count": int(transition_sdf.count()),
                     "fused_edge_count": int(fused_sdf.count()),
-                    "event_jaccard_vs_full": _jaccard(full_event_keys, _edge_keys(event_sdf.toPandas(), directed=False)),
+                    "event_jaccard_vs_full": _jaccard(
+                        full_event_keys, _edge_keys(event_sdf.toPandas(), directed=False)
+                    ),
                     "lag_jaccard_vs_full": _jaccard(full_lag_keys, _edge_keys(lag_sdf.toPandas(), directed=True)),
-                    "transition_jaccard_vs_full": _jaccard(full_transition_keys, _edge_keys(transition_sdf.toPandas(), directed=True)),
-                    "fused_jaccard_vs_full": _jaccard(full_fused_keys, _edge_keys(fused_sdf.toPandas(), directed=False)),
+                    "transition_jaccard_vs_full": _jaccard(
+                        full_transition_keys, _edge_keys(transition_sdf.toPandas(), directed=True)
+                    ),
+                    "fused_jaccard_vs_full": _jaccard(
+                        full_fused_keys, _edge_keys(fused_sdf.toPandas(), directed=False)
+                    ),
                 }
             )
 
@@ -425,48 +452,47 @@ def build_graph_stage_evaluation_report_spark(
     timings_ms["graph_counts"] = round((time.perf_counter() - started) * 1000.0, 3)
     started = time.perf_counter()
     edge_stability = _stability_subset_report(
-
-            events_df=events_df,
-            windows_df=windows_df,
-            window_features_df=window_features_df,
-            backbone_df=backbone_df,
-            full_event_sdf=event_sdf,
-            full_lag_sdf=lag_sdf,
-            full_transition_sdf=transition_sdf,
-            full_fused_sdf=fused_sdf,
-            lag_tau_max_seconds=lag_tau_max_seconds,
-            lag_bands=resolved_bands,
-            min_event_count=min_event_count,
-            min_event_npmi=min_event_npmi,
-            event_top_k_per_parameter_name=event_top_k_per_parameter_name,
-            min_lag_count=min_lag_count,
-            max_mean_lag_seconds=max_mean_lag_seconds,
-            lag_top_k_outgoing=lag_top_k_outgoing,
-            min_transition_count=min_transition_count,
-            precision_ridge_lambda=precision_ridge_lambda,
-            min_abs_partial_corr=min_abs_partial_corr,
-            alpha=alpha,
-            beta=beta,
-            gamma=gamma,
-            max_graph_sensor_universe=max_graph_sensor_universe,
-            spec=eval_spec,
+        events_df=events_df,
+        windows_df=windows_df,
+        window_features_df=window_features_df,
+        backbone_df=backbone_df,
+        full_event_sdf=event_sdf,
+        full_lag_sdf=lag_sdf,
+        full_transition_sdf=transition_sdf,
+        full_fused_sdf=fused_sdf,
+        lag_tau_max_seconds=lag_tau_max_seconds,
+        lag_bands=resolved_bands,
+        min_event_count=min_event_count,
+        min_event_npmi=min_event_npmi,
+        event_top_k_per_parameter_name=event_top_k_per_parameter_name,
+        min_lag_count=min_lag_count,
+        max_mean_lag_seconds=max_mean_lag_seconds,
+        lag_top_k_outgoing=lag_top_k_outgoing,
+        min_transition_count=min_transition_count,
+        precision_ridge_lambda=precision_ridge_lambda,
+        min_abs_partial_corr=min_abs_partial_corr,
+        alpha=alpha,
+        beta=beta,
+        gamma=gamma,
+        max_graph_sensor_universe=max_graph_sensor_universe,
+        spec=eval_spec,
     )
     timings_ms["edge_stability"] = round((time.perf_counter() - started) * 1000.0, 3)
     started = time.perf_counter()
     hierarchy_sensitivity = _hierarchy_sensitivity_report(
-            spark=spark,
-            precision_pdf=precision_df,
-            event_sdf=event_sdf,
-            lag_profile_sdf=lag_profile_sdf,
-            fused_sdf=fused_sdf,
-            parameter_names=parameter_names,
-            resolved_bands=resolved_bands,
-            tau_max_seconds=lag_tau_max_seconds,
-            lag_min_count=min_lag_count,
-            max_mean_lag_seconds=max_mean_lag_seconds,
-            lag_top_k_outgoing=lag_top_k_outgoing,
-            fusion_spec=FusedGraphSpec(alpha=alpha, beta=beta, gamma=gamma),
-            hierarchy_spec=hierarchy_spec,
+        spark=spark,
+        precision_pdf=precision_df,
+        event_sdf=event_sdf,
+        lag_profile_sdf=lag_profile_sdf,
+        fused_sdf=fused_sdf,
+        parameter_names=parameter_names,
+        resolved_bands=resolved_bands,
+        tau_max_seconds=lag_tau_max_seconds,
+        lag_min_count=min_lag_count,
+        max_mean_lag_seconds=max_mean_lag_seconds,
+        lag_top_k_outgoing=lag_top_k_outgoing,
+        fusion_spec=FusedGraphSpec(alpha=alpha, beta=beta, gamma=gamma),
+        hierarchy_spec=hierarchy_spec,
     )
     timings_ms["hierarchy_sensitivity"] = round((time.perf_counter() - started) * 1000.0, 3)
     return {
@@ -477,4 +503,3 @@ def build_graph_stage_evaluation_report_spark(
         "hierarchy_sensitivity": hierarchy_sensitivity,
         "evaluation_timing_ms": timings_ms,
     }
-
