@@ -186,7 +186,9 @@ def get_spark(app_name: str) -> "SparkSession":
     os.environ.setdefault("SPARK_LOCAL_HOSTNAME", "localhost")
 
     runtime_config = describe_spark_runtime_config()
-    runtime_config.setdefault("spark.sql.warehouse.dir", os.getenv("S3NTINEL_SPARK_WAREHOUSE_DIR", "/tmp/s3ntinel-spark-warehouse"))
+    runtime_config.setdefault(
+        "spark.sql.warehouse.dir", os.getenv("S3NTINEL_SPARK_WAREHOUSE_DIR", "/tmp/s3ntinel-spark-warehouse")
+    )
     _ensure_spark_local_paths(runtime_config)
 
     builder = SparkSession.builder.appName(app_name)
@@ -231,6 +233,7 @@ def get_spark(app_name: str) -> "SparkSession":
                 pass
 
     return builder.getOrCreate()
+
 
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame, SparkSession
