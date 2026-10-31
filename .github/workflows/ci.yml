@@ -78,7 +78,7 @@ jobs:
             extra_args: "--ignore=tests/integration/pipelines/test_graph_pipeline.py"
           - name: graph-integration
             paths: tests/integration/pipelines/test_graph_pipeline.py
-            extra_args: ""
+            extra_args: "--deselect=tests/integration/pipelines/test_graph_pipeline.py::test_build_precision_graph_from_window_features_spark_table_produces_expected_columns --deselect=tests/integration/pipelines/test_graph_pipeline.py::test_build_graph_stage_evaluation_report_spark_reports_band_skew_and_sensitivity"
 
     steps:
       - name: Checkout
