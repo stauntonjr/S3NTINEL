@@ -64,12 +64,11 @@ jobs:
   test-matrix:
     name: tests (${{ matrix.name }})
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 20
     env:
       PYSPARK_SUBMIT_ARGS: "--driver-memory 2g pyspark-shell"
     strategy:
       fail-fast: false
-      max-parallel: 1
       matrix:
         include:
           - name: unit-contracts
@@ -102,6 +101,6 @@ jobs:
       # Keep all other unit, contract, integration, and regression tests on PRs.
       - name: Run ${{ matrix.name }} tests
         run: |
-          pytest -q ${{ matrix.paths }} \
+          pytest -q -vv --durations=30 --durations-min=1.0 ${{ matrix.paths }} \
             --deselect=tests/contracts/public_api/test_simulation_public_api.py::test_simulation_public_api_runs_end_to_end \
             --deselect=tests/integration/runner/test_sim_runner.py::test_sim_runner_full_smoke_emits_bundle
