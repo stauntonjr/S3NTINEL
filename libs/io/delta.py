@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 
 from libs.perf.annotations import hot_path
 
-
 _SPARK_PROFILE_DEFAULTS: dict[str, dict[str, str]] = {
     "ci_small": {
         "spark.master": "local[2]",
