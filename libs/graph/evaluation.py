@@ -409,19 +409,23 @@ def build_graph_stage_evaluation_report_spark(
     parameter_names = [str(row["parameter_name"]) for row in parameter_universe_df.select("parameter_name").collect()]
     lag_profile_pdf = lag_profile_sdf.toPandas()
 
-    return {
-        "status": "ok",
-        "graph_counts": {
-            "precision_edge_count": int(len(precision_df)),
-            "event_edge_count": int(event_sdf.count()),
-            "lag_profile_edge_count": int(len(lag_profile_pdf)),
-            "lag_edge_count": int(lag_sdf.count()),
-            "transition_edge_count": int(transition_sdf.count()),
-            "fused_edge_count": int(fused_sdf.count()),
-            "parameter_universe_count": len(parameter_names),
-        },
-        "lag_profile_band_skew": _lag_profile_band_skew_report(lag_profile_pdf),
-        "edge_stability": _stability_subset_report(
+    import time
+
+    timings_ms: dict[str, float] = {}
+    started = time.perf_counter()
+    graph_counts = {
+        "precision_edge_count": int(len(precision_df)),
+        "event_edge_count": int(event_sdf.count()),
+        "lag_profile_edge_count": int(len(lag_profile_pdf)),
+        "lag_edge_count": int(lag_sdf.count()),
+        "transition_edge_count": int(transition_sdf.count()),
+        "fused_edge_count": int(fused_sdf.count()),
+        "parameter_universe_count": len(parameter_names),
+    }
+    timings_ms["graph_counts"] = round((time.perf_counter() - started) * 1000.0, 3)
+    started = time.perf_counter()
+    edge_stability = _stability_subset_report(
+
             events_df=events_df,
             windows_df=windows_df,
             window_features_df=window_features_df,
@@ -446,8 +450,10 @@ def build_graph_stage_evaluation_report_spark(
             gamma=gamma,
             max_graph_sensor_universe=max_graph_sensor_universe,
             spec=eval_spec,
-        ),
-        "hierarchy_sensitivity": _hierarchy_sensitivity_report(
+    )
+    timings_ms["edge_stability"] = round((time.perf_counter() - started) * 1000.0, 3)
+    started = time.perf_counter()
+    hierarchy_sensitivity = _hierarchy_sensitivity_report(
             spark=spark,
             precision_pdf=precision_df,
             event_sdf=event_sdf,
@@ -461,7 +467,15 @@ def build_graph_stage_evaluation_report_spark(
             lag_top_k_outgoing=lag_top_k_outgoing,
             fusion_spec=FusedGraphSpec(alpha=alpha, beta=beta, gamma=gamma),
             hierarchy_spec=hierarchy_spec,
-        ),
+    )
+    timings_ms["hierarchy_sensitivity"] = round((time.perf_counter() - started) * 1000.0, 3)
+    return {
+        "status": "ok",
+        "graph_counts": graph_counts,
+        "lag_profile_band_skew": _lag_profile_band_skew_report(lag_profile_pdf),
+        "edge_stability": edge_stability,
+        "hierarchy_sensitivity": hierarchy_sensitivity,
+        "evaluation_timing_ms": timings_ms,
     }
 
 
