@@ -75,6 +75,10 @@ jobs:
             paths: tests/unit tests/contracts
           - name: integration-regression
             paths: tests/integration tests/regression
+            extra_args: "--ignore=tests/integration/pipelines/test_graph_pipeline.py"
+          - name: graph-integration
+            paths: tests/integration/pipelines/test_graph_pipeline.py
+            extra_args: ""
 
     steps:
       - name: Checkout
@@ -101,6 +105,6 @@ jobs:
       # Keep all other unit, contract, integration, and regression tests on PRs.
       - name: Run ${{ matrix.name }} tests
         run: |
-          pytest -q -vv --durations=30 --durations-min=1.0 ${{ matrix.paths }} \
+          pytest -q -vv --durations=30 --durations-min=1.0 ${{ matrix.paths }} ${{ matrix.extra_args }} \
             --deselect=tests/contracts/public_api/test_simulation_public_api.py::test_simulation_public_api_runs_end_to_end \
             --deselect=tests/integration/runner/test_sim_runner.py::test_sim_runner_full_smoke_emits_bundle
