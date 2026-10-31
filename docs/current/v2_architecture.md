@@ -2,6 +2,10 @@
 
 This document describes the active pipeline path at a high level.
 
+For a print- and screen-friendly single-pane view of the implemented V2 system,
+see the [current architecture SVG](s3ntinel_current_architecture.svg). The SVG is
+regenerated with `python tools/render_current_architecture_svg.py`.
+
 For current ownership and implementation names, prefer:
 - [pipelines/README.md](../../pipelines/README.md)
 - [libs/windows/README.md](../../libs/windows/README.md)
