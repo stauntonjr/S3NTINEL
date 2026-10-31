@@ -6,6 +6,7 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from libs.perf.annotations import hot_path
 
@@ -231,8 +232,6 @@ def get_spark(app_name: str) -> "SparkSession":
                 pass
 
     return builder.getOrCreate()
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame, SparkSession
