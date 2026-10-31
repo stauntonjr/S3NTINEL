@@ -28,5 +28,6 @@ jobs:
           pytest -q -vv --durations=30 \
             tests/contracts/public_api/test_simulation_public_api.py::test_simulation_public_api_runs_end_to_end \
             tests/integration/runner/test_sim_runner.py::test_sim_runner_full_smoke_emits_bundle \
+            tests/integration/simulation/test_dataset.py::test_canonical_sim_rows_flow_into_events_windows_and_window_features \
             tests/integration/pipelines/test_graph_pipeline.py::test_build_precision_graph_from_window_features_spark_table_produces_expected_columns \
             tests/integration/pipelines/test_graph_pipeline.py::test_build_graph_stage_evaluation_report_spark_reports_band_skew_and_sensitivity
