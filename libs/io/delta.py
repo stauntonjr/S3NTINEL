@@ -11,6 +11,16 @@ from libs.perf.annotations import hot_path
 
 
 _SPARK_PROFILE_DEFAULTS: dict[str, dict[str, str]] = {
+    "dgx_spark": {
+        "spark.master": "local[8]",
+        "spark.driver.memory": "16g",
+        "spark.driver.maxResultSize": "4g",
+        "spark.sql.shuffle.partitions": "32",
+        "spark.default.parallelism": "16",
+        "spark.sql.adaptive.enabled": "true",
+        "spark.sql.adaptive.coalescePartitions.enabled": "true",
+        "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
+    },
     "laptop_large_sim": {
         "spark.master": "local[4]",
         "spark.driver.memory": "8g",
