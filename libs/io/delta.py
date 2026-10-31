@@ -11,6 +11,12 @@ from libs.perf.annotations import hot_path
 
 
 _SPARK_PROFILE_DEFAULTS: dict[str, dict[str, str]] = {
+    "ci_small": {
+        "spark.master": "local[2]",
+        "spark.driver.memory": "2g",
+        "spark.sql.shuffle.partitions": "8",
+        "spark.default.parallelism": "8",
+    },
     "dgx_spark": {
         "spark.master": "local[8]",
         "spark.driver.memory": "16g",
