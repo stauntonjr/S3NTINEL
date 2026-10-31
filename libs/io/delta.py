@@ -6,11 +6,27 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from libs.perf.annotations import hot_path
 
-
 _SPARK_PROFILE_DEFAULTS: dict[str, dict[str, str]] = {
+    "ci_small": {
+        "spark.master": "local[2]",
+        "spark.driver.memory": "2g",
+        "spark.sql.shuffle.partitions": "8",
+        "spark.default.parallelism": "8",
+    },
+    "dgx_spark": {
+        "spark.master": "local[8]",
+        "spark.driver.memory": "16g",
+        "spark.driver.maxResultSize": "4g",
+        "spark.sql.shuffle.partitions": "32",
+        "spark.default.parallelism": "16",
+        "spark.sql.adaptive.enabled": "true",
+        "spark.sql.adaptive.coalescePartitions.enabled": "true",
+        "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
+    },
     "laptop_large_sim": {
         "spark.master": "local[4]",
         "spark.driver.memory": "8g",
@@ -170,7 +186,9 @@ def get_spark(app_name: str) -> "SparkSession":
     os.environ.setdefault("SPARK_LOCAL_HOSTNAME", "localhost")
 
     runtime_config = describe_spark_runtime_config()
-    runtime_config.setdefault("spark.sql.warehouse.dir", os.getenv("S3NTINEL_SPARK_WAREHOUSE_DIR", "/tmp/s3ntinel-spark-warehouse"))
+    runtime_config.setdefault(
+        "spark.sql.warehouse.dir", os.getenv("S3NTINEL_SPARK_WAREHOUSE_DIR", "/tmp/s3ntinel-spark-warehouse")
+    )
     _ensure_spark_local_paths(runtime_config)
 
     builder = SparkSession.builder.appName(app_name)
@@ -216,7 +234,6 @@ def get_spark(app_name: str) -> "SparkSession":
 
     return builder.getOrCreate()
 
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame, SparkSession

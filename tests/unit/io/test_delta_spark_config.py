@@ -62,3 +62,13 @@ def test_describe_spark_runtime_config_allows_explicit_env_overrides():
 def test_describe_spark_runtime_config_rejects_unknown_profile():
     with pytest.raises(ValueError, match="unsupported S3NTINEL_SPARK_PROFILE"):
         describe_spark_runtime_config({"S3NTINEL_SPARK_PROFILE": "does_not_exist"})
+
+
+def test_explicit_ci_and_dgx_profiles_are_distinct():
+    ci = describe_spark_runtime_config({"S3NTINEL_SPARK_PROFILE": "ci_small"})
+    dgx = describe_spark_runtime_config({"S3NTINEL_SPARK_PROFILE": "dgx_spark"})
+    assert ci["spark.master"] == "local[2]"
+    assert ci["spark.driver.memory"] == "2g"
+    assert dgx["spark.master"] == "local[8]"
+    assert dgx["spark.driver.memory"] == "16g"
+    assert dgx["spark.sql.shuffle.partitions"] == "32"

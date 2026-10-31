@@ -10,6 +10,7 @@ jobs:
     env:
       PYSPARK_SUBMIT_ARGS: "--driver-memory 2g pyspark-shell"
       PYTHONUNBUFFERED: "1"
+      S3NTINEL_SPARK_PROFILE: "ci_small"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
