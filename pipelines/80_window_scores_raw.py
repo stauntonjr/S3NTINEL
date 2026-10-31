@@ -10,8 +10,8 @@ from libs.perf import (
     build_artifact_manifest,
     build_stage_manifest,
     get_logger,
-    log_memory_usage,
     log_dict_artifact_if_active,
+    log_memory_usage,
     log_stage_manifest_if_active,
     log_wall_time,
     track_mlflow_run,
@@ -21,7 +21,6 @@ from libs.profiling import ParameterBehaviorProfile
 from libs.scoring import WindowScoresRawTable
 from libs.windows import WindowsTable
 from pipelines.common import build_stage_runtime
-
 
 LOGGER = get_logger(__name__)
 _SCORE_ARTIFACT_PARTITION_BY: tuple[str, ...] = ()
