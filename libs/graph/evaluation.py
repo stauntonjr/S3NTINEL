@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import pandas as pd
 
@@ -478,6 +478,3 @@ def build_graph_stage_evaluation_report_spark(
         "evaluation_timing_ms": timings_ms,
     }
 
-
-if TYPE_CHECKING:
-    from pyspark.sql import DataFrame
