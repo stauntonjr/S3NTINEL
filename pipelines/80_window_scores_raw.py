@@ -1,6 +1,8 @@
 # File: pipelines/80_window_scores_raw.py
 """Build raw window scores from phase windows and phase baselines."""
 
+import time
+
 from libs.events import EventsTable, ParameterEventProfile
 from libs.graph.tables import HierarchySensorMapTable
 from libs.io.delta import get_spark
@@ -8,8 +10,8 @@ from libs.perf import (
     build_artifact_manifest,
     build_stage_manifest,
     get_logger,
-    log_memory_usage,
     log_dict_artifact_if_active,
+    log_memory_usage,
     log_stage_manifest_if_active,
     log_wall_time,
     track_mlflow_run,
@@ -20,9 +22,9 @@ from libs.scoring import WindowScoresRawTable
 from libs.windows import WindowsTable
 from pipelines.common import build_stage_runtime
 
-
 LOGGER = get_logger(__name__)
 _SCORE_ARTIFACT_PARTITION_BY: tuple[str, ...] = ()
+
 
 @track_mlflow_run(stage_name="80_window_scores_raw", logger=LOGGER)
 @log_memory_usage(logger=LOGGER, label="80_window_scores_raw")
@@ -52,6 +54,8 @@ def run() -> None:
         format=table_format,
     )
     parameter_event_profile = ParameterEventProfile.read(spark, parameter_event_profile_path, format=table_format)
+    started = time.perf_counter()
+    LOGGER.info("stage80_step_start step=score_plan")
     scores = WindowScoresRawTable.from_phase_tables(
         phase_windows,
         phase_baselines,
@@ -65,13 +69,19 @@ def run() -> None:
         format=table_format,
         partition_by=_SCORE_ARTIFACT_PARTITION_BY,
     )
+    LOGGER.info("stage80_step_end step=score_plan elapsed_ms=%.1f", (time.perf_counter() - started) * 1000.0)
+    started = time.perf_counter()
+    LOGGER.info("stage80_step_start step=score_write")
     scores.write(mode=write_mode)
+    LOGGER.info("stage80_step_end step=score_write elapsed_ms=%.1f", (time.perf_counter() - started) * 1000.0)
     scores = WindowScoresRawTable.read(
         spark,
         scores_path,
         format=table_format,
         partition_by=_SCORE_ARTIFACT_PARTITION_BY,
     )
+    started = time.perf_counter()
+    LOGGER.info("stage80_step_start step=artifact_counts")
     scores_count = int(scores.to_dataframe().count())
     phase_windows_count = int(phase_windows.to_dataframe().count())
     phase_baselines_count = int(phase_baselines.to_dataframe().count())
@@ -80,6 +90,9 @@ def run() -> None:
     events_count = int(events.to_dataframe().count())
     parameter_behavior_profile_count = int(parameter_behavior_profile.to_dataframe().count())
     parameter_event_profile_count = int(parameter_event_profile.to_dataframe().count())
+    LOGGER.info("stage80_step_end step=artifact_counts elapsed_ms=%.1f", (time.perf_counter() - started) * 1000.0)
+    started = time.perf_counter()
+    LOGGER.info("stage80_step_start step=manifest")
     log_dict_artifact_if_active(
         {
             "stage": "80_window_scores_raw",
@@ -158,6 +171,7 @@ def run() -> None:
         ],
     )
     log_stage_manifest_if_active(stage_manifest, runtime.report_paths.manifest_artifact_path)
+    LOGGER.info("stage80_step_end step=manifest elapsed_ms=%.1f", (time.perf_counter() - started) * 1000.0)
     LOGGER.info(
         "pipeline=window_scores_raw format=%s write_mode=%s phase_windows=%s events=%s window_scores_raw=%s",
         table_format,
