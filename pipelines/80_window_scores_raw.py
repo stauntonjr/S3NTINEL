@@ -25,6 +25,7 @@ from pipelines.common import build_stage_runtime
 LOGGER = get_logger(__name__)
 _SCORE_ARTIFACT_PARTITION_BY: tuple[str, ...] = ()
 
+
 @track_mlflow_run(stage_name="80_window_scores_raw", logger=LOGGER)
 @log_memory_usage(logger=LOGGER, label="80_window_scores_raw")
 @log_wall_time(logger=LOGGER)
