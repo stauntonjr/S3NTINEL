@@ -16,8 +16,8 @@ from libs.perf import (
     build_artifact_manifest,
     build_stage_manifest,
     get_logger,
-    log_memory_usage,
     log_dict_artifact_if_active,
+    log_memory_usage,
     log_params_if_active,
     log_stage_manifest_if_active,
     log_wall_time,
@@ -26,15 +26,15 @@ from libs.perf import (
 from libs.windows import WindowFeaturesTable
 from pipelines.common import build_stage_runtime, require_artifact_path
 
-
 LOGGER = get_logger(__name__)
+
 
 @track_mlflow_run(stage_name="40_backbone_fit", logger=LOGGER)
 @log_memory_usage(logger=LOGGER, label="40_backbone_fit")
 @log_wall_time(logger=LOGGER)
 def run() -> None:
-    from pyspark.sql import functions as F
     from pyspark import StorageLevel
+    from pyspark.sql import functions as F
 
     runtime = build_stage_runtime("40_backbone_fit")
     context = runtime.context
@@ -67,35 +67,58 @@ def run() -> None:
     events_count = int(events_df.count())
     windows_count = int(windows_df.count())
     scaling_profile_count = int(scaling_profile_df.count())
+    if windows_count == 0:
+        raise ValueError(
+            f"Cannot fit backbone: no adaptive windows (raw_rows={raw_count}, events={events_count}). "
+            "Use a longer simulation horizon or inspect event extraction and window policy; "
+            "an empty training set cannot produce a backbone model."
+        )
 
-    window_features_df = WindowFeaturesTable.from_raw_events_and_windows(
-        raw_df,
-        events_df,
-        windows_df,
-        scaling_profile_df=scaling_profile_df,
-    ).to_dataframe().persist(
-        StorageLevel.MEMORY_AND_DISK
+    window_features_df = (
+        WindowFeaturesTable.from_raw_events_and_windows(
+            raw_df,
+            events_df,
+            windows_df,
+            scaling_profile_df=scaling_profile_df,
+        )
+        .to_dataframe()
+        .persist(StorageLevel.MEMORY_AND_DISK)
     )
     try:
         window_features_count = int(window_features_df.count())
 
-        energy_sdf = BackboneSensorEnergyTable.from_window_features(
-            window_features_df,
-            event_prior_alpha=float(backbone_event_prior_alpha),
-        ).to_dataframe().persist(StorageLevel.MEMORY_AND_DISK)
+        energy_sdf = (
+            BackboneSensorEnergyTable.from_window_features(
+                window_features_df,
+                event_prior_alpha=float(backbone_event_prior_alpha),
+            )
+            .to_dataframe()
+            .persist(StorageLevel.MEMORY_AND_DISK)
+        )
         try:
             sensor_energy_count = int(energy_sdf.count())
-            selected_sensors_c = select_backbone_sensors_by_energy_spark(energy_sdf, k=max(int(backbone_sensor_count), 1))
-            selected_sensor_frame_df = BackboneSelectedSensorFrame.from_window_features(
-                window_features_df,
-                selected_sensors=selected_sensors_c,
-            ).to_dataframe().persist(StorageLevel.MEMORY_AND_DISK)
-            try:
-                g_row = BackboneGramFrame.from_window_features(
+            selected_sensors_c = select_backbone_sensors_by_energy_spark(
+                energy_sdf, k=max(int(backbone_sensor_count), 1)
+            )
+            selected_sensor_frame_df = (
+                BackboneSelectedSensorFrame.from_window_features(
                     window_features_df,
                     selected_sensors=selected_sensors_c,
-                    selected_sensor_frame_df=selected_sensor_frame_df,
-                ).to_dataframe().first().asDict()
+                )
+                .to_dataframe()
+                .persist(StorageLevel.MEMORY_AND_DISK)
+            )
+            try:
+                g_row = (
+                    BackboneGramFrame.from_window_features(
+                        window_features_df,
+                        selected_sensors=selected_sensors_c,
+                        selected_sensor_frame_df=selected_sensor_frame_df,
+                    )
+                    .to_dataframe()
+                    .first()
+                    .asDict()
+                )
                 sensor_rows = (
                     BackboneCrossTermFrame.from_window_features(
                         window_features_df,

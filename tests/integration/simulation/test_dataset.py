@@ -6,6 +6,7 @@ import pandas as pd
 
 from libs.events import EventDetectionPlan
 from libs.events.continuous import ContinuousDetectorConfig, ContinuousEventDetector
+from libs.io.delta import read_table, write_table
 from libs.io.pandas_spark import pandas_records_for_spark
 from libs.io.schemas import SIMULATION_RAW_INPUT_SCHEMA
 from libs.io.transforms import normalize_raw_telemetry
@@ -148,7 +149,7 @@ def test_composite_flight_emits_fault_truth_metadata():
     assert misbehavior_rows["coupling_id_label"].fillna("").astype(str).str.len().max() > 0
 
 
-def test_canonical_sim_rows_flow_into_events_windows_and_window_features(spark):
+def test_canonical_sim_rows_flow_into_events_windows_and_window_features(spark, tmp_path):
     raw_rows, _phase_rows = _build_flight(
         flight_name="pressurization",
         tail_id="TSTRUC",
@@ -164,6 +165,9 @@ def test_canonical_sim_rows_flow_into_events_windows_and_window_features(spark):
         schema=SIMULATION_RAW_INPUT_SCHEMA(),
     )
     normalized_raw_sdf = normalize_raw_telemetry(raw_sdf)
+    raw_path = str(tmp_path / "raw_telemetry")
+    write_table(normalized_raw_sdf, path=raw_path, fmt="parquet", mode="overwrite")
+    normalized_raw_sdf = read_table(spark, raw_path, fmt="parquet")
     events_sdf = (
         EventDetectionPlan(
             continuous_detector=ContinuousEventDetector(
@@ -173,6 +177,11 @@ def test_canonical_sim_rows_flow_into_events_windows_and_window_features(spark):
         .build(normalized_raw_sdf)
         .events.to_dataframe()
     )
+    # Match the runner's persisted stage boundaries instead of duplicating the
+    # complete detector/window lineage inside the feature plan's joins.
+    events_path = str(tmp_path / "events")
+    write_table(events_sdf, path=events_path, fmt="parquet", mode="overwrite")
+    events_sdf = read_table(spark, events_path, fmt="parquet")
     windows_sdf = WindowsTable.from_events(
         events_sdf,
         max_ms=10000,
@@ -181,6 +190,9 @@ def test_canonical_sim_rows_flow_into_events_windows_and_window_features(spark):
         inactivity_timeout_ms=0,
         strategy="segmented",
     ).to_dataframe()
+    windows_path = str(tmp_path / "windows")
+    write_table(windows_sdf, path=windows_path, fmt="parquet", mode="overwrite")
+    windows_sdf = read_table(spark, windows_path, fmt="parquet")
     window_features_sdf = WindowFeaturesTable.from_raw_events_and_windows(
         normalized_raw_sdf,
         events_sdf,
@@ -190,8 +202,19 @@ def test_canonical_sim_rows_flow_into_events_windows_and_window_features(spark):
     assert events_sdf.count() > 0
     assert windows_sdf.count() > 0
     assert window_features_sdf.count() > 0
-    assert {"tail_id", "flight_id", "event_seq_id", "timestamp_utc", "parameter_name", "event_type_detected"}.issubset(events_sdf.columns)
-    assert {"tail_id", "flight_id", "win_id", "event_count", "sensor_count", "event_type_counts", "zoh_snapshot", "close_reason"}.issubset(windows_sdf.columns)
+    assert {"tail_id", "flight_id", "event_seq_id", "timestamp_utc", "parameter_name", "event_type_detected"}.issubset(
+        events_sdf.columns
+    )
+    assert {
+        "tail_id",
+        "flight_id",
+        "win_id",
+        "event_count",
+        "sensor_count",
+        "event_type_counts",
+        "zoh_snapshot",
+        "close_reason",
+    }.issubset(windows_sdf.columns)
     assert {"tail_id", "flight_id", "win_id", "continuous_vector_t_end", "categorical_state_t_end"}.issubset(
         window_features_sdf.columns
     )

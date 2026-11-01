@@ -1,13 +1,95 @@
+import sys
+from dataclasses import replace
 from pathlib import Path
+
+import pytest
 
 from libs.simulation.cli import resolve_flight
 from libs.simulation.reference_inference import (
     REFERENCE_ARTIFACT_NAMES,
     nominal_companion_flight,
     reset_spark_between_runs,
+    run_paired_reference_inference,
     stage_reference_artifacts,
 )
-from libs.simulation.run_context import MODE_PLAN_BY_NAME, RunPaths
+from libs.simulation.run_cli import parse_args
+from libs.simulation.run_context import MODE_PLAN_BY_NAME, PipelineRunConfig, RunPaths
+
+
+@pytest.mark.parametrize("n_steps", [6, 180])
+def test_paired_run_rejects_horizon_before_first_fault_without_starting_spark(tmp_path, monkeypatch, n_steps):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "run_sim_reference_inference",
+            "--flight-name",
+            "power_pressurization_hierarchy_composite",
+            "--sim-seed",
+            "17",
+            "--n-steps",
+            str(n_steps),
+            "--base-dir",
+            str(tmp_path / "pair"),
+        ],
+    )
+    config = PipelineRunConfig.from_args(parse_args())
+
+    def unexpected_pipeline(*args, **kwargs):
+        pytest.fail("Invalid paired horizon must be rejected before pipeline execution")
+
+    monkeypatch.setattr("libs.simulation.reference_inference.run_pipeline", unexpected_pipeline)
+
+    with pytest.raises(ValueError, match="first authored fault.*180"):
+        run_paired_reference_inference(config)
+
+    assert not (tmp_path / "pair").exists()
+
+
+@pytest.mark.parametrize("n_steps, expected_steps", [(None, 3360), (181, 181), (600, 600)])
+def test_paired_run_accepts_fault_inclusive_horizon_and_resolves_preset_cadence(monkeypatch, n_steps, expected_steps):
+    argv = [
+        "run_sim_reference_inference",
+        "--flight-name",
+        "power_pressurization_hierarchy_composite",
+        "--sim-seed",
+        "17",
+    ]
+    if n_steps is not None:
+        argv.extend(["--n-steps", str(n_steps)])
+    monkeypatch.setattr(sys, "argv", argv)
+    config = PipelineRunConfig.from_args(parse_args())
+
+    class PipelineReached(Exception):
+        pass
+
+    def start_reference(resolved, *, flight_spec):
+        raise PipelineReached(resolved)
+
+    monkeypatch.setattr("libs.simulation.reference_inference.run_pipeline", start_reference)
+    with pytest.raises(PipelineReached) as reached:
+        run_paired_reference_inference(config)
+
+    resolved = reached.value.args[0]
+    assert resolved.n_steps == expected_steps
+    assert resolved.dt_seconds == 0.5
+
+
+def test_paired_run_accepts_flight_without_authored_fault_program(monkeypatch):
+    flight = replace(resolve_flight("power_chain"), misbehavior_program_spec=None, fault_program_spec=None)
+    monkeypatch.setattr(sys, "argv", ["run_sim_reference_inference", "--flight-name", "power_chain"])
+    config = PipelineRunConfig.from_args(parse_args())
+    monkeypatch.setattr("libs.simulation.cli.resolve_flight", lambda *args, **kwargs: flight)
+
+    class PipelineReached(Exception):
+        pass
+
+    def start_reference(resolved, *, flight_spec):
+        raise PipelineReached()
+
+    monkeypatch.setattr("libs.simulation.reference_inference.run_pipeline", start_reference)
+    with pytest.raises(PipelineReached):
+        run_paired_reference_inference(config)
 
 
 def test_nominal_companion_removes_misbehavior_without_changing_topology():
@@ -41,9 +123,7 @@ def test_reference_artifact_inventory_excludes_observations_and_inference_output
     }
 
     assert not (set(REFERENCE_ARTIFACT_NAMES) & forbidden)
-    assert {"continuous_scaling_profile", "backbone", "phase_reference_model"}.issubset(
-        REFERENCE_ARTIFACT_NAMES
-    )
+    assert {"continuous_scaling_profile", "backbone", "phase_reference_model"}.issubset(REFERENCE_ARTIFACT_NAMES)
 
 
 def test_stage_reference_artifacts_copies_only_declared_model_artifacts(tmp_path: Path):
