@@ -10,6 +10,7 @@ jobs:
     env:
       PYSPARK_SUBMIT_ARGS: "--driver-memory 2g pyspark-shell"
       PYTHONUNBUFFERED: "1"
+      S3NTINEL_STAGE80_EXPLAIN: "1"
       S3NTINEL_SPARK_PROFILE: "ci_small"
     steps:
       - uses: actions/checkout@v4
@@ -23,6 +24,9 @@ jobs:
           cache: pip
       - name: Install dependencies
         run: pip install -e .[dev,spark]
+      - name: Verify bounded GitHub runner profile
+        run: |
+          python -c 'import os; from libs.io.delta import describe_spark_runtime_config; p=os.environ.get("S3NTINEL_SPARK_PROFILE"); c=describe_spark_runtime_config(); print("profile=",p,"master=",c["spark.master"],"driver=",c["spark.driver.memory"]); assert p=="ci_small" and c["spark.master"]=="local[2]" and c["spark.driver.memory"]=="2g", "Refusing heavyweight or unexpected profile on GitHub runner"'
       - name: Identify stalled full-pipeline test and preserve logs
         run: |
           pytest -vv -s --log-cli-level=INFO --durations=0 \
