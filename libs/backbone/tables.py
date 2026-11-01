@@ -26,9 +26,9 @@ class BackboneSelectedSensorFrame(Frame):
             dataframe=window_feature_df.select(
                 *key_columns,
                 *[
-                    F.coalesce(F.element_at("continuous_vector_t_end_scaled", F.lit(sensor)).cast("double"), F.lit(0.0)).alias(
-                        f"x_{idx}"
-                    )
+                    F.coalesce(
+                        F.element_at("continuous_vector_t_end_scaled", F.lit(sensor)).cast("double"), F.lit(0.0)
+                    ).alias(f"x_{idx}")
                     for idx, sensor in enumerate(backbone_sensors)
                 ],
             )
@@ -59,23 +59,33 @@ class BackboneSensorEnergyTable(Table):
                 F.col("entry.key").cast("string").alias("parameter_name"),
                 F.col("entry.value").cast("double").alias("scaled_value"),
                 F.coalesce(
-                    F.element_at(F.col("continuous_event_summary.slope_abs_impulse_by_parameter"), F.col("entry.key")).cast("double"),
+                    F.element_at(
+                        F.col("continuous_event_summary.slope_abs_impulse_by_parameter"), F.col("entry.key")
+                    ).cast("double"),
                     F.lit(0.0),
                 ).alias("slope_abs_impulse"),
                 F.coalesce(
-                    F.element_at(F.col("continuous_event_summary.switch_count_by_parameter"), F.col("entry.key")).cast("double"),
+                    F.element_at(F.col("continuous_event_summary.switch_count_by_parameter"), F.col("entry.key")).cast(
+                        "double"
+                    ),
                     F.lit(0.0),
                 ).alias("switch_count"),
                 F.coalesce(
-                    F.element_at(F.col("continuous_event_summary.threshold_count_by_parameter"), F.col("entry.key")).cast("double"),
+                    F.element_at(
+                        F.col("continuous_event_summary.threshold_count_by_parameter"), F.col("entry.key")
+                    ).cast("double"),
                     F.lit(0.0),
                 ).alias("threshold_count"),
                 F.coalesce(
-                    F.element_at(F.col("continuous_event_summary.oscillation_count_by_parameter"), F.col("entry.key")).cast("double"),
+                    F.element_at(
+                        F.col("continuous_event_summary.oscillation_count_by_parameter"), F.col("entry.key")
+                    ).cast("double"),
                     F.lit(0.0),
                 ).alias("oscillation_count"),
                 F.coalesce(
-                    F.element_at(F.col("continuous_event_summary.drift_guard_count_by_parameter"), F.col("entry.key")).cast("double"),
+                    F.element_at(
+                        F.col("continuous_event_summary.drift_guard_count_by_parameter"), F.col("entry.key")
+                    ).cast("double"),
                     F.lit(0.0),
                 ).alias("drift_guard_count"),
                 F.coalesce(
@@ -88,25 +98,29 @@ class BackboneSensorEnergyTable(Table):
             )
             .where(F.col("parameter_name").isNotNull() & F.col("scaled_value").isNotNull())
         )
-        energy_df = vector_entries.groupBy("parameter_name").agg(
-            F.sum(F.col("scaled_value") * F.col("scaled_value")).cast("double").alias("energy"),
-            F.count(F.lit(1)).cast("int").alias("support_count"),
-            F.sum(F.col("slope_abs_impulse")).cast("double").alias("slope_abs_impulse_total"),
-            F.sum(F.col("switch_count")).cast("double").alias("switch_count_total"),
-            F.sum(F.col("threshold_count")).cast("double").alias("threshold_count_total"),
-            F.sum(F.col("oscillation_count")).cast("double").alias("oscillation_count_total"),
-            F.sum(F.col("drift_guard_count")).cast("double").alias("drift_guard_count_total"),
-            F.sum(F.col("slope_reinforcement_count")).cast("double").alias("slope_reinforcement_count_total"),
-        ).withColumn(
-            "event_prior",
-            F.log1p(F.greatest(F.col("slope_abs_impulse_total"), F.lit(0.0)))
-            + (F.lit(0.75) * F.log1p(F.greatest(F.col("switch_count_total"), F.lit(0.0))))
-            + (
-                F.lit(0.5)
-                * F.log1p(F.greatest(F.col("threshold_count_total") + F.col("oscillation_count_total"), F.lit(0.0)))
+        energy_df = (
+            vector_entries.groupBy("parameter_name")
+            .agg(
+                F.sum(F.col("scaled_value") * F.col("scaled_value")).cast("double").alias("energy"),
+                F.count(F.lit(1)).cast("int").alias("support_count"),
+                F.sum(F.col("slope_abs_impulse")).cast("double").alias("slope_abs_impulse_total"),
+                F.sum(F.col("switch_count")).cast("double").alias("switch_count_total"),
+                F.sum(F.col("threshold_count")).cast("double").alias("threshold_count_total"),
+                F.sum(F.col("oscillation_count")).cast("double").alias("oscillation_count_total"),
+                F.sum(F.col("drift_guard_count")).cast("double").alias("drift_guard_count_total"),
+                F.sum(F.col("slope_reinforcement_count")).cast("double").alias("slope_reinforcement_count_total"),
             )
-            + (F.lit(0.25) * F.log1p(F.greatest(F.col("drift_guard_count_total"), F.lit(0.0))))
-            + (F.lit(0.25) * F.log1p(F.greatest(F.col("slope_reinforcement_count_total"), F.lit(0.0)))),
+            .withColumn(
+                "event_prior",
+                F.log1p(F.greatest(F.col("slope_abs_impulse_total"), F.lit(0.0)))
+                + (F.lit(0.75) * F.log1p(F.greatest(F.col("switch_count_total"), F.lit(0.0))))
+                + (
+                    F.lit(0.5)
+                    * F.log1p(F.greatest(F.col("threshold_count_total") + F.col("oscillation_count_total"), F.lit(0.0)))
+                )
+                + (F.lit(0.25) * F.log1p(F.greatest(F.col("drift_guard_count_total"), F.lit(0.0))))
+                + (F.lit(0.25) * F.log1p(F.greatest(F.col("slope_reinforcement_count_total"), F.lit(0.0)))),
+            )
         )
         stats_df = energy_df.agg(
             F.avg(F.log1p(F.col("energy"))).cast("double").alias("energy_log_mean"),
@@ -159,17 +173,18 @@ class BackboneGramFrame(Frame):
         from pyspark.sql import functions as F
 
         backbone_sensors = [str(item) for item in selected_sensors if str(item)]
-        base = selected_sensor_frame_df or BackboneSelectedSensorFrame.from_window_features(
-            window_feature_df,
-            selected_sensors=backbone_sensors,
-        ).to_dataframe()
+        base = (
+            selected_sensor_frame_df
+            or BackboneSelectedSensorFrame.from_window_features(
+                window_feature_df,
+                selected_sensors=backbone_sensors,
+            ).to_dataframe()
+        )
         aggregations = [F.count(F.lit(1)).cast("long").alias("window_count")]
         for i in range(len(backbone_sensors)):
             for j in range(len(backbone_sensors)):
                 aggregations.append((F.sum(F.col(f"x_{i}") * F.col(f"x_{j}")).cast("double")).alias(f"g_{i}_{j}"))
-        return cls(
-            dataframe=base.agg(*aggregations)
-        )
+        return cls(dataframe=base.agg(*aggregations))
 
 
 @dataclass(frozen=True)
@@ -185,18 +200,25 @@ class BackboneCrossTermFrame(Frame):
         from pyspark.sql import functions as F
 
         backbone_sensors = [str(item) for item in selected_sensors if str(item)]
-        key_columns = ["tail_id", "flight_id", "win_id"]
-        base = selected_sensor_frame_df or BackboneSelectedSensorFrame.from_window_features(
-            window_feature_df,
-            selected_sensors=backbone_sensors,
-        ).to_dataframe()
-        exploded = (
-            window_feature_df.select(*key_columns, F.explode_outer(F.map_entries("continuous_vector_t_end_scaled")).alias("entry"))
-            .select(
-                *key_columns,
-                F.col("entry.key").cast("string").alias("parameter_name"),
-                F.col("entry.value").cast("double").alias("scaled_value"),
+        if not backbone_sensors:
+            raise ValueError(
+                "Backbone cross terms require at least one selected continuous sensor; "
+                "check that adaptive windows contain continuous observations."
             )
+        key_columns = ["tail_id", "flight_id", "win_id"]
+        base = (
+            selected_sensor_frame_df
+            or BackboneSelectedSensorFrame.from_window_features(
+                window_feature_df,
+                selected_sensors=backbone_sensors,
+            ).to_dataframe()
+        )
+        exploded = window_feature_df.select(
+            *key_columns, F.explode_outer(F.map_entries("continuous_vector_t_end_scaled")).alias("entry")
+        ).select(
+            *key_columns,
+            F.col("entry.key").cast("string").alias("parameter_name"),
+            F.col("entry.value").cast("double").alias("scaled_value"),
         )
         joined = base.join(exploded, on=key_columns, how="inner")
         aggregations = [
@@ -209,7 +231,9 @@ class BackboneCrossTermFrame(Frame):
             .agg(*aggregations)
             .select(
                 "parameter_name",
-                F.array(*[F.coalesce(F.col(f"h_{idx}"), F.lit(0.0)) for idx in range(len(backbone_sensors))]).alias("h_vector_c"),
+                F.array(*[F.coalesce(F.col(f"h_{idx}"), F.lit(0.0)) for idx in range(len(backbone_sensors))]).alias(
+                    "h_vector_c"
+                ),
             )
             .orderBy("parameter_name")
         )

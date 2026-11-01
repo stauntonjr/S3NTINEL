@@ -14,7 +14,6 @@ from libs.simulation.fault.examples import build_no_misbehavior_program_spec
 from libs.simulation.run_context import PipelineRunConfig, PipelineRunResult, RunPaths
 from libs.simulation.runner import run_pipeline
 
-
 REFERENCE_ARTIFACT_NAMES = (
     "parameter_datatype_profile",
     "continuous_scaling_profile",
@@ -185,9 +184,7 @@ def _score_comparison(spark, *, self_paths: RunPaths, reference_inference_paths:
         self_fit_window_count=int(self_df.count()),
         reference_inference_window_count=int(reference_df.count()),
         self_fit_emit_ready_count=int(self_df.where(F.col("emit_ready") == F.lit(True)).count()),
-        reference_inference_emit_ready_count=int(
-            reference_df.where(F.col("emit_ready") == F.lit(True)).count()
-        ),
+        reference_inference_emit_ready_count=int(reference_df.where(F.col("emit_ready") == F.lit(True)).count()),
     )
 
 
@@ -234,9 +231,7 @@ def _candidate_comparison(spark, *, self_paths: RunPaths, reference_inference_pa
         ),
         structural_cut_change_count=int(
             matched_df.where(
-                ~F.col("self_structural_cut_retained").eqNullSafe(
-                    F.col("reference_structural_cut_retained")
-                )
+                ~F.col("self_structural_cut_retained").eqNullSafe(F.col("reference_structural_cut_retained"))
             ).count()
         ),
     )
@@ -281,6 +276,18 @@ def run_paired_reference_inference(config: PipelineRunConfig) -> PairedReference
     from libs.simulation.cli import resolve_flight
 
     faulted_flight = resolve_flight(config.flight_name, sim_seed=config.sim_seed)
+    config = config.with_flight_defaults(flight=faulted_flight)
+    fault_program = faulted_flight.misbehavior_program_spec
+    fault_windows = fault_program.windows if fault_program is not None else ()
+    if fault_windows and not any(
+        window.start_step < config.n_steps and window.end_step_exclusive > 0 for window in fault_windows
+    ):
+        first_fault_step = min(window.start_step for window in fault_windows)
+        raise ValueError(
+            f"Paired reference inference with n_steps={config.n_steps} ends before the "
+            f"first authored fault at step {first_fault_step}. Use the flight preset's "
+            "default mission length (omit --n-steps), or a horizon that includes faulted observations."
+        )
     nominal_flight = nominal_companion_flight(faulted_flight)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     pair_dir = Path(config.base_dir) / f"{timestamp}_{config.flight_name}_reference_comparison"

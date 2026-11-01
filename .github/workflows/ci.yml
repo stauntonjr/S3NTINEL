@@ -75,7 +75,7 @@ jobs:
             paths: tests/unit tests/contracts
           - name: integration-regression
             paths: tests/integration tests/regression
-            extra_args: "--ignore=tests/integration/pipelines/test_graph_pipeline.py --deselect=tests/integration/simulation/test_dataset.py::test_canonical_sim_rows_flow_into_events_windows_and_window_features"
+            extra_args: "--ignore=tests/integration/pipelines/test_graph_pipeline.py"
           - name: graph-integration
             paths: tests/integration/pipelines/test_graph_pipeline.py
             extra_args: "--deselect=tests/integration/pipelines/test_graph_pipeline.py::test_build_precision_graph_from_window_features_spark_table_produces_expected_columns --deselect=tests/integration/pipelines/test_graph_pipeline.py::test_build_graph_stage_evaluation_report_spark_reports_band_skew_and_sensitivity"
