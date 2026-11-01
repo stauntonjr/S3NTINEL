@@ -1,7 +1,6 @@
 # File: pipelines/80_window_scores_raw.py
 """Build raw window scores from phase windows and phase baselines."""
 
-import os
 import time
 
 from libs.events import EventsTable, ParameterEventProfile
@@ -73,17 +72,6 @@ def run() -> None:
     LOGGER.info("stage80_step_end step=score_plan elapsed_ms=%.1f", (time.perf_counter() - started) * 1000.0)
     started = time.perf_counter()
     LOGGER.info("stage80_step_start step=score_write")
-    if os.getenv("S3NTINEL_STAGE80_EXPLAIN", "0") == "1":
-        LOGGER.info(
-            "stage80_spark_runtime profile=%s master=%s driver_memory=%s shuffle_partitions=%s",
-            os.getenv("S3NTINEL_SPARK_PROFILE", "<unset>"),
-            spark.sparkContext.master,
-            spark.sparkContext.getConf().get("spark.driver.memory", "<unset>"),
-            spark.conf.get("spark.sql.shuffle.partitions"),
-        )
-        LOGGER.info("stage80_physical_plan_start")
-        scores.to_dataframe().explain(mode="simple")
-        LOGGER.info("stage80_physical_plan_end")
     scores.write(mode=write_mode)
     LOGGER.info("stage80_step_end step=score_write elapsed_ms=%.1f", (time.perf_counter() - started) * 1000.0)
     scores = WindowScoresRawTable.read(
