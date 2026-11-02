@@ -86,3 +86,8 @@ sensitivity, and actual source examples must accompany any result. Surprise
 is not root-cause evidence. Recoverability-tier localization, uncovered fault
 families, Spark integration, entropy coding, and scale remain separate gates;
 PR #57 remains draft even after a technically complete pilot.
+
+The [November 2 simulator validation](simulator_conditional_information_validation.md)
+records the completed 16-mission pilot: conditional code length improved on
+held-out seeds, but the observed false-alert rates exceeded the 1% calibration
+target. This is not a promotion or production-readiness pass.

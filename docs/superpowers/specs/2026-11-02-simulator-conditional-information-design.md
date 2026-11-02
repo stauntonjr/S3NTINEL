@@ -1,6 +1,8 @@
 # Simulator conditional-information pilot
 
-Status: approved by the user on November 2, 2026. No evaluation has run.
+Status: approved by the user on November 2, 2026. Execution evidence is recorded
+in [simulator validation](../../research/simulator_conditional_information_validation.md);
+the frozen protocol below was not retuned after evaluation.
 
 ## Intent and scope
 
