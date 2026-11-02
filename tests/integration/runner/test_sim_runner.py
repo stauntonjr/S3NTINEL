@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
+import textwrap
+from dataclasses import asdict
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pandas as pd
 import pytest
 
 import libs.simulation.runner as runner
-from libs.io.delta import get_spark
 from libs.io.schemas import ANOMALY_WINDOW_ATTRIBUTION_COLUMNS
 from libs.simulation.flight.examples import build_named_flight_spec
 from libs.simulation.reporting import (
@@ -226,21 +231,18 @@ def test_sim_runner_writes_seed_tables(tmp_path, monkeypatch):
 
         assert raw_input["path"] == str(run_dir / "input" / "raw_telemetry")
         assert len(raw_input["records"]) == counts["raw_input_rows"]
-        assert {"tail_id", "flight_id", "timestamp_utc", "parameter_name", "parameter_value", "date_utc"}.issubset(raw_input["columns"])
-        assert {"tail_id", "flight_id", "step_index", "timestamp_utc", "phase_label", "date_utc"}.issubset(phase_labels["columns"])
+        assert {"tail_id", "flight_id", "timestamp_utc", "parameter_name", "parameter_value", "date_utc"}.issubset(
+            raw_input["columns"]
+        )
+        assert {"tail_id", "flight_id", "step_index", "timestamp_utc", "phase_label", "date_utc"}.issubset(
+            phase_labels["columns"]
+        )
         assert {"parameter_name", "system_id", "subsystem_id", "module_id"}.issubset(hierarchy_labels["columns"])
     finally:
         runner._restore_env(previous_env)
 
 
 def test_sim_runner_full_smoke_emits_bundle(monkeypatch, tmp_path):
-    try:
-        spark = get_spark("s3ntinel.test_sim_full_smoke_preflight")
-    except Exception as exc:
-        pytest.skip(f"local Spark unavailable in this environment: {exc.__class__.__name__}")
-    else:
-        spark.stop()
-
     config = runner.PipelineRunConfig(
         flight_name="power_chain",
         tail_id="T_SIM",
@@ -269,8 +271,82 @@ def test_sim_runner_full_smoke_emits_bundle(monkeypatch, tmp_path):
         backbone_ridge_lambda=1.0,
         event_warmup_points=1,
     )
-    result = runner.run_pipeline(config)
-    run_dir = result.paths.run_dir
+    # SparkContext.stop() does not terminate PySpark's gateway JVM. The
+    # runner's default 8 GiB laptop profile could therefore be applied to
+    # the suite's already-launched 2 GiB JVM. Run the complete production
+    # pipeline in a fresh process with an explicitly sized 8 GiB driver.
+    # Keep the two-worker topology; the 2 GiB matrix-fixture budget is not
+    # a requirement for this complete simulation.
+    monkeypatch.setenv("S3NTINEL_SPARK_PROFILE", "laptop_large_sim")
+    monkeypatch.setenv("PYSPARK_SUBMIT_ARGS", "--driver-memory 4g pyspark-shell")
+    monkeypatch.setenv("PYSPARK_GATEWAY_PORT", "1")
+    monkeypatch.setenv("PYSPARK_GATEWAY_SECRET", "parent-gateway-must-not-be-reused")
+    child_env = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("S3NTINEL_SPARK_")
+        and key not in {"PYSPARK_GATEWAY_PORT", "PYSPARK_GATEWAY_SECRET", "SPARK_REMOTE"}
+    }
+    child_env.update(
+        S3NTINEL_SPARK_PROFILE="ci_small",
+        S3NTINEL_SPARK_DRIVER_MEMORY="8g",
+        S3NTINEL_TABLE_FORMAT="parquet",
+        S3NTINEL_DELTA_ALLOW_MAVEN="false",
+        S3NTINEL_SPARK_LOCAL_DIR=str(tmp_path / "spark-spill"),
+        S3NTINEL_SPARK_WAREHOUSE_DIR=str(tmp_path / "spark-warehouse"),
+        PYSPARK_SUBMIT_ARGS="--driver-memory 8g pyspark-shell",
+        PYSPARK_PYTHON=sys.executable,
+        PYSPARK_DRIVER_PYTHON=sys.executable,
+        SPARK_LOCAL_IP="127.0.0.1",
+        SPARK_LOCAL_HOSTNAME="localhost",
+    )
+    child_code = textwrap.dedent("""\
+        import json
+        import os
+        import sys
+        from libs.io.delta import get_spark
+        from libs.simulation.runner import PipelineRunConfig, run_pipeline
+
+        spark = get_spark("s3ntinel.test_sim_full_smoke")
+        try:
+            max_heap_bytes = int(spark._jvm.java.lang.Runtime.getRuntime().maxMemory())
+            assert 7 * 1024**3 < max_heap_bytes <= 8 * 1024**3, max_heap_bytes
+            assert spark.sparkContext.master == "local[2]", spark.sparkContext.master
+            result = run_pipeline(PipelineRunConfig(**json.loads(sys.argv[1])))
+            print("S3NTINEL_SMOKE_RESULT=" + json.dumps({
+                "run_dir": str(result.paths.run_dir),
+                "python_pid": os.getpid(),
+                "max_heap_bytes": max_heap_bytes,
+            }), flush=True)
+        finally:
+            spark.stop()
+        """)
+    try:
+        completed = subprocess.run(
+            [sys.executable, "-c", child_code, json.dumps(asdict(config))],
+            cwd=Path(__file__).resolve().parents[3],
+            env=child_env,
+            capture_output=True,
+            text=True,
+            timeout=900,
+        )
+    except subprocess.TimeoutExpired as exc:
+        stderr = exc.stderr or b""
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode("utf-8", errors="replace")
+        pytest.fail(
+            f"Isolated simulation smoke exceeded 900 seconds. Child stderr tail:\n{stderr[-12000:]}", pytrace=False
+        )
+    assert completed.returncode == 0, completed.stdout[-4000:] + completed.stderr[-12000:]
+    payloads = [
+        json.loads(line.removeprefix("S3NTINEL_SMOKE_RESULT="))
+        for line in completed.stdout.splitlines()
+        if line.startswith("S3NTINEL_SMOKE_RESULT=")
+    ]
+    assert len(payloads) == 1, completed.stdout[-4000:]
+    assert payloads[0]["python_pid"] != os.getpid()
+    assert 7 * 1024**3 < payloads[0]["max_heap_bytes"] <= 8 * 1024**3
+    run_dir = Path(payloads[0]["run_dir"])
 
     manifest = json.loads((run_dir / "reports" / "run_manifest.json").read_text(encoding="utf-8"))
     full_run_report = json.loads((run_dir / "reports" / "full_run_report.json").read_text(encoding="utf-8"))
@@ -278,6 +354,9 @@ def test_sim_runner_full_smoke_emits_bundle(monkeypatch, tmp_path):
         (run_dir / "reports" / "stages" / "25_window_policy_profile_summary.json").read_text(encoding="utf-8")
     )
     assert manifest["status"] == "success"
+    assert manifest["environment"]["spark_profile"] == "ci_small"
+    assert manifest["environment"]["spark_driver_memory"] == "8g"
+    assert manifest["environment"]["spark_master"] == "local[2]"
     assert full_run_report["status"] == "success"
     assert "modeling_performance" in full_run_report
     assert "window_policy_profile" in full_run_report
@@ -294,7 +373,10 @@ def test_sim_runner_full_smoke_emits_bundle(monkeypatch, tmp_path):
     assert (run_dir / "reports" / "stages" / "15_event_profiles_fit_manifest.json").exists()
     assert (run_dir / "reports" / "stages" / "25_window_policy_profile_manifest.json").exists()
     assert (run_dir / "reports" / "stages" / "25_window_policy_profile_evaluation.json").exists()
-    assert stage25_summary["window_policy_profile_evaluation_path"] == "reports/stages/25_window_policy_profile_evaluation.json"
+    assert (
+        stage25_summary["window_policy_profile_evaluation_path"]
+        == "reports/stages/25_window_policy_profile_evaluation.json"
+    )
     assert (run_dir / "reports" / "stages" / "40_backbone_fit_manifest.json").exists()
     assert (run_dir / "reports" / "stages" / "50_build_graph_manifest.json").exists()
     assert (run_dir / "reports" / "stages" / "50_build_graph_evaluation.json").exists()
@@ -529,7 +611,7 @@ def test_validation_harness_report_bundles_fit_validation_and_compute(tmp_path):
                     "subsystem": {
                         "eligible_fault_window_count": 5,
                         "dominant_subsystem_match_rate": 0.6,
-                    }
+                    },
                 },
             },
             "benchmark_tier_validation": {
@@ -647,7 +729,8 @@ def test_validation_harness_report_bundles_fit_validation_and_compute(tmp_path):
         record["category"] == "validation"
         and record["scope_name"] == "overall"
         and record["subscope_name"] == "benchmark_tier_validation"
-        and record["metric_path"] == "score_validation_by_benchmark_tier.module_recoverable.emit_ready_fault_window_rate"
+        and record["metric_path"]
+        == "score_validation_by_benchmark_tier.module_recoverable.emit_ready_fault_window_rate"
         and record["value"] == 1.0 / 3.0
         for record in harness["validation_metrics"]["metric_records"]
     )
@@ -969,10 +1052,16 @@ def test_runner_fault_wrappers_preserve_extended_validation_metrics():
     assert fault_score_summary["median_detection_latency_seconds"] == 1.5
     assert fault_score_summary["median_emit_ready_latency_seconds"] == 2.5
     assert fault_score_summary["raw_score_validation"]["window_count"] == 10
-    assert fault_score_summary["calibrated_score_validation"]["truth_window_recall_by_top_k_calibrated_rarity"]["any_overlap"][
-        "top_5"
-    ] == 0.5
-    assert fault_score_summary["emission_validation"]["blocked_candidate_window_count_by_p_value_threshold"]["p_le_0p05"] == 1
+    assert (
+        fault_score_summary["calibrated_score_validation"]["truth_window_recall_by_top_k_calibrated_rarity"][
+            "any_overlap"
+        ]["top_5"]
+        == 0.5
+    )
+    assert (
+        fault_score_summary["emission_validation"]["blocked_candidate_window_count_by_p_value_threshold"]["p_le_0p05"]
+        == 1
+    )
     assert fault_score_summary["score_window_diagnostics"] == [{"win_id": 7}]
     assert fault_attribution_summary["dominant_subsystem_match_count"] == 1
     assert fault_attribution_summary["dominant_module_match_count"] == 1
