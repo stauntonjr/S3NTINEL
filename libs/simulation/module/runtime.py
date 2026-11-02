@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from libs.behavior import (
     BehaviorRegistry,
@@ -128,14 +128,8 @@ class Module:
                 )
                 for parameter_spec in spec.parameters
             },
-            input_ports={
-                port_spec.port_name: Port.from_spec(port_spec)
-                for port_spec in spec.input_ports
-            },
-            output_ports={
-                port_spec.port_name: Port.from_spec(port_spec)
-                for port_spec in spec.output_ports
-            },
+            input_ports={port_spec.port_name: Port.from_spec(port_spec) for port_spec in spec.input_ports},
+            output_ports={port_spec.port_name: Port.from_spec(port_spec) for port_spec in spec.output_ports},
             latent_state_by_name={
                 latent_name: 0.0
                 for latent_name in {
@@ -199,14 +193,17 @@ class Module:
         *,
         parameter: Parameter,
     ) -> dict[str, Any]:
+        nominal_metadata: dict[str, Any] = {}
         for port_name in parameter.input_port_names:
             port = self.input_ports.get(str(port_name))
             if port is None:
                 continue
             metadata = dict(port.metadata or {})
-            if metadata.get("coupling_id") or metadata.get("misbehavior_window_id") or metadata.get("misbehavior_family_label"):
+            if metadata.get("misbehavior_active", metadata.get("fault_active", False)):
                 return metadata
-        return {}
+            if metadata.get("coupling_id") and not nominal_metadata:
+                nominal_metadata = metadata
+        return nominal_metadata
 
     def apply_latent_updates(
         self,
@@ -313,45 +310,47 @@ class Module:
                 metadata["event_misbehavior_label"] = str(
                     (fault_context.get("event_misbehavior_label") or "") if misbehavior_applied else ""
                 )
-                metadata["anomaly_type_label"] = str((fault_context.get("anomaly_type_label") or "") if misbehavior_applied else "")
+                metadata["anomaly_type_label"] = str(
+                    (fault_context.get("anomaly_type_label") or "") if misbehavior_applied else ""
+                )
                 metadata["anomaly_score_label"] = (
                     fault_context.get("anomaly_score_label") if misbehavior_applied else 0.0
                 )
                 metadata["fault_active"] = misbehavior_active
                 metadata["fault_applied"] = misbehavior_applied
                 metadata["fault_family_label"] = str(
-                    (
-                        fault_context.get("fault_family_label")
-                        or parameter.behavior_family_label
-                    )
+                    (fault_context.get("fault_family_label") or parameter.behavior_family_label)
                     if fault_context
                     else ""
                 )
                 metadata["fault_type"] = str(
-                    (
-                        fault_context.get("fault_type")
-                        or fault_context.get("violation_type")
-                        or misbehavior_detail_label
-                    )
+                    (fault_context.get("fault_type") or fault_context.get("violation_type") or misbehavior_detail_label)
                     if fault_context
                     else ""
                 )
                 metadata["fault_window_id"] = str(fault_context.get("fault_window_id") if fault_context else "")
                 coupling_metadata = self._active_coupling_metadata_for_parameter(parameter=parameter)
                 metadata["coupling_id_label"] = str(coupling_metadata.get("coupling_id", "") or "")
-                if coupling_metadata and not metadata["misbehavior_applied"]:
-                    metadata["misbehavior_active"] = bool(coupling_metadata.get("misbehavior_active", True))
-                    metadata["misbehavior_applied"] = bool(coupling_metadata.get("misbehavior_active", True))
-                    metadata["misbehavior_family_label"] = str(coupling_metadata.get("misbehavior_family_label", "") or "")
-                    metadata["misbehavior_detail_label"] = str(coupling_metadata.get("misbehavior_detail_label", "") or "")
+                coupling_active = bool(
+                    coupling_metadata.get("misbehavior_active", coupling_metadata.get("fault_active", False))
+                )
+                if coupling_active and not metadata["misbehavior_applied"]:
+                    metadata["misbehavior_active"] = coupling_active
+                    metadata["misbehavior_applied"] = coupling_active
+                    metadata["misbehavior_family_label"] = str(
+                        coupling_metadata.get("misbehavior_family_label", "") or ""
+                    )
+                    metadata["misbehavior_detail_label"] = str(
+                        coupling_metadata.get("misbehavior_detail_label", "") or ""
+                    )
                     metadata["misbehavior_window_id"] = str(coupling_metadata.get("misbehavior_window_id", "") or "")
                     metadata["event_misbehavior_label"] = str(
                         coupling_metadata.get("event_misbehavior_label", "") or ""
                     )
                     metadata["anomaly_type_label"] = str(coupling_metadata.get("anomaly_type_label", "") or "")
                     metadata["anomaly_score_label"] = coupling_metadata.get("anomaly_score_label", 0.0)
-                    metadata["fault_active"] = bool(coupling_metadata.get("fault_active", True))
-                    metadata["fault_applied"] = bool(coupling_metadata.get("fault_active", True))
+                    metadata["fault_active"] = coupling_active
+                    metadata["fault_applied"] = coupling_active
                     metadata["fault_family_label"] = str(coupling_metadata.get("fault_family_label", "") or "")
                     metadata["fault_type"] = str(coupling_metadata.get("fault_type", "") or "")
                     metadata["fault_window_id"] = str(coupling_metadata.get("fault_window_id", "") or "")

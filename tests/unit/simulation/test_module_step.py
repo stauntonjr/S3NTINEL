@@ -1,9 +1,107 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timezone
+
+import pytest
 
 from libs.behavior import BehaviorStepInput
 from libs.simulation import LatentUpdate, LatentUpdateSpec, Module, ModuleSpec, ParameterSpec, PortSpec
+
+
+@pytest.mark.parametrize("activity", [None, False, True])
+def test_coupling_identity_alone_does_not_imply_applied_misbehavior(activity):
+    module = Module.from_spec(_build_test_module_spec())
+    coupling_metadata = {"coupling_id": "command-drive"}
+    if activity is not None:
+        coupling_metadata.update(
+            misbehavior_active=activity,
+            fault_active=activity,
+            misbehavior_window_id="coupling-window",
+            fault_window_id="coupling-window",
+            misbehavior_family_label="coupling_inversion",
+        )
+    module.input_port("command_in").metadata = coupling_metadata
+
+    sample = next(
+        module.iter_samples(
+            step_inputs_by_parameter={
+                "spool_speed": BehaviorStepInput(
+                    dt_seconds=1.0,
+                    latent_state={},
+                    context={"target_value": 1.0},
+                ),
+            },
+            initial_state_by_parameter={"spool_speed": 0.0},
+        )
+    )
+
+    assert sample.parameter_value == sample.parameter_value_clean == 0.5
+    assert sample.metadata["coupling_id_label"] == "command-drive"
+    for field in ("misbehavior_active", "misbehavior_applied", "fault_active", "fault_applied"):
+        assert sample.metadata[field] is bool(activity)
+    assert sample.metadata["misbehavior_window_id"] == ("coupling-window" if activity else "")
+
+
+def test_nominal_coupling_does_not_erase_active_unapplied_parameter_fault():
+    module = Module.from_spec(_build_test_module_spec())
+    module.input_port("command_in").metadata = {"coupling_id": "command-drive"}
+
+    sample = next(
+        module.iter_samples(
+            step_inputs_by_parameter={
+                "spool_speed": BehaviorStepInput(dt_seconds=1.0, latent_state={}, context={"target_value": 1.0}),
+            },
+            initial_state_by_parameter={"spool_speed": 0.0},
+            fault_context_by_parameter={
+                "spool_speed": {
+                    "violation_type": "timing_lag",
+                    "anomaly_rate": 0.0,
+                    "misbehavior_window_id": "parameter-window",
+                    "fault_window_id": "parameter-window",
+                },
+            },
+        )
+    )
+
+    assert sample.metadata["misbehavior_active"] is True
+    assert sample.metadata["fault_active"] is True
+    assert sample.metadata["misbehavior_applied"] is False
+    assert sample.metadata["fault_applied"] is False
+    assert sample.metadata["misbehavior_window_id"] == "parameter-window"
+    assert sample.metadata["fault_window_id"] == "parameter-window"
+
+
+def test_active_coupling_is_not_hidden_by_an_earlier_nominal_input_port():
+    spec = _build_test_module_spec()
+    parameter = replace(spec.parameters[1], input_port_names=("command_in", "faulted_in"))
+    module = Module.from_spec(
+        replace(
+            spec,
+            parameters=(parameter,),
+            input_ports=(*spec.input_ports, PortSpec.input(port_name="faulted_in", value_datatype_label="numeric")),
+        )
+    )
+    module.input_port("command_in").metadata = {"coupling_id": "nominal-drive"}
+    module.input_port("faulted_in").metadata = {
+        "coupling_id": "faulted-drive",
+        "misbehavior_active": True,
+        "fault_active": True,
+        "misbehavior_window_id": "coupling-window",
+        "fault_window_id": "coupling-window",
+    }
+
+    sample = next(
+        module.iter_samples(
+            step_inputs_by_parameter={
+                "spool_speed": BehaviorStepInput(dt_seconds=1.0, latent_state={}, context={"target_value": 1.0}),
+            }
+        )
+    )
+
+    assert sample.metadata["coupling_id_label"] == "faulted-drive"
+    assert sample.metadata["misbehavior_applied"] is True
+    assert sample.metadata["misbehavior_window_id"] == "coupling-window"
 
 
 def _build_test_module_spec() -> ModuleSpec:
@@ -68,15 +166,15 @@ def test_iter_module_samples_emits_local_behavior_streams():
 
     samples = list(
         module.iter_samples(
-        step_inputs_by_parameter={
-            "bus_voltage": BehaviorStepInput(dt_seconds=1.0, latent_state={}, context={"target_value": 28.0}),
-            "spool_speed": BehaviorStepInput(
-                dt_seconds=1.0,
-                latent_state={},
-                context={"target_value": 1.0, "time_constant_seconds": 1.0},
-            ),
-        },
-        initial_state_by_parameter={"bus_voltage": 28.0, "spool_speed": 0.0},
+            step_inputs_by_parameter={
+                "bus_voltage": BehaviorStepInput(dt_seconds=1.0, latent_state={}, context={"target_value": 28.0}),
+                "spool_speed": BehaviorStepInput(
+                    dt_seconds=1.0,
+                    latent_state={},
+                    context={"target_value": 1.0, "time_constant_seconds": 1.0},
+                ),
+            },
+            initial_state_by_parameter={"bus_voltage": 28.0, "spool_speed": 0.0},
         )
     )
 
@@ -92,14 +190,14 @@ def test_iter_module_samples_can_apply_violations():
 
     samples = list(
         module.iter_samples(
-        step_inputs_by_parameter={
-            "bus_voltage": BehaviorStepInput(dt_seconds=1.0, latent_state={}, context={"target_value": 28.0}),
-        },
-        initial_state_by_parameter={"bus_voltage": 28.0},
-        fault_context_by_parameter={
-            "bus_voltage": {"bias": 2.0, "anomaly_rate": 1.0, "rng_seed": 7},
-        },
-        apply_faults=True,
+            step_inputs_by_parameter={
+                "bus_voltage": BehaviorStepInput(dt_seconds=1.0, latent_state={}, context={"target_value": 28.0}),
+            },
+            initial_state_by_parameter={"bus_voltage": 28.0},
+            fault_context_by_parameter={
+                "bus_voltage": {"bias": 2.0, "anomaly_rate": 1.0, "rng_seed": 7},
+            },
+            apply_faults=True,
         )
     )
 
