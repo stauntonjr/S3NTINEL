@@ -54,3 +54,35 @@ These checks qualify implementation behavior only. No held-out detection,
 false-alarm calibration, localization improvement, Spark integration,
 entropy-bitstream efficiency, or scale claim follows from passing them.
 The evaluation gates above remain prerequisites for advancing this draft.
+
+## Bounded simulator pilot
+
+The approved [simulator design](../superpowers/specs/2026-11-02-simulator-conditional-information-design.md)
+and [implementation plan](../superpowers/plans/2026-11-02-simulator-conditional-information.md)
+define a fixed 16-mission native-simulator experiment. It uses separate fit,
+calibration, and test seeds, nominal-only finite encoding, a common native
+sampling grid, two fixed parent-order arms, and independently calibrated
+marginal/temporal/conditional thresholds. The 1% false-alarm budget is a
+calibration target, not a held-out guarantee with correlated windows.
+
+From the research branch in `sentinel-spark35`, run with a new local directory:
+
+```bash
+python -u -m scripts.evaluate_sim_conditional_information \
+  --output-dir data/conditional_information_unique_attempt
+```
+
+No Spark JVM or GPU is used by this bounded evaluation. Production Table/Frame
+stages, simulator semantics, scoring, and attribution are unchanged. Tiny
+test protocols are explicitly non-qualification runs; the CLI does not expose
+tuning options. Existing output directories are rejected, including incomplete
+attempts. A `running` or `failed` manifest is not a completed qualification.
+
+Inspect `manifest.json`, `freeze.json`, `report.json`, and `summary.md`, plus
+role/seed raw, synchronized-symbol, encoding-diagnostic, contribution, and
+window-score artifacts. Input and frozen-artifact hashes, thresholds, per-seed
+and per-sensor metrics, denominators, absent fault families, parent-order
+sensitivity, and actual source examples must accompany any result. Surprise
+is not root-cause evidence. Recoverability-tier localization, uncovered fault
+families, Spark integration, entropy coding, and scale remain separate gates;
+PR #57 remains draft even after a technically complete pilot.
