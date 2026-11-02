@@ -1,0 +1,56 @@
+# Conditional information baselines (research-only)
+
+This experiment tests whether sparse cross-sensor conditioning improves the
+nominal predictive code length and detects coherence breaks beyond independent
+sensor models. It does **not** implement arithmetic coding, lossless storage,
+continuous-valued density estimation, phase conditioning, or a production score.
+
+- Input: synchronized discrete sensor symbols with declared finite alphabets.
+- Fit: separate nominal reference sequences; sequence boundaries reset temporal context.
+- Evaluation: held-out nominal and faulted sequences, with fixed model.
+- Models: smoothed marginal, first-order per-sensor temporal, and causal
+  within-state parent-conditioned temporal probability tables.
+- Outputs: ideal negative-log2 likelihood per observation and aggregate window
+  totals/means. Actual encoded bytes and model costs are not measured.
+- An unseen context backs off to the sensor marginal distribution.
+- Parent sensors must precede their children in a fixed decoding order.
+- Joint likelihood contributions depend on that ordering; they do not prove
+  root cause or causal relationships.
+- Dense/high-cardinality telemetry needs a separate bounded representation
+  design before scaling this reference implementation.
+
+## Evaluation gates
+
+1. Compare held-out nominal cross-entropy (bits/observation) for each model.
+2. Evaluate injected cross-sensor, temporal, stuck-at, and drift faults at a
+   fixed false-alarm budget using separate nominal calibration sequences.
+3. Evaluate parameter/module/subsystem attribution against existing benchmark
+   recoverability tiers; report ranking and parent-order sensitivity.
+4. Keep existing stage-80 scores and stage-90 attribution unchanged.
+5. Only consider Spark integration and real entropy coding after evidence
+   shows improved localization or predictive efficiency.
+
+Run: `pytest tests/unit/research/test_conditional_information.py`.
+
+## Input-validation and retry contract
+
+Smoothing must be finite and positive. NaN and either infinity are rejected
+at construction, before a fitted predictor can emit non-finite likelihoods.
+Training validates every reference sequence before changing any counts. A
+validation error in a later sequence leaves the predictor unfitted and
+does not contaminate a subsequent valid fit. The one-successful-fit guard
+and sequence-boundary reset semantics remain unchanged.
+
+The November 2, 2026 qualification first reproduced both defects against
+the original draft. With additive smoothing of one, a failed fit followed
+by reference `[1, 1]` incorrectly gave marginal surprise 0.5849625 bits
+instead of the hand-derived 0.4150375 bits (`P(1)=3/4`). The retry tests
+also check the temporal and conditional transition value of 0.5849625 bits
+(`P(1|1)=2/3`), for both invalid-symbol and invalid-sensor-set failures.
+Separate rejection tests reproduced accepted NaN and positive-infinite
+smoothing; negative infinity remains rejected.
+
+These checks qualify implementation behavior only. No held-out detection,
+false-alarm calibration, localization improvement, Spark integration,
+entropy-bitstream efficiency, or scale claim follows from passing them.
+The evaluation gates above remain prerequisites for advancing this draft.
