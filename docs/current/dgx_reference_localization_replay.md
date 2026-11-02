@@ -99,6 +99,16 @@ run manifest and log files for all three runs. Do not accept localization
 metrics unless the observed-value contract remains `parameter_value_only`
 and the reference inference does not refit target observations.
 
+Require report version 2 and
+`window_alignment: unique_exact_interval_tail_flight_date`. Phase and
+candidate changes compare only identical, unambiguous time intervals;
+run-local window IDs are not alignment keys. Inspect each branch's unmatched
+counts: missing boundaries, ambiguous intervals, and orphan candidates are
+not silently paired or dropped from totals. Score/emission counts remain
+unpaired branch totals, not like-for-like changes. Raw phase-ID disagreement
+also does not prove a semantic phase change between independently fitted
+models.
+
 ## Decision gate
 
 1. Confirm all three runs succeed and report lineage is complete.
@@ -113,6 +123,7 @@ and the reference inference does not refit target observations.
 Do not infer performance from GitHub's `ci_small` profile. No GPU execution
 is implied by the `dgx_spark` name.
 
-For the recorded baseline failure, verified paired runs, and the existing
-generic fault-flag metadata limitation, see the
-[DGX validation record](dgx_reference_localization_validation.md).
+For the recorded baseline failure and original paired runs, see the
+[DGX validation record](dgx_reference_localization_validation.md). The
+[truth and interval-alignment follow-up](dgx_truth_alignment_validation.md)
+records the subsequent nominal fault-flag and report-alignment repairs.

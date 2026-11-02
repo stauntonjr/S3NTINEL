@@ -23,10 +23,25 @@ that reuses the nominal fitted artifacts. It records artifact-level lineage and
 compares phase assignments, score/emission counts, and bounded candidate-cut
 decisions in `reports/reference_inference_comparison_report.json`.
 
+Report version 2 compares only complete, unique, exact window intervals
+(`tail_id`, `flight_id`, `date_utc`, `t_start`, `t_end`). Window IDs are local
+ordinals, not cross-run identities. Candidate evidence first resolves its
+own run's window boundaries; ambiguous, missing, and unpaired rows remain
+in the reported unmatched totals. Score/emission counts are unpaired totals.
+Phase-ID disagreement is diagnostic only: independently fitted phase IDs
+do not establish semantic phase equivalence or localization accuracy.
+
 The reference-inference production path reads only observed
 `parameter_value`; simulator clean values and truth labels remain validation
 inputs. The runner stops and recreates Spark between child runs so persisted
 RDD/checkpoint state from one child cannot contaminate or exhaust the next.
+
+Ordinary coupling transfers retain `coupling_id_label` without setting
+misbehavior/fault activity or applied flags. Only explicit active coupling
+misbehavior can supply those labels; it cannot be hidden by an earlier
+nominal input port. Applied parameter misbehavior retains precedence over
+coupling labels, and nominal coupling metadata does not erase active,
+unapplied parameter-misbehavior context.
 
 ## Core model
 

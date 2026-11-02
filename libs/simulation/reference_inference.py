@@ -50,6 +50,8 @@ class PhaseInferenceComparison:
     self_fit_window_count: int
     reference_inference_window_count: int
     matched_window_count: int
+    self_fit_unmatched_window_count: int
+    reference_inference_unmatched_window_count: int
     phase_assignment_change_count: int
 
 
@@ -66,6 +68,8 @@ class CandidateEvidenceComparison:
     self_fit_candidate_count: int
     reference_inference_candidate_count: int
     matched_candidate_count: int
+    self_fit_unmatched_candidate_count: int
+    reference_inference_unmatched_candidate_count: int
     support_rank_change_count: int
     telemetry_cut_change_count: int
     structural_cut_change_count: int
@@ -81,7 +85,8 @@ class ReferenceInferenceComparisonReport:
     score_comparison: ScoreInferenceComparison
     candidate_evidence_comparison: CandidateEvidenceComparison
     observed_value_contract: str = "parameter_value_only"
-    report_version: int = 1
+    window_alignment: str = "unique_exact_interval_tail_flight_date"
+    report_version: int = 2
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -150,23 +155,53 @@ def reset_spark_between_runs() -> None:
     spark.stop()
 
 
+def _unique_complete_keys(df, keys: list[str]):
+    """Leave ambiguous/missing identities in totals, never in paired changes."""
+    from pyspark.sql import Window
+    from pyspark.sql import functions as F
+
+    complete = F.lit(True)
+    for key in keys:
+        complete = complete & F.col(key).isNotNull()
+    return (
+        df.withColumn("_comparison_key_count", F.count("*").over(Window.partitionBy(*keys)))
+        .where(complete & (F.col("_comparison_key_count") == 1))
+        .drop("_comparison_key_count")
+    )
+
+
 def _phase_comparison(spark, *, self_paths: RunPaths, reference_inference_paths: RunPaths, fmt: str):
     from pyspark.sql import functions as F
 
-    keys = ["tail_id", "flight_id", "win_id", "date_utc"]
+    # win_id is an ordinal local to each adaptive windowing run, not an
+    # observation identity. Only identical time intervals are comparable.
+    keys = ["tail_id", "flight_id", "date_utc", "t_start", "t_end"]
     self_df = read_table(spark, str(self_paths.artifact_path("phase_windows")), fmt=fmt)
     reference_df = read_table(spark, str(reference_inference_paths.artifact_path("phase_windows")), fmt=fmt)
-    matched_df = self_df.select(*keys, F.col("phase_id_detected").alias("self_phase_id")).join(
-        reference_df.select(*keys, F.col("phase_id_detected").alias("reference_phase_id")),
-        on=keys,
-        how="inner",
+    matched_df = (
+        _unique_complete_keys(self_df, keys)
+        .select(
+            *keys,
+            F.col("phase_id_detected").alias("self_phase_id"),
+        )
+        .join(
+            _unique_complete_keys(reference_df, keys).select(
+                *keys,
+                F.col("phase_id_detected").alias("reference_phase_id"),
+            ),
+            on=keys,
+            how="inner",
+        )
     )
+    self_count, reference_count, matched_count = self_df.count(), reference_df.count(), matched_df.count()
     return PhaseInferenceComparison(
-        self_fit_window_count=int(self_df.count()),
-        reference_inference_window_count=int(reference_df.count()),
-        matched_window_count=int(matched_df.count()),
+        self_fit_window_count=int(self_count),
+        reference_inference_window_count=int(reference_count),
+        matched_window_count=int(matched_count),
+        self_fit_unmatched_window_count=int(self_count - matched_count),
+        reference_inference_unmatched_window_count=int(reference_count - matched_count),
         phase_assignment_change_count=int(
-            matched_df.where(F.col("self_phase_id") != F.col("reference_phase_id")).count()
+            matched_df.where(~F.col("self_phase_id").eqNullSafe(F.col("reference_phase_id"))).count()
         ),
     )
 
@@ -191,7 +226,8 @@ def _score_comparison(spark, *, self_paths: RunPaths, reference_inference_paths:
 def _candidate_comparison(spark, *, self_paths: RunPaths, reference_inference_paths: RunPaths, fmt: str):
     from pyspark.sql import functions as F
 
-    keys = ["tail_id", "flight_id", "win_id", "parameter_name", "date_utc"]
+    window_keys = ["tail_id", "flight_id", "win_id", "date_utc"]
+    keys = ["tail_id", "flight_id", "date_utc", "t_start", "t_end", "parameter_name"]
     self_df = read_table(
         spark,
         str(self_paths.artifact_path("anomaly_parameter_candidate_evidence")),
@@ -202,25 +238,47 @@ def _candidate_comparison(spark, *, self_paths: RunPaths, reference_inference_pa
         str(reference_inference_paths.artifact_path("anomaly_parameter_candidate_evidence")),
         fmt=fmt,
     )
-    matched_df = self_df.select(
-        *keys,
-        F.col("parameter_support_rank_in_window").alias("self_rank"),
-        F.col("telemetry_retained").alias("self_telemetry_retained"),
-        F.col("structural_cut_retained").alias("self_structural_cut_retained"),
-    ).join(
-        reference_df.select(
+    self_count, reference_count = self_df.count(), reference_df.count()
+
+    def with_unique_intervals(candidates, paths):
+        # Resolve IDs within their own run, then require unambiguous intervals
+        # and parameters. Preserve raw totals so orphans/ambiguities count as
+        # unmatched rather than disappearing or forming Cartesian products.
+        windows = read_table(spark, str(paths.artifact_path("windows")), fmt=fmt).select(
+            *window_keys,
+            "t_start",
+            "t_end",
+        )
+        windows = _unique_complete_keys(windows, window_keys)
+        windows = _unique_complete_keys(windows, ["tail_id", "flight_id", "date_utc", "t_start", "t_end"])
+        return _unique_complete_keys(candidates.join(windows, on=window_keys, how="inner"), keys)
+
+    matched_df = (
+        with_unique_intervals(self_df, self_paths)
+        .select(
             *keys,
-            F.col("parameter_support_rank_in_window").alias("reference_rank"),
-            F.col("telemetry_retained").alias("reference_telemetry_retained"),
-            F.col("structural_cut_retained").alias("reference_structural_cut_retained"),
-        ),
-        on=keys,
-        how="inner",
+            F.col("parameter_support_rank_in_window").alias("self_rank"),
+            F.col("telemetry_retained").alias("self_telemetry_retained"),
+            F.col("structural_cut_retained").alias("self_structural_cut_retained"),
+        )
+        .join(
+            with_unique_intervals(reference_df, reference_inference_paths).select(
+                *keys,
+                F.col("parameter_support_rank_in_window").alias("reference_rank"),
+                F.col("telemetry_retained").alias("reference_telemetry_retained"),
+                F.col("structural_cut_retained").alias("reference_structural_cut_retained"),
+            ),
+            on=keys,
+            how="inner",
+        )
     )
+    matched_count = matched_df.count()
     return CandidateEvidenceComparison(
-        self_fit_candidate_count=int(self_df.count()),
-        reference_inference_candidate_count=int(reference_df.count()),
-        matched_candidate_count=int(matched_df.count()),
+        self_fit_candidate_count=int(self_count),
+        reference_inference_candidate_count=int(reference_count),
+        matched_candidate_count=int(matched_count),
+        self_fit_unmatched_candidate_count=int(self_count - matched_count),
+        reference_inference_unmatched_candidate_count=int(reference_count - matched_count),
         support_rank_change_count=int(
             matched_df.where(~F.col("self_rank").eqNullSafe(F.col("reference_rank"))).count()
         ),

@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from libs.simulation.cli import resolve_flight
+from libs.simulation.flight.runtime import Flight
 from libs.simulation.reference_inference import (
     REFERENCE_ARTIFACT_NAMES,
     nominal_companion_flight,
@@ -104,6 +105,16 @@ def test_nominal_companion_removes_misbehavior_without_changing_topology():
     assert nominal.aircraft_spec == faulted.aircraft_spec
     assert nominal.input_program_spec == faulted.input_program_spec
     assert nominal.phase_program_spec == faulted.phase_program_spec
+
+
+def test_nominal_companion_emits_no_fault_flags_despite_coupling_transfers():
+    nominal = nominal_companion_flight(resolve_flight("power_pressurization_hierarchy_composite", sim_seed=17))
+    rows, _ = Flight.from_spec(nominal).simulate_rows(n_steps=200, dt_seconds=0.5)
+
+    assert len(rows) == 7000
+    assert any(row.get("coupling_id_label") for row in rows)
+    for field in ("misbehavior_active", "misbehavior_applied", "fault_active", "fault_applied"):
+        assert not any(row[field] for row in rows), field
 
 
 def test_reference_artifact_inventory_excludes_observations_and_inference_outputs():

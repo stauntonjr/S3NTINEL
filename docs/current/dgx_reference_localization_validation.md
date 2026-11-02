@@ -1,5 +1,10 @@
 # DGX reference-inference validation, November 1, 2026
 
+This is the historical execution-repair record for PR #64. Its metadata and
+ID-alignment limitations are addressed in the subsequent
+[truth and interval-alignment validation](dgx_truth_alignment_validation.md);
+the historical measurements below are retained unchanged.
+
 ## Source and failure history
 
 The baseline is PR #64 at `e5125f05cda3d36aefa64f9c43e7c7167d21d43b`,
