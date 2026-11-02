@@ -318,14 +318,22 @@ def test_sim_runner_full_smoke_emits_bundle(monkeypatch, tmp_path):
         finally:
             spark.stop()
         """)
-    completed = subprocess.run(
-        [sys.executable, "-c", child_code, json.dumps(asdict(config))],
-        cwd=Path(__file__).resolve().parents[3],
-        env=child_env,
-        capture_output=True,
-        text=True,
-        timeout=360,
-    )
+    try:
+        completed = subprocess.run(
+            [sys.executable, "-c", child_code, json.dumps(asdict(config))],
+            cwd=Path(__file__).resolve().parents[3],
+            env=child_env,
+            capture_output=True,
+            text=True,
+            timeout=900,
+        )
+    except subprocess.TimeoutExpired as exc:
+        stderr = exc.stderr or b""
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode("utf-8", errors="replace")
+        pytest.fail(
+            f"Isolated simulation smoke exceeded 900 seconds. Child stderr tail:\n{stderr[-12000:]}", pytrace=False
+        )
     assert completed.returncode == 0, completed.stdout[-4000:] + completed.stderr[-12000:]
     payloads = [
         json.loads(line.removeprefix("S3NTINEL_SMOKE_RESULT="))

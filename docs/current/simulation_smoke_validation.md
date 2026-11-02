@@ -37,7 +37,7 @@ The unchanged 12-step `power_chain` full pipeline now runs in a child Python
 process with a fresh gateway JVM, `ci_small`, `local[2]`, and an actual heap
 cap of 2 GiB. The test strips inherited Spark profile overrides and gateway
 credentials, uses private temporary spill/warehouse directories, and sets a
-360-second child deadline. It deliberately supplies conflicting parent
+900-second child deadline. It deliberately supplies conflicting parent
 profile, heap, and gateway settings to test the isolation boundary.
 
 The child checks the JVM's actual maximum heap and Spark master before
@@ -49,7 +49,7 @@ Normal cleanup stops the Spark context; on Linux, gateway stdin closes on
 child exit, including timeout termination.
 
 A dedicated GitHub Actions job runs this smoke once per PR/main push,
-with Java 17, Python 3.11, the Spark dependencies, and a ten-minute job
+with Java 17, Python 3.11, the Spark dependencies, and a twenty-minute job
 deadline. Matrix jobs continue to deselect this case to avoid duplicate
 execution. The larger public-API end-to-end simulation remains a separate
 local validation gate.
@@ -72,7 +72,7 @@ skips/failures/errors, in 143.929 seconds; the smoke call took 143.01
 seconds. That run preceded the final extra conflicting-parent-heap input
 and removal of the skip guard.
 
-The complete final-code suite subsequently exited zero: **498 passed, one
+The complete suite at `6b18671` subsequently exited zero: **498 passed, one
 skipped, zero failures or errors**, 499 tests in 1,579.849 seconds. The
 smoke passed in 147.742 seconds, including the conflicting parent settings.
 Its final run manifest reports success, `ci_small`, 2 GiB, and `local[2]`;
@@ -80,6 +80,32 @@ the pipeline summary records all 16 stages successful in 138.868 seconds.
 The public-API end-to-end simulation also passed. The sole skip was
 `test_upsert_table_overwrites_existing_merge_key_row`, because Delta JVM
 classes are unavailable in this Parquet runtime.
+
+## Hosted timing qualification
+
+The first dedicated hosted smoke, job `125324233693` in CI run
+`41459387812`, failed with `subprocess.TimeoutExpired` at the initial
+360-second deadline. The traceback did not expose enough captured child
+output to establish progress or a stall; this is not evidence of another
+allocator failure or a successful pipeline. The local success above does
+not qualify hosted execution.
+
+The follow-up allows a bounded 900 seconds, without changing the 2 GiB
+heap, two-worker profile, pipeline input, or output assertions. Timeout
+failures expose a bounded child-stderr tail. CI records its own host
+resources and always prints final or partial manifests, stage summaries,
+and run-log tails before cleanup. The twenty-minute job deadline leaves
+room for dependency setup and diagnostics. This is a hosted timing probe,
+not a performance or completion claim. The hosted rerun, rather than local
+timing, determines whether this budget suffices; see
+[PR #66](https://github.com/stauntonjr/S3NTINEL/pull/66) for the live CI receipt.
+
+After this deadline/diagnostic-only adjustment, the complete runner module
+again passed locally: 11 tests, no skips/failures/errors; smoke call 149.58
+seconds. Injected timeout checks verified both bytes and text stderr
+produce explicit failures with bounded diagnostic tails. The full-suite
+receipt above is from before this adjustment; no production code or normal
+pipeline assertions changed afterward.
 
 Retained workspace evidence includes `dgx-main-pr65-pytest.xml` / `.log`,
 `dgx-stage80-ci-profile-probe.xml` / `.log`,
