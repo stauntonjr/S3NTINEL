@@ -274,7 +274,9 @@ def test_sim_runner_full_smoke_emits_bundle(monkeypatch, tmp_path):
     # SparkContext.stop() does not terminate PySpark's gateway JVM. The
     # runner's default 8 GiB laptop profile could therefore be applied to
     # the suite's already-launched 2 GiB JVM. Run the complete production
-    # pipeline in a fresh, resource-capped process instead.
+    # pipeline in a fresh process with an explicitly sized 8 GiB driver.
+    # Keep the two-worker topology; the 2 GiB matrix-fixture budget is not
+    # a requirement for this complete simulation.
     monkeypatch.setenv("S3NTINEL_SPARK_PROFILE", "laptop_large_sim")
     monkeypatch.setenv("PYSPARK_SUBMIT_ARGS", "--driver-memory 4g pyspark-shell")
     monkeypatch.setenv("PYSPARK_GATEWAY_PORT", "1")
@@ -287,11 +289,12 @@ def test_sim_runner_full_smoke_emits_bundle(monkeypatch, tmp_path):
     }
     child_env.update(
         S3NTINEL_SPARK_PROFILE="ci_small",
+        S3NTINEL_SPARK_DRIVER_MEMORY="8g",
         S3NTINEL_TABLE_FORMAT="parquet",
         S3NTINEL_DELTA_ALLOW_MAVEN="false",
         S3NTINEL_SPARK_LOCAL_DIR=str(tmp_path / "spark-spill"),
         S3NTINEL_SPARK_WAREHOUSE_DIR=str(tmp_path / "spark-warehouse"),
-        PYSPARK_SUBMIT_ARGS="--driver-memory 2g pyspark-shell",
+        PYSPARK_SUBMIT_ARGS="--driver-memory 8g pyspark-shell",
         PYSPARK_PYTHON=sys.executable,
         PYSPARK_DRIVER_PYTHON=sys.executable,
         SPARK_LOCAL_IP="127.0.0.1",
@@ -307,7 +310,7 @@ def test_sim_runner_full_smoke_emits_bundle(monkeypatch, tmp_path):
         spark = get_spark("s3ntinel.test_sim_full_smoke")
         try:
             max_heap_bytes = int(spark._jvm.java.lang.Runtime.getRuntime().maxMemory())
-            assert 0 < max_heap_bytes <= 2 * 1024**3, max_heap_bytes
+            assert 7 * 1024**3 < max_heap_bytes <= 8 * 1024**3, max_heap_bytes
             assert spark.sparkContext.master == "local[2]", spark.sparkContext.master
             result = run_pipeline(PipelineRunConfig(**json.loads(sys.argv[1])))
             print("S3NTINEL_SMOKE_RESULT=" + json.dumps({
@@ -342,7 +345,7 @@ def test_sim_runner_full_smoke_emits_bundle(monkeypatch, tmp_path):
     ]
     assert len(payloads) == 1, completed.stdout[-4000:]
     assert payloads[0]["python_pid"] != os.getpid()
-    assert 0 < payloads[0]["max_heap_bytes"] <= 2 * 1024**3
+    assert 7 * 1024**3 < payloads[0]["max_heap_bytes"] <= 8 * 1024**3
     run_dir = Path(payloads[0]["run_dir"])
 
     manifest = json.loads((run_dir / "reports" / "run_manifest.json").read_text(encoding="utf-8"))
@@ -352,7 +355,7 @@ def test_sim_runner_full_smoke_emits_bundle(monkeypatch, tmp_path):
     )
     assert manifest["status"] == "success"
     assert manifest["environment"]["spark_profile"] == "ci_small"
-    assert manifest["environment"]["spark_driver_memory"] == "2g"
+    assert manifest["environment"]["spark_driver_memory"] == "8g"
     assert manifest["environment"]["spark_master"] == "local[2]"
     assert full_run_report["status"] == "success"
     assert "modeling_performance" in full_run_report

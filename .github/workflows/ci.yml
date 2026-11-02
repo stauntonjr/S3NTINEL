@@ -111,12 +111,13 @@ jobs:
             --deselect=tests/integration/runner/test_sim_runner.py::test_sim_runner_full_smoke_emits_bundle
 
   simulation-smoke:
-    name: simulation smoke (2 GiB)
+    name: simulation smoke (8 GiB)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      PYSPARK_SUBMIT_ARGS: "--driver-memory 2g pyspark-shell"
+      PYSPARK_SUBMIT_ARGS: "--driver-memory 8g pyspark-shell"
       S3NTINEL_SPARK_PROFILE: ci_small
+      S3NTINEL_SPARK_DRIVER_MEMORY: 8g
       S3NTINEL_TABLE_FORMAT: parquet
     steps:
       - name: Checkout
