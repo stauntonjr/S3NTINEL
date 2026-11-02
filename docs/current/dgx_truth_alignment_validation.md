@@ -77,6 +77,13 @@ seconds with the same 2 GiB driver heap. The sole skip is
 Delta JVM classes are unavailable in this Parquet runtime. The previously
 interrupted example-builder test passes in this clean run.
 
+After merge, an additional local full-suite run encountered a stage-80
+smoke failure despite the recorded pre-merge success above. The failed
+evidence and subsequent test-runtime/CI repair are tracked separately in
+[isolated simulation smoke validation](simulation_smoke_validation.md).
+The historical results here are preserved, not substituted for that
+follow-up verification.
+
 ## Bounded 600-step replay
 
 Seed 17, 600 steps at 0.5 seconds, using the runbook command with base
