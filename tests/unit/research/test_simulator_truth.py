@@ -44,7 +44,7 @@ def test_authored_inventory_preserves_realized_metadata_and_missing_family_cover
     assert intervals and all(i.window_id and i.realized_parameters for i in intervals)
     coverage = coverage_inventory(intervals)
     assert coverage["stuck_at"]["status"] == "not_covered"
-    assert coverage["drift"]["status"] == "covered"
+    assert coverage["drift"]["status"] == "declared_only"
     windows = flight.misbehavior_program_spec.windows
     bad_window = replace(windows[0], metadata={})
     # Explicitly empty authored identity may not be synthesized from observed flags.
@@ -62,3 +62,32 @@ def test_duplicate_interval_identity_is_rejected(tmp_path):
     path.write_text("")
     with pytest.raises(ValueError):
         evaluate_truth([interval("same", 0, 10), interval("same", 20, 30)], [], {}, path, [])
+
+
+def test_coverage_distinguishes_declared_applied_and_common_grid_support(tmp_path):
+    path = tmp_path / "raw.jsonl"
+    path.write_text(
+        "\n".join(
+            json.dumps(row)
+            for row in [
+                {"step_index": 1, "misbehavior_window_id": "drift", "misbehavior_applied": True},
+                {"step_index": 4, "misbehavior_window_id": "coupling", "misbehavior_applied": True},
+            ]
+        )
+        + "\n"
+    )
+    intervals = [
+        interval("drift", 0, 20),
+        interval("coupling", 0, 20, "coupling_break"),
+        interval("future", 100, 200, "state_chatter"),
+    ]
+    result = evaluate_truth(intervals, [], {"lexical/conditional": Threshold(1, 336, 334, 0, 2, True)}, path, [0, 4, 8])
+    coverage = result["coverage"]
+    assert coverage["drift"]["status"] == "applied_off_grid_only"
+    assert coverage["drift"]["common_grid_details"] == []
+    assert coverage["cross_sensor"]["status"] == "observed_common_grid"
+    assert coverage["cross_sensor"]["common_grid_details"] == ["coupling_break"]
+    assert coverage["temporal"]["status"] == "declared_only"
+    assert coverage["temporal"]["applied_interval_count"] == 0
+    assert coverage["stuck_at"]["status"] == "not_covered"
+    assert len(result["faults"]) == 3

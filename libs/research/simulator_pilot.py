@@ -16,7 +16,7 @@ from time import perf_counter
 from libs.research.conditional_evaluation import calibrate, fit_arms, model_payload, score_mission
 from libs.research.simulator_data import generate_mission, observed_fingerprint
 from libs.research.simulator_protocol import PilotProtocol
-from libs.research.simulator_reporting import build_report, render_markdown
+from libs.research.simulator_reporting import build_report, encoding_metrics, render_markdown
 from libs.research.simulator_truth import authored_intervals, evaluate_truth
 from libs.research.symbol_encoding import fit_encoder
 from libs.simulation.cli import DEFAULT_START_TIMESTAMP_UTC, resolve_flight
@@ -207,6 +207,7 @@ def run_pilot(output_dir: Path, protocol: PilotProtocol = PilotProtocol()) -> Pa
         stage("fit")
         encoder = fit_encoder(fit)
         encoded_fit = [encoder.transform(m) for m in fit]
+        encoding_diagnostics = []
         for m, encoded in zip(fit, encoded_fit):
             directory = output / "missions" / f"fit_{m.seed}"
             _jsonl(
@@ -214,6 +215,9 @@ def run_pilot(output_dir: Path, protocol: PilotProtocol = PilotProtocol()) -> Pa
                 [{"step": t, "symbols": row} for t, row in zip(encoded.steps, encoded.states)],
             )
             _write(directory / "encoding.json", encoded.diagnostics)
+            encoding_diagnostics.append(
+                {"role": m.role, "seed": m.seed, "sensors": encoding_metrics(encoded.diagnostics)}
+            )
         del fit
         arms = fit_arms(encoded_fit, encoder.alphabets)
         del encoded_fit
@@ -233,6 +237,7 @@ def run_pilot(output_dir: Path, protocol: PilotProtocol = PilotProtocol()) -> Pa
                 [{"step": t, "symbols": row} for t, row in zip(encoded.steps, encoded.states)],
             )
             _write(directory / "encoding.json", encoded.diagnostics)
+            encoding_diagnostics.append({"role": role, "seed": seed, "sensors": encoding_metrics(encoded.diagnostics)})
             stage("score", role, seed)
             for arm, model in arms.items():
                 rows, diagnostics = score_mission(model, encoded, arm=arm, protocol=protocol)
@@ -319,6 +324,7 @@ def run_pilot(output_dir: Path, protocol: PilotProtocol = PilotProtocol()) -> Pa
                 "thresholds": thresholds,
                 "truths": truths,
                 "details": details,
+                "encoding_diagnostics": encoding_diagnostics,
                 "missions": missions,
                 "reproducibility": reproducibility,
                 "examples": examples,

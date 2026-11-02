@@ -52,15 +52,37 @@ def _validate(intervals):
 
 
 def coverage_inventory(intervals):
-    details = {i.detail for i in intervals}
-    return {
-        challenge: {
-            "status": "covered" if details.intersection(names) else "not_covered",
+    return coverage_from_fault_rows([{**asdict(i), "applied_rows": 0, "grid_applied_rows": 0} for i in intervals])
+
+
+def coverage_from_fault_rows(rows):
+    """Separate authored declarations from emitted and common-grid support.
+
+    Even applied common-grid support is not proof of an observable fault effect.
+    Model/order copies of the same interval count only once in coverage.
+    """
+    result = {}
+    for challenge, names in CHALLENGES.items():
+        declared = {(r["seed"], r["window_id"]): r for r in rows if r["detail"] in names}
+        applied = {k: r for k, r in declared.items() if r["applied_rows"] > 0}
+        grid = {k: r for k, r in declared.items() if r["grid_applied_rows"] > 0}
+        result[challenge] = {
+            "status": "observed_common_grid"
+            if grid
+            else "applied_off_grid_only"
+            if applied
+            else "declared_only"
+            if declared
+            else "not_covered",
             "accepted_detail_labels": list(names),
-            "present_details": sorted(details.intersection(names)),
+            "declared_details": sorted({r["detail"] for r in declared.values()}),
+            "applied_details": sorted({r["detail"] for r in applied.values()}),
+            "common_grid_details": sorted({r["detail"] for r in grid.values()}),
+            "declared_interval_count": len(declared),
+            "applied_interval_count": len(applied),
+            "common_grid_interval_count": len(grid),
         }
-        for challenge, names in CHALLENGES.items()
-    }
+    return result
 
 
 def evaluate_truth(intervals, scores, thresholds, raw_truth_path, retained_steps):
@@ -117,4 +139,4 @@ def evaluate_truth(intervals, scores, thresholds, raw_truth_path, retained_steps
                     "off_grid_only": applied[interval.window_id] > 0 and grid_applied[interval.window_id] == 0,
                 }
             )
-    return {"faults": faults, "alerts": alerts, "coverage": coverage_inventory(intervals)}
+    return {"faults": faults, "alerts": alerts, "coverage": coverage_from_fault_rows(faults)}

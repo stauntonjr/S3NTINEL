@@ -4,7 +4,20 @@ from collections import defaultdict
 from dataclasses import asdict
 
 from libs.research.simulator_protocol import PilotProtocol
-from libs.research.simulator_truth import CHALLENGES
+from libs.research.simulator_truth import coverage_from_fault_rows
+
+
+def encoding_metrics(diagnostics):
+    return {
+        sensor: {
+            **row,
+            **{
+                kind + "_rate": row[kind] / row["observations"] if row["observations"] else None
+                for kind in ("underflow", "overflow", "unknown")
+            },
+        }
+        for sensor, row in diagnostics.items()
+    }
 
 
 def _detection(rows):
@@ -37,6 +50,10 @@ def build_report(protocol, evidence):
             detail: _detection([r for r in relevant if r["detail"] == detail])
             for detail in sorted({r["detail"] for r in relevant})
         }
+        authored_family = {
+            family: _detection([r for r in relevant if r["family"] == family])
+            for family in sorted({r["family"] for r in relevant})
+        }
         performance.append(
             {
                 "arm": arm,
@@ -49,6 +66,7 @@ def build_report(protocol, evidence):
                 "calibration": asdict(threshold),
                 **_detection(relevant),
                 "by_fault_detail": by_family,
+                "by_authored_family": authored_family,
             }
         )
         for seed in sorted({s.seed for s in nominal}):
@@ -96,14 +114,7 @@ def build_report(protocol, evidence):
                 "faulted_minus_nominal": pair["faulted_test"] - pair["nominal_test"],
             }
         )
-    coverage = {}
-    for name, accepted in CHALLENGES.items():
-        present = sorted({r["detail"] for r in faults}.intersection(accepted))
-        coverage[name] = {
-            "status": "covered" if present else "not_covered",
-            "accepted_detail_labels": list(accepted),
-            "present_details": present,
-        }
+    coverage = coverage_from_fault_rows(faults)
     return {
         "version": 1,
         "qualification": protocol == PilotProtocol(),
@@ -117,6 +128,7 @@ def build_report(protocol, evidence):
         "coverage": coverage,
         "faults": faults,
         "sensor_metrics": evidence.get("details", []),
+        "encoding_diagnostics": evidence.get("encoding_diagnostics", []),
         "missions": evidence.get("missions", []),
         "examples": evidence.get("examples", {}),
         "reproducibility": evidence.get("reproducibility", {}),
@@ -153,10 +165,13 @@ def render_markdown(report):
         )
     lines.extend(["", "## Coverage and limits", ""])
     lines.extend(
-        f"- {name}: {value['status']} ({', '.join(value['present_details']) or 'no represented details'})."
+        f"- {name}: {value['status']}; declared/applied/common-grid intervals "
+        f"{value['declared_interval_count']}/{value['applied_interval_count']}/{value['common_grid_interval_count']}; "
+        f"common-grid details: {', '.join(value['common_grid_details']) or 'none'}."
         for name, value in report["coverage"].items()
     )
     lines.extend("- " + value for value in report["limits"])
+    lines.append("- Applied/common-grid support is not proof of an observable fault effect.")
     lines.extend(
         [
             "",
