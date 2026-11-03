@@ -56,14 +56,3 @@ Read [Architecture Decision Records](../decisions/README.md). The initial ADR se
 2. major stages communicate through persisted artifacts;
 3. reference fitting is separated from target inference;
 4. simulation truth never becomes a production inference dependency.
-
-## Suggested Interview Walkthrough
-
-For a five-minute technical walkthrough, use this sequence:
-
-1. architecture overview and fit/inference split;
-2. `libs/graph/lag.py` as the distributed implementation example;
-3. anomaly attribution artifacts as the operator-facing evidence contract;
-4. simulation-backed integration tests as evidence that the architecture is exercised end to end.
-
-For deeper discussion, pivot into replay/lineage, phase-reference fitting, graph fusion and hierarchy evidence, or the Spark/driver scaling boundary depending on the interviewer.
