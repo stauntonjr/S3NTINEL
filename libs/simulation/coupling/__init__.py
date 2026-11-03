@@ -1,3 +1,4 @@
+from libs.simulation.coupling.audit import CouplingDelivery, CouplingExecution
 from libs.simulation.coupling.examples import (
     build_drive_coupling_spec,
     build_enable_coupling_spec,
@@ -13,6 +14,8 @@ from libs.simulation.coupling.spec import CouplingSpec
 
 __all__ = [
     "Coupling",
+    "CouplingDelivery",
+    "CouplingExecution",
     "CouplingSpec",
     "DelayedTransfer",
     "DelayedTransferKey",

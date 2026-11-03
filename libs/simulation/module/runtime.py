@@ -14,6 +14,7 @@ from libs.behavior import (
     build_default_behavior_registry,
     iter_tick_samples,
 )
+from libs.simulation.coupling.audit import CouplingExecution
 from libs.simulation.coupling.runtime import Coupling, DelayedTransferKey, DelayedTransferQueue
 from libs.simulation.module.spec import LatentUpdateSpec, ModuleSpec
 from libs.simulation.parameter.runtime import Parameter
@@ -395,6 +396,7 @@ class Module:
         apply_faults: bool = True,
         timestamp_utc: datetime | None = None,
         current_phase_label: str | None = None,
+        audit_sink: list[CouplingExecution] | None = None,
     ) -> list[BehaviorSample]:
         resolved_step_inputs = self.resolve_step_inputs(raw_step_inputs)
         port_hydrated_step_inputs = self.hydrate_step_inputs_from_ports(resolved_step_inputs)
@@ -427,5 +429,6 @@ class Module:
                 timestamp_utc=timestamp_utc,
                 current_phase_label=current_phase_label,
                 misbehavior_context=(coupling_misbehavior_context_by_id or {}).get(coupling.coupling_id, {}),
+                audit_sink=audit_sink,
             )
         return samples

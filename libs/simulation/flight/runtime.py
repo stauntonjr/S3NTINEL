@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
 from libs.behavior import BehaviorRegistry, BehaviorSample, BehaviorStepInput
+from libs.simulation.coupling.audit import CouplingDelivery, CouplingExecution
 from libs.simulation.event_truth import annotate_event_type_labels
 from libs.simulation.fault.runtime import FaultProgram, MisbehaviorProgram, MisbehaviorStepContext
 from libs.simulation.flight.spec import FlightSpec, InputProgramSpec, StepInputSpec
@@ -30,6 +31,23 @@ class FlightTick:
     phase_label: str | None
     samples_by_module_id: dict[str, list[BehaviorSample]]
     step_misbehavior_context: MisbehaviorStepContext
+    coupling_executions: tuple[CouplingExecution, ...] = ()
+
+    def coupling_audit_rows(self) -> list[dict[str, object]]:
+        """Return tick-local execution evidence, never sensor-value fault labels."""
+        rows: list[dict[str, object]] = []
+        for execution in self.coupling_executions:
+            row = asdict(execution)
+            delivery = row.pop("delivered_transfer")
+            row.update(
+                {
+                    f"delivered_{item.name}": delivery[item.name] if delivery is not None else None
+                    for item in fields(CouplingDelivery)
+                }
+            )
+            row.update(tail_id=self.tail_id, flight_id=self.flight_id, step_index=self.step_index)
+            rows.append(row)
+        return rows
 
     @property
     def misbehavior_context_by_module(self) -> dict[str, dict[str, dict[str, Any]]]:
@@ -225,6 +243,7 @@ class Flight:
         *,
         dt_seconds: float,
         apply_faults: bool = True,
+        collect_coupling_audit: bool = False,
     ) -> FlightTick:
         resolved_step_index = int(self.step_index)
         timestamp_utc = self.start_timestamp_utc + timedelta(seconds=float(resolved_step_index) * float(dt_seconds))
@@ -240,15 +259,14 @@ class Flight:
             default_dt_seconds=float(dt_seconds),
         )
         initial_state_by_module = (
-            dict(self.spec.initial_state_spec.values_by_module)
-            if not self._initial_state_applied
-            else {}
+            dict(self.spec.initial_state_spec.values_by_module) if not self._initial_state_applied else {}
         )
         step_misbehavior_context = (
             self.misbehavior_program.step_context_for_step(resolved_step_index)
             if apply_faults
             else MisbehaviorStepContext(parameter_context_by_module={}, coupling_context_by_id={})
         )
+        audit_sink: list[CouplingExecution] | None = [] if collect_coupling_audit else None
         samples_by_module_id = self.aircraft.step(
             step_inputs_by_module=step_inputs_by_module,
             initial_state_by_module=initial_state_by_module,
@@ -257,6 +275,7 @@ class Flight:
             apply_faults=apply_faults,
             timestamp_utc=timestamp_utc,
             current_phase_label=phase_label,
+            audit_sink=audit_sink,
         )
         self.step_index = resolved_step_index + 1
         self.current_timestamp_utc = timestamp_utc
@@ -271,6 +290,7 @@ class Flight:
             phase_label=phase_label,
             samples_by_module_id=samples_by_module_id,
             step_misbehavior_context=step_misbehavior_context,
+            coupling_executions=tuple(audit_sink) if audit_sink is not None else (),
         )
 
     def iter_ticks(
@@ -279,11 +299,13 @@ class Flight:
         n_steps: int,
         dt_seconds: float,
         apply_faults: bool = True,
+        collect_coupling_audit: bool = False,
     ):
         for _ in range(int(max(n_steps, 0))):
             yield self.step(
                 dt_seconds=dt_seconds,
                 apply_faults=apply_faults,
+                collect_coupling_audit=collect_coupling_audit,
             )
 
     def simulate_rows(

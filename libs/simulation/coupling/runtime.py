@@ -5,8 +5,15 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from libs.simulation.coupling.audit import (
+    CouplingAction,
+    CouplingDelivery,
+    CouplingExecution,
+    CouplingGate,
+    context_identity_fields,
+)
 from libs.simulation.coupling.spec import CouplingSpec
 
 if TYPE_CHECKING:
@@ -102,9 +109,7 @@ class Coupling:
             gain=float(spec.gain),
             sign=int(spec.sign),
             lag_seconds=float(spec.lag_seconds),
-            time_constant_seconds=(
-                None if spec.time_constant_seconds is None else float(spec.time_constant_seconds)
-            ),
+            time_constant_seconds=(None if spec.time_constant_seconds is None else float(spec.time_constant_seconds)),
             phase_gate=tuple(spec.phase_gate),
             mode_gate=tuple(spec.mode_gate),
             source_mode_name=spec.source_mode_name,
@@ -179,25 +184,43 @@ class Coupling:
         current_phase_label: str | None = None,
         ignore_phase_gate: bool = False,
     ) -> bool:
+        return (
+            self._blocking_gate(
+                source_module,
+                target_module,
+                current_phase_label=current_phase_label,
+                ignore_phase_gate=ignore_phase_gate,
+            )
+            is None
+        )
+
+    def _blocking_gate(
+        self,
+        source_module: "Module",
+        target_module: "Module",
+        *,
+        current_phase_label: str | None = None,
+        ignore_phase_gate: bool = False,
+    ) -> CouplingGate | None:
         if self.phase_gate and not ignore_phase_gate:
             if current_phase_label is None or current_phase_label not in self.phase_gate:
-                return False
+                return "phase"
         if self.source_mode_gate:
             source_mode_value = source_module.mode_state_by_name.get(str(self.source_mode_name or ""))
             if source_mode_value is None or str(source_mode_value) not in self.source_mode_gate:
-                return False
+                return "source_mode"
         if self.target_mode_gate:
             target_mode_value = target_module.mode_state_by_name.get(str(self.target_mode_name or ""))
             if target_mode_value is None or str(target_mode_value) not in self.target_mode_gate:
-                return False
+                return "target_mode"
         if self.mode_gate and not self.source_mode_gate and not self.target_mode_gate:
             active_mode_values = {
                 *[str(value) for value in source_module.mode_state_by_name.values() if value],
                 *[str(value) for value in target_module.mode_state_by_name.values() if value],
             }
             if not active_mode_values.intersection(self.mode_gate):
-                return False
-        return True
+                return "mode"
+        return None
 
     def _transfer_value(
         self,
@@ -229,7 +252,9 @@ class Coupling:
         if self.relation_type == "drive":
             return True, self._transfer_value(source_value, gain=gain, sign=sign)
         if self.relation_type == "enable":
-            return True, self._transfer_value(source_value, gain=gain, sign=sign) if _signal_is_active(source_value) else None
+            return True, self._transfer_value(source_value, gain=gain, sign=sign) if _signal_is_active(
+                source_value
+            ) else None
         if self.relation_type == "inhibit":
             return (_signal_is_active(source_value), None)
         return True, self._transfer_value(source_value, gain=gain, sign=sign)
@@ -240,7 +265,7 @@ class Coupling:
         *,
         current_timestamp_utc: datetime,
         transfer_key: DelayedTransferKey | None = None,
-    ) -> None:
+    ) -> DelayedTransfer | None:
         queue = target_module.delayed_input_transfers_by_key.get(transfer_key or self.key())
         if queue is None:
             return
@@ -252,6 +277,7 @@ class Coupling:
             target_port.metadata = dict(last_due.metadata)
         if not queue:
             target_module.delayed_input_transfers_by_key.pop(transfer_key or self.key(), None)
+        return last_due
 
     def _build_transfer_metadata(
         self,
@@ -345,6 +371,54 @@ class Coupling:
             "break_coupling": break_coupling,
         }
 
+    def _record_execution(
+        self,
+        *,
+        audit_sink: list[CouplingExecution] | None,
+        timestamp_utc: datetime | None,
+        source_timestamp_utc: datetime | None,
+        current_phase_label: str | None,
+        transfer_config: Mapping[str, Any],
+        misbehavior_context: Mapping[str, Any] | None,
+        action: CouplingAction,
+        gate_block_reason: CouplingGate | None = None,
+        scheduled_for_timestamp_utc: datetime | None = None,
+        delivered_transfer: DelayedTransfer | None = None,
+    ) -> None:
+        if audit_sink is None:
+            return
+        audit_sink.append(
+            CouplingExecution(
+                coupling_id=self.coupling_id,
+                source_module_id=self.source_module_id,
+                source_port_name=self.source_port_name,
+                target_module_id=self.target_module_id,
+                target_port_name=self.target_port_name,
+                relation_type=self.relation_type,
+                timestamp_utc=timestamp_utc,
+                source_timestamp_utc=source_timestamp_utc,
+                phase_label=current_phase_label,
+                gain=float(transfer_config["gain"]),
+                sign=int(transfer_config["sign"]),
+                lag_seconds=float(transfer_config["lag_seconds"]),
+                ignore_phase_gate=bool(transfer_config["ignore_phase_gate"]),
+                context_present=bool(misbehavior_context),
+                action=action,
+                gate_block_reason=gate_block_reason,
+                scheduled_for_timestamp_utc=scheduled_for_timestamp_utc,
+                delivered_transfer=(
+                    CouplingDelivery(
+                        effective_timestamp_utc=delivered_transfer.effective_timestamp_utc,
+                        coupling_id=str(delivered_transfer.metadata.get("coupling_id", "") or ""),
+                        **context_identity_fields(delivered_transfer.metadata),
+                    )
+                    if delivered_transfer is not None
+                    else None
+                ),
+                **context_identity_fields(misbehavior_context),
+            )
+        )
+
     def apply(
         self,
         source_module: "Module",
@@ -353,6 +427,7 @@ class Coupling:
         timestamp_utc: datetime | None = None,
         current_phase_label: str | None = None,
         misbehavior_context: Mapping[str, Any] | None = None,
+        audit_sink: list[CouplingExecution] | None = None,
     ) -> None:
         source_port = source_module.output_port(self.source_port_name)
         target_port = target_module.input_port(self.target_port_name)
@@ -368,44 +443,63 @@ class Coupling:
             lag_seconds=float(transfer_config["lag_seconds"]),
         )
 
+        delivered_transfer = None
         if float(transfer_config["lag_seconds"]) > 0.0 and source_timestamp_utc is not None:
-            self._drain_due_transfers(
+            delivered_transfer = self._drain_due_transfers(
                 target_module,
                 current_timestamp_utc=source_timestamp_utc,
                 transfer_key=transfer_key,
             )
 
-        if not self.is_active(
+        gate_block_reason = self._blocking_gate(
             source_module,
             target_module,
             current_phase_label=current_phase_label,
             ignore_phase_gate=bool(transfer_config["ignore_phase_gate"]),
-        ):
-            return
-
-        should_write, transferred_value = self._resolve_transfer_result(
-            source_value,
-            gain=float(transfer_config["gain"]),
-            sign=int(transfer_config["sign"]),
-            break_coupling=bool(transfer_config["break_coupling"]),
         )
-        transfer_metadata = self._build_transfer_metadata(misbehavior_context=misbehavior_context)
-        if float(transfer_config["lag_seconds"]) > 0.0 and source_timestamp_utc is not None:
-            queue = target_module.delayed_input_transfers_by_key.setdefault(
-                transfer_key,
-                DelayedTransferQueue(),
+        scheduled_for_timestamp_utc = None
+        if gate_block_reason is not None:
+            action: CouplingAction = "blocked"
+        else:
+            should_write, transferred_value = self._resolve_transfer_result(
+                source_value,
+                gain=float(transfer_config["gain"]),
+                sign=int(transfer_config["sign"]),
+                break_coupling=bool(transfer_config["break_coupling"]),
             )
-            if should_write:
-                queue.append(
-                    DelayedTransfer(
-                        effective_timestamp_utc=source_timestamp_utc + timedelta(seconds=float(transfer_config["lag_seconds"])),
-                        value=transferred_value,
-                        metadata=transfer_metadata,
-                    )
+            transfer_metadata = self._build_transfer_metadata(misbehavior_context=misbehavior_context)
+            action = "suppressed_break" if transfer_config["break_coupling"] else "no_write"
+            if float(transfer_config["lag_seconds"]) > 0.0 and source_timestamp_utc is not None:
+                queue = target_module.delayed_input_transfers_by_key.setdefault(
+                    transfer_key,
+                    DelayedTransferQueue(),
                 )
-            return
-        if not should_write:
-            return
-        target_port.current_value = transferred_value
-        target_port.timestamp_utc = source_timestamp_utc
-        target_port.metadata = transfer_metadata
+                if should_write:
+                    scheduled_for_timestamp_utc = source_timestamp_utc + timedelta(
+                        seconds=float(transfer_config["lag_seconds"])
+                    )
+                    queue.append(
+                        DelayedTransfer(
+                            effective_timestamp_utc=scheduled_for_timestamp_utc,
+                            value=transferred_value,
+                            metadata=transfer_metadata,
+                        )
+                    )
+                    action = "enqueued"
+            elif should_write:
+                target_port.current_value = transferred_value
+                target_port.timestamp_utc = source_timestamp_utc
+                target_port.metadata = transfer_metadata
+                action = "written"
+        self._record_execution(
+            audit_sink=audit_sink,
+            timestamp_utc=timestamp_utc,
+            source_timestamp_utc=source_timestamp_utc,
+            current_phase_label=current_phase_label,
+            transfer_config=transfer_config,
+            misbehavior_context=misbehavior_context,
+            action=action,
+            gate_block_reason=gate_block_reason,
+            scheduled_for_timestamp_utc=scheduled_for_timestamp_utc,
+            delivered_transfer=delivered_transfer,
+        )

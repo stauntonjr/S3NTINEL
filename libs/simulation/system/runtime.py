@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any
 
 from libs.behavior import BehaviorSample, BehaviorStepInput
+from libs.simulation.coupling.audit import CouplingExecution
 from libs.simulation.coupling.runtime import Coupling
 from libs.simulation.module.runtime import Module
 from libs.simulation.subsystem.runtime import Subsystem
@@ -27,8 +28,7 @@ class System:
         modules_by_id: Mapping[str, Module],
     ) -> "System":
         subsystems = tuple(
-            Subsystem.from_spec(subsystem_spec, modules_by_id=modules_by_id)
-            for subsystem_spec in spec.subsystems
+            Subsystem.from_spec(subsystem_spec, modules_by_id=modules_by_id) for subsystem_spec in spec.subsystems
         )
         return cls(id=str(spec.system_id), subsystems=subsystems)
 
@@ -44,6 +44,7 @@ class System:
         apply_faults: bool,
         timestamp_utc: datetime | None,
         current_phase_label: str | None,
+        audit_sink: list[CouplingExecution] | None = None,
     ) -> dict[str, list[BehaviorSample]]:
         samples_by_module_id: dict[str, list[BehaviorSample]] = {}
         for subsystem in self.subsystems:
@@ -58,6 +59,7 @@ class System:
                     apply_faults=apply_faults,
                     timestamp_utc=timestamp_utc,
                     current_phase_label=current_phase_label,
+                    audit_sink=audit_sink,
                 )
             )
         return samples_by_module_id

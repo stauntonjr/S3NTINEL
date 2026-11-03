@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Any
 
 from libs.behavior import BehaviorSample, BehaviorStepInput
+from libs.simulation.coupling.audit import CouplingExecution
 from libs.simulation.coupling.runtime import Coupling
 from libs.simulation.module.runtime import Module
 from libs.simulation.subsystem.spec import SubsystemSpec
@@ -41,6 +42,7 @@ class Subsystem:
         apply_faults: bool,
         timestamp_utc: datetime | None,
         current_phase_label: str | None,
+        audit_sink: list[CouplingExecution] | None = None,
     ) -> dict[str, list[BehaviorSample]]:
         samples_by_module_id: dict[str, list[BehaviorSample]] = {}
         for module in self.modules:
@@ -55,5 +57,6 @@ class Subsystem:
                 apply_faults=apply_faults,
                 timestamp_utc=timestamp_utc,
                 current_phase_label=current_phase_label,
+                audit_sink=audit_sink,
             )
         return samples_by_module_id
