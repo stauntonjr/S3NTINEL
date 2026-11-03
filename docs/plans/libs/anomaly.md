@@ -951,11 +951,28 @@ the stack:
 - no new detection rule should depend on simulator-specific identifiers or truth
   labels
 
-Implementation status: the bounded evidence ledger and paired runner are in
-place, with fixed artifact lineage and an observed-`parameter_value` contract.
-Focused fit/apply tests and the structural smoke pass. Do not treat the paired
-comparison as accepted evidence until the post-session-reset diagnostic replay
-completes successfully.
+Implementation status (2026-11-02): the bounded evidence ledger and paired
+runner are implemented. DGX Spark completed both bounded and full 3,360-step
+nominal-reference-fit / faulted-inference comparisons. The 19 reference
+artifact trees were verified byte-identical after application, and the
+observed-`parameter_value` contract was preserved. See
+[DGX reference validation](../../current/dgx_reference_localization_validation.md)
+and [truth/interval alignment validation](../../current/dgx_truth_alignment_validation.md).
+
+The truth-metadata and interval-identity repairs are complete, but this
+does **not** qualify localization accuracy. In the corrected full-mission
+comparison, only 79 windows align on unique exact intervals; 235 self-fit
+and 239 reference-inference windows are unmatched. Phase cluster IDs are
+not semantically aligned across independently fitted models.
+
+Next acceptance gate: evaluate localization against authored fault truth
+**within each branch's own time intervals**, rather than treating matching
+`win_id` or independently fitted phase IDs as shared identities. Emit
+detection, parameter, subsystem, and module denominators and first-failure
+counts, with explicit coverage for unpaired intervals. Compare self-fit and
+reference inference only after each branch has independently passed that
+truth-alignment contract. Reproduce the composite tier ledger and investigate
+subsystem truth-mapping gaps before proposing any scoring or hierarchy change.
 
 ### Modeling pass after the diagnostics
 
