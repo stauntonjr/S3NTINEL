@@ -1,7 +1,9 @@
 from libs.simulation.aircraft.runtime import Aircraft
 from libs.simulation.aircraft.spec import AircraftSpec
+from libs.simulation.coupling.audit import CouplingDelivery, CouplingExecution
 from libs.simulation.coupling.runtime import Coupling
 from libs.simulation.coupling.spec import CouplingSpec
+from libs.simulation.fault.runtime import MisbehaviorProgram, MisbehaviorStepContext
 from libs.simulation.fault.spec import (
     FaultProgramSpec,
     FaultWindowSpec,
@@ -9,7 +11,6 @@ from libs.simulation.fault.spec import (
     MisbehaviorWindowSpec,
 )
 from libs.simulation.fleet.runtime import Fleet
-from libs.simulation.fault.runtime import MisbehaviorProgram, MisbehaviorStepContext
 from libs.simulation.flight.runtime import Flight, FlightTick
 from libs.simulation.flight.spec import FlightSpec, InitialStateSpec, InputProgramSpec, StepInputSpec
 from libs.simulation.module.runtime import LatentUpdate, Module
@@ -48,6 +49,8 @@ __all__ = [
     "CANONICAL_PHASE_IDS_BY_LABEL",
     "CANONICAL_PHASE_LABELS",
     "Coupling",
+    "CouplingDelivery",
+    "CouplingExecution",
     "CouplingSpec",
     "FaultProgramSpec",
     "FaultWindowSpec",

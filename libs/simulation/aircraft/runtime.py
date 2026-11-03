@@ -9,6 +9,7 @@ from typing import Any
 
 from libs.behavior import BehaviorRegistry, BehaviorSample, BehaviorStepInput, build_default_behavior_registry
 from libs.simulation.aircraft.spec import AircraftSpec
+from libs.simulation.coupling.audit import CouplingExecution
 from libs.simulation.coupling.runtime import Coupling
 from libs.simulation.module.runtime import Module
 from libs.simulation.system.runtime import System
@@ -47,16 +48,11 @@ class Aircraft:
             for module_spec in aircraft_spec.iter_module_specs()
         }
         systems = tuple(
-            System.from_spec(system_spec, modules_by_id=modules_by_id)
-            for system_spec in aircraft_spec.systems
+            System.from_spec(system_spec, modules_by_id=modules_by_id) for system_spec in aircraft_spec.systems
         )
         index = AircraftIndex(
             systems_by_id={system.id: system for system in systems},
-            subsystems_by_id={
-                subsystem.id: subsystem
-                for system in systems
-                for subsystem in system.subsystems
-            },
+            subsystems_by_id={subsystem.id: subsystem for system in systems for subsystem in system.subsystems},
             modules_by_id=modules_by_id,
         )
         return cls(
@@ -89,7 +85,9 @@ class Aircraft:
 
     @property
     def module_ids(self) -> tuple[str, ...]:
-        return tuple(module.id for system in self.systems for subsystem in system.subsystems for module in subsystem.modules)
+        return tuple(
+            module.id for system in self.systems for subsystem in system.subsystems for module in subsystem.modules
+        )
 
     @property
     def coupling_source_module_ids(self) -> tuple[str, ...]:
@@ -105,6 +103,7 @@ class Aircraft:
         apply_faults: bool = True,
         timestamp_utc: datetime | None = None,
         current_phase_label: str | None = None,
+        audit_sink: list[CouplingExecution] | None = None,
     ) -> dict[str, list[BehaviorSample]]:
         samples_by_module_id: dict[str, list[BehaviorSample]] = {}
         for module in self._index.modules_by_id.values():
@@ -122,6 +121,7 @@ class Aircraft:
                     apply_faults=apply_faults,
                     timestamp_utc=timestamp_utc,
                     current_phase_label=current_phase_label,
+                    audit_sink=audit_sink,
                 )
             )
         return samples_by_module_id
